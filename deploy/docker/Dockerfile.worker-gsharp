@@ -1,0 +1,171 @@
+# syntax=docker/dockerfile:1.7
+
+ARG SDK_IMAGE
+ARG ASPNET_IMAGE
+ARG GSHARP_VERSION
+ARG GSHARP_COMMIT
+ARG GSHARP_ARCHIVE_URL
+ARG GSHARP_ARCHIVE_SHA256
+ARG GSHARP_LEGACY_VERSION
+ARG GSHARP_LEGACY_COMMIT
+ARG GSHARP_LEGACY_ARCHIVE_URL
+ARG GSHARP_LEGACY_ARCHIVE_SHA256
+ARG NET10_REFERENCE_PACK_VERSION
+ARG NET10_REFERENCE_URL
+ARG NET10_REFERENCE_SHA512
+ARG NET10_REFERENCE_PACKAGE_CONTENT_HASH
+
+FROM ${SDK_IMAGE} AS gsharp-stable-tools
+ARG GSHARP_VERSION
+ARG GSHARP_COMMIT
+ARG GSHARP_ARCHIVE_URL
+ARG GSHARP_ARCHIVE_SHA256
+WORKDIR /gsharp-stable-source
+RUN test -n "${GSHARP_VERSION}" \
+    && test -n "${GSHARP_COMMIT}" \
+    && curl --fail --location --retry 3 --retry-all-errors --output /tmp/gsharp.tar.gz "${GSHARP_ARCHIVE_URL}" \
+    && echo "${GSHARP_ARCHIVE_SHA256}  /tmp/gsharp.tar.gz" | sha256sum --check --strict \
+    && tar --extract --gzip --file /tmp/gsharp.tar.gz --strip-components=1 \
+    && rm /tmp/gsharp.tar.gz \
+    && test -f LICENSE
+RUN --mount=type=cache,id=sharplabnext-gsharp-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore src/Compiler/Compiler.csproj --configfile nuget.config \
+    && dotnet restore src/LanguageServer/LanguageServer.csproj --configfile nuget.config \
+    && dotnet publish src/Compiler/Compiler.csproj \
+      --configuration Release \
+      --no-restore \
+      --output /opt/gsharp/${GSHARP_VERSION}/compiler \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${GSHARP_COMMIT} \
+      /p:Version=${GSHARP_VERSION} \
+    && dotnet publish src/LanguageServer/LanguageServer.csproj \
+      --configuration Release \
+      --no-restore \
+      --output /opt/gsharp/${GSHARP_VERSION}/language-server \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${GSHARP_COMMIT} \
+      /p:Version=${GSHARP_VERSION} \
+    && test -f /opt/gsharp/${GSHARP_VERSION}/compiler/gsc.dll \
+    && test -f /opt/gsharp/${GSHARP_VERSION}/language-server/GSharp.LanguageServer.dll \
+    && cp LICENSE /opt/gsharp/${GSHARP_VERSION}/GSharp-LICENSE.txt
+
+FROM ${SDK_IMAGE} AS gsharp-legacy-tools
+ARG GSHARP_LEGACY_VERSION
+ARG GSHARP_LEGACY_COMMIT
+ARG GSHARP_LEGACY_ARCHIVE_URL
+ARG GSHARP_LEGACY_ARCHIVE_SHA256
+WORKDIR /gsharp-legacy-source
+RUN test -n "${GSHARP_LEGACY_VERSION}" \
+    && test -n "${GSHARP_LEGACY_COMMIT}" \
+    && curl --fail --location --retry 3 --retry-all-errors --output /tmp/gsharp-legacy.tar.gz "${GSHARP_LEGACY_ARCHIVE_URL}" \
+    && echo "${GSHARP_LEGACY_ARCHIVE_SHA256}  /tmp/gsharp-legacy.tar.gz" | sha256sum --check --strict \
+    && tar --extract --gzip --file /tmp/gsharp-legacy.tar.gz --strip-components=1 \
+    && rm /tmp/gsharp-legacy.tar.gz \
+    && test -f LICENSE
+RUN --mount=type=cache,id=sharplabnext-gsharp-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore src/Compiler/Compiler.csproj --configfile nuget.config \
+    && dotnet restore src/LanguageServer/LanguageServer.csproj --configfile nuget.config \
+    && dotnet publish src/Compiler/Compiler.csproj \
+      --configuration Release \
+      --no-restore \
+      --output /opt/gsharp/${GSHARP_LEGACY_VERSION}/compiler \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${GSHARP_LEGACY_COMMIT} \
+      /p:Version=${GSHARP_LEGACY_VERSION} \
+    && dotnet publish src/LanguageServer/LanguageServer.csproj \
+      --configuration Release \
+      --no-restore \
+      --output /opt/gsharp/${GSHARP_LEGACY_VERSION}/language-server \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${GSHARP_LEGACY_COMMIT} \
+      /p:Version=${GSHARP_LEGACY_VERSION} \
+    && test -f /opt/gsharp/${GSHARP_LEGACY_VERSION}/compiler/gsc.dll \
+    && test -f /opt/gsharp/${GSHARP_LEGACY_VERSION}/language-server/GSharp.LanguageServer.dll \
+    && cp LICENSE /opt/gsharp/${GSHARP_LEGACY_VERSION}/GSharp-LICENSE.txt
+
+FROM ${SDK_IMAGE} AS publish
+ARG NET10_REFERENCE_PACK_VERSION
+ARG NET10_REFERENCE_URL
+ARG NET10_REFERENCE_SHA512
+ARG NET10_REFERENCE_PACKAGE_CONTENT_HASH
+WORKDIR /source
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+COPY eng/extract-zip.cs /tools/extract-zip.cs
+COPY eng/create-reference-set-attestation.cs /tools/create-reference-set-attestation.cs
+COPY --chmod=0555 deploy/docker/fetch-verified-reference-package.sh /tools/fetch-verified-reference-package
+RUN dotnet restore \
+      src/Workers/GSharp/SharpLabNext.Worker.GSharp/SharpLabNext.Worker.GSharp.csproj \
+      --locked-mode
+RUN dotnet publish \
+      src/Workers/GSharp/SharpLabNext.Worker.GSharp/SharpLabNext.Worker.GSharp.csproj \
+      --configuration Release \
+      --no-restore \
+      --output /app/publish \
+      /p:UseAppHost=false
+RUN --mount=type=cache,id=sharplabnext-reference-archives,target=/reference-archives,sharing=locked \
+    mkdir -p /reference-sets/net10-ref \
+    && /tools/fetch-verified-reference-package \
+      "${NET10_REFERENCE_URL}" \
+      "${NET10_REFERENCE_SHA512}" \
+      "/reference-archives/microsoft.netcore.app.ref.${NET10_REFERENCE_PACK_VERSION}.nupkg" \
+    && cd /tools \
+    && NUGET_PACKAGES=/tmp/reference-nuget dotnet run extract-zip.cs -- \
+      "/reference-archives/microsoft.netcore.app.ref.${NET10_REFERENCE_PACK_VERSION}.nupkg" /tmp/net10-ref \
+    && cd /source \
+    && cp -a "/tmp/net10-ref/ref/net10.0/." /reference-sets/net10-ref/ \
+    && if [ -f /app/publish/SharpLab.Runtime.dll ]; then \
+         cp /app/publish/SharpLab.Runtime.dll /reference-sets/net10-ref/SharpLab.Runtime.dll; \
+       fi \
+    && test -f /reference-sets/net10-ref/System.Runtime.dll
+RUN dotnet run /tools/create-reference-set-attestation.cs -- \
+      --root /reference-sets/net10-ref \
+      --id net10-ref \
+      --target-framework net10.0 \
+      --digest "${NET10_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --provenance-kind nuget-package \
+      --resolved-version "${NET10_REFERENCE_PACK_VERSION}" \
+      --package Microsoft.NETCore.App.Ref \
+      --source-uri "${NET10_REFERENCE_URL}" \
+      --source-archive-digest "sha512:${NET10_REFERENCE_SHA512}"
+
+FROM ${ASPNET_IMAGE} AS final
+ARG VERSION
+ARG SOURCE_REVISION
+ARG GSHARP_VERSION
+ARG GSHARP_COMMIT
+ARG GSHARP_LEGACY_VERSION
+ARG GSHARP_LEGACY_COMMIT
+ARG NET10_REFERENCE_PACKAGE_CONTENT_HASH
+LABEL org.opencontainers.image.title="SharpLabNext G# Worker" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      io.sharplabnext.reference-set.net10-ref="${NET10_REFERENCE_PACKAGE_CONTENT_HASH}"
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:8080 \
+    DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    HOME=/tmp \
+    SHARPLABNEXT_ASSEMBLY=SharpLabNext.Worker.GSharp.dll \
+    GSharp__Toolchains__gsharp-stable__CompilerVersion=${GSHARP_VERSION} \
+    GSharp__Toolchains__gsharp-stable__CompilerCommit=${GSHARP_COMMIT} \
+    GSharp__Toolchains__gsharp-stable__CompilerAssemblyPath=/opt/gsharp/${GSHARP_VERSION}/compiler/gsc.dll \
+    GSharp__Toolchains__gsharp-stable__LanguageServerAssemblyPath=/opt/gsharp/${GSHARP_VERSION}/language-server/GSharp.LanguageServer.dll \
+    GSharp__Toolchains__gsharp-legacy-0.3.8__CompilerVersion=${GSHARP_LEGACY_VERSION} \
+    GSharp__Toolchains__gsharp-legacy-0.3.8__CompilerCommit=${GSHARP_LEGACY_COMMIT} \
+    GSharp__Toolchains__gsharp-legacy-0.3.8__CompilerAssemblyPath=/opt/gsharp/${GSHARP_LEGACY_VERSION}/compiler/gsc.dll \
+    GSharp__Toolchains__gsharp-legacy-0.3.8__LanguageServerAssemblyPath=/opt/gsharp/${GSHARP_LEGACY_VERSION}/language-server/GSharp.LanguageServer.dll
+COPY --from=publish --chown=1654:1654 /app/publish/ ./
+COPY --from=publish --chown=1654:1654 /reference-sets/ /reference-sets/
+COPY --from=gsharp-stable-tools --chown=1654:1654 /opt/gsharp/ /opt/gsharp/
+COPY --from=gsharp-legacy-tools --chown=1654:1654 /opt/gsharp/ /opt/gsharp/
+COPY --chmod=0555 deploy/docker/service-entrypoint.sh /usr/local/bin/sharplabnext-service
+USER 1654:1654
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/sharplabnext-service"]

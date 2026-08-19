@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "sharplabnext.catalog": {
+        "type": "Project",
+        "dependencies": {
+          "SharpLabNext.Contracts": "[0.1.0, )"
+        }
+      },
+      "sharplabnext.contracts": {
+        "type": "Project"
+      },
+      "sharplabnext.pipelineresolver": {
+        "type": "Project",
+        "dependencies": {
+          "SharpLabNext.Catalog": "[1.0.0, )",
+          "SharpLabNext.Contracts": "[0.1.0, )"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+# Generated release/profile services are overlaid on compose.prod.yaml.
+# Phase 0 intentionally ships no generated profiles; the approved release
+# builder replaces this file with auditable, immutable image selections.
+services: {}

@@ -1,0 +1,74 @@
+# syntax=docker/dockerfile:1.7
+
+ARG SDK_IMAGE
+ARG ASPNET_IMAGE
+
+FROM ${SDK_IMAGE} AS publish
+ARG SOURCE_REVISION
+ARG ROSLYN_STABLE_VERSION
+WORKDIR /source
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+RUN dotnet restore \
+      src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable.csproj \
+      --locked-mode \
+      /p:RoslynStableVersion="${ROSLYN_STABLE_VERSION}"
+RUN dotnet publish \
+      src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable.csproj \
+      --configuration Release \
+      --no-restore \
+      --output /app/publish \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION} \
+      /p:RoslynStableVersion="${ROSLYN_STABLE_VERSION}"
+
+FROM publish AS reference-set
+COPY profiles/runtime-matrix.json /inputs/runtime-matrix.json
+COPY deploy/docker/roslyn-netfx48-appsettings.json /inputs/appsettings.template.json
+COPY eng/materialize-framework-reference-sets.cs /tools/materialize-framework-reference-sets.cs
+RUN --mount=type=cache,id=sharplabnext-reference-archives,target=/reference-archives,sharing=locked \
+    cd /tools \
+    && NUGET_PACKAGES=/tmp/sharplabnext-nuget dotnet run materialize-framework-reference-sets.cs -- \
+      --matrix /inputs/runtime-matrix.json \
+      --output /reference-sets \
+      --archive-cache /reference-archives \
+      --appsettings-template /inputs/appsettings.template.json \
+      --appsettings-output /generated/appsettings.json \
+    && test "$(find /reference-sets -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 14 \
+    && test -f /reference-sets/netfx30-managed-ref/reference-set.attestation.json
+
+FROM ${ASPNET_IMAGE} AS final
+ARG VERSION
+ARG SOURCE_REVISION
+ARG ROSLYN_STABLE_VERSION
+ARG ROSLYN_STABLE_SOURCE_URI
+RUN test -n "${VERSION}" \
+    && test -n "${SOURCE_REVISION}" \
+    && test -n "${ROSLYN_STABLE_VERSION}" \
+    && test -n "${ROSLYN_STABLE_SOURCE_URI}" \
+    && mkdir -p /app /reference-sets \
+    && chown -R 1654:1654 /app /reference-sets
+LABEL org.opencontainers.image.title="SharpLabNext Roslyn Stable .NET Framework Worker" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      io.sharplabnext.component.roslyn-stable.version="${ROSLYN_STABLE_VERSION}" \
+      io.sharplabnext.component.roslyn-stable.source-uri="${ROSLYN_STABLE_SOURCE_URI}" \
+      io.sharplabnext.component.roslyn-stable-netfx48.version="${ROSLYN_STABLE_VERSION}" \
+      io.sharplabnext.component.roslyn-stable-netfx48.source-uri="${ROSLYN_STABLE_SOURCE_URI}"
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:8080 \
+    DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    HOME=/tmp \
+    SHARPLABNEXT_ASSEMBLY=SharpLabNext.Worker.Roslyn.Stable.dll
+COPY --from=publish --chown=1654:1654 /app/publish/ ./
+RUN rm -f /app/appsettings.Development.json
+COPY --from=reference-set --chown=1654:1654 /reference-sets/ /reference-sets/
+COPY --from=reference-set --chown=1654:1654 /generated/appsettings.json /app/appsettings.json
+COPY --chmod=0555 deploy/docker/service-entrypoint.sh /usr/local/bin/sharplabnext-service
+USER 1654:1654
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/sharplabnext-service"]

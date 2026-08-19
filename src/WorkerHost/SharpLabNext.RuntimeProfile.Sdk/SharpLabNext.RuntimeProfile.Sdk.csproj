@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsSharpLabNextPublicPackage>true</IsSharpLabNextPublicPackage>
+    <PackageId>SharpLabNext.RuntimeProfile.Sdk</PackageId>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Description>Public runtime image profile and helper SDK for SharpLabNext.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\..\schemas\runtime-profile.schema.json"
+          Pack="true"
+          PackagePath="schemas\runtime-profile.schema.json"
+          Link="schemas\runtime-profile.schema.json" />
+  </ItemGroup>
+
+</Project>

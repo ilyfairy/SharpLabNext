@@ -1,0 +1,17 @@
+id: dotnet-11-preview-linux-x64
+kind: runtime-channel
+source:
+  type: dotnet-release-metadata
+  channel: "11.0"
+  policy: latest-preview
+referenceSet:
+  id: net11-preview-ref
+  package: Microsoft.NETCore.App.Ref
+platform:
+  os: linux
+  libc: glibc
+  architecture: x64
+update:
+  pollInterval: 6h
+  autoPromoteAfterTests: false
+  retainLastKnownGood: true

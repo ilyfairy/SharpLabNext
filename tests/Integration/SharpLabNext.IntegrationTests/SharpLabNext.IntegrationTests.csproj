@@ -1,0 +1,41 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Gateway\SharpLabNext.Gateway\SharpLabNext.Gateway.csproj" />
+    <ProjectReference Include="..\..\..\src\RuntimeJobs\SharpLabNext.Runner\SharpLabNext.Runner.csproj" Aliases="SharpLabNextRunner" />
+    <ProjectReference Include="..\..\..\src\RuntimeJobs\SharpLabNext.WineRunner\SharpLabNext.WineRunner.csproj" Aliases="SharpLabNextWineRunner" />
+    <ProjectReference Include="..\..\..\src\RuntimeJobs\SharpLabNext.RuntimeProtocol\SharpLabNext.RuntimeProtocol.csproj" />
+    <ProjectReference Include="..\..\Fixtures\SharpLabNext.RunnerFixture\SharpLabNext.RunnerFixture.csproj" />
+    <ProjectReference Include="..\..\Fixtures\SharpLabNext.LegacyJitFixture\SharpLabNext.LegacyJitFixture.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Fixtures\SharpLabNext.RuntimeCapabilityProbe\SharpLabNext.RuntimeCapabilityProbe.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\src\RuntimeJobs\SharpLabNext.LegacyJitInspector\SharpLabNext.LegacyJitInspector.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\src\RuntimeJobs\SharpLabNext.JitInspector\SharpLabNext.JitInspector.csproj" Aliases="JitInspector" />
+    <ProjectReference Include="..\..\..\src\Supervisor\SharpLabNext.RuntimeSupervisor.Client\SharpLabNext.RuntimeSupervisor.Client.csproj" />
+    <ProjectReference Include="..\..\..\src\WorkerHost\SharpLabNext.WorkerHost\SharpLabNext.WorkerHost.csproj" />
+    <ProjectReference Include="..\..\..\src\WorkerHost\SharpLabNext.WorkerHost\SharpLabNext.WorkerHost.csproj" />
+    <ProjectReference Include="..\..\..\src\ArtifactStore\SharpLabNext.ArtifactStore\SharpLabNext.ArtifactStore.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\src\Workers\FSharp\SharpLabNext.Worker.FSharp\SharpLabNext.Worker.FSharp.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\src\Workers\PeachPie\SharpLabNext.Worker.PeachPie\SharpLabNext.Worker.PeachPie.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\src\Workers\Roslyn.Stable\SharpLabNext.Worker.Roslyn.Stable\SharpLabNext.Worker.Roslyn.Stable.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

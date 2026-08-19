@@ -1,0 +1,356 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/runtime/v1/runtime-profile.schema.json",
+  "title": "SharpLabNext Runtime Profile Package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "image", "family", "runtimeVersion", "runtimeCommit", "jitVersion", "jitCommit", "runtimeImageId", "rid", "architecture", "cpuFeatureProfile", "acceptedArtifactFormats", "capabilities", "providedRuntimeFeatureTags", "providedMetadataFeatureTags", "allowedSecurityPolicyIds", "layout", "securityPolicies"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "$ref": "#/$defs/id" },
+    "image": { "$ref": "#/$defs/nonEmpty" },
+    "promotionReceipt": { "$ref": "#/$defs/promotionReceiptReference" },
+    "family": { "$ref": "#/$defs/id" },
+    "acceptedRuntimeFamilies": {
+      "description": "Explicit accepted runtime families. An empty array means only the profile family.",
+      "$ref": "#/$defs/ids"
+    },
+    "acceptedFrameworks": {
+      "description": "Framework compatibility allowlist. An empty array accepts only artifacts without framework requirements. Names are case-sensitive; ranges are inclusive.",
+      "$ref": "#/$defs/acceptedFrameworks"
+    },
+    "runtimeVersion": { "$ref": "#/$defs/nonEmpty" },
+    "runtimeCommit": { "$ref": "#/$defs/nonEmpty" },
+    "jitVersion": { "$ref": "#/$defs/nonEmpty" },
+    "jitCommit": { "$ref": "#/$defs/nonEmpty" },
+    "runtimeImageId": {
+      "description": "Development profiles may use the local image tag. Generated release configuration replaces it with the inspected immutable image ID.",
+      "$ref": "#/$defs/nonEmpty"
+    },
+    "rid": { "enum": ["linux-x64", "linux-arm64"] },
+    "architecture": { "enum": ["x64", "arm64"] },
+    "cpuFeatureProfile": { "$ref": "#/$defs/id" },
+    "acceptedArtifactFormats": { "$ref": "#/$defs/idsNonEmpty" },
+    "capabilities": { "$ref": "#/$defs/idsNonEmpty" },
+    "providedRuntimeFeatureTags": { "$ref": "#/$defs/ids" },
+    "providedMetadataFeatureTags": { "$ref": "#/$defs/ids" },
+    "allowedSecurityPolicyIds": { "$ref": "#/$defs/idsNonEmpty" },
+    "container": { "$ref": "#/$defs/container" },
+    "layout": { "$ref": "#/$defs/layout" },
+    "operations": { "$ref": "#/$defs/operations" },
+    "securityPolicies": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/securityPolicy" }
+    }
+  },
+  "$defs": {
+    "nonEmpty": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "idsNonEmpty": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "positive": { "type": "integer", "minimum": 1 },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "promotionReceiptReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^profiles/runtime-promotion-receipts/[a-z0-9][a-z0-9._-]*\\.json$"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "linuxAbsolutePath": { "type": "string", "minLength": 2, "maxLength": 512, "pattern": "^/(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]+$" },
+    "winePrefixPath": { "type": "string", "minLength": 6, "maxLength": 512, "pattern": "^/opt/(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\u0000]*[^/\\\\\\u0000]$" },
+    "container": {
+      "anyOf": [
+        { "$ref": "#/$defs/standardContainer" },
+        { "$ref": "#/$defs/wineContainer" }
+      ]
+    },
+    "standardContainer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["isolationKind", "environmentKind", "executionUser"],
+      "properties": {
+        "isolationKind": { "const": "standard" },
+        "environmentKind": { "enum": ["coreclr", "mono"] },
+        "executionUser": { "const": "1654:1654" }
+      }
+    },
+    "wineContainer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["isolationKind", "environmentKind", "executionUser", "winePrefixPath"],
+      "properties": {
+        "isolationKind": { "const": "wine" },
+        "environmentKind": { "const": "wine" },
+        "executionUser": { "enum": ["0:0", "1654:1654"] },
+        "winePrefixPath": { "$ref": "#/$defs/winePrefixPath" }
+      }
+    },
+    "frameworkName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^(?=.*[A-Za-z0-9])[A-Za-z0-9._-]+$"
+    },
+    "frameworkVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[0-9]+(?:\\.[0-9]+){0,3}(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "acceptedFrameworks": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/acceptedFramework" }
+    },
+    "acceptedFramework": {
+      "anyOf": [
+        { "$ref": "#/$defs/exactAcceptedFramework" },
+        { "$ref": "#/$defs/rangedAcceptedFramework" }
+      ]
+    },
+    "exactAcceptedFramework": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "exactVersion"],
+      "properties": {
+        "name": { "$ref": "#/$defs/frameworkName" },
+        "exactVersion": { "$ref": "#/$defs/frameworkVersion" }
+      }
+    },
+    "rangedAcceptedFramework": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "minimumVersion", "maximumVersion"],
+      "properties": {
+        "name": { "$ref": "#/$defs/frameworkName" },
+        "minimumVersion": { "$ref": "#/$defs/frameworkVersion" },
+        "maximumVersion": { "$ref": "#/$defs/frameworkVersion" }
+      }
+    },
+    "operationExecutable": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?:[A-Za-z0-9._-]+|/(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\{}\\s\\u0000]+)$"
+    },
+    "fixedArgvToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^{}\\u0000-\\u001f\\u007f]+$"
+    },
+    "runArgvToken": {
+      "anyOf": [
+        { "enum": ["{entryAssembly}", "{arguments}"] },
+        { "$ref": "#/$defs/fixedArgvToken" }
+      ]
+    },
+    "jitArgvToken": {
+      "anyOf": [
+        { "enum": ["{entryAssembly}", "{methodFilter}"] },
+        { "$ref": "#/$defs/fixedArgvToken" }
+      ]
+    },
+    "runCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executable", "argv"],
+      "properties": {
+        "executable": { "$ref": "#/$defs/operationExecutable" },
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/runArgvToken" },
+          "allOf": [
+            {
+              "contains": { "const": "{entryAssembly}" },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": { "const": "{arguments}" },
+              "minContains": 0,
+              "maxContains": 1
+            }
+          ]
+        }
+      }
+    },
+    "jitCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executable", "argv"],
+      "properties": {
+        "executable": { "$ref": "#/$defs/operationExecutable" },
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/jitArgvToken" },
+          "allOf": [
+            {
+              "contains": { "const": "{entryAssembly}" },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": { "const": "{methodFilter}" },
+              "minContains": 0,
+              "maxContains": 1
+            }
+          ]
+        }
+      }
+    },
+    "runOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementationId", "pathStyle", "command"],
+      "properties": {
+        "implementationId": {
+          "enum": [
+            "sharplabnext-runner-v1",
+            "sharplabnext-legacy-jit-inspector-v1",
+            "sharplabnext-wine-runner-v1",
+            "sharplabnext-target-runtime-runner-v1",
+            "sharplabnext-direct-runtime-v1"
+          ]
+        },
+        "pathStyle": { "enum": ["unix", "wine-z"] },
+        "command": { "$ref": "#/$defs/runCommand" }
+      }
+    },
+    "jitOperation": {
+      "anyOf": [
+        { "$ref": "#/$defs/jitOperationWithoutMapping" },
+        { "$ref": "#/$defs/jitOperationWithLinuxProfiler" },
+        { "$ref": "#/$defs/jitOperationWithCheckedJitDebugInfo" }
+      ]
+    },
+    "jitOperationWithoutMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementationId", "pathStyle", "command", "sourceMappingKind"],
+      "properties": {
+        "implementationId": {
+          "enum": [
+            "sharplabnext-jit-inspector-v1",
+            "sharplabnext-legacy-jit-inspector-v1",
+            "sharplabnext-checked-jit-bridge-v1",
+            "sharplabnext-mono-jit-inspector-v1"
+          ]
+        },
+        "pathStyle": { "enum": ["unix", "wine-z"] },
+        "command": { "$ref": "#/$defs/jitCommand" },
+        "sourceMappingKind": { "const": "none" }
+      }
+    },
+    "jitOperationWithLinuxProfiler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementationId", "pathStyle", "command", "sourceMappingKind", "profilerPath"],
+      "properties": {
+        "implementationId": { "const": "sharplabnext-jit-inspector-v1" },
+        "pathStyle": { "const": "unix" },
+        "command": { "$ref": "#/$defs/jitCommand" },
+        "sourceMappingKind": { "const": "linux-profiler" },
+        "profilerPath": { "$ref": "#/$defs/linuxAbsolutePath" }
+      }
+    },
+    "jitOperationWithCheckedJitDebugInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementationId", "pathStyle", "command", "sourceMappingKind"],
+      "properties": {
+        "implementationId": { "const": "sharplabnext-checked-jit-bridge-v1" },
+        "pathStyle": { "const": "unix" },
+        "command": { "$ref": "#/$defs/jitCommand" },
+        "sourceMappingKind": { "const": "checked-jit-debug-info" }
+      }
+    },
+    "operations": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "run": { "$ref": "#/$defs/runOperation" },
+        "jit": { "$ref": "#/$defs/jitOperation" }
+      }
+    },
+    "layout": {
+      "anyOf": [
+        { "$ref": "#/$defs/dotnetLayout" },
+        { "$ref": "#/$defs/wineLayout" }
+      ]
+    },
+    "dotnetLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dotNetHostPath", "runnerAssemblyPath"],
+      "properties": {
+        "runnerKind": { "const": "dotnet" },
+        "dotNetHostPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?:[A-Za-z0-9._-]+|/[^\\\\\\u0000]+)$"
+        },
+        "wineHostPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?:[A-Za-z0-9._-]+|/[^\\\\\\u0000]+)$"
+        },
+        "runnerAssemblyPath": { "$ref": "#/$defs/linuxAbsolutePath" },
+        "jitInspectorAssemblyPath": { "$ref": "#/$defs/linuxAbsolutePath" }
+      }
+    },
+    "wineLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runnerKind", "dotNetHostPath", "wineHostPath", "winePrefixPath", "runnerAssemblyPath"],
+      "properties": {
+        "runnerKind": { "enum": ["wine-coreclr", "wine-netfx", "wine-jsharp20"] },
+        "dotNetHostPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?:[A-Za-z0-9._-]+|/[^\\\\\\u0000]+)$"
+        },
+        "wineHostPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?:[A-Za-z0-9._-]+|/[^\\\\\\u0000]+)$"
+        },
+        "winePrefixPath": { "$ref": "#/$defs/linuxAbsolutePath" },
+        "runnerAssemblyPath": { "$ref": "#/$defs/linuxAbsolutePath" }
+      }
+    },
+    "securityPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "memoryBytes", "nanoCpus", "pidsLimit", "maximumDurationSeconds", "maximumArtifactBytes", "maximumOutputBytes", "tmpfsBytes"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "memoryBytes": { "$ref": "#/$defs/positive" },
+        "nanoCpus": { "$ref": "#/$defs/positive" },
+        "pidsLimit": { "$ref": "#/$defs/positive" },
+        "maximumDurationSeconds": { "$ref": "#/$defs/positive" },
+        "maximumArtifactBytes": { "$ref": "#/$defs/positive" },
+        "maximumOutputBytes": { "$ref": "#/$defs/positive" },
+        "tmpfsBytes": { "$ref": "#/$defs/positive" }
+      }
+    }
+  }
+}

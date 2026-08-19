@@ -1,0 +1,321 @@
+# syntax=docker/dockerfile:1.7
+
+ARG SDK_IMAGE
+ARG ASPNET_IMAGE
+ARG PROJECT_PATH
+ARG ASSEMBLY_NAME
+
+FROM ${SDK_IMAGE} AS publish
+ARG CONFIGURATION=Release
+ARG PROJECT_PATH
+ARG ROSLYN_STABLE_VERSION
+ARG FSHARP_COMPILER_SERVICE_VERSION
+ARG FSHARP_CORE_VERSION
+ARG ILSPY_VERSION
+ARG ILVERIFICATION_VERSION
+ARG MOBIUS_ILASM_VERSION
+RUN test -n "${PROJECT_PATH}"
+WORKDIR /source
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+COPY samples/ ./samples/
+COPY third_party/ILSense/ ./third_party/ILSense/
+RUN if [ "${PROJECT_PATH}" = "src/Workers/IL/SharpLabNext.Worker.IL/SharpLabNext.Worker.IL.csproj" ]; then \
+      dotnet restore "third_party/ILSense/src/EleCho.ILSense/EleCho.ILSense.csproj" \
+        --force-evaluate \
+        --use-lock-file \
+        --lock-file-path=/source/src/Workers/IL/SharpLabNext.Worker.IL/packages.EleCho.ILSense.lock.json \
+        --locked-mode \
+        /p:RestorePackagesWithLockFile=true; \
+    fi
+RUN dotnet restore "${PROJECT_PATH}" --locked-mode \
+    /p:RoslynStableVersion="${ROSLYN_STABLE_VERSION}" \
+    /p:FSharpCompilerServiceVersion="${FSHARP_COMPILER_SERVICE_VERSION}" \
+    /p:FSharpCoreVersion="${FSHARP_CORE_VERSION}" \
+    /p:ILSpyVersion="${ILSPY_VERSION}" \
+    /p:ILVerificationVersion="${ILVERIFICATION_VERSION}" \
+    /p:MobiusILAsmVersion="${MOBIUS_ILASM_VERSION}"
+RUN dotnet publish "${PROJECT_PATH}" \
+    --configuration ${CONFIGURATION} \
+    --no-restore \
+    --output /app/publish \
+    /p:UseAppHost=false
+
+FROM publish AS reference-sets
+ARG NET10_REFERENCE_PACK_VERSION
+ARG NET10_REFERENCE_URL
+ARG NET10_REFERENCE_SHA512
+ARG NET10_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NET11_REFERENCE_VERSION
+ARG NET11_REFERENCE_URL
+ARG NET11_REFERENCE_SHA512
+ARG NET11_REFERENCE_PACKAGE_CONTENT_HASH
+COPY eng/extract-zip.cs /tools/extract-zip.cs
+COPY eng/create-reference-set-attestation.cs /tools/create-reference-set-attestation.cs
+COPY --chmod=0555 deploy/docker/fetch-verified-reference-package.sh /tools/fetch-verified-reference-package
+RUN --mount=type=cache,id=sharplabnext-reference-archives,target=/reference-archives,sharing=locked \
+    mkdir -p /reference-sets/net10-ref /reference-sets/net11-preview-ref \
+    && /tools/fetch-verified-reference-package \
+      "${NET10_REFERENCE_URL}" \
+      "${NET10_REFERENCE_SHA512}" \
+      "/reference-archives/microsoft.netcore.app.ref.${NET10_REFERENCE_PACK_VERSION}.nupkg" \
+    && cd /tools \
+    && NUGET_PACKAGES=/tmp/sharplabnext-nuget dotnet run extract-zip.cs -- \
+      "/reference-archives/microsoft.netcore.app.ref.${NET10_REFERENCE_PACK_VERSION}.nupkg" /tmp/net10-ref \
+    && cd /source \
+    && cp -a "/tmp/net10-ref/ref/net10.0/." /reference-sets/net10-ref/ \
+    && /tools/fetch-verified-reference-package \
+      "${NET11_REFERENCE_URL}" \
+      "${NET11_REFERENCE_SHA512}" \
+      "/reference-archives/microsoft.netcore.app.ref.${NET11_REFERENCE_VERSION}.nupkg" \
+    && cd /tools \
+    && NUGET_PACKAGES=/tmp/sharplabnext-nuget dotnet run extract-zip.cs -- \
+      "/reference-archives/microsoft.netcore.app.ref.${NET11_REFERENCE_VERSION}.nupkg" /tmp/net11-ref \
+    && cd /source \
+    && cp -a "/tmp/net11-ref/ref/net11.0/." /reference-sets/net11-preview-ref/ \
+    && if [ -f /app/publish/SharpLab.Runtime.dll ]; then \
+         cp /app/publish/SharpLab.Runtime.dll /reference-sets/net10-ref/SharpLab.Runtime.dll; \
+         cp /app/publish/SharpLab.Runtime.dll /reference-sets/net11-preview-ref/SharpLab.Runtime.dll; \
+       fi \
+    && test -f /reference-sets/net11-preview-ref/System.Runtime.dll
+RUN dotnet run /tools/create-reference-set-attestation.cs -- \
+      --root /reference-sets/net10-ref \
+      --id net10-ref \
+      --target-framework net10.0 \
+      --digest "${NET10_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --provenance-kind nuget-package \
+      --resolved-version "${NET10_REFERENCE_PACK_VERSION}" \
+      --package Microsoft.NETCore.App.Ref \
+      --source-uri "${NET10_REFERENCE_URL}" \
+      --source-archive-digest "sha512:${NET10_REFERENCE_SHA512}" \
+    && dotnet run /tools/create-reference-set-attestation.cs -- \
+      --root /reference-sets/net11-preview-ref \
+      --id net11-preview-ref \
+      --target-framework net11.0 \
+      --digest "${NET11_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --provenance-kind nuget-package \
+      --resolved-version "${NET11_REFERENCE_VERSION}" \
+      --package Microsoft.NETCore.App.Ref \
+      --source-uri "${NET11_REFERENCE_URL}" \
+      --source-archive-digest "sha512:${NET11_REFERENCE_SHA512}"
+
+FROM publish AS framework-reference-sets
+COPY profiles/runtime-matrix.json /inputs/runtime-matrix.json
+COPY deploy/docker/roslyn-netfx48-appsettings.json /inputs/appsettings.template.json
+COPY eng/materialize-framework-reference-sets.cs /tools/materialize-framework-reference-sets.cs
+RUN --mount=type=cache,id=sharplabnext-reference-archives,target=/reference-archives,sharing=locked \
+    cd /tools \
+    && NUGET_PACKAGES=/tmp/sharplabnext-nuget dotnet run materialize-framework-reference-sets.cs -- \
+      --matrix /inputs/runtime-matrix.json \
+      --output /reference-sets \
+      --archive-cache /reference-archives \
+      --appsettings-template /inputs/appsettings.template.json \
+      --appsettings-output /generated/appsettings.json \
+    && test "$(find /reference-sets -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 14 \
+    && test -f /reference-sets/netfx20-managed-ref/mscorlib.dll \
+    && test -f /reference-sets/netfx30-managed-ref/reference-set.attestation.json \
+    && test -f /reference-sets/netfx48-managed-ref/System.Runtime.dll \
+    && test -f /reference-sets/netfx48-managed-ref/netstandard.dll \
+    && test ! -f /reference-sets/netfx48-managed-ref/SharpLab.Runtime.dll
+
+FROM ${ASPNET_IMAGE} AS final-base
+ARG ASSEMBLY_NAME
+ARG SERVICE_TITLE="SharpLabNext Worker"
+ARG VERSION
+ARG SOURCE_REVISION
+ARG DOTNET10_RUNTIME_VERSION
+ARG DOTNET10_RUNTIME_COMMIT
+ARG DOTNET10_JIT_COMMIT
+ARG DOTNET11_RUNTIME_VERSION
+ARG DOTNET11_RUNTIME_COMMIT
+ARG DOTNET11_JIT_COMMIT
+ARG CONST_GENERICS_RUNTIME_VERSION
+ARG CONST_GENERICS_RUNTIME_COMMIT
+ARG CONST_GENERICS_JIT_COMMIT
+ARG WINE_NETFX48_RUNTIME_VERSION
+ARG WINE_JSHARP20_RUNTIME_VERSION
+RUN test -n "${ASSEMBLY_NAME}" \
+    && if [ "${ASSEMBLY_NAME}" = "SharpLabNext.RuntimeSupervisor.dll" ]; then \
+         test -n "${DOTNET10_RUNTIME_VERSION}" \
+         && test -n "${DOTNET10_RUNTIME_COMMIT}" \
+         && test -n "${DOTNET10_JIT_COMMIT}" \
+         && test -n "${DOTNET11_RUNTIME_VERSION}" \
+         && test -n "${DOTNET11_RUNTIME_COMMIT}" \
+         && test -n "${DOTNET11_JIT_COMMIT}" \
+         && test -n "${CONST_GENERICS_RUNTIME_VERSION}" \
+         && test -n "${CONST_GENERICS_RUNTIME_COMMIT}" \
+         && test -n "${CONST_GENERICS_JIT_COMMIT}" \
+         && test -n "${WINE_NETFX48_RUNTIME_VERSION}" \
+         && test -n "${WINE_JSHARP20_RUNTIME_VERSION}"; \
+       fi \
+    && mkdir -p /var/lib/sharplabnext \
+    && chown 1654:1654 /var/lib/sharplabnext
+LABEL org.opencontainers.image.title="${SERVICE_TITLE}" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext"
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:8080 \
+    DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    HOME=/tmp \
+    RuntimeSupervisor__Profiles__0__RuntimeVersion=${DOTNET10_RUNTIME_VERSION} \
+    RuntimeSupervisor__Profiles__0__RuntimeCommit=${DOTNET10_RUNTIME_COMMIT} \
+    RuntimeSupervisor__Profiles__0__JitVersion=${DOTNET10_RUNTIME_VERSION} \
+    RuntimeSupervisor__Profiles__0__JitCommit=${DOTNET10_JIT_COMMIT} \
+    RuntimeSupervisor__Profiles__1__RuntimeVersion=${DOTNET11_RUNTIME_VERSION} \
+    RuntimeSupervisor__Profiles__1__RuntimeCommit=${DOTNET11_RUNTIME_COMMIT} \
+    RuntimeSupervisor__Profiles__1__JitVersion=${DOTNET11_RUNTIME_VERSION} \
+    RuntimeSupervisor__Profiles__1__JitCommit=${DOTNET11_JIT_COMMIT} \
+    RuntimeSupervisor__Profiles__2__RuntimeVersion=${CONST_GENERICS_RUNTIME_VERSION} \
+    RuntimeSupervisor__Profiles__2__RuntimeCommit=${CONST_GENERICS_RUNTIME_COMMIT} \
+    RuntimeSupervisor__Profiles__2__JitVersion=${CONST_GENERICS_RUNTIME_VERSION} \
+    RuntimeSupervisor__Profiles__2__JitCommit=${CONST_GENERICS_JIT_COMMIT} \
+    RuntimeSupervisor__Profiles__3__RuntimeVersion=${WINE_NETFX48_RUNTIME_VERSION} \
+    RuntimeSupervisor__Profiles__3__RuntimeCommit=not-applicable \
+    RuntimeSupervisor__Profiles__3__JitVersion=not-applicable \
+    RuntimeSupervisor__Profiles__3__JitCommit=not-applicable \
+    RuntimeSupervisor__Profiles__4__RuntimeVersion=${WINE_JSHARP20_RUNTIME_VERSION} \
+    RuntimeSupervisor__Profiles__4__RuntimeCommit=not-applicable \
+    RuntimeSupervisor__Profiles__4__JitVersion=not-applicable \
+    RuntimeSupervisor__Profiles__4__JitCommit=not-applicable \
+    SHARPLABNEXT_ASSEMBLY=${ASSEMBLY_NAME}
+COPY --from=publish --chown=1654:1654 /app/publish/ ./
+COPY --chmod=0555 deploy/docker/service-entrypoint.sh /usr/local/bin/sharplabnext-service
+USER 1654:1654
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/sharplabnext-service"]
+
+FROM final-base AS final-without-reference-sets
+
+FROM final-base AS final-with-reference-sets
+ARG NET10_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NET11_REFERENCE_PACKAGE_CONTENT_HASH
+LABEL io.sharplabnext.reference-set.net10-ref="${NET10_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      io.sharplabnext.reference-set.net11-preview-ref="${NET11_REFERENCE_PACKAGE_CONTENT_HASH}"
+COPY --from=reference-sets --chown=1654:1654 /reference-sets/ /reference-sets/
+
+FROM final-with-reference-sets AS final-with-reference-sets-and-ilsense-license
+USER 0:0
+RUN install -d -o 1654 -g 1654 -m 0555 /app/.sharplabnext/licenses
+COPY --from=publish --chown=1654:1654 --chmod=0444 \
+    /source/third_party/ILSense/LICENSE /app/.sharplabnext/licenses/ILSense-MIT.txt
+USER 1654:1654
+
+FROM final-with-reference-sets AS final-with-framework-reference-sets
+ARG NETFX20_MANAGED_REFERENCE_VERSION
+ARG NETFX20_MANAGED_REFERENCE_SOURCE_URI
+ARG NETFX20_MANAGED_REFERENCE_DIGEST
+ARG NETFX30_MANAGED_REFERENCE_VERSION
+ARG NETFX30_MANAGED_REFERENCE_DIGEST
+ARG NETFX35_MANAGED_REFERENCE_VERSION
+ARG NETFX35_MANAGED_REFERENCE_SOURCE_URI
+ARG NETFX35_MANAGED_REFERENCE_DIGEST
+ARG NETFX40_MANAGED_REFERENCE_VERSION
+ARG NETFX40_MANAGED_REFERENCE_SOURCE_URI
+ARG NETFX40_MANAGED_REFERENCE_DIGEST
+ARG NETFX45_MANAGED_REFERENCE_VERSION
+ARG NETFX45_MANAGED_REFERENCE_SOURCE_URI
+ARG NETFX45_MANAGED_REFERENCE_DIGEST
+ARG NETFX451_MANAGED_REFERENCE_VERSION
+ARG NETFX451_MANAGED_REFERENCE_SOURCE_URI
+ARG NETFX451_MANAGED_REFERENCE_DIGEST
+ARG NETFX452_MANAGED_REFERENCE_VERSION
+ARG NETFX452_MANAGED_REFERENCE_SOURCE_URI
+ARG NETFX452_MANAGED_REFERENCE_DIGEST
+ARG NETFX46_MANAGED_REFERENCE_VERSION
+ARG NETFX46_MANAGED_REFERENCE_SOURCE_URI
+ARG NETFX46_MANAGED_REFERENCE_DIGEST
+ARG NETFX461_MANAGED_REFERENCE_VERSION
+ARG NETFX461_MANAGED_REFERENCE_SOURCE_URI
+ARG NETFX461_MANAGED_REFERENCE_DIGEST
+ARG NETFX462_MANAGED_REFERENCE_VERSION
+ARG NETFX462_MANAGED_REFERENCE_SOURCE_URI
+ARG NETFX462_MANAGED_REFERENCE_DIGEST
+ARG NETFX47_MANAGED_REFERENCE_VERSION
+ARG NETFX47_MANAGED_REFERENCE_SOURCE_URI
+ARG NETFX47_MANAGED_REFERENCE_DIGEST
+ARG NETFX471_MANAGED_REFERENCE_VERSION
+ARG NETFX471_MANAGED_REFERENCE_SOURCE_URI
+ARG NETFX471_MANAGED_REFERENCE_DIGEST
+ARG NETFX472_MANAGED_REFERENCE_VERSION
+ARG NETFX472_MANAGED_REFERENCE_SOURCE_URI
+ARG NETFX472_MANAGED_REFERENCE_DIGEST
+ARG NETFX48_MANAGED_REFERENCE_VERSION
+ARG NETFX48_MANAGED_REFERENCE_SOURCE_URI
+ARG NETFX48_MANAGED_REFERENCE_DIGEST
+LABEL io.sharplabnext.component.netfx20-managed-ref.version="${NETFX20_MANAGED_REFERENCE_VERSION}" \
+      io.sharplabnext.component.netfx20-managed-ref.source-uri="${NETFX20_MANAGED_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.component.netfx30-managed-ref.version="${NETFX30_MANAGED_REFERENCE_VERSION}" \
+      io.sharplabnext.component.netfx30-managed-ref.digest="${NETFX30_MANAGED_REFERENCE_DIGEST}" \
+      io.sharplabnext.component.netfx35-managed-ref.version="${NETFX35_MANAGED_REFERENCE_VERSION}" \
+      io.sharplabnext.component.netfx35-managed-ref.source-uri="${NETFX35_MANAGED_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.component.netfx40-managed-ref.version="${NETFX40_MANAGED_REFERENCE_VERSION}" \
+      io.sharplabnext.component.netfx40-managed-ref.source-uri="${NETFX40_MANAGED_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.component.netfx45-managed-ref.version="${NETFX45_MANAGED_REFERENCE_VERSION}" \
+      io.sharplabnext.component.netfx45-managed-ref.source-uri="${NETFX45_MANAGED_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.component.netfx451-managed-ref.version="${NETFX451_MANAGED_REFERENCE_VERSION}" \
+      io.sharplabnext.component.netfx451-managed-ref.source-uri="${NETFX451_MANAGED_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.component.netfx452-managed-ref.version="${NETFX452_MANAGED_REFERENCE_VERSION}" \
+      io.sharplabnext.component.netfx452-managed-ref.source-uri="${NETFX452_MANAGED_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.component.netfx46-managed-ref.version="${NETFX46_MANAGED_REFERENCE_VERSION}" \
+      io.sharplabnext.component.netfx46-managed-ref.source-uri="${NETFX46_MANAGED_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.component.netfx461-managed-ref.version="${NETFX461_MANAGED_REFERENCE_VERSION}" \
+      io.sharplabnext.component.netfx461-managed-ref.source-uri="${NETFX461_MANAGED_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.component.netfx462-managed-ref.version="${NETFX462_MANAGED_REFERENCE_VERSION}" \
+      io.sharplabnext.component.netfx462-managed-ref.source-uri="${NETFX462_MANAGED_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.component.netfx47-managed-ref.version="${NETFX47_MANAGED_REFERENCE_VERSION}" \
+      io.sharplabnext.component.netfx47-managed-ref.source-uri="${NETFX47_MANAGED_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.component.netfx471-managed-ref.version="${NETFX471_MANAGED_REFERENCE_VERSION}" \
+      io.sharplabnext.component.netfx471-managed-ref.source-uri="${NETFX471_MANAGED_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.component.netfx472-managed-ref.version="${NETFX472_MANAGED_REFERENCE_VERSION}" \
+      io.sharplabnext.component.netfx472-managed-ref.source-uri="${NETFX472_MANAGED_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.component.netfx48-managed-ref.version="${NETFX48_MANAGED_REFERENCE_VERSION}" \
+      io.sharplabnext.component.netfx48-managed-ref.source-uri="${NETFX48_MANAGED_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.reference-set.netfx20-managed-ref="${NETFX20_MANAGED_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.netfx30-managed-ref="${NETFX30_MANAGED_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.netfx35-managed-ref="${NETFX35_MANAGED_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.netfx40-managed-ref="${NETFX40_MANAGED_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.netfx45-managed-ref="${NETFX45_MANAGED_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.netfx451-managed-ref="${NETFX451_MANAGED_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.netfx452-managed-ref="${NETFX452_MANAGED_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.netfx46-managed-ref="${NETFX46_MANAGED_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.netfx461-managed-ref="${NETFX461_MANAGED_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.netfx462-managed-ref="${NETFX462_MANAGED_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.netfx47-managed-ref="${NETFX47_MANAGED_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.netfx471-managed-ref="${NETFX471_MANAGED_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.netfx472-managed-ref="${NETFX472_MANAGED_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.netfx48-managed-ref="${NETFX48_MANAGED_REFERENCE_DIGEST}"
+COPY --from=framework-reference-sets --chown=1654:1654 \
+    /reference-sets/ /reference-sets/
+
+FROM final-with-framework-reference-sets AS final-with-framework-and-jsharp-reference-sets
+ARG JSHARP_REFERENCE_VERSION
+ARG JSHARP_REFERENCE_DIGEST
+ARG JSHARP_REFERENCE_SOURCE_URI
+LABEL io.sharplabnext.component.jsharp20-ref.version="${JSHARP_REFERENCE_VERSION}" \
+      io.sharplabnext.component.jsharp20-ref.digest="${JSHARP_REFERENCE_DIGEST}" \
+      io.sharplabnext.component.jsharp20-ref.source-uri="${JSHARP_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.reference-set.jsharp20-ref="${JSHARP_REFERENCE_DIGEST}"
+COPY --from=jsharp-reference-source --chown=1654:1654 \
+    /reference-sets/jsharp20-ref/ /reference-sets/jsharp20-ref/
+RUN set -eu; \
+    reference_root=/reference-sets/jsharp20-ref; \
+    reference_manifest=/tmp/jsharp20-ref.manifest; \
+    for file in mscorlib.dll System.dll vjslib.dll vjscor.dll; do \
+      test -f "${reference_root}/${file}"; \
+    done; \
+    find "${reference_root}" -maxdepth 1 -type f -printf '%f\n' \
+      | LC_ALL=C sort \
+      | while IFS= read -r file; do \
+          file_digest="$(sha256sum "${reference_root}/${file}" | cut -d' ' -f1)"; \
+          file_size="$(stat -c '%s' "${reference_root}/${file}")"; \
+          printf 'sha256:%s  %s  %s\n' "${file_digest}" "${file_size}" "${file}"; \
+        done > "${reference_manifest}"; \
+    test "$(wc -l < "${reference_manifest}")" -eq 4; \
+    reference_content_digest="sha256:$(sha256sum "${reference_manifest}" | cut -d' ' -f1)"; \
+    test "${reference_content_digest}" = "${JSHARP_REFERENCE_DIGEST}"; \
+    rm -f "${reference_manifest}"
+
+FROM final-with-reference-sets AS final

@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "dependencies": {
+    ".NETStandard,Version=v2.1": {},
+    "net10.0": {}
+  }
+}

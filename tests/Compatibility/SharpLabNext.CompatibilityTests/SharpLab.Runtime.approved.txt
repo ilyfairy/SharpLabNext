@@ -1,0 +1,104 @@
+static class Inspect
+  method static System.Void Allocations(System.Action action)
+  method static System.Void Allocations<T>(System.Func<T> action)
+  method static System.Void Heap(System.Object object)
+  method static System.Void MemoryGraph<T>(in T value)
+  method static System.Void MemoryGraph<T1, T2>(in T1 value1, in T2 value2)
+  method static System.Void MemoryGraph<T1, T2, T3>(in T1 value1, in T2 value2, in T3 value3)
+  method static System.Void MemoryGraph<T1, T2, T3, T4>(in T1 value1, in T2 value2, in T3 value3, in T4 value4)
+  method static System.Void MemoryGraph<T1, T2, T3, T4, T5>(in T1 value1, in T2 value2, in T3 value3, in T4 value4, in T5 value5)
+  method static System.Boolean ReferenceEquals(System.Object objA, System.Object objB)
+  method static System.Void Stack<T>(in T value)
+
+sealed class SharpLab.Runtime.AllocationInspection
+  ctor AllocationInspection(System.Int64 allocatedBytes)
+  property System.Int64 AllocatedBytes { get; }
+
+enum SharpLab.Runtime.FlowEventKind
+  field static const SharpLab.Runtime.FlowEventKind Branch = 1
+  field static const SharpLab.Runtime.FlowEventKind Exception = 6
+  field static const SharpLab.Runtime.FlowEventKind Jump = 4
+  field static const SharpLab.Runtime.FlowEventKind Loop = 3
+  field static const SharpLab.Runtime.FlowEventKind Method = 2
+  field static const SharpLab.Runtime.FlowEventKind SequencePoint = 0
+  field static const SharpLab.Runtime.FlowEventKind Value = 5
+  field System.Int32 value__
+
+sealed class SharpLab.Runtime.FlowRecord
+  ctor FlowRecord(SharpLab.Runtime.FlowEventKind kind, System.String documentPath, System.Int32 startLine, System.Int32 startColumn, System.Int32 endLine, System.Int32 endColumn, System.Object value = null, System.String name = null)
+  property System.String DocumentPath { get; }
+  property System.Int32 EndColumn { get; }
+  property System.Int32 EndLine { get; }
+  property SharpLab.Runtime.FlowEventKind Kind { get; }
+  property System.String Name { get; }
+  property System.Int32 StartColumn { get; }
+  property System.Int32 StartLine { get; }
+  property System.Object Value { get; }
+
+interface SharpLab.Runtime.IFlowSink
+  method System.Void Write(SharpLab.Runtime.FlowRecord flow)
+
+interface SharpLab.Runtime.IInspectionSink
+  method System.Void Write(SharpLab.Runtime.InspectionRecord inspection)
+
+enum SharpLab.Runtime.InspectionKind
+  field static const SharpLab.Runtime.InspectionKind Allocations = 4
+  field static const SharpLab.Runtime.InspectionKind Heap = 1
+  field static const SharpLab.Runtime.InspectionKind MemoryGraph = 3
+  field static const SharpLab.Runtime.InspectionKind Stack = 2
+  field static const SharpLab.Runtime.InspectionKind Value = 0
+  field static const SharpLab.Runtime.InspectionKind Warning = 5
+  field System.Int32 value__
+
+sealed class SharpLab.Runtime.InspectionRecord
+  ctor InspectionRecord(SharpLab.Runtime.InspectionKind kind, System.String title, System.Object value, System.Collections.Generic.IReadOnlyList<System.Object> values = null)
+  property SharpLab.Runtime.InspectionKind Kind { get; }
+  property System.String Title { get; }
+  property System.Object Value { get; }
+  property System.Collections.Generic.IReadOnlyList<System.Object> Values { get; }
+
+static class SharpLab.Runtime.Internal.ContainerFlow
+  method static System.Void ReportException(System.Object exception)
+  method static System.Void ReportLineStart(System.Int32 lineNumber)
+  method static System.Void ReportReadOnlySpanValue<T>(System.ReadOnlySpan<T> value, System.String name, System.Int32 lineNumber)
+  method static System.Void ReportRefReadOnlySpanValue<T>(ref System.ReadOnlySpan<T> value, System.String name, System.Int32 lineNumber)
+  method static System.Void ReportRefSpanValue<T>(ref System.Span<T> value, System.String name, System.Int32 lineNumber)
+  method static System.Void ReportRefValue<T>(ref T value, System.String name, System.Int32 lineNumber)
+  method static System.Void ReportSpanValue<T>(System.Span<T> value, System.String name, System.Int32 lineNumber)
+  method static System.Void ReportValue<T>(T value, System.String name, System.Int32 lineNumber)
+
+static class SharpLab.Runtime.Internal.Flow
+  field static const System.Int32 UnknownLineNumber = -1
+  method static System.Void ReportBranch(System.String documentPath, System.Int32 startLine, System.Int32 startColumn, System.Int32 endLine, System.Int32 endColumn)
+  method static System.Void ReportException(System.Object exception)
+  method static System.Void ReportJump()
+  method static System.Void ReportLineStart(System.Int32 lineNumber)
+  method static System.Void ReportLoopArea(System.Int32 startLineNumber, System.Int32 endLineNumber)
+  method static System.Void ReportLoopEnd()
+  method static System.Void ReportLoopStart()
+  method static System.Void ReportMethod(System.String name)
+  method static System.Void ReportMethodArea(System.Int32 startLineNumber, System.Int32 endLineNumber)
+  method static System.Void ReportReadOnlySpanValue<T>(System.ReadOnlySpan<T> value, System.String name, System.Int32 lineNumber)
+  method static System.Void ReportRefReadOnlySpanValue<T>(ref System.ReadOnlySpan<T> value, System.String name, System.Int32 lineNumber)
+  method static System.Void ReportRefSpanValue<T>(ref System.Span<T> value, System.String name, System.Int32 lineNumber)
+  method static System.Void ReportRefValue<T>(ref T value, System.String name, System.Int32 lineNumber)
+  method static System.Void ReportSequencePoint(System.String documentPath, System.Int32 startLine, System.Int32 startColumn, System.Int32 endLine, System.Int32 endColumn)
+  method static System.Void ReportSpanValue<T>(System.Span<T> value, System.String name, System.Int32 lineNumber)
+  method static System.Void ReportValue<T>(T value, System.String name, System.Int32 lineNumber)
+
+class SharpLab.Runtime.JitGenericAttribute
+  ctor JitGenericAttribute(System.Type[] argumentTypes)
+  property System.Type[] ArgumentTypes { get; }
+
+sealed class SharpLab.Runtime.NoILRewritingAttribute
+  ctor NoILRewritingAttribute()
+
+static class SharpLab.Runtime.RuntimeServices
+  method static System.IDisposable PushFlowSink(SharpLab.Runtime.IFlowSink sink)
+  method static System.IDisposable PushInspectionSink(SharpLab.Runtime.IInspectionSink sink)
+
+static class SharpLabObjectExtensions
+  method static T Dump<T>(T value)
+  method static System.Void Inspect<T>(System.ReadOnlySpan<T> value, System.String title = null)
+  method static System.Void Inspect<T>(System.Span<T> value, System.String title = null)
+  method static System.Void Inspect<T>(T value, System.String title = null)

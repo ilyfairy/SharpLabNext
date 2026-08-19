@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "componentId": "roslyn-const-generics",
+  "sourceComponentId": "const-generics-roslyn-source",
+  "compatibilityGroup": "const-generics-bcaed316",
+  "status": "source-inputs-recorded",
+  "license": "MIT",
+  "patchSeries": [
+    {
+      "path": "eng/patches/roslyn-const-generics/0001-use-source-built-metadata.patch",
+      "purpose": "Replace the mutable 8.0.0-dev metadata and immutable packages with compiler-compatible assemblies built from the locked runtime source, and correct the fork's Windows-only SymbolKey path casing."
+    }
+  ],
+  "builder": {
+    "imageId": "dotnet-sdk",
+    "platform": "linux/amd64",
+    "sourceDateEpoch": 1694172012
+  },
+  "build": {
+    "configuration": "Release",
+    "solutionFilter": "eng/roslyn-const-generics.slnf",
+    "targetFrameworks": ["netstandard2.0"],
+    "officialBuild": true,
+    "ibcOptimization": false,
+    "metadataRuntimeSourceComponentId": "const-generics-runtime-source",
+    "compilerAssetTargetFramework": "netstandard2.0",
+    "compilerAssetAssemblyVersion": "8.0.0.0",
+    "referenceSetId": "const-generics-ref",
+    "outputs": [
+      "Microsoft.CodeAnalysis.Common",
+      "Microsoft.CodeAnalysis.CSharp",
+      "Microsoft.CodeAnalysis.Workspaces",
+      "Microsoft.CodeAnalysis.CSharp.Workspaces",
+      "Microsoft.CodeAnalysis.Features",
+      "Microsoft.CodeAnalysis.CSharp.Features",
+      "C# LSP adapter"
+    ]
+  },
+  "featureEvidence": [
+    "src/Compilers/CSharp/Portable/Symbols/ConstraintsHelper.cs:CheckConstTypeArgument",
+    "src/Compilers/CSharp/Portable/Parser/LanguageParser.cs:LiteralTypeArgumentSyntax",
+    "src/Workspaces/CSharp/Portable/Recommendations/CSharpRecommendationServiceRunner.cs:ITypeParameterSymbol.Type",
+    "System.Reflection.Metadata:GenericParameter.Type",
+    "System.Reflection.Metadata:SignatureTypeEncoder.ConstValueType"
+  ],
+  "artifactContract": {
+    "compatibilityGroup": "const-generics-bcaed316",
+    "runtimeFamily": "coreclr-const-generics",
+    "requiredRuntimeFeatureTags": ["runtime.const-generics.v1"],
+    "metadataFeatureTags": ["metadata.const-generics.v1"]
+  }
+}

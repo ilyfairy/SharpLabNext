@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "componentId": "const-generics-linux-x64",
+  "sourceComponentId": "const-generics-runtime-source",
+  "compatibilityGroup": "const-generics-bcaed316",
+  "status": "source-inputs-recorded",
+  "license": "MIT",
+  "builder": {
+    "imageId": "dotnet-runtime-build",
+    "platform": "linux/amd64",
+    "sourceDateEpoch": 1695171340
+  },
+  "build": {
+    "configuration": "Release",
+    "subset": "clr+libs+host.native+host.tools+host.pkg+packs.product",
+    "officialBuildId": "20230920.1",
+    "sourceLink": "disabled-for-checksum-verified-source-archive",
+    "bootstrapDependencyOverrides": [
+      {
+        "componentId": "const-generics-versiontools",
+        "sourceRequestedVersion": "8.0.0-beta.23463.1",
+        "reason": "The source-requested package was removed from the public dotnet-eng feed; the compatible replacement is pinned by the referenced top-level build dependency."
+      }
+    ],
+    "outputs": [
+      "linux-x64-runtime-layout",
+      "Microsoft.NETCore.App.Ref",
+      "CoreCLR JIT",
+      "DAC",
+      "netstandard2.0/System.Reflection.Metadata.dll (assembly 8.0.0.0)",
+      "netstandard2.0/System.Collections.Immutable.dll (assembly 8.0.0.0)"
+    ],
+    "referenceSet": {
+      "componentId": "const-generics-ref",
+      "referencePath": "ref/net9.0"
+    }
+  },
+  "featureEvidence": [
+    "src/coreclr/inc/corhdr.h:ELEMENT_TYPE_CTARG",
+    "src/coreclr/md/inc/metamodel.h:SupportsConstGenerics",
+    "src/coreclr/vm/typehandle.cpp:IsConstGenericVariable",
+    "src/libraries/System.Reflection.Metadata"
+  ],
+  "featureTags": {
+    "runtime": ["runtime.const-generics.v1"],
+    "metadata": ["metadata.const-generics.v1"]
+  }
+}

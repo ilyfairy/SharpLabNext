@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 2,
+  "workerId": "minilang-stable",
+  "languageId": "minilang",
+  "toolchainIds": ["minilang-stable"],
+  "protocolVersion": "1.0",
+  "capabilities": [
+    "artifact",
+    "compile-check",
+    "completion",
+    "diagnostics",
+    "lsp"
+  ],
+  "producedArtifactFormats": [
+    "cil-text-v1"
+  ],
+  "supportedReferenceSetIds": [
+    "net10-ref",
+    "net11-preview-ref"
+  ],
+  "limits": {
+    "maximumFiles": 16,
+    "maximumSourceUtf8Bytes": 262144,
+    "maximumArtifactBytes": 1048576,
+    "maximumConcurrentBuilds": 4,
+    "maximumBuildMilliseconds": 5000,
+    "maximumLspMessageBytes": 262144
+  }
+}

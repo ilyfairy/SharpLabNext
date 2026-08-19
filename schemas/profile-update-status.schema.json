@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/operations/v1/profile-update-status.schema.json",
+  "title": "SharpLabNext Public Profile Update Status",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "status", "checked", "active", "updatedAt", "lastStage"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "status": {
+      "enum": ["unknown", "not-checked", "up-to-date", "update-available", "candidate-in-progress", "candidate-failed", "candidate-approved"]
+    },
+    "checked": { "type": "boolean" },
+    "active": { "$ref": "#/$defs/release" },
+    "lastKnownGood": { "anyOf": [{ "$ref": "#/$defs/release" }, { "type": "null" }] },
+    "candidate": { "anyOf": [{ "$ref": "#/$defs/release" }, { "type": "null" }] },
+    "updateAvailable": { "type": ["boolean", "null"] },
+    "checkedAt": { "type": ["string", "null"], "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "lastStage": { "$ref": "#/$defs/stage" }
+  },
+  "$defs": {
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["releaseId"],
+      "properties": {
+        "releaseId": { "$ref": "#/$defs/nonEmpty" },
+        "lockDigest": {
+          "anyOf": [
+            { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "outcome"],
+      "properties": {
+        "stage": { "enum": ["none", "check", "resolve", "build", "test", "promote"] },
+        "outcome": { "enum": ["not-checked", "succeeded", "failed"] },
+        "startedAt": { "type": ["string", "null"], "format": "date-time" },
+        "completedAt": { "type": ["string", "null"], "format": "date-time" },
+        "error": { "anyOf": [{ "$ref": "#/$defs/error" }, { "type": "null" }] }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z0-9][a-z0-9.-]*$" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "nonEmpty": { "type": "string", "minLength": 1, "maxLength": 512 }
+  }
+}

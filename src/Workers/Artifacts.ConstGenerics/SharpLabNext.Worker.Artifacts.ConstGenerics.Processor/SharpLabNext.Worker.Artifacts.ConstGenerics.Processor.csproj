@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <!-- This executable is launched directly by the worker; make the shared
+         PascalCase serializer a direct dependency of the isolated child. -->
+    <ProjectReference Include="..\..\..\Contracts\SharpLabNext.Contracts\SharpLabNext.Contracts.csproj" />
+    <ProjectReference Include="..\SharpLabNext.Worker.Artifacts.ConstGenerics.Protocol\SharpLabNext.Worker.Artifacts.ConstGenerics.Protocol.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseAppHost>false</UseAppHost>
+    <RollForward>Major</RollForward>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <NuGetLockFilePath Condition="'$(ConstGenericsDependenciesDirectory)' != ''">packages.source.lock.json</NuGetLockFilePath>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(ConstGenericsDependenciesDirectory)' == ''">
+    <PackageReference Include="ICSharpCode.Decompiler" />
+    <PackageReference Include="Microsoft.ILVerification" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(ConstGenericsDependenciesDirectory)' != ''">
+    <Reference Include="ICSharpCode.Decompiler">
+      <HintPath>$(ConstGenericsDependenciesDirectory)/ICSharpCode.Decompiler.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="ILVerification">
+      <HintPath>$(ConstGenericsDependenciesDirectory)/ILVerification.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Reflection.Metadata">
+      <HintPath>$(ConstGenericsDependenciesDirectory)/System.Reflection.Metadata.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Collections.Immutable">
+      <HintPath>$(ConstGenericsDependenciesDirectory)/System.Collections.Immutable.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="ValidateConstGenericsDependencies" BeforeTargets="ResolveReferences"
+          Condition="'$(ConstGenericsDependenciesDirectory)' != ''">
+    <Error Condition="!Exists('$(ConstGenericsDependenciesDirectory)/ICSharpCode.Decompiler.dll')"
+           Text="The source-built ConstGenerics ILSpy assembly is missing." />
+    <Error Condition="!Exists('$(ConstGenericsDependenciesDirectory)/ILVerification.dll')"
+           Text="The source-built ConstGenerics ILVerification assembly is missing." />
+    <Error Condition="!Exists('$(ConstGenericsDependenciesDirectory)/System.Reflection.Metadata.dll')"
+           Text="The source-built ConstGenerics metadata assembly is missing." />
+    <Error Condition="!Exists('$(ConstGenericsDependenciesDirectory)/System.Collections.Immutable.dll')"
+           Text="The matching ConstGenerics immutable collections assembly is missing." />
+  </Target>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpLabNext.Worker.Artifacts.ConstGenerics.Tests" />
+  </ItemGroup>
+
+</Project>

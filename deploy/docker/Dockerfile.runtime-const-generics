@@ -1,0 +1,262 @@
+# syntax=docker/dockerfile:1.7
+
+ARG RUNTIME_BUILD_IMAGE
+ARG SDK_IMAGE
+ARG RUNTIME_DEPS_IMAGE
+ARG CONST_GENERICS_RUNTIME_COMMIT
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_URL
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_SHA256
+ARG CONST_GENERICS_VERSIONTOOLS_VERSION
+ARG CONST_GENERICS_VERSIONTOOLS_PACKAGE_SHA256
+ARG CONST_GENERICS_VERSIONTOOLS_SOURCE_URI
+
+FROM ${RUNTIME_BUILD_IMAGE} AS runtime-source-build-base
+ARG CONST_GENERICS_RUNTIME_COMMIT
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_URL
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_SHA256
+ARG CONST_GENERICS_VERSIONTOOLS_VERSION
+ARG CONST_GENERICS_VERSIONTOOLS_PACKAGE_SHA256
+ARG CONST_GENERICS_VERSIONTOOLS_SOURCE_URI
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+    NUGET_XMLDOC_MODE=skip \
+    SOURCE_DATE_EPOCH=1695171340
+WORKDIR /runtime-source
+RUN curl --fail --location --retry 3 --retry-all-errors --output /tmp/runtime-source.tar.gz "${CONST_GENERICS_RUNTIME_ARCHIVE_URL}" \
+    && echo "${CONST_GENERICS_RUNTIME_ARCHIVE_SHA256}  /tmp/runtime-source.tar.gz" | sha256sum --check --strict \
+    && curl --fail --location --retry 3 --retry-all-errors --output /tmp/microsoft.dotnet.versiontools.tasks.nupkg "${CONST_GENERICS_VERSIONTOOLS_SOURCE_URI}" \
+    && echo "${CONST_GENERICS_VERSIONTOOLS_PACKAGE_SHA256}  /tmp/microsoft.dotnet.versiontools.tasks.nupkg" | sha256sum --check --strict \
+    && tar --extract --gzip --file /tmp/runtime-source.tar.gz --strip-components=1 \
+    && rm /tmp/runtime-source.tar.gz \
+    && grep --fixed-strings --quiet 'ELEMENT_TYPE_CTARG          = 0x22' src/coreclr/inc/corhdr.h \
+    && grep --fixed-strings --quiet 'SupportsConstGenerics()' src/coreclr/md/inc/metamodel.h \
+    && grep --fixed-strings --quiet 'IsConstGenericVariable()' src/coreclr/vm/typehandle.cpp \
+    && grep --fixed-strings --quiet '<ProductVersion>9.0.0</ProductVersion>' eng/Versions.props
+RUN --mount=type=cache,id=sharplabnext-const-runtime-nuget,target=/root/.nuget/packages,sharing=locked \
+    --mount=type=cache,id=sharplabnext-const-runtime-packages,target=/runtime-source/.packages,sharing=locked \
+    ./build.sh \
+      --subset clr+libs+host.native+host.tools+host.pkg+packs.product \
+      --configuration Release \
+      --arch x64 \
+      --os linux \
+      /p:ContinuousIntegrationBuild=true \
+      /p:OfficialBuildId=20230920.1 \
+      /p:PreReleaseVersionLabel=constgenerics \
+      /p:PreReleaseVersionIteration=1 \
+      /p:SourceRevisionId=${CONST_GENERICS_RUNTIME_COMMIT} \
+      /p:MicrosoftDotNetVersionToolsTasksVersion=${CONST_GENERICS_VERSIONTOOLS_VERSION} \
+      /p:EnableSourceLink=false \
+      /p:UseSharedCompilation=false
+RUN --mount=type=cache,id=sharplabnext-const-runtime-nuget,target=/root/.nuget/packages,sharing=locked \
+    --mount=type=cache,id=sharplabnext-const-runtime-packages,target=/runtime-source/.packages,sharing=locked \
+    set -e; \
+    restored=0; \
+    for attempt in 1 2 3; do \
+      if ./dotnet.sh restore \
+        src/libraries/System.Reflection.Metadata/src/System.Reflection.Metadata.csproj \
+        --locked-mode \
+        --disable-parallel \
+        /p:MicrosoftDotNetVersionToolsTasksVersion=${CONST_GENERICS_VERSIONTOOLS_VERSION}; then \
+        restored=1; \
+        break; \
+      fi; \
+      echo "ConstGenerics metadata restore attempt ${attempt} failed; retrying." >&2; \
+      sleep $((attempt * 2)); \
+    done; \
+    test "${restored}" -eq 1; \
+    ./dotnet.sh build \
+      src/libraries/System.Reflection.Metadata/src/System.Reflection.Metadata.csproj \
+      --configuration Release \
+      --framework netstandard2.0 \
+      --no-restore \
+      --no-incremental \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${CONST_GENERICS_RUNTIME_COMMIT} \
+      /p:MicrosoftDotNetVersionToolsTasksVersion=${CONST_GENERICS_VERSIONTOOLS_VERSION} \
+      /p:MajorVersion=8 \
+      /p:MinorVersion=0 \
+      /p:AssemblyVersion=8.0.0.0 \
+      /p:FileVersion=8.0.0.0 \
+      /p:Version=8.0.0-dev \
+    && mkdir -p /compiler-assets/const-generics \
+    && cp artifacts/bin/System.Reflection.Metadata/Release/netstandard2.0/System.Reflection.Metadata.dll \
+      /compiler-assets/const-generics/System.Reflection.Metadata.dll \
+    && cp artifacts/bin/System.Collections.Immutable/Release/netstandard2.0/System.Collections.Immutable.dll \
+      /compiler-assets/const-generics/System.Collections.Immutable.dll \
+    && test -s /compiler-assets/const-generics/System.Reflection.Metadata.dll \
+    && test -s /compiler-assets/const-generics/System.Collections.Immutable.dll \
+    && sha256sum /compiler-assets/const-generics/*.dll \
+      > /compiler-assets/const-generics/compiler-assets.sha256
+
+FROM runtime-source-build-base AS runtime-assets
+ARG CONST_GENERICS_RUNTIME_COMMIT
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_URL
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_SHA256
+ARG CONST_GENERICS_VERSIONTOOLS_VERSION
+ARG CONST_GENERICS_VERSIONTOOLS_PACKAGE_SHA256
+ARG CONST_GENERICS_REFERENCE_VERSION
+ARG CONST_GENERICS_REFERENCE_DIGEST
+RUN set -eux; \
+    runtime_archive="artifacts/packages/Release/Shipping/dotnet-runtime-${CONST_GENERICS_REFERENCE_VERSION}-linux-x64.tar.gz"; \
+    reference_package="artifacts/packages/Release/Shipping/Microsoft.NETCore.App.Ref.${CONST_GENERICS_REFERENCE_VERSION}.nupkg"; \
+    test -f "${runtime_archive}"; \
+    test -f "${reference_package}"; \
+    test "${CONST_GENERICS_REFERENCE_DIGEST#sha256:}" != "${CONST_GENERICS_REFERENCE_DIGEST}"; \
+    expected_reference_identity_digest="${CONST_GENERICS_REFERENCE_DIGEST#sha256:}"; \
+    if [ "${expected_reference_identity_digest}" != "${CONST_GENERICS_RUNTIME_ARCHIVE_SHA256}" ]; then \
+      echo "ConstGenerics reference source identity digest mismatch: expected sha256:${CONST_GENERICS_RUNTIME_ARCHIVE_SHA256}, actual ${CONST_GENERICS_REFERENCE_DIGEST}." >&2; \
+      exit 1; \
+    fi; \
+    mkdir -p /runtime-layout /reference-pack; \
+    tar --extract --gzip --file "${runtime_archive}" --directory /runtime-layout; \
+    unzip -q "${reference_package}" -d /tmp/reference-package; \
+    cp -a /tmp/reference-package/ref/net9.0/. /reference-pack/; \
+    test -f /reference-pack/System.Runtime.dll; \
+    reference_content_digest="$( \
+      find /reference-pack -maxdepth 1 -type f -name '*.dll' -printf '%f\n' \
+        | LC_ALL=C sort \
+        | while IFS= read -r file; do \
+            file_digest="$(sha256sum "/reference-pack/${file}" | cut -d' ' -f1)"; \
+            file_size="$(stat -c '%s' "/reference-pack/${file}")"; \
+            printf 'sha256:%s  %s  %s\n' "${file_digest}" "${file_size}" "${file}"; \
+          done \
+        | sha256sum \
+        | cut -d' ' -f1 \
+    )"; \
+    test -n "${reference_content_digest}"; \
+    runtime_directory="/runtime-layout/shared/Microsoft.NETCore.App/${CONST_GENERICS_REFERENCE_VERSION}"; \
+    test -d "${runtime_directory}"; \
+    runtime_version="$(basename "${runtime_directory}")"; \
+    test "${runtime_version}" = "${CONST_GENERICS_REFERENCE_VERSION}"; \
+    test -x /runtime-layout/dotnet; \
+    test -f "${runtime_directory}/libcoreclr.so"; \
+    test -f "${runtime_directory}/libclrjit.so"; \
+    test -f "${runtime_directory}/System.Private.CoreLib.dll"; \
+    mkdir -p /runtime-layout/.sharplabnext; \
+    runtime_archive_sha256="$(sha256sum "${runtime_archive}" | cut -d' ' -f1)"; \
+    reference_package_sha256="$(sha256sum "${reference_package}" | cut -d' ' -f1)"; \
+    printf '{"schemaVersion":1,"repository":"https://github.com/hez2010/runtime","commit":"%s","sourceArchive":"%s","sourceArchiveSha256":"%s","buildSubset":"clr+libs+host.native+host.tools+host.pkg+packs.product","configuration":"Release","rid":"linux-x64","versionToolsTasksVersion":"%s","versionToolsTasksPackageSha256":"%s","runtimeVersion":"%s","runtimeArchiveSha256":"%s","referencePackageSha256":"%s","referenceIdentityKind":"source-archive-sha256","referenceIdentityDigest":"sha256:%s","referenceContentDigest":"sha256:%s"}\n' \
+      "${CONST_GENERICS_RUNTIME_COMMIT}" \
+      "${CONST_GENERICS_RUNTIME_ARCHIVE_URL}" \
+      "${CONST_GENERICS_RUNTIME_ARCHIVE_SHA256}" \
+      "${CONST_GENERICS_VERSIONTOOLS_VERSION}" \
+      "${CONST_GENERICS_VERSIONTOOLS_PACKAGE_SHA256}" \
+      "${runtime_version}" \
+      "${runtime_archive_sha256}" \
+      "${reference_package_sha256}" \
+      "${expected_reference_identity_digest}" \
+      "${reference_content_digest}" \
+      > /runtime-layout/.sharplabnext/runtime-build.json; \
+    find "${runtime_directory}" -maxdepth 1 -type f \
+      \( -name 'libcoreclr.so' -o -name 'libclrjit.so' -o -name 'System.Private.CoreLib.dll' -o -name 'System.Reflection.Metadata.dll' \) \
+      -print0 | sort -z | xargs -0 sha256sum > /runtime-layout/.sharplabnext/runtime-files.sha256; \
+    cp LICENSE.TXT /runtime-layout/.sharplabnext/runtime-LICENSE.TXT; \
+    cp THIRD-PARTY-NOTICES.TXT /runtime-layout/.sharplabnext/runtime-THIRD-PARTY-NOTICES.TXT
+
+FROM ${RUNTIME_BUILD_IMAGE} AS jit-profiler
+WORKDIR /source
+COPY src/RuntimeJobs/SharpLabNext.JitProfiler.Native/ ./profiler/
+RUN test -x /usr/lib/llvm-14/bin/clang++ \
+    && CXX=/usr/lib/llvm-14/bin/clang++ sh ./profiler/build.sh /app/SharpLabNext.JitProfiler.so
+
+FROM ${SDK_IMAGE} AS helper-publish
+ARG CONFIGURATION=Release
+WORKDIR /source
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+RUN dotnet restore src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj --locked-mode \
+    && dotnet restore src/RuntimeJobs/SharpLabNext.JitInspector/SharpLabNext.JitInspector.csproj --locked-mode \
+    && dotnet restore src/RuntimeJobs/SharpLabNext.JitProfiler.Native/Smoke/SharpLabNext.JitProfilerSmoke.csproj --locked-mode
+RUN dotnet publish src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj \
+      --configuration ${CONFIGURATION} \
+      --framework net8.0 \
+      --no-restore \
+      --output /helpers/runner \
+      /p:UseAppHost=false \
+    && dotnet publish src/RuntimeJobs/SharpLabNext.JitInspector/SharpLabNext.JitInspector.csproj \
+      --configuration ${CONFIGURATION} \
+      --framework net8.0 \
+      --no-restore \
+      --output /helpers/jit \
+      /p:UseAppHost=false \
+    && dotnet publish src/RuntimeJobs/SharpLabNext.JitProfiler.Native/Smoke/SharpLabNext.JitProfilerSmoke.csproj \
+      --configuration ${CONFIGURATION} \
+      --framework net8.0 \
+      --no-restore \
+      --output /helpers/mapping-smoke \
+      /p:UseAppHost=false \
+      /p:DebugSymbols=true \
+      /p:DebugType=portable
+RUN mkdir -p /smoke \
+    && printf '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><AssemblyName>SharpLabNext.ConstRuntimeSmoke</AssemblyName></PropertyGroup></Project>\n' > /smoke/Smoke.csproj \
+    && printf 'using System; public static class Program { public static int Main() { Console.WriteLine("const-runtime-smoke"); return 0; } public static int Add(int left, int right) => left + right; }\n' > /smoke/Program.cs \
+    && dotnet publish /smoke/Smoke.csproj --configuration Release --output /smoke/publish /p:UseAppHost=false
+
+FROM ${RUNTIME_DEPS_IMAGE} AS runtime-image
+ARG VERSION
+ARG CONST_GENERICS_RUNTIME_COMMIT
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_SHA256
+ARG CONST_GENERICS_REFERENCE_DIGEST
+LABEL org.opencontainers.image.title="SharpLabNext ConstGenerics Runtime Job" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${CONST_GENERICS_RUNTIME_COMMIT}" \
+      org.opencontainers.image.source="https://github.com/hez2010/runtime" \
+      com.sharplabnext.runtime-profile="const-generics-linux-x64" \
+      com.sharplabnext.compatibility-group="const-generics-bcaed316" \
+      com.sharplabnext.runtime-feature="runtime.const-generics.v1" \
+      com.sharplabnext.metadata-feature="metadata.const-generics.v1" \
+      io.sharplabnext.runtime.commit="${CONST_GENERICS_RUNTIME_COMMIT}" \
+      io.sharplabnext.jit.commit="${CONST_GENERICS_RUNTIME_COMMIT}" \
+      io.sharplabnext.runtime.source-archive-sha256="${CONST_GENERICS_RUNTIME_ARCHIVE_SHA256}" \
+      io.sharplabnext.component.jit-profiler.license="MIT" \
+      io.sharplabnext.reference-set.const-generics-ref="${CONST_GENERICS_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.identity-kind="source-archive-sha256"
+USER root
+RUN mkdir -p /usr/share/dotnet /opt/sharplabnext/licenses /workspace /reference-sets/const-generics-ref /compiler-assets/const-generics \
+    && chown 1654:1654 /workspace \
+    && chmod 0755 /usr/share/dotnet /opt/sharplabnext /opt/sharplabnext/licenses /workspace /reference-sets/const-generics-ref /compiler-assets/const-generics
+COPY --from=runtime-assets /runtime-layout/ /usr/share/dotnet/
+COPY --from=runtime-assets /reference-pack/ /reference-sets/const-generics-ref/
+COPY --from=runtime-assets /compiler-assets/const-generics/ /compiler-assets/const-generics/
+COPY --from=helper-publish --chown=1654:1654 /helpers/runner/ /opt/sharplabnext/
+COPY --from=helper-publish --chown=1654:1654 /helpers/jit/ /opt/sharplabnext/
+COPY --from=jit-profiler --chown=1654:1654 --chmod=0555 /app/SharpLabNext.JitProfiler.so /opt/sharplabnext/SharpLabNext.JitProfiler.so
+COPY --from=jit-profiler --chown=1654:1654 --chmod=0444 /source/profiler/LICENSE.Microsoft.txt /opt/sharplabnext/licenses/jit-profiler-MIT.txt
+COPY --chmod=0555 deploy/docker/runtime-entrypoint.sh /opt/sharplabnext/runtime-entrypoint.sh
+COPY --chmod=0555 deploy/docker/jit-profiler-preflight.sh /opt/sharplabnext/jit-profiler-preflight.sh
+RUN ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
+ENV DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_ROLL_FORWARD=Major \
+    HOME=/tmp
+WORKDIR /workspace
+ENTRYPOINT ["/opt/sharplabnext/runtime-entrypoint.sh"]
+CMD ["dotnet", "--info"]
+
+FROM runtime-image AS preflight
+ARG CONST_GENERICS_RUNTIME_COMMIT
+COPY --from=helper-publish /smoke/publish/ /opt/sharplabnext/smoke/
+COPY --from=helper-publish /helpers/mapping-smoke/ /opt/sharplabnext/mapping-smoke/
+USER 1654:1654
+RUN set -eux; \
+    dotnet --list-runtimes | grep --fixed-strings 'Microsoft.NETCore.App 9.'; \
+    dotnet /opt/sharplabnext/SharpLabNext.Runner.dll /opt/sharplabnext/smoke/SharpLabNext.ConstRuntimeSmoke.dll > /tmp/run.frames; \
+    while IFS= read -r frame; do printf '%s' "${frame}" | base64 --decode; done < /tmp/run.frames > /tmp/run.decoded; \
+    grep --text --fixed-strings --quiet 'const-runtime-smoke' /tmp/run.decoded; \
+    grep --text --fixed-strings --quiet '"Status":"completed"' /tmp/run.decoded; \
+    COMPlus_JitDisasm='*' \
+    COMPlus_JitDisasmAssemblies=SharpLabNext.ConstRuntimeSmoke \
+    COMPlus_JitStdOutFile=/tmp/sharplabnext-jit.asm \
+    SHARPLABNEXT_JIT_OUTPUT_PATH=/tmp/sharplabnext-jit.asm \
+    dotnet /opt/sharplabnext/SharpLabNext.JitInspector.dll /opt/sharplabnext/smoke/SharpLabNext.ConstRuntimeSmoke.dll > /tmp/jit.frames; \
+    while IFS= read -r frame; do printf '%s' "${frame}" | base64 --decode; done < /tmp/jit.frames > /tmp/jit.decoded; \
+    grep --text --fixed-strings --quiet 'Assembly listing for method' /tmp/jit.decoded; \
+    grep --text --fixed-strings --quiet '"Status":"prepared"' /tmp/jit.decoded; \
+    /opt/sharplabnext/jit-profiler-preflight.sh /opt/sharplabnext/mapping-smoke; \
+    printf 'source=%s\nrun=passed\njit=passed\njit-profiler=passed\nsequence-point-ranges=passed\ndiagnostics-ipc-disabled-while-running=passed\n' "${CONST_GENERICS_RUNTIME_COMMIT}" > /tmp/const-generics-preflight.txt
+
+FROM runtime-image AS final
+COPY --from=preflight /tmp/const-generics-preflight.txt /opt/sharplabnext/const-generics-preflight.txt
+USER 1654:1654

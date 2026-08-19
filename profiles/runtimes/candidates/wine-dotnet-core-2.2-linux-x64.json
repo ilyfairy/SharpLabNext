@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "id": "wine-dotnet-core-2.2-linux-x64",
+  "image": "sharplabnext/runtime-wine-dotnet-core-2.2-linux-x64:candidate",
+  "family": "coreclr-wine",
+  "acceptedRuntimeFamilies": [
+    "coreclr-wine",
+    "coreclr"
+  ],
+  "acceptedFrameworks": [
+    {
+      "name": "Microsoft.NETCore.App",
+      "exactVersion": "2.2.8"
+    }
+  ],
+  "runtimeVersion": "2.2.8",
+  "runtimeCommit": "b9aa1abc510165cdc4c92e59d938def6f3eee0e1",
+  "jitVersion": "2.2.8",
+  "jitCommit": "b9aa1abc510165cdc4c92e59d938def6f3eee0e1",
+  "runtimeImageId": "sharplabnext/runtime-wine-dotnet-core-2.2-linux-x64:candidate",
+  "rid": "linux-x64",
+  "architecture": "x64",
+  "cpuFeatureProfile": "x64-v2",
+  "acceptedArtifactFormats": [
+    "dotnet-managed-pe-v1"
+  ],
+  "capabilities": [
+    "run"
+  ],
+  "providedRuntimeFeatureTags": [],
+  "providedMetadataFeatureTags": [],
+  "allowedSecurityPolicyIds": [
+    "runtime-job-default"
+  ],
+  "container": {
+    "isolationKind": "wine",
+    "environmentKind": "wine",
+    "executionUser": "0:0",
+    "winePrefixPath": "/opt/wine-dotnet"
+  },
+  "operations": {
+    "run": {
+      "implementationId": "sharplabnext-legacy-jit-inspector-v1",
+      "pathStyle": "wine-z",
+      "command": {
+        "executable": "/usr/lib/wine/wine64",
+        "argv": [
+          "Z:\\opt\\wine-dotnet\\drive_c\\dotnet\\dotnet.exe",
+          "exec",
+          "--fx-version",
+          "2.2.8",
+          "Z:\\opt\\sharplabnext\\SharpLabNext.LegacyJitInspector.dll",
+          "--runtime-version",
+          "2.2.8",
+          "run",
+          "{entryAssembly}",
+          "--",
+          "{arguments}"
+        ]
+      }
+    }
+  },
+  "layout": {
+    "runnerKind": "wine-coreclr",
+    "dotNetHostPath": "/opt/wine-dotnet/drive_c/dotnet/dotnet.exe",
+    "wineHostPath": "/usr/lib/wine/wine64",
+    "winePrefixPath": "/opt/wine-dotnet",
+    "runnerAssemblyPath": "/opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll"
+  },
+  "securityPolicies": [
+    {
+      "id": "runtime-job-default",
+      "memoryBytes": 268435456,
+      "nanoCpus": 1000000000,
+      "pidsLimit": 64,
+      "maximumDurationSeconds": 10,
+      "maximumArtifactBytes": 67108864,
+      "maximumOutputBytes": 1048576,
+      "tmpfsBytes": 33554432
+    }
+  ]
+}

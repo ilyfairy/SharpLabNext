@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "id": "runtime-image-linux-x64-v1",
+  "sampleCounts": {
+    "cold": 3,
+    "warm": 10
+  },
+  "resourceLimits": {
+    "nanoCpus": 1000000000,
+    "allowedMemoryBytes": [
+      268435456,
+      1073741824
+    ]
+  },
+  "image": {
+    "maximumSizeBytes": 8589934592
+  },
+  "scenarios": {
+    "run": {
+      "cold": {
+        "maximumP95LatencyMilliseconds": 30000,
+        "maximumSampleLatencyMilliseconds": 45000,
+        "maximumPeakMemoryBytes": 1073741824
+      },
+      "warm": {
+        "maximumP95LatencyMilliseconds": 10000,
+        "maximumSampleLatencyMilliseconds": 20000,
+        "maximumPeakMemoryBytes": 1073741824
+      }
+    },
+    "jit": {
+      "cold": {
+        "maximumP95LatencyMilliseconds": 45000,
+        "maximumSampleLatencyMilliseconds": 60000,
+        "maximumPeakMemoryBytes": 1073741824
+      },
+      "warm": {
+        "maximumP95LatencyMilliseconds": 20000,
+        "maximumSampleLatencyMilliseconds": 30000,
+        "maximumPeakMemoryBytes": 1073741824
+      }
+    },
+    "mapping": {
+      "cold": {
+        "maximumP95LatencyMilliseconds": 60000,
+        "maximumSampleLatencyMilliseconds": 90000,
+        "maximumPeakMemoryBytes": 1073741824
+      },
+      "warm": {
+        "maximumP95LatencyMilliseconds": 30000,
+        "maximumSampleLatencyMilliseconds": 45000,
+        "maximumPeakMemoryBytes": 1073741824
+      }
+    }
+  }
+}

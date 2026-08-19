@@ -1,0 +1,530 @@
+# syntax=docker/dockerfile:1.7
+
+# Shared candidate image for every Linux CoreCLR target in the runtime matrix.
+# The target runtime is deliberately copied into its own directory instead of
+# replacing the image's control-plane dotnet installation.  Profiles select
+# this directory through an operation command; no job-time download is used.
+
+ARG SDK_IMAGE
+ARG RUNTIME_DEPS_IMAGE
+ARG CHECKED_JIT_BUILD_IMAGE
+ARG PROFILER_BUILD_IMAGE
+
+FROM ${SDK_IMAGE} AS helper
+ARG SDK_IMAGE
+ARG RUNTIME_DEPS_IMAGE
+WORKDIR /source
+COPY deploy/docker/validate-digest-pinned-image.sh /usr/local/bin/sharplabnext-validate-image
+RUN chmod 0555 /usr/local/bin/sharplabnext-validate-image \
+    && /usr/local/bin/sharplabnext-validate-image \
+         SDK_IMAGE "${SDK_IMAGE}" \
+         RUNTIME_DEPS_IMAGE "${RUNTIME_DEPS_IMAGE}"
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+RUN dotnet restore \
+      src/RuntimeJobs/SharpLabNext.LegacyJitInspector/SharpLabNext.LegacyJitInspector.csproj \
+      --locked-mode
+RUN dotnet restore \
+      src/RuntimeJobs/SharpLabNext.CheckedJitBridge/SharpLabNext.CheckedJitBridge.csproj \
+      --locked-mode
+RUN dotnet restore \
+      src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj \
+      --locked-mode
+RUN dotnet restore \
+      src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj \
+      --locked-mode \
+    && dotnet restore \
+      src/RuntimeJobs/SharpLabNext.JitInspector/SharpLabNext.JitInspector.csproj \
+      --locked-mode \
+    && dotnet restore \
+      src/RuntimeJobs/SharpLabNext.JitProfiler.Native/Smoke/SharpLabNext.JitProfilerSmoke.csproj \
+      --locked-mode
+RUN dotnet publish \
+      src/RuntimeJobs/SharpLabNext.LegacyJitInspector/SharpLabNext.LegacyJitInspector.csproj \
+      --configuration Release \
+      --framework netcoreapp2.0 \
+      --no-restore \
+      --output /helper \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true
+RUN dotnet publish \
+      src/RuntimeJobs/SharpLabNext.CheckedJitBridge/SharpLabNext.CheckedJitBridge.csproj \
+      --configuration Release \
+      --framework net5.0 \
+      --no-restore \
+      --output /checked-jit-bridge \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true
+RUN dotnet publish \
+      src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj \
+      --configuration Release \
+      --framework netstandard2.1 \
+      --no-restore \
+      --output /runtime-api \
+      /p:ContinuousIntegrationBuild=true
+RUN dotnet publish \
+      src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj \
+      --configuration Release \
+      --framework net10.0 \
+      --no-restore \
+      --output /runtime-api-modern \
+      /p:ContinuousIntegrationBuild=true
+RUN dotnet publish \
+      src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj \
+      --configuration Release \
+      --framework net10.0 \
+      --no-restore \
+      --output /modern-run \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+    && dotnet publish \
+      src/RuntimeJobs/SharpLabNext.JitInspector/SharpLabNext.JitInspector.csproj \
+      --configuration Release \
+      --framework net10.0 \
+      --no-restore \
+      --output /modern-jit \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+    && dotnet publish \
+      src/RuntimeJobs/SharpLabNext.JitProfiler.Native/Smoke/SharpLabNext.JitProfilerSmoke.csproj \
+      --configuration Release \
+      --framework net8.0 \
+      --no-restore \
+      --output /profiler-smoke \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:DebugSymbols=true \
+      /p:DebugType=portable
+
+# The native profiler source is already vendored at the commits named by the
+# provider lock. The optional stage still validates a digest-pinned FROM when
+# no provider is selected, but it builds and emits no profiler bytes.
+FROM ${PROFILER_BUILD_IMAGE} AS jit-profiler
+ARG PROFILER_BUILD_IMAGE
+ARG JIT_PROFILER_PROVIDER_ID
+ARG JIT_PROFILER_CLR_SAMPLES_COMMIT
+ARG JIT_PROFILER_CLR_SAMPLES_SOURCE_URI
+ARG JIT_PROFILER_RUNTIME_HEADERS_COMMIT
+ARG JIT_PROFILER_RUNTIME_HEADERS_SOURCE_URI
+ARG JIT_PROFILER_SOURCE_MAPPING_KIND
+WORKDIR /source
+COPY deploy/docker/validate-digest-pinned-image.sh /usr/local/bin/sharplabnext-validate-image
+RUN chmod 0555 /usr/local/bin/sharplabnext-validate-image \
+    && /usr/local/bin/sharplabnext-validate-image \
+         PROFILER_BUILD_IMAGE "${PROFILER_BUILD_IMAGE}"
+COPY src/RuntimeJobs/SharpLabNext.JitProfiler.Native/ ./profiler/
+RUN set -eu; \
+    mkdir -p /jit-profiler; \
+    if [ -z "${JIT_PROFILER_PROVIDER_ID}" ]; then \
+      test -z "${JIT_PROFILER_CLR_SAMPLES_COMMIT}"; \
+      test -z "${JIT_PROFILER_CLR_SAMPLES_SOURCE_URI}"; \
+      test -z "${JIT_PROFILER_RUNTIME_HEADERS_COMMIT}"; \
+      test -z "${JIT_PROFILER_RUNTIME_HEADERS_SOURCE_URI}"; \
+      test -z "${JIT_PROFILER_SOURCE_MAPPING_KIND}"; \
+      exit 0; \
+    fi; \
+    test "${JIT_PROFILER_PROVIDER_ID}" = "sharplabnext-linux-profiler-v1"; \
+    test "${JIT_PROFILER_SOURCE_MAPPING_KIND}" = "linux-profiler"; \
+    test -n "${JIT_PROFILER_CLR_SAMPLES_COMMIT}"; \
+    test -n "${JIT_PROFILER_CLR_SAMPLES_SOURCE_URI}"; \
+    test -n "${JIT_PROFILER_RUNTIME_HEADERS_COMMIT}"; \
+    test -n "${JIT_PROFILER_RUNTIME_HEADERS_SOURCE_URI}"; \
+    test -x /usr/lib/llvm-14/bin/clang++; \
+    CXX=/usr/lib/llvm-14/bin/clang++ \
+      sh ./profiler/build.sh /jit-profiler/SharpLabNext.JitProfiler.so; \
+    test -s /jit-profiler/SharpLabNext.JitProfiler.so; \
+    install -m 0444 ./profiler/LICENSE.Microsoft.txt /jit-profiler/LICENSE.Microsoft.txt
+
+# Build just the host-architecture JIT. The exact source archive and optional
+# bootstrap SDK are downloaded and verified before the native build, which is
+# forced offline and therefore cannot fetch an unreviewed toolset or dependency.
+# .NET 6 requires both its historical SDK and explicit PGO-disable flag; later
+# source revisions use the pinned builder toolset and disabled-by-default PGO.
+FROM ${CHECKED_JIT_BUILD_IMAGE} AS checked-jit
+ARG CHECKED_JIT_BUILD_IMAGE
+ARG DOTNET_JIT_COMMIT
+ARG DOTNET_CHECKED_JIT_COMMIT
+ARG DOTNET_CHECKED_JIT_SOURCE_URL
+ARG DOTNET_CHECKED_JIT_SOURCE_SHA512
+ARG DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION
+ARG DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_URL
+ARG DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_SHA512
+ARG DOTNET_CHECKED_JIT_CONFIGURATION
+ARG DOTNET_CHECKED_JIT_TARGET_OS
+ARG DOTNET_CHECKED_JIT_ARCHITECTURE
+ARG DOTNET_CHECKED_JIT_BUILD_COMPONENT
+ARG DOTNET_CHECKED_JIT_PGO_MODE
+ARG DOTNET_CHECKED_JIT_COMPILER
+ARG DOTNET_CHECKED_JIT_GENERATOR
+ARG DOTNET_CHECKED_JIT_VERSION_GENERATION_MODE
+ARG DOTNET_CHECKED_JIT_SOURCE_MAPPING_KIND
+WORKDIR /runtime-source
+COPY deploy/docker/validate-digest-pinned-image.sh /usr/local/bin/sharplabnext-validate-image
+RUN chmod 0555 /usr/local/bin/sharplabnext-validate-image \
+    && /usr/local/bin/sharplabnext-validate-image \
+         CHECKED_JIT_BUILD_IMAGE "${CHECKED_JIT_BUILD_IMAGE}"
+RUN set -eu; \
+    mkdir -p /checked-jit; \
+    : > /checked-jit/libclrjit.so.sha256; \
+    if [ -z "${DOTNET_CHECKED_JIT_SOURCE_URL}" ]; then \
+      test -z "${DOTNET_CHECKED_JIT_SOURCE_SHA512}"; \
+      test -z "${DOTNET_CHECKED_JIT_COMMIT}"; \
+      test -z "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION}"; \
+      test -z "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_URL}"; \
+      test -z "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_SHA512}"; \
+      test -z "${DOTNET_CHECKED_JIT_VERSION_GENERATION_MODE}"; \
+      exit 0; \
+    fi; \
+    test "${DOTNET_CHECKED_JIT_COMMIT}" = "${DOTNET_JIT_COMMIT}"; \
+    test "${DOTNET_CHECKED_JIT_SOURCE_URL}" = \
+      "https://github.com/dotnet/runtime/archive/${DOTNET_CHECKED_JIT_COMMIT}.tar.gz"; \
+    test "$(printf '%s' "${DOTNET_CHECKED_JIT_SOURCE_SHA512}" | wc -c)" -eq 128; \
+    curl --fail --location --retry 3 --retry-delay 1 --retry-connrefused \
+      --proto '=https' --tlsv1.2 \
+      --output /tmp/dotnet-runtime-source.tar.gz \
+      "${DOTNET_CHECKED_JIT_SOURCE_URL}"; \
+    echo "${DOTNET_CHECKED_JIT_SOURCE_SHA512}  /tmp/dotnet-runtime-source.tar.gz" \
+      | sha512sum --check --strict; \
+    tar --list --gzip --file /tmp/dotnet-runtime-source.tar.gz \
+      > /tmp/dotnet-runtime-source.list; \
+    test "$(sed -n '1{s,/.*,,;p;}' /tmp/dotnet-runtime-source.list)" = \
+      "runtime-${DOTNET_CHECKED_JIT_COMMIT}"; \
+    test "$(sed 's,/.*,,g' /tmp/dotnet-runtime-source.list | sort -u | wc -l)" -eq 1; \
+    tar --extract --gzip --file /tmp/dotnet-runtime-source.tar.gz \
+      --directory /runtime-source --strip-components=1; \
+    test -x /runtime-source/src/coreclr/build-runtime.sh; \
+    if [ -z "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION}" ]; then \
+      test -z "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_URL}"; \
+      test -z "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_SHA512}"; \
+    else \
+      test "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_URL}" = \
+        "https://builds.dotnet.microsoft.com/dotnet/Sdk/${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION}/dotnet-sdk-${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION}-linux-x64.tar.gz"; \
+      test "$(printf '%s' "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_SHA512}" | wc -c)" -eq 128; \
+      command -v python3; \
+      source_sdk_version="$(python3 -c 'import json; print(json.load(open("/runtime-source/global.json", encoding="utf-8"))["tools"]["dotnet"])')"; \
+      test "${source_sdk_version}" = "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION}"; \
+      curl --fail --location --retry 3 --retry-delay 1 --retry-connrefused \
+        --proto '=https' --tlsv1.2 \
+        --output /tmp/dotnet-bootstrap-sdk.tar.gz \
+        "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_URL}"; \
+      echo "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_SHA512}  /tmp/dotnet-bootstrap-sdk.tar.gz" \
+        | sha512sum --check --strict; \
+      tar --list --gzip --file /tmp/dotnet-bootstrap-sdk.tar.gz \
+        > /tmp/dotnet-bootstrap-sdk.list; \
+      test -s /tmp/dotnet-bootstrap-sdk.list; \
+      ! grep -Eq '(^/|(^|/)\.\.(/|$))' /tmp/dotnet-bootstrap-sdk.list; \
+      mkdir -p /bootstrap-dotnet; \
+      tar --extract --gzip --file /tmp/dotnet-bootstrap-sdk.tar.gz \
+        --directory /bootstrap-dotnet; \
+      test -x /bootstrap-dotnet/dotnet; \
+      test -d "/bootstrap-dotnet/sdk/${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION}"; \
+      DOTNET_ROOT=/bootstrap-dotnet DOTNET_MULTILEVEL_LOOKUP=0 \
+        /bootstrap-dotnet/dotnet --list-sdks \
+        | awk -v expected="${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION}" \
+            '$1 == expected && $2 == "[/bootstrap-dotnet/sdk]" { found=1 } END { exit !found }'; \
+    fi
+RUN --network=none set -eu; \
+    if [ -z "${DOTNET_CHECKED_JIT_SOURCE_URL}" ]; then exit 0; fi; \
+    test "${DOTNET_CHECKED_JIT_CONFIGURATION}" = "Checked"; \
+    case "${DOTNET_CHECKED_JIT_TARGET_OS}" in Linux|linux) ;; *) exit 1 ;; esac; \
+    test "${DOTNET_CHECKED_JIT_ARCHITECTURE}" = "x64"; \
+    test "${DOTNET_CHECKED_JIT_BUILD_COMPONENT}" = "jit"; \
+    test "${DOTNET_CHECKED_JIT_COMPILER}" = "gcc"; \
+    test "${DOTNET_CHECKED_JIT_GENERATOR}" = "make"; \
+    command -v gcc; \
+    command -v make; \
+    if [ -n "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION}" ]; then \
+      test -x /bootstrap-dotnet/dotnet; \
+      test -d "/bootstrap-dotnet/sdk/${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION}"; \
+      export DOTNET_INSTALL_DIR=/bootstrap-dotnet; \
+      export DOTNET_ROOT=/bootstrap-dotnet; \
+      export DOTNET_MULTILEVEL_LOOKUP=0; \
+      export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1; \
+      export PATH="/bootstrap-dotnet:${PATH}"; \
+    fi; \
+    set -- \
+      -component "${DOTNET_CHECKED_JIT_BUILD_COMPONENT}" \
+      "-${DOTNET_CHECKED_JIT_ARCHITECTURE}" \
+      "-${DOTNET_CHECKED_JIT_CONFIGURATION}" \
+      -gcc \
+      -os "${DOTNET_CHECKED_JIT_TARGET_OS}"; \
+    case "${DOTNET_CHECKED_JIT_PGO_MODE}" in \
+      disabled-by-flag) set -- "$@" -nopgooptimize ;; \
+      disabled-by-default) ;; \
+      *) exit 1 ;; \
+    esac; \
+    case "${DOTNET_CHECKED_JIT_VERSION_GENERATION_MODE}" in \
+      skip-by-upstream-flag) set -- "$@" -skipgenerateversion ;; \
+      "") ;; \
+      *) exit 1 ;; \
+    esac; \
+    /runtime-source/src/coreclr/build-runtime.sh "$@"; \
+    artifact_directory="/runtime-source/artifacts/bin/coreclr/${DOTNET_CHECKED_JIT_TARGET_OS}.${DOTNET_CHECKED_JIT_ARCHITECTURE}.${DOTNET_CHECKED_JIT_CONFIGURATION}"; \
+    artifact="${artifact_directory}/libclrjit.so"; \
+    test -f "${artifact}"; \
+    test ! -L "${artifact}"; \
+    test "$(find "${artifact_directory}" -maxdepth 1 -type f -name libclrjit.so | wc -l)" -eq 1; \
+    test "$(find /runtime-source/artifacts/bin/coreclr -type f -name libclrjit.so \
+      -exec sha256sum {} \; | cut -d' ' -f1 | sort -u | wc -l)" -eq 1; \
+    readelf --file-header "${artifact}" | grep -Eq 'Class:[[:space:]]+ELF64'; \
+    readelf --file-header "${artifact}" | grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64'; \
+    install -m 0555 "${artifact}" /checked-jit/libclrjit.so; \
+    sha256sum /checked-jit/libclrjit.so | cut -d' ' -f1 \
+      > /checked-jit/libclrjit.so.sha256; \
+    test "${DOTNET_CHECKED_JIT_SOURCE_MAPPING_KIND}" = "none" \
+      || test "${DOTNET_CHECKED_JIT_SOURCE_MAPPING_KIND}" = "checked-jit-debug-info"
+
+FROM ${SDK_IMAGE} AS target-runtime
+ARG DOTNET_RUNTIME_VERSION
+ARG DOTNET_RUNTIME_COMMIT
+ARG DOTNET_JIT_COMMIT
+ARG DOTNET_RUNTIME_URL
+ARG DOTNET_RUNTIME_SHA512
+ARG DOTNET_CHECKED_JIT_SOURCE_URL
+RUN test -n "${DOTNET_RUNTIME_VERSION}" \
+    && test -n "${DOTNET_RUNTIME_COMMIT}" \
+    && test -n "${DOTNET_JIT_COMMIT}" \
+    && test -n "${DOTNET_RUNTIME_URL}" \
+    && test -n "${DOTNET_RUNTIME_SHA512}" \
+    && curl --fail --location --retry 3 --retry-delay 1 --retry-connrefused \
+         --proto '=https' --tlsv1.2 \
+         --output /tmp/dotnet-runtime.tar.gz "${DOTNET_RUNTIME_URL}" \
+    && echo "${DOTNET_RUNTIME_SHA512}  /tmp/dotnet-runtime.tar.gz" \
+         | sha512sum --check --strict \
+    && mkdir /runtime \
+    && tar --extract --gzip --file /tmp/dotnet-runtime.tar.gz --directory /runtime \
+    && test -x /runtime/dotnet \
+    && test -d "/runtime/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}" \
+    && test -f "/runtime/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}/System.Private.CoreLib.dll" \
+    && version_file="/runtime/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}/.version" \
+    && test -f "${version_file}" \
+    && actual_commit="$(sed -n '1{s/\r$//;p;}' "${version_file}")" \
+    && actual_version="$(sed -n '2{s/\r$//;p;}' "${version_file}")" \
+    && test "${actual_commit}" = "${DOTNET_RUNTIME_COMMIT}" \
+    && test "${actual_commit}" = "${DOTNET_JIT_COMMIT}" \
+    && test "${actual_version}" = "${DOTNET_RUNTIME_VERSION}"
+COPY --from=checked-jit /checked-jit/ /checked-jit/
+RUN set -eu; \
+    if [ -n "${DOTNET_CHECKED_JIT_SOURCE_URL}" ]; then \
+      target="/runtime/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}/libclrjit.so"; \
+      test -f "${target}"; \
+      test -f /checked-jit/libclrjit.so; \
+      original_sha256="$(sha256sum "${target}" | cut -d' ' -f1)"; \
+      checked_sha256="$(cat /checked-jit/libclrjit.so.sha256)"; \
+      test -n "${checked_sha256}"; \
+      test "${original_sha256}" != "${checked_sha256}"; \
+      install -m 0555 /checked-jit/libclrjit.so "${target}"; \
+      test "$(sha256sum "${target}" | cut -d' ' -f1)" = "${checked_sha256}"; \
+    else \
+      test ! -s /checked-jit/libclrjit.so.sha256; \
+    fi
+
+FROM ${RUNTIME_DEPS_IMAGE} AS final
+ARG PROFILE_ID
+ARG VERSION
+ARG SOURCE_REVISION
+ARG DOTNET_RUNTIME_VERSION
+ARG DOTNET_RUNTIME_COMMIT
+ARG DOTNET_JIT_COMMIT
+ARG DOTNET_RUNTIME_SHA512
+ARG CHECKED_JIT_BUILD_IMAGE
+ARG DOTNET_CHECKED_JIT_COMMIT
+ARG DOTNET_CHECKED_JIT_SOURCE_URL
+ARG DOTNET_CHECKED_JIT_SOURCE_SHA512
+ARG DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION
+ARG DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_URL
+ARG DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_SHA512
+ARG DOTNET_CHECKED_JIT_CONFIGURATION
+ARG DOTNET_CHECKED_JIT_TARGET_OS
+ARG DOTNET_CHECKED_JIT_ARCHITECTURE
+ARG DOTNET_CHECKED_JIT_BUILD_COMPONENT
+ARG DOTNET_CHECKED_JIT_PGO_MODE
+ARG DOTNET_CHECKED_JIT_COMPILER
+ARG DOTNET_CHECKED_JIT_GENERATOR
+ARG DOTNET_CHECKED_JIT_VERSION_GENERATION_MODE
+ARG DOTNET_CHECKED_JIT_SOURCE_MAPPING_KIND
+ARG PROFILER_BUILD_IMAGE
+ARG JIT_PROFILER_PROVIDER_ID
+ARG JIT_PROFILER_CLR_SAMPLES_COMMIT
+ARG JIT_PROFILER_CLR_SAMPLES_SOURCE_URI
+ARG JIT_PROFILER_RUNTIME_HEADERS_COMMIT
+ARG JIT_PROFILER_RUNTIME_HEADERS_SOURCE_URI
+ARG JIT_PROFILER_SOURCE_MAPPING_KIND
+
+ENV SHARPLABNEXT_CHECKED_JIT_SOURCE_MAPPING_KIND="${DOTNET_CHECKED_JIT_SOURCE_MAPPING_KIND}"
+
+RUN test -n "${PROFILE_ID}" \
+    && test -n "${VERSION}" \
+    && test -n "${SOURCE_REVISION}" \
+    && test -n "${DOTNET_RUNTIME_VERSION}" \
+    && test -n "${DOTNET_RUNTIME_COMMIT}" \
+    && test -n "${DOTNET_JIT_COMMIT}" \
+    && test "$(printf '%s' "${DOTNET_RUNTIME_SHA512}" | wc -c)" -eq 128 \
+    && { test -n "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION}" \
+         && test -n "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_URL}" \
+         && test "$(printf '%s' "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_SHA512}" | wc -c)" -eq 128 \
+         || { test -z "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION}" \
+              && test -z "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_URL}" \
+              && test -z "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_SHA512}"; }; } \
+    && { test -n "${DOTNET_CHECKED_JIT_SOURCE_URL}" \
+         || test -z "${DOTNET_CHECKED_JIT_VERSION_GENERATION_MODE}"; } \
+    && { test -z "${DOTNET_CHECKED_JIT_VERSION_GENERATION_MODE}" \
+         || test "${DOTNET_CHECKED_JIT_VERSION_GENERATION_MODE}" = "skip-by-upstream-flag"; } \
+    && test "${SHARPLABNEXT_CHECKED_JIT_SOURCE_MAPPING_KIND}" = \
+         "${DOTNET_CHECKED_JIT_SOURCE_MAPPING_KIND}" \
+    && { test -z "${DOTNET_CHECKED_JIT_SOURCE_URL}" || test -z "${JIT_PROFILER_PROVIDER_ID}"; } \
+    && rm -rf /usr/share/dotnet \
+    && rm -f /usr/bin/dotnet \
+    && mkdir -p /opt/sharplabnext/target-dotnet /opt/sharplabnext /workspace \
+    && chown 1654:1654 /workspace \
+    && chmod 0755 /opt/sharplabnext /opt/sharplabnext/target-dotnet /workspace
+
+LABEL org.opencontainers.image.title="SharpLabNext Linux CoreCLR Matrix Runtime Job" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      com.sharplabnext.runtime-profile="${PROFILE_ID}" \
+      com.sharplabnext.runtime-version="${DOTNET_RUNTIME_VERSION}" \
+      io.sharplabnext.runtime.commit="${DOTNET_RUNTIME_COMMIT}" \
+      io.sharplabnext.jit.commit="${DOTNET_JIT_COMMIT}" \
+      io.sharplabnext.runtime.payload-sha512="${DOTNET_RUNTIME_SHA512}" \
+      io.sharplabnext.jit.checked.commit="${DOTNET_CHECKED_JIT_COMMIT}" \
+      io.sharplabnext.jit.checked.source-uri="${DOTNET_CHECKED_JIT_SOURCE_URL}" \
+      io.sharplabnext.jit.checked.source-sha512="${DOTNET_CHECKED_JIT_SOURCE_SHA512}" \
+      io.sharplabnext.jit.checked.bootstrap-sdk.version="${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION}" \
+      io.sharplabnext.jit.checked.bootstrap-sdk.source-uri="${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_URL}" \
+      io.sharplabnext.jit.checked.bootstrap-sdk.source-sha512="${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_SHA512}" \
+      io.sharplabnext.jit.checked.builder-image="${CHECKED_JIT_BUILD_IMAGE}" \
+      io.sharplabnext.jit.checked.configuration="${DOTNET_CHECKED_JIT_CONFIGURATION}" \
+      io.sharplabnext.jit.checked.target-os="${DOTNET_CHECKED_JIT_TARGET_OS}" \
+      io.sharplabnext.jit.checked.architecture="${DOTNET_CHECKED_JIT_ARCHITECTURE}" \
+      io.sharplabnext.jit.checked.build-component="${DOTNET_CHECKED_JIT_BUILD_COMPONENT}" \
+      io.sharplabnext.jit.checked.pgo-mode="${DOTNET_CHECKED_JIT_PGO_MODE}" \
+      io.sharplabnext.jit.checked.compiler="${DOTNET_CHECKED_JIT_COMPILER}" \
+      io.sharplabnext.jit.checked.generator="${DOTNET_CHECKED_JIT_GENERATOR}" \
+      io.sharplabnext.jit.checked.version-generation-mode="${DOTNET_CHECKED_JIT_VERSION_GENERATION_MODE}" \
+      io.sharplabnext.jit.checked.source-mapping-kind="${DOTNET_CHECKED_JIT_SOURCE_MAPPING_KIND}" \
+      io.sharplabnext.jit.profiler.provider="${JIT_PROFILER_PROVIDER_ID}" \
+      io.sharplabnext.jit.profiler.builder-image="${PROFILER_BUILD_IMAGE}" \
+      io.sharplabnext.component.jit-profiler-clr-samples.commit="${JIT_PROFILER_CLR_SAMPLES_COMMIT}" \
+      io.sharplabnext.component.jit-profiler-clr-samples.source-uri="${JIT_PROFILER_CLR_SAMPLES_SOURCE_URI}" \
+      io.sharplabnext.component.jit-profiler-runtime-headers.commit="${JIT_PROFILER_RUNTIME_HEADERS_COMMIT}" \
+      io.sharplabnext.component.jit-profiler-runtime-headers.source-uri="${JIT_PROFILER_RUNTIME_HEADERS_SOURCE_URI}" \
+      io.sharplabnext.jit.profiler.source-mapping-kind="${JIT_PROFILER_SOURCE_MAPPING_KIND}" \
+      io.sharplabnext.component.jit-profiler.license="MIT"
+
+COPY --from=target-runtime /runtime/ /opt/sharplabnext/target-dotnet/
+COPY --from=helper /helper/ /opt/sharplabnext/
+COPY --from=helper /checked-jit-bridge/ /opt/sharplabnext/
+RUN printf '%s\n' "${DOTNET_RUNTIME_VERSION}" > /opt/sharplabnext/runtime-version.txt \
+    && chmod 0444 /opt/sharplabnext/runtime-version.txt
+COPY --from=checked-jit /checked-jit/libclrjit.so.sha256 /opt/sharplabnext/checked-jit-libclrjit.sha256
+COPY --chmod=0555 deploy/docker/runtime-entrypoint.sh /opt/sharplabnext/runtime-entrypoint.sh
+COPY --chmod=0555 deploy/docker/verify-linux-coreclr-runtime.sh /opt/sharplabnext/verify-linux-coreclr-runtime.sh
+COPY --chmod=0555 deploy/docker/jit-profiler-preflight.sh /opt/sharplabnext/jit-profiler-preflight.sh
+
+RUN --mount=from=helper,source=/modern-run,target=/mnt/modern-run,ro \
+    --mount=from=helper,source=/modern-jit,target=/mnt/modern-jit,ro \
+    --mount=from=helper,source=/runtime-api,target=/mnt/runtime-api,ro \
+    --mount=from=helper,source=/runtime-api-modern,target=/mnt/runtime-api-modern,ro \
+    --mount=from=jit-profiler,source=/jit-profiler,target=/mnt/jit-profiler,ro \
+    set -eu; \
+    if [ -n "${JIT_PROFILER_PROVIDER_ID}" ]; then \
+      test "${JIT_PROFILER_PROVIDER_ID}" = "sharplabnext-linux-profiler-v1"; \
+      test "${JIT_PROFILER_SOURCE_MAPPING_KIND}" = "linux-profiler"; \
+      test -z "${DOTNET_CHECKED_JIT_SOURCE_URL}"; \
+      test -s /mnt/modern-run/SharpLabNext.Runner.dll; \
+      test -s /mnt/modern-jit/SharpLabNext.JitInspector.dll; \
+      test -s /mnt/jit-profiler/SharpLabNext.JitProfiler.so; \
+      test -s /mnt/runtime-api-modern/SharpLab.Runtime.dll; \
+      cp -R /mnt/modern-run/. /opt/sharplabnext/; \
+      test -s /opt/sharplabnext/SharpLab.Runtime.dll; \
+      test "$(sha256sum /mnt/runtime-api-modern/SharpLab.Runtime.dll | cut -d' ' -f1)" = \
+        "$(sha256sum /opt/sharplabnext/SharpLab.Runtime.dll | cut -d' ' -f1)"; \
+      for source in /mnt/modern-jit/*; do \
+        test -f "${source}"; \
+        target="/opt/sharplabnext/$(basename "${source}")"; \
+        if [ -e "${target}" ]; then \
+          test "$(sha256sum "${source}" | cut -d' ' -f1)" = \
+            "$(sha256sum "${target}" | cut -d' ' -f1)"; \
+        else \
+          cp "${source}" "${target}"; \
+        fi; \
+      done; \
+      install -m 0555 /mnt/jit-profiler/SharpLabNext.JitProfiler.so \
+        /opt/sharplabnext/SharpLabNext.JitProfiler.so; \
+      mkdir -p /opt/sharplabnext/licenses; \
+      install -m 0444 /mnt/jit-profiler/LICENSE.Microsoft.txt \
+        /opt/sharplabnext/licenses/jit-profiler-MIT.txt; \
+      touch /opt/sharplabnext/jit-profiler-preflight.txt; \
+      chown 1654:1654 /opt/sharplabnext/jit-profiler-preflight.txt; \
+    else \
+      test -z "${JIT_PROFILER_CLR_SAMPLES_COMMIT}"; \
+      test -z "${JIT_PROFILER_CLR_SAMPLES_SOURCE_URI}"; \
+      test -z "${JIT_PROFILER_RUNTIME_HEADERS_COMMIT}"; \
+      test -z "${JIT_PROFILER_RUNTIME_HEADERS_SOURCE_URI}"; \
+      test -z "${JIT_PROFILER_SOURCE_MAPPING_KIND}"; \
+      test ! -e /opt/sharplabnext/SharpLabNext.JitProfiler.so; \
+      case "${DOTNET_RUNTIME_VERSION}" in \
+        2.*) test ! -e /opt/sharplabnext/SharpLab.Runtime.dll ;; \
+        *) install -m 0444 /mnt/runtime-api/SharpLab.Runtime.dll \
+             /opt/sharplabnext/SharpLab.Runtime.dll ;; \
+      esac; \
+    fi
+RUN case "${DOTNET_RUNTIME_VERSION}" in \
+      2.*) test ! -e /opt/sharplabnext/SharpLab.Runtime.dll ;; \
+      *) test -s /opt/sharplabnext/SharpLab.Runtime.dll ;; \
+    esac
+
+# Keep the image self-checking after the archive is copied into the final
+# runtime-deps layer.  This catches an accidentally mismatched base image or
+# archive before the candidate can be used by a worker.
+RUN /opt/sharplabnext/verify-linux-coreclr-runtime.sh \
+      /opt/sharplabnext/target-dotnet \
+      "${DOTNET_RUNTIME_VERSION}" \
+      "${DOTNET_RUNTIME_COMMIT}" \
+      "${DOTNET_JIT_COMMIT}" \
+    && test -d "/opt/sharplabnext/target-dotnet/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}" \
+    && test -f "/opt/sharplabnext/target-dotnet/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}/System.Private.CoreLib.dll"
+RUN set -eu; \
+    if [ -n "${DOTNET_CHECKED_JIT_SOURCE_URL}" ]; then \
+      target="/opt/sharplabnext/target-dotnet/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}/libclrjit.so"; \
+      test "$(sha256sum "${target}" | cut -d' ' -f1)" = \
+        "$(cat /opt/sharplabnext/checked-jit-libclrjit.sha256)"; \
+    else \
+      test ! -s /opt/sharplabnext/checked-jit-libclrjit.sha256; \
+    fi
+
+ENV DOTNET_VERSION="" \
+    DOTNET_DOWNLOAD_URL="" \
+    DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_ROLL_FORWARD=Major \
+    HOME=/tmp
+WORKDIR /workspace
+USER 1654:1654
+RUN set -eu; \
+    if [ -n "${DOTNET_CHECKED_JIT_SOURCE_URL}" ]; then \
+      DOTNET_ROOT=/opt/sharplabnext/target-dotnet \
+      DOTNET_MULTILEVEL_LOOKUP=0 \
+        /opt/sharplabnext/target-dotnet/dotnet \
+          /opt/sharplabnext/SharpLabNext.CheckedJitBridge.dll \
+          --verify-runtime-version \
+          "${DOTNET_RUNTIME_VERSION}"; \
+    fi
+RUN --mount=from=helper,source=/profiler-smoke,target=/opt/sharplabnext/profiler-smoke,ro \
+    set -eu; \
+    if [ -n "${JIT_PROFILER_PROVIDER_ID}" ]; then \
+      DOTNET_ROOT=/opt/sharplabnext/target-dotnet \
+      PATH="/opt/sharplabnext/target-dotnet:${PATH}" \
+        /opt/sharplabnext/jit-profiler-preflight.sh \
+          /opt/sharplabnext/profiler-smoke; \
+      printf 'jit-profiler=passed\nsequence-point-ranges=passed\ndiagnostics-ipc-disabled-while-running=passed\n' \
+        > /opt/sharplabnext/jit-profiler-preflight.txt; \
+    else \
+      test ! -e /opt/sharplabnext/jit-profiler-preflight.txt; \
+    fi
+ENTRYPOINT ["/opt/sharplabnext/runtime-entrypoint.sh"]
+CMD ["/opt/sharplabnext/target-dotnet/dotnet", "--info"]

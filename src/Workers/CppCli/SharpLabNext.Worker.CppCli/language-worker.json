@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 2,
+  "workerId": "msvc-cppcli-netfx48",
+  "languageId": "cppcli",
+  "toolchainIds": ["msvc-cppcli-netfx48"],
+  "protocolVersion": "1.0",
+  "capabilities": [
+    "artifact",
+    "compile-check"
+  ],
+  "producedArtifactFormats": [
+    "dotnet-framework-mixed-pe-v1"
+  ],
+  "supportedReferenceSetIds": [
+    "netfx48-ref"
+  ],
+  "limits": {
+    "maximumFiles": 1,
+    "maximumSourceUtf8Bytes": 1048576,
+    "maximumArtifactBytes": 16777216,
+    "maximumConcurrentBuilds": 1,
+    "maximumBuildMilliseconds": 20000,
+    "maximumLspMessageBytes": 1048576
+  }
+}

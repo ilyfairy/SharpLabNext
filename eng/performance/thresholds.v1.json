@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "profileId": "release-compose-linux-x64-v1",
+  "workload": {
+    "warmupSamplesPerScenario": 1,
+    "baselineSamplesPerScenario": 10,
+    "baselineMaxConcurrency": 1,
+    "concurrencyLevels": [10, 50],
+    "operationTimeoutSeconds": 300,
+    "overallTimeoutMinutes": 40,
+    "pollIntervalMilliseconds": 100,
+    "memorySampleIntervalMilliseconds": 100
+  },
+  "scenarios": {
+    "build": {
+      "baseline": {
+        "maxP50Milliseconds": 2500,
+        "maxP95Milliseconds": 6000,
+        "maxGatewayDispatchP95Milliseconds": 1500
+      },
+      "concurrency": {
+        "10": {
+          "maxP50Milliseconds": 8000,
+          "maxP95Milliseconds": 20000,
+          "maxGatewayDispatchP95Milliseconds": 15000
+        },
+        "50": {
+          "maxP50Milliseconds": 45000,
+          "maxP95Milliseconds": 120000,
+          "maxGatewayDispatchP95Milliseconds": 105000
+        }
+      }
+    },
+    "il-transform": {
+      "baseline": {
+        "maxP50Milliseconds": 4000,
+        "maxP95Milliseconds": 10000,
+        "maxGatewayDispatchP95Milliseconds": 3000
+      },
+      "concurrency": {
+        "10": {
+          "maxP50Milliseconds": 15000,
+          "maxP95Milliseconds": 35000,
+          "maxGatewayDispatchP95Milliseconds": 25000
+        },
+        "50": {
+          "maxP50Milliseconds": 70000,
+          "maxP95Milliseconds": 180000,
+          "maxGatewayDispatchP95Milliseconds": 150000
+        }
+      }
+    },
+    "decompiled-csharp-transform": {
+      "baseline": {
+        "maxP50Milliseconds": 5000,
+        "maxP95Milliseconds": 12000,
+        "maxGatewayDispatchP95Milliseconds": 4000
+      },
+      "concurrency": {
+        "10": {
+          "maxP50Milliseconds": 18000,
+          "maxP95Milliseconds": 40000,
+          "maxGatewayDispatchP95Milliseconds": 30000
+        },
+        "50": {
+          "maxP50Milliseconds": 80000,
+          "maxP95Milliseconds": 200000,
+          "maxGatewayDispatchP95Milliseconds": 165000
+        }
+      }
+    },
+    "run": {
+      "baseline": {
+        "maxP50Milliseconds": 6000,
+        "maxP95Milliseconds": 12000,
+        "maxGatewayDispatchP95Milliseconds": 3000
+      },
+      "concurrency": {
+        "10": {
+          "maxP50Milliseconds": 15000,
+          "maxP95Milliseconds": 30000,
+          "maxGatewayDispatchP95Milliseconds": 15000
+        },
+        "50": {
+          "maxP50Milliseconds": 45000,
+          "maxP95Milliseconds": 90000,
+          "maxGatewayDispatchP95Milliseconds": 60000
+        }
+      }
+    },
+    "jit": {
+      "baseline": {
+        "maxP50Milliseconds": 8000,
+        "maxP95Milliseconds": 15000,
+        "maxGatewayDispatchP95Milliseconds": 4000
+      },
+      "concurrency": {
+        "10": {
+          "maxP50Milliseconds": 20000,
+          "maxP95Milliseconds": 40000,
+          "maxGatewayDispatchP95Milliseconds": 20000
+        },
+        "50": {
+          "maxP50Milliseconds": 60000,
+          "maxP95Milliseconds": 120000,
+          "maxGatewayDispatchP95Milliseconds": 75000
+        }
+      }
+    }
+  },
+  "concurrency": {
+    "10": {
+      "maxBatchDurationMilliseconds": 90000,
+      "maxPeakUsedDeltaBytes": 4294967296,
+      "minAvailableBytes": 536870912
+    },
+    "50": {
+      "maxBatchDurationMilliseconds": 300000,
+      "maxPeakUsedDeltaBytes": 8589934592,
+      "minAvailableBytes": 536870912
+    }
+  }
+}

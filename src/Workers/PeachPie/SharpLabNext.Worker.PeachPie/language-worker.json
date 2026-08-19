@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "workerId": "peachpie-stable",
+  "languageId": "php",
+  "toolchainIds": ["peachpie-stable"],
+  "protocolVersion": "1.0",
+  "capabilities": [
+    "artifact",
+    "compile-check",
+    "diagnostics",
+    "managed-pe",
+    "multi-file"
+  ],
+  "producedArtifactFormats": [
+    "dotnet-managed-pe-v1"
+  ],
+  "supportedReferenceSetIds": [
+    "net10-ref"
+  ],
+  "limits": {
+    "maximumFiles": 32,
+    "maximumSourceUtf8Bytes": 1048576,
+    "maximumArtifactBytes": 20971520,
+    "maximumConcurrentBuilds": 4,
+    "maximumBuildMilliseconds": 20000,
+    "maximumLspMessageBytes": 1048576
+  }
+}

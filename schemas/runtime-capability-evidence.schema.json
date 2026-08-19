@@ -1,0 +1,419 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/runtime/v1/runtime-capability-evidence.schema.json",
+  "title": "SharpLabNext Runtime Capability Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "profileId",
+    "capability",
+    "image",
+    "sourceRevision",
+    "completedAtUtc",
+    "result",
+    "producer",
+    "probeArtifact",
+    "artifacts",
+    "invocation",
+    "sandbox",
+    "lifecycle"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "profileId": { "$ref": "#/$defs/id" },
+    "capability": { "enum": ["run", "jit-asm", "inspection", "execution-flow"] },
+    "image": { "$ref": "#/$defs/image" },
+    "sourceRevision": { "$ref": "#/$defs/gitCommit" },
+    "completedAtUtc": { "$ref": "#/$defs/canonicalUtc" },
+    "result": { "const": "passed" },
+    "producer": { "$ref": "#/$defs/producer" },
+    "probeArtifact": { "$ref": "#/$defs/probeArtifact" },
+    "artifacts": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "invocation": { "$ref": "#/$defs/invocation" },
+    "sandbox": { "$ref": "#/$defs/sandbox" },
+    "lifecycle": { "$ref": "#/$defs/lifecycle" },
+    "run": { "$ref": "#/$defs/runEvidence" },
+    "jit": { "$ref": "#/$defs/jitEvidence" },
+    "inspection": { "$ref": "#/$defs/inspectionEvidence" },
+    "executionFlow": { "$ref": "#/$defs/executionFlowEvidence" }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "nonEmpty": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "gitCommit": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
+    "canonicalUtc": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,7})?Z$"
+    },
+    "imageReference": {
+      "type": "string",
+      "maxLength": 512,
+      "pattern": "^[^@\\s]+@sha256:[0-9a-f]{64}$"
+    },
+    "absolutePath": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 4096,
+      "pattern": "^(?!.*(?:^|[/\\\\])\\.{1,2}(?:[/\\\\]|$))(?:/(?:[^/\\u0000-\\u001f]+/)*[^/\\u0000-\\u001f]+|[A-Z]:\\\\(?:[^\\\\\\u0000-\\u001f]+\\\\)*[^\\\\\\u0000-\\u001f]+)$"
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "imageId"],
+      "properties": {
+        "reference": { "$ref": "#/$defs/imageReference" },
+        "imageId": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sourceRevision", "planSha256"],
+      "properties": {
+        "id": { "const": "sharplabnext-runtime-preflight-v1" },
+        "sourceRevision": { "$ref": "#/$defs/gitCommit" },
+        "planSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "probeDerivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parentArtifactSha256",
+        "processorId",
+        "processorVersion",
+        "optionsSha256",
+        "transformId",
+        "profileId",
+        "applied"
+      ],
+      "properties": {
+        "parentArtifactSha256": { "$ref": "#/$defs/sha256" },
+        "processorId": { "const": "artifacts-default" },
+        "processorVersion": { "const": "1.0.0" },
+        "optionsSha256": { "$ref": "#/$defs/sha256" },
+        "transformId": { "const": "runtime-instrumentation-v1" },
+        "profileId": { "const": "execution-flow-v1" },
+        "applied": { "const": true }
+      }
+    },
+    "probeArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract",
+        "sourceArtifactSha256",
+        "artifactSha256",
+        "entryAssemblySha256"
+      ],
+      "properties": {
+        "contract": { "const": "runtime-capability-probe-v1" },
+        "sourceArtifactSha256": { "$ref": "#/$defs/sha256" },
+        "artifactSha256": { "$ref": "#/$defs/sha256" },
+        "entryAssemblySha256": { "$ref": "#/$defs/sha256" },
+        "derivation": { "$ref": "#/$defs/probeDerivation" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "path", "sha256", "sizeBytes", "format", "architecture"],
+      "properties": {
+        "role": {
+          "enum": [
+            "helper",
+            "control-host",
+            "runtime-host",
+            "support-assembly",
+            "jit-library",
+            "profiler"
+          ]
+        },
+        "path": { "$ref": "#/$defs/absolutePath" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 268435456 },
+        "format": { "enum": ["elf", "pe", "managed-pe", "script"] },
+        "architecture": { "enum": ["x64", "anycpu", "shell"] }
+      }
+    },
+    "entryAssembly": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/absolutePath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "implementation",
+        "command",
+        "entryAssembly",
+        "outcome",
+        "exitCode",
+        "runtimeFrameCount",
+        "terminalFrameKind",
+        "terminalStatus",
+        "stdoutBytes",
+        "stderrBytes"
+      ],
+      "properties": {
+        "implementation": { "$ref": "#/$defs/nonEmpty" },
+        "command": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/nonEmpty" }
+        },
+        "entryAssembly": { "$ref": "#/$defs/entryAssembly" },
+        "methodFilter": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "outcome": { "const": "succeeded" },
+        "exitCode": { "const": 0 },
+        "runtimeFrameCount": { "type": "integer", "minimum": 1, "maximum": 100000 },
+        "terminalFrameKind": { "const": "Exit" },
+        "terminalStatus": { "const": "completed" },
+        "stdoutBytes": { "type": "integer", "minimum": 0, "maximum": 16777216 },
+        "stderrBytes": { "type": "integer", "minimum": 0, "maximum": 16777216 }
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supervisorPolicyId",
+        "securityPolicyId",
+        "seccompSha256",
+        "containerId",
+        "networkMode",
+        "networkProbeBlocked",
+        "readOnlyRootFilesystem",
+        "readOnlyProbeBlocked",
+        "capDrop",
+        "noNewPrivileges",
+        "user",
+        "nanoCpus",
+        "memoryBytes",
+        "pidsLimit",
+        "deadlineMilliseconds",
+        "outputLimitBytes",
+        "tmpfsBytes"
+      ],
+      "properties": {
+        "supervisorPolicyId": { "$ref": "#/$defs/id" },
+        "securityPolicyId": { "$ref": "#/$defs/id" },
+        "seccompSha256": { "$ref": "#/$defs/sha256" },
+        "apparmorProfile": { "$ref": "#/$defs/id" },
+        "containerId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "networkMode": { "const": "none" },
+        "networkProbeBlocked": { "const": true },
+        "readOnlyRootFilesystem": { "const": true },
+        "readOnlyProbeBlocked": { "const": true },
+        "capDrop": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": { "const": "ALL" }
+        },
+        "noNewPrivileges": { "const": true },
+        "user": { "type": "string", "pattern": "^[0-9]+:[0-9]+$" },
+        "nanoCpus": { "type": "integer", "minimum": 250000000, "maximum": 4000000000 },
+        "memoryBytes": { "type": "integer", "minimum": 134217728, "maximum": 2147483648 },
+        "pidsLimit": { "type": "integer", "minimum": 8, "maximum": 1024 },
+        "deadlineMilliseconds": { "type": "integer", "minimum": 1, "maximum": 120000 },
+        "outputLimitBytes": { "type": "integer", "minimum": 1, "maximum": 16777216 },
+        "tmpfsBytes": { "type": "integer", "minimum": 1048576, "maximum": 1073741824 }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result", "terminalStatus", "containerRemoved", "processTreeRemoved"],
+      "properties": {
+        "result": { "const": "passed" },
+        "terminalStatus": {
+          "enum": ["output-limit-exceeded", "timeout", "cancelled", "completed"]
+        },
+        "containerRemoved": { "const": true },
+        "processTreeRemoved": { "const": true }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outputOverflow", "timeout", "cancellation", "processTreeCleanup"],
+      "properties": {
+        "outputOverflow": { "$ref": "#/$defs/probe" },
+        "timeout": { "$ref": "#/$defs/probe" },
+        "cancellation": { "$ref": "#/$defs/probe" },
+        "processTreeCleanup": { "$ref": "#/$defs/probe" }
+      }
+    },
+    "runEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expectedStdoutMarker",
+        "observedStdoutMarker",
+        "expectedStderrMarker",
+        "observedStderrMarker",
+        "exceptionFrameValidated"
+      ],
+      "properties": {
+        "expectedStdoutMarker": { "$ref": "#/$defs/nonEmpty" },
+        "observedStdoutMarker": { "$ref": "#/$defs/nonEmpty" },
+        "expectedStderrMarker": { "$ref": "#/$defs/nonEmpty" },
+        "observedStderrMarker": { "$ref": "#/$defs/nonEmpty" },
+        "exceptionFrameValidated": { "const": true }
+      }
+    },
+    "pdb": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "contentId", "sequencePointCount"],
+      "properties": {
+        "path": { "$ref": "#/$defs/absolutePath" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "contentId": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "sequencePointCount": { "type": "integer", "minimum": 1, "maximum": 1000000 }
+      }
+    },
+    "sourceRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ilOffset",
+        "nativeStartOffset",
+        "nativeEndOffset",
+        "document",
+        "startLine",
+        "startColumn",
+        "endLine",
+        "endColumn"
+      ],
+      "properties": {
+        "ilOffset": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "nativeStartOffset": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "nativeEndOffset": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "document": { "$ref": "#/$defs/nonEmpty" },
+        "startLine": { "type": "integer", "minimum": 1, "maximum": 10000000 },
+        "startColumn": { "type": "integer", "minimum": 1, "maximum": 10000000 },
+        "endLine": { "type": "integer", "minimum": 1, "maximum": 10000000 },
+        "endColumn": { "type": "integer", "minimum": 1, "maximum": 10000000 }
+      }
+    },
+    "jitMethod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metadataToken",
+        "displayName",
+        "nativeCodeBytes",
+        "instructionCount",
+        "sourceRanges"
+      ],
+      "properties": {
+        "metadataToken": { "type": "string", "pattern": "^0x06[0-9a-f]{6}$" },
+        "displayName": { "$ref": "#/$defs/nonEmpty" },
+        "nativeCodeBytes": { "type": "integer", "minimum": 1, "maximum": 268435456 },
+        "instructionCount": { "type": "integer", "minimum": 1, "maximum": 10000000 },
+        "sourceRanges": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/sourceRange" }
+        }
+      }
+    },
+    "jitMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "source", "rangeCount", "distinctSourceRangeCount", "allRangesMatchPdb"],
+      "properties": {
+        "kind": { "enum": ["none", "linux-profiler", "checked-jit-debug-info"] },
+        "source": { "enum": ["method", "ordinary", "rich", "checked-jit-debug-info"] },
+        "rangeCount": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "distinctSourceRangeCount": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "allRangesMatchPdb": { "type": "boolean" }
+      }
+    },
+    "jitEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtimeVersion", "jitVersion", "methods", "mapping"],
+      "properties": {
+        "runtimeVersion": { "$ref": "#/$defs/nonEmpty" },
+        "jitVersion": { "$ref": "#/$defs/nonEmpty" },
+        "pdb": { "$ref": "#/$defs/pdb" },
+        "methods": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/jitMethod" }
+        },
+        "mapping": { "$ref": "#/$defs/jitMapping" }
+      }
+    },
+    "inspectionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recordCount", "kinds", "valueProbePassed", "memoryGraphProbePassed"],
+      "properties": {
+        "recordCount": { "type": "integer", "minimum": 2, "maximum": 100000 },
+        "kinds": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 16,
+          "items": { "enum": ["Value", "Heap", "Stack", "MemoryGraph", "Allocations", "Warning"] }
+        },
+        "valueProbePassed": { "const": true },
+        "memoryGraphProbePassed": { "const": true }
+      }
+    },
+    "executionFlowEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recordCount",
+        "sequencePointCount",
+        "branchCount",
+        "sourceRangeCount",
+        "derivedArtifactSha256",
+        "parentArtifactSha256",
+        "processorId",
+        "processorVersion",
+        "optionsSha256",
+        "transformId",
+        "profileId",
+        "applied"
+      ],
+      "properties": {
+        "recordCount": { "type": "integer", "minimum": 2, "maximum": 1000000 },
+        "sequencePointCount": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "branchCount": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "sourceRangeCount": { "type": "integer", "minimum": 2, "maximum": 1000000 },
+        "derivedArtifactSha256": { "$ref": "#/$defs/sha256" },
+        "parentArtifactSha256": { "$ref": "#/$defs/sha256" },
+        "processorId": { "const": "artifacts-default" },
+        "processorVersion": { "const": "1.0.0" },
+        "optionsSha256": { "$ref": "#/$defs/sha256" },
+        "transformId": { "const": "runtime-instrumentation-v1" },
+        "profileId": { "const": "execution-flow-v1" },
+        "applied": { "const": true }
+      }
+    }
+  }
+}

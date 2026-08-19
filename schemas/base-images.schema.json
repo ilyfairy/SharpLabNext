@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/build/v1/base-images.schema.json",
+  "title": "SharpLabNext Base Images",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "images"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "images": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/image" }
+    }
+  },
+  "$defs": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "bakeVariable", "reference"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "bakeVariable": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 96,
+          "pattern": "^BASE_[A-Z0-9_]+_IMAGE$"
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 80,
+          "maxLength": 512,
+          "pattern": "^[^@\\s]+@sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/runtime/v1/runtime-promotion-plan.schema.json",
+  "title": "SharpLabNext Runtime Promotion Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "profileId",
+    "profileSha256",
+    "matrixTargetId",
+    "platform",
+    "family",
+    "resolvedVersion",
+    "image",
+    "componentIdentity",
+    "runtimeIdentity",
+    "sourceRevision",
+    "createdAtUtc",
+    "producer",
+    "securityPolicyId",
+    "capabilities",
+    "sourceMappingKind",
+    "operations",
+    "preflightProfile",
+    "performance"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "profileId": { "$ref": "#/$defs/id" },
+    "profileSha256": { "$ref": "#/$defs/sha256" },
+    "matrixTargetId": { "$ref": "#/$defs/id" },
+    "platform": { "enum": ["linux", "wine", "mono", "framework"] },
+    "family": { "enum": ["coreclr", "coreclr-wine", "mono", "netfx-clr-wine"] },
+    "resolvedVersion": { "$ref": "#/$defs/nonEmpty" },
+    "image": { "$ref": "#/$defs/image" },
+    "componentIdentity": { "$ref": "#/$defs/componentIdentity" },
+    "runtimeIdentity": { "$ref": "#/$defs/runtimeIdentity" },
+    "sourceRevision": { "$ref": "#/$defs/gitCommit" },
+    "createdAtUtc": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,7})?Z$"
+    },
+    "producer": { "$ref": "#/$defs/producer" },
+    "securityPolicyId": { "$ref": "#/$defs/id" },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": { "enum": ["execution-flow", "inspection", "jit-asm", "run"] }
+    },
+    "sourceMappingKind": {
+      "enum": ["not-applicable", "none", "linux-profiler", "checked-jit-debug-info"]
+    },
+    "operations": { "$ref": "#/$defs/operations" },
+    "jitLibraryPath": {
+      "type": "string",
+      "maxLength": 4096,
+      "pattern": "^/(?!.*(?:^|/)\\.\\.(?:/|$))(?:[A-Za-z0-9._-]+/)*(?:libclrjit\\.so|clrjit\\.dll)$"
+    },
+    "preflightProfile": { "$ref": "#/$defs/preflightProfile" },
+    "performance": { "$ref": "#/$defs/performance" }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "nonEmpty": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "sourceDigest": {
+      "type": "string",
+      "pattern": "^(?:sha256:[0-9a-f]{64}|sha512:[0-9a-f]{128})$"
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "imageReference": {
+      "type": "string",
+      "maxLength": 512,
+      "pattern": "^[^@\\s]+@sha256:[0-9a-f]{64}$"
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "imageId", "sizeBytes"],
+      "properties": {
+        "reference": { "$ref": "#/$defs/imageReference" },
+        "imageId": { "$ref": "#/$defs/sha256" },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 17179869184
+        }
+      }
+    },
+    "componentIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceUri", "sourceDigest"],
+      "properties": {
+        "sourceUri": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^(?:https://[^\\s]+|docker://[^@\\s]+@sha256:[0-9a-f]{64})$"
+        },
+        "sourceDigest": { "$ref": "#/$defs/sourceDigest" }
+      }
+    },
+    "runtimeIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtimeCommit", "jitVersion", "jitCommit"],
+      "properties": {
+        "runtimeCommit": { "$ref": "#/$defs/nonEmpty" },
+        "jitVersion": { "$ref": "#/$defs/nonEmpty" },
+        "jitCommit": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sourceRevision"],
+      "properties": {
+        "id": { "const": "sharplabnext-runtime-preflight-v1" },
+        "sourceRevision": { "$ref": "#/$defs/gitCommit" }
+      }
+    },
+    "operationHelper": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation", "assemblyPath", "assemblySha256"],
+      "properties": {
+        "implementation": { "$ref": "#/$defs/nonEmpty" },
+        "assemblyPath": {
+          "type": "string",
+          "pattern": "^(?:/opt/sharplabnext/[A-Za-z0-9._-]+\\.dll|/opt/sharplabnext/SharpLabNext\\.TargetRuntimeRunner\\.exe)$"
+        },
+        "assemblySha256": { "$ref": "#/$defs/sha256" },
+        "profilerPath": {
+          "type": "string",
+          "pattern": "^/opt/sharplabnext/[A-Za-z0-9._-]+\\.so$"
+        },
+        "profilerSha256": { "$ref": "#/$defs/sha256" }
+      },
+      "dependentRequired": {
+        "profilerPath": ["profilerSha256"],
+        "profilerSha256": ["profilerPath"]
+      }
+    },
+    "operations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run"],
+      "properties": {
+        "run": { "$ref": "#/$defs/operationHelper" },
+        "jit": { "$ref": "#/$defs/operationHelper" }
+      }
+    },
+    "preflightProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^profiles/runtime-promotion-plans/[a-z0-9][a-z0-9._-]*\\.profile\\.json$"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "performance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policyId", "policyPath", "policySha256", "evidencePath"],
+      "properties": {
+        "policyId": { "$ref": "#/$defs/id" },
+        "policyPath": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^profiles/runtime-performance-policies/[a-z0-9][a-z0-9._-]*\\.json$"
+        },
+        "policySha256": { "$ref": "#/$defs/sha256" },
+        "evidencePath": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^profiles/runtime-promotion-evidence/[a-z0-9][a-z0-9._-]*/performance\\.json$"
+        }
+      }
+    }
+  }
+}

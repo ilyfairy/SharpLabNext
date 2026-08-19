@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\ArtifactStore\SharpLabNext.ArtifactStore.Client\SharpLabNext.ArtifactStore.Client.csproj" />
+    <ProjectReference Include="..\..\Contracts\SharpLabNext.Artifacts.Contracts\SharpLabNext.Artifacts.Contracts.csproj" />
+    <ProjectReference Include="..\SharpLabNext.WorkerHost\SharpLabNext.WorkerHost.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsSharpLabNextPublicPackage>true</IsSharpLabNextPublicPackage>
+    <PackageId>SharpLabNext.ArtifactWorker.Sdk</PackageId>
+    <Description>Public SDK for implementing isolated SharpLabNext artifact processor workers.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Infrastructure\PascalCaseQuery.cs"
+             Link="Infrastructure\PascalCaseQuery.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\..\schemas\artifact-worker-capability.schema.json"
+          Pack="true"
+          PackagePath="schemas\artifact-worker-capability.schema.json"
+          Visible="false" />
+  </ItemGroup>
+
+</Project>

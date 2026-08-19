@@ -1,0 +1,175 @@
+# syntax=docker/dockerfile:1.7
+
+# Candidate-only Windows CoreCLR-under-Wine image.  A digest-pinned Wine base
+# image supplies the loader, native libraries, and an initialized 64-bit
+# prefix.  The exact Windows CoreCLR payload is fetched by URL plus SHA-512
+# and copied into that prefix; no network access is needed at runtime.
+
+ARG SDK_IMAGE
+ARG CONTROL_IMAGE
+ARG WINE_IMAGE
+
+FROM ${SDK_IMAGE} AS publish
+ARG SDK_IMAGE
+ARG CONTROL_IMAGE
+ARG WINE_IMAGE
+ARG SOURCE_REVISION
+WORKDIR /source
+COPY deploy/docker/validate-digest-pinned-image.sh /usr/local/bin/sharplabnext-validate-image
+RUN chmod 0555 /usr/local/bin/sharplabnext-validate-image \
+    && /usr/local/bin/sharplabnext-validate-image \
+         SDK_IMAGE "${SDK_IMAGE}" \
+         CONTROL_IMAGE "${CONTROL_IMAGE}" \
+         WINE_IMAGE "${WINE_IMAGE}"
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+RUN dotnet restore \
+      src/RuntimeJobs/SharpLabNext.LegacyJitInspector/SharpLabNext.LegacyJitInspector.csproj \
+      --locked-mode
+RUN dotnet publish \
+      src/RuntimeJobs/SharpLabNext.LegacyJitInspector/SharpLabNext.LegacyJitInspector.csproj \
+      --configuration Release \
+      --framework netcoreapp2.0 \
+      --no-restore \
+      --output /legacy-jit-helper \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION}
+COPY eng/extract-zip.cs /tools/extract-zip.cs
+
+FROM publish AS runtime-payload
+ARG DOTNET_RUNTIME_VERSION
+ARG DOTNET_RUNTIME_URL
+ARG DOTNET_RUNTIME_SHA512
+RUN test -n "${DOTNET_RUNTIME_VERSION}" \
+    && test -n "${DOTNET_RUNTIME_URL}" \
+    && test -n "${DOTNET_RUNTIME_SHA512}" \
+    && curl --fail --location --retry 3 --retry-all-errors \
+         --output /tmp/dotnet-runtime.zip "${DOTNET_RUNTIME_URL}" \
+    && echo "${DOTNET_RUNTIME_SHA512}  /tmp/dotnet-runtime.zip" \
+         | sha512sum --check --strict \
+    && dotnet run /tools/extract-zip.cs -- \
+         /tmp/dotnet-runtime.zip /runtime \
+    && test -f "/runtime/dotnet.exe" \
+    && test "$(find /runtime -mindepth 1 -maxdepth 1 -type d -name shared | wc -l)" -eq 1 \
+    && test "$(find /runtime/shared/Microsoft.NETCore.App -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1 \
+    && test -f "/runtime/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}/System.Private.CoreLib.dll" \
+    && rm /tmp/dotnet-runtime.zip
+
+FROM ${WINE_IMAGE} AS wine-source
+RUN test -x /usr/bin/wine-stable \
+    && test -x /usr/lib/wine/wine64 \
+    && test -x /usr/lib/wine/wineserver64 \
+    && test -d /opt/wine-dotnet/drive_c/windows \
+    && test -d /opt/wine-dotnet/drive_c/windows/system32 \
+    && test -r /opt/wine-dotnet/system.reg \
+    && test "$(awk 'index($0, "#arch=") == 1 { value=substr($0, 7); sub(/\r$/, "", value); print value; exit }' /opt/wine-dotnet/system.reg)" = win64 \
+    && test ! -e /usr/lib/x86_64-linux-gnu/wine/i386-windows
+
+FROM ${CONTROL_IMAGE} AS control-image
+RUN test -x /usr/share/dotnet/dotnet \
+    && /usr/share/dotnet/dotnet --info >/dev/null \
+    && printf 'wine-coreclr-control-input-v1\n' > /control-image-preflight
+
+FROM wine-source AS runtime-base
+ARG VERSION
+ARG SOURCE_REVISION
+ARG PROFILE_ID
+ARG DOTNET_RUNTIME_VERSION
+ARG DOTNET_RUNTIME_COMMIT
+ARG DOTNET_JIT_COMMIT
+ARG DOTNET_RUNTIME_SHA512
+ARG CONTROL_IMAGE
+ARG WINE_IMAGE
+
+RUN test -n "${VERSION}" \
+    && test -n "${SOURCE_REVISION}" \
+    && test -n "${PROFILE_ID}" \
+    && test -n "${DOTNET_RUNTIME_VERSION}" \
+    && test -n "${DOTNET_RUNTIME_COMMIT}" \
+    && test -n "${DOTNET_JIT_COMMIT}" \
+    && test "$(printf '%s' "${DOTNET_RUNTIME_SHA512}" | wc -c)" -eq 128 \
+    && rm -rf /opt/wine-dotnet/drive_c/dotnet \
+    && mkdir -p /opt/sharplabnext /opt/wine-dotnet/drive_c/dotnet /workspace
+
+# Retain Wine's userspace and initialized prefix as the image root. The Linux
+# control image is an independently validated build input only; user code and
+# the helper both execute inside the selected Windows CoreCLR.
+COPY --from=control-image /control-image-preflight /opt/sharplabnext/.control-image-preflight
+COPY --from=runtime-payload /runtime/ /opt/wine-dotnet/drive_c/dotnet/
+COPY --from=publish /legacy-jit-helper/ /opt/sharplabnext/
+COPY --chmod=0555 deploy/docker/runtime-entrypoint.sh /opt/sharplabnext/runtime-entrypoint.sh
+RUN printf '%s\n' "${DOTNET_RUNTIME_VERSION}" > /opt/sharplabnext/runtime-version.txt \
+    && chmod 0444 /opt/sharplabnext/runtime-version.txt
+
+RUN test -x /usr/bin/wine-stable \
+    && test -x /usr/lib/wine/wine64 \
+    && test -x /usr/lib/wine/wineserver64 \
+    && test -r /opt/wine-dotnet/system.reg \
+    && test "$(awk 'index($0, "#arch=") == 1 { value=substr($0, 7); sub(/\r$/, "", value); print value; exit }' /opt/wine-dotnet/system.reg)" = win64 \
+    && test ! -e /usr/lib/x86_64-linux-gnu/wine/i386-windows \
+    && test -f "/opt/wine-dotnet/drive_c/dotnet/dotnet.exe" \
+    && test -f "/opt/wine-dotnet/drive_c/dotnet/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}/System.Private.CoreLib.dll" \
+    && test -s /opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll \
+    && test -s /opt/sharplabnext/SharpLabNext.LegacyJitInspector.runtimeconfig.json \
+    && chown 1654:1654 /opt/wine-dotnet /workspace \
+    && mkdir -p /run/user \
+    && chown 0:0 /run/user \
+    && chmod 0755 /run/user \
+    && test ! -e /run/user/1654 \
+    && test ! -L /run/user/1654 \
+    && ln -s /tmp/sharplabnext-wine-runtime-1654 /run/user/1654
+
+ENV DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    HOME=/tmp \
+    SHARPLABNEXT_CAPTURE_DIRECTORY="Z:\\tmp" \
+    SHARPLABNEXT_PREPARE_WINE_XDG_RUNTIME_DIR=1 \
+    WINEPREFIX=/opt/wine-dotnet \
+    WINEARCH=win64 \
+    WINELOADER=/usr/lib/wine/wine64 \
+    WINESERVER=/usr/lib/wine/wineserver64 \
+    WINEDEBUG=-all
+
+FROM runtime-base AS preflight
+ARG DOTNET_RUNTIME_VERSION
+USER 1654:1654
+RUN set -eu; \
+    mkdir -p /workspace/.sharplabnext; \
+    : > /workspace/.sharplabnext/ready; \
+    output="$(/opt/sharplabnext/runtime-entrypoint.sh /usr/lib/wine/wine64 \
+      'Z:\\opt\\wine-dotnet\\drive_c\\dotnet\\dotnet.exe' --list-runtimes)"; \
+    printf '%s\n' "${output}" | grep -F "Microsoft.NETCore.App ${DOTNET_RUNTIME_VERSION} "; \
+    printf 'wine-coreclr-target-preflight-v1\n' > /tmp/runtime-image-preflight
+
+FROM runtime-base AS final
+ARG VERSION
+ARG SOURCE_REVISION
+ARG PROFILE_ID
+ARG DOTNET_RUNTIME_VERSION
+ARG DOTNET_RUNTIME_COMMIT
+ARG DOTNET_JIT_COMMIT
+ARG DOTNET_RUNTIME_SHA512
+ARG CONTROL_IMAGE
+ARG WINE_IMAGE
+COPY --from=preflight --chown=0:0 /tmp/runtime-image-preflight /opt/sharplabnext/.image-preflight
+
+LABEL org.opencontainers.image.title="SharpLabNext Wine CoreCLR Matrix Runtime Candidate" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      com.sharplabnext.runtime-candidate="true" \
+      com.sharplabnext.runtime-profile="${PROFILE_ID}" \
+      io.sharplabnext.runtime.environment="wine-coreclr" \
+      io.sharplabnext.runtime.version="${DOTNET_RUNTIME_VERSION}" \
+      io.sharplabnext.runtime.commit="${DOTNET_RUNTIME_COMMIT}" \
+      io.sharplabnext.jit.commit="${DOTNET_JIT_COMMIT}" \
+      io.sharplabnext.runtime.payload-sha512="${DOTNET_RUNTIME_SHA512}" \
+      io.sharplabnext.control-image="${CONTROL_IMAGE}" \
+      io.sharplabnext.operator-image.wine="${WINE_IMAGE}"
+WORKDIR /workspace
+USER 0:0
+ENTRYPOINT ["/opt/sharplabnext/runtime-entrypoint.sh"]
+CMD ["/usr/lib/wine/wine64", "--version"]

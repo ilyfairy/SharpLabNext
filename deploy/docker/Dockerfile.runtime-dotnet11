@@ -1,0 +1,97 @@
+# syntax=docker/dockerfile:1.7
+
+ARG SDK_IMAGE
+ARG RUNTIME_DEPS_IMAGE
+ARG RUNTIME_BUILD_IMAGE
+
+FROM ${RUNTIME_BUILD_IMAGE} AS jit-profiler
+WORKDIR /source
+COPY src/RuntimeJobs/SharpLabNext.JitProfiler.Native/ ./profiler/
+RUN test -x /usr/lib/llvm-14/bin/clang++ \
+    && CXX=/usr/lib/llvm-14/bin/clang++ sh ./profiler/build.sh /app/SharpLabNext.JitProfiler.so
+
+FROM ${SDK_IMAGE} AS publish
+WORKDIR /source
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+RUN dotnet restore src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj --locked-mode \
+    && dotnet restore src/RuntimeJobs/SharpLabNext.JitInspector/SharpLabNext.JitInspector.csproj --locked-mode \
+    && dotnet restore src/RuntimeJobs/SharpLabNext.JitProfiler.Native/Smoke/SharpLabNext.JitProfilerSmoke.csproj --locked-mode
+RUN dotnet publish src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj \
+    --configuration Release \
+    --framework net10.0 \
+    --no-restore \
+    --output /app/runner \
+    /p:UseAppHost=false \
+    && dotnet publish src/RuntimeJobs/SharpLabNext.JitInspector/SharpLabNext.JitInspector.csproj \
+    --configuration Release \
+    --framework net10.0 \
+    --no-restore \
+    --output /app/jit \
+    /p:UseAppHost=false \
+    && dotnet publish src/RuntimeJobs/SharpLabNext.JitProfiler.Native/Smoke/SharpLabNext.JitProfilerSmoke.csproj \
+    --configuration Release \
+    --framework net8.0 \
+    --no-restore \
+    --output /app/smoke \
+    /p:UseAppHost=false \
+    /p:DebugSymbols=true \
+    /p:DebugType=portable
+
+FROM ${SDK_IMAGE} AS runtime
+ARG DOTNET_RUNTIME_VERSION
+ARG DOTNET_RUNTIME_URL
+ARG DOTNET_RUNTIME_SHA512
+RUN curl --fail --location --retry 3 --retry-all-errors --output /tmp/dotnet-runtime.tar.gz "${DOTNET_RUNTIME_URL}" \
+    && echo "${DOTNET_RUNTIME_SHA512}  /tmp/dotnet-runtime.tar.gz" | sha512sum --check --strict \
+    && mkdir /runtime \
+    && tar --extract --gzip --file /tmp/dotnet-runtime.tar.gz --directory /runtime \
+    && test "$(/runtime/dotnet --list-runtimes | awk '/Microsoft.NETCore.App/ { print $2 }')" = "${DOTNET_RUNTIME_VERSION}"
+
+FROM ${RUNTIME_DEPS_IMAGE} AS runtime-image
+ARG VERSION
+ARG SOURCE_REVISION
+ARG DOTNET_RUNTIME_VERSION
+ARG DOTNET_RUNTIME_COMMIT
+ARG DOTNET_JIT_COMMIT
+LABEL org.opencontainers.image.title="SharpLabNext .NET 11 Preview Runtime Job" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      com.sharplabnext.runtime-profile="dotnet-11-preview-linux-x64" \
+      com.sharplabnext.runtime-version="${DOTNET_RUNTIME_VERSION}" \
+      io.sharplabnext.runtime.commit="${DOTNET_RUNTIME_COMMIT}" \
+      io.sharplabnext.jit.commit="${DOTNET_JIT_COMMIT}" \
+      io.sharplabnext.component.jit-profiler.license="MIT"
+USER root
+RUN mkdir -p /usr/share/dotnet /opt/sharplabnext/licenses /workspace \
+    && chown 1654:1654 /workspace \
+    && chmod 0755 /usr/share/dotnet /opt/sharplabnext /opt/sharplabnext/licenses /workspace
+COPY --from=runtime /runtime/ /usr/share/dotnet/
+RUN ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
+COPY --from=publish --chown=1654:1654 /app/runner/ /opt/sharplabnext/
+COPY --from=publish --chown=1654:1654 /app/jit/ /opt/sharplabnext/
+COPY --from=jit-profiler --chown=1654:1654 --chmod=0555 /app/SharpLabNext.JitProfiler.so /opt/sharplabnext/SharpLabNext.JitProfiler.so
+COPY --from=jit-profiler --chown=1654:1654 --chmod=0444 /source/profiler/LICENSE.Microsoft.txt /opt/sharplabnext/licenses/jit-profiler-MIT.txt
+COPY --chmod=0555 deploy/docker/runtime-entrypoint.sh /opt/sharplabnext/runtime-entrypoint.sh
+COPY --chmod=0555 deploy/docker/jit-profiler-preflight.sh /opt/sharplabnext/jit-profiler-preflight.sh
+ENV DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_ROLL_FORWARD=Major \
+    HOME=/tmp
+WORKDIR /workspace
+USER 1654:1654
+ENTRYPOINT ["/opt/sharplabnext/runtime-entrypoint.sh"]
+CMD ["dotnet", "--info"]
+
+FROM runtime-image AS preflight
+COPY --from=publish /app/smoke/ /opt/sharplabnext/smoke/
+RUN set -eux; \
+    /opt/sharplabnext/jit-profiler-preflight.sh /opt/sharplabnext/smoke; \
+    printf 'jit-profiler=passed\nsequence-point-ranges=passed\ndiagnostics-ipc-disabled-while-running=passed\n' > /tmp/jit-profiler-preflight.txt
+
+FROM runtime-image AS final
+COPY --from=preflight /tmp/jit-profiler-preflight.txt /opt/sharplabnext/jit-profiler-preflight.txt
+USER 1654:1654

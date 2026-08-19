@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Gateway\SharpLabNext.Catalog\SharpLabNext.Catalog.csproj" />
+    <ProjectReference Include="..\..\Contracts\SharpLabNext.Artifacts.Contracts\SharpLabNext.Artifacts.Contracts.csproj" />
+    <ProjectReference Include="..\..\Contracts\SharpLabNext.Contracts\SharpLabNext.Contracts.csproj" />
+    <ProjectReference Include="..\..\WorkerHost\SharpLabNext.RuntimeProfile.Sdk\SharpLabNext.RuntimeProfile.Sdk.csproj" />
+    <EmbeddedResource Include="DeploymentScripts\*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpLabNext.UnitTests" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

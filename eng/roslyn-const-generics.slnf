@@ -1,0 +1,10 @@
+{
+  "solution": {
+    "path": "Roslyn.sln",
+    "projects": [
+      "src\\Features\\CSharp\\Portable\\Microsoft.CodeAnalysis.CSharp.Features.csproj",
+      "src\\Features\\VisualBasic\\Portable\\Microsoft.CodeAnalysis.VisualBasic.Features.vbproj",
+      "src\\Scripting\\Core\\Microsoft.CodeAnalysis.Scripting.csproj"
+    ]
+  }
+}

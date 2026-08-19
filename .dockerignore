@@ -1,0 +1,16 @@
+.git
+.github
+.vs
+.idea
+**/bin
+**/obj
+**/node_modules
+artifacts
+deploy/secrets
+test-results
+*.binlog
+*.user
+*.suo
+.env
+.env.*
+!*.example

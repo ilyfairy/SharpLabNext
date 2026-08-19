@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "workerId": "il-assembler",
+  "protocolVersion": "1.0",
+  "capabilities": [
+    "generated-il",
+    "assemble-il",
+    "managed-pe"
+  ],
+  "acceptedArtifactFormats": [
+    "cil-text-v1"
+  ],
+  "producedArtifactFormats": [
+    "dotnet-managed-pe-v1"
+  ],
+  "transformIds": [
+    "assemble-il"
+  ],
+  "renderOutputIds": [
+    "generated-il"
+  ],
+  "verificationProfileIds": [],
+  "limits": {
+    "maximumInputArtifactBytes": 2097152,
+    "maximumOutputArtifactBytes": 16777216,
+    "maximumConcurrentOperations": 4,
+    "maximumOperationMilliseconds": 10000,
+    "maximumRetainedOperations": 256,
+    "maximumEventsPerOperation": 16
+  }
+}

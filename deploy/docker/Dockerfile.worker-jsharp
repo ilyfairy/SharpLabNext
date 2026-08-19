@@ -1,0 +1,95 @@
+# syntax=docker/dockerfile:1.7
+
+ARG SDK_IMAGE
+
+FROM ${SDK_IMAGE} AS publish
+ARG SOURCE_REVISION
+WORKDIR /source
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+RUN dotnet restore \
+      src/Workers/JSharp/SharpLabNext.Worker.JSharp/SharpLabNext.Worker.JSharp.csproj \
+      --locked-mode
+RUN dotnet publish \
+      src/Workers/JSharp/SharpLabNext.Worker.JSharp/SharpLabNext.Worker.JSharp.csproj \
+      --configuration Release \
+      --no-restore \
+      --output /app/publish \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION}
+
+FROM jsharp-wine-base AS final
+ARG VERSION
+ARG SOURCE_REVISION
+ARG JSHARP_TOOLCHAIN_VERSION
+ARG JSHARP_COMPILER_VERSION
+ARG JSHARP_TOOLCHAIN_DIGEST
+ARG JSHARP_TOOLCHAIN_SOURCE_URI
+ARG JSHARP_REFERENCE_VERSION
+ARG JSHARP_REFERENCE_DIGEST
+ARG JSHARP_REFERENCE_SOURCE_URI
+RUN test -n "${VERSION}" \
+    && test -n "${SOURCE_REVISION}" \
+    && test -n "${JSHARP_TOOLCHAIN_VERSION}" \
+    && test -n "${JSHARP_COMPILER_VERSION}" \
+    && test -n "${JSHARP_TOOLCHAIN_SOURCE_URI}" \
+    && test -n "${JSHARP_REFERENCE_VERSION}" \
+    && test -n "${JSHARP_REFERENCE_SOURCE_URI}" \
+    && case "${JSHARP_TOOLCHAIN_DIGEST}" in sha256:????????????????????????????????????????????????????????????????) ;; *) exit 1 ;; esac \
+    && case "${JSHARP_REFERENCE_DIGEST}" in sha256:????????????????????????????????????????????????????????????????) ;; *) exit 1 ;; esac \
+    && mkdir -p /app /reference-sets/jsharp20-ref /tmp/sharplabnext-jsharp
+LABEL org.opencontainers.image.title="SharpLabNext Visual J# 2.0 x64 Worker" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      io.sharplabnext.component.jsharp20.version="${JSHARP_TOOLCHAIN_VERSION}" \
+      io.sharplabnext.component.jsharp20.digest="${JSHARP_TOOLCHAIN_DIGEST}" \
+      io.sharplabnext.component.jsharp20.source-uri="${JSHARP_TOOLCHAIN_SOURCE_URI}" \
+      io.sharplabnext.component.vjc-jsharp20.version="${JSHARP_COMPILER_VERSION}" \
+      io.sharplabnext.component.jsharp20-ref.version="${JSHARP_REFERENCE_VERSION}" \
+      io.sharplabnext.component.jsharp20-ref.digest="${JSHARP_REFERENCE_DIGEST}" \
+      io.sharplabnext.component.jsharp20-ref.source-uri="${JSHARP_REFERENCE_SOURCE_URI}" \
+      io.sharplabnext.reference-set.jsharp20-ref="${JSHARP_REFERENCE_DIGEST}" \
+      io.sharplabnext.reference-set.jsharp20-ref.source-uri="${JSHARP_REFERENCE_SOURCE_URI}"
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:8080 \
+    HOME=/tmp \
+    SHARPLABNEXT_ASSEMBLY=SharpLabNext.Worker.JSharp.dll \
+    JSharp__CompilerVersion=${JSHARP_COMPILER_VERSION} \
+    JSharp__ReferenceSetDigest=${JSHARP_REFERENCE_DIGEST} \
+    JSharp__ReferenceSetContentDigest=${JSHARP_REFERENCE_DIGEST} \
+    JSharp__ReferenceSetSourceUri=${JSHARP_REFERENCE_SOURCE_URI} \
+    JSharp__CompilerHostPath=/usr/lib/wine/wine64 \
+    JSharp__CompilerPath=/opt/sharplabnext/jsharp20/vjc.exe \
+    JSharp__WorkRoot=/tmp/sharplabnext-jsharp
+COPY --from=publish /app/publish/ ./
+RUN set -eu; \
+    framework=/opt/wine-jsharp20/drive_c/windows/Microsoft.NET/Framework64/v2.0.50727; \
+    reference_root=/reference-sets/jsharp20-ref; \
+    reference_manifest=/tmp/jsharp20-ref.manifest; \
+    for file in \
+      mscorlib.dll \
+      System.dll \
+      vjslib.dll \
+      vjscor.dll; do \
+        test -f "${framework}/${file}"; \
+        cp "${framework}/${file}" "${reference_root}/${file}"; \
+    done; \
+    find "${reference_root}" -maxdepth 1 -type f -printf '%f\n' \
+      | LC_ALL=C sort \
+      | while IFS= read -r file; do \
+          file_digest="$(sha256sum "${reference_root}/${file}" | cut -d' ' -f1)"; \
+          file_size="$(stat -c '%s' "${reference_root}/${file}")"; \
+          printf 'sha256:%s  %s  %s\n' "${file_digest}" "${file_size}" "${file}"; \
+        done > "${reference_manifest}"; \
+    test "$(wc -l < "${reference_manifest}")" -eq 4; \
+    reference_content_digest="sha256:$(sha256sum "${reference_manifest}" | cut -d' ' -f1)"; \
+    test "${reference_content_digest}" = "${JSHARP_REFERENCE_DIGEST}"; \
+    rm -f "${reference_manifest}"
+RUN rm -f /app/appsettings.Development.json
+COPY --chmod=0555 deploy/docker/service-entrypoint.sh /usr/local/bin/sharplabnext-service
+USER 0:0
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/sharplabnext-service"]

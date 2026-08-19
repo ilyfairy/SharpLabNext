@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/provenance/maintained/v1/maintained-provenance.schema.json",
+  "title": "SharpLabNext Maintained Component Provenance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "componentId",
+    "sourceComponentId",
+    "compatibilityGroup",
+    "status",
+    "license",
+    "builder",
+    "build"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "componentId": { "$ref": "#/$defs/id" },
+    "sourceComponentId": { "$ref": "#/$defs/id" },
+    "compatibilityGroup": { "$ref": "#/$defs/id" },
+    "status": { "const": "source-inputs-recorded" },
+    "license": { "$ref": "#/$defs/nonEmpty" },
+    "patchSeries": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/patch" }
+    },
+    "runtimeDependency": { "$ref": "#/$defs/runtimeDependency" },
+    "builder": { "$ref": "#/$defs/builder" },
+    "build": { "$ref": "#/$defs/build" },
+    "featureEvidence": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/nonEmpty" }
+    },
+    "featureTags": { "$ref": "#/$defs/featureTags" },
+    "artifactContract": { "$ref": "#/$defs/artifactContract" }
+  },
+  "$defs": {
+    "nonEmpty": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "stringList": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/nonEmpty" }
+    },
+    "idList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    },
+    "patch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "purpose"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^eng/patches/.+\\.patch$" },
+        "purpose": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "builder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["imageId", "platform", "sourceDateEpoch"],
+      "properties": {
+        "imageId": { "$ref": "#/$defs/id" },
+        "platform": { "const": "linux/amd64" },
+        "sourceDateEpoch": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "componentReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["componentId"],
+      "properties": {
+        "componentId": { "$ref": "#/$defs/id" },
+        "referencePath": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "bootstrapOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["componentId", "sourceRequestedVersion", "reason"],
+      "properties": {
+        "componentId": { "$ref": "#/$defs/id" },
+        "sourceRequestedVersion": { "$ref": "#/$defs/nonEmpty" },
+        "reason": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "runtimeBuild": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configuration",
+        "subset",
+        "officialBuildId",
+        "sourceLink",
+        "bootstrapDependencyOverrides",
+        "outputs",
+        "referenceSet"
+      ],
+      "properties": {
+        "configuration": { "const": "Release" },
+        "subset": { "$ref": "#/$defs/nonEmpty" },
+        "officialBuildId": { "$ref": "#/$defs/nonEmpty" },
+        "sourceLink": { "$ref": "#/$defs/nonEmpty" },
+        "bootstrapDependencyOverrides": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/bootstrapOverride" }
+        },
+        "outputs": { "$ref": "#/$defs/stringList" },
+        "referenceSet": { "$ref": "#/$defs/componentReference" }
+      }
+    },
+    "roslynBuild": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configuration",
+        "solutionFilter",
+        "targetFrameworks",
+        "officialBuild",
+        "ibcOptimization",
+        "metadataRuntimeSourceComponentId",
+        "compilerAssetTargetFramework",
+        "compilerAssetAssemblyVersion",
+        "referenceSetId",
+        "outputs"
+      ],
+      "properties": {
+        "configuration": { "const": "Release" },
+        "solutionFilter": { "$ref": "#/$defs/nonEmpty" },
+        "targetFrameworks": { "$ref": "#/$defs/stringList" },
+        "officialBuild": { "type": "boolean" },
+        "ibcOptimization": { "type": "boolean" },
+        "metadataRuntimeSourceComponentId": { "$ref": "#/$defs/id" },
+        "compilerAssetTargetFramework": { "$ref": "#/$defs/nonEmpty" },
+        "compilerAssetAssemblyVersion": { "$ref": "#/$defs/nonEmpty" },
+        "referenceSetId": { "$ref": "#/$defs/id" },
+        "outputs": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "artifactBuild": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["configuration", "legacyMetadataPolicy", "processorRuntime", "outputs"],
+      "properties": {
+        "configuration": { "const": "Release" },
+        "legacyMetadataPolicy": { "$ref": "#/$defs/nonEmpty" },
+        "processorRuntime": { "$ref": "#/$defs/nonEmpty" },
+        "outputs": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "languageToolchainBuild": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configuration",
+        "targetFramework",
+        "compilerProject",
+        "languageServerProject",
+        "outputs"
+      ],
+      "properties": {
+        "configuration": { "const": "Release" },
+        "targetFramework": { "$ref": "#/$defs/nonEmpty" },
+        "compilerProject": { "$ref": "#/$defs/nonEmpty" },
+        "languageServerProject": { "$ref": "#/$defs/nonEmpty" },
+        "outputs": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "externalToolchainBuild": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configuration",
+        "workerProject",
+        "operatorImageComponentId",
+        "referenceSetId",
+        "runtimeComponentId",
+        "compilerPath",
+        "artifactFormat",
+        "redistributionPolicy",
+        "outputs"
+      ],
+      "properties": {
+        "configuration": { "const": "Release" },
+        "workerProject": { "$ref": "#/$defs/nonEmpty" },
+        "operatorImageComponentId": { "$ref": "#/$defs/id" },
+        "referenceSetId": { "$ref": "#/$defs/id" },
+        "runtimeComponentId": { "$ref": "#/$defs/id" },
+        "compilerPath": { "$ref": "#/$defs/nonEmpty" },
+        "artifactFormat": { "$ref": "#/$defs/id" },
+        "redistributionPolicy": { "const": "operator-supplied-only" },
+        "outputs": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "build": {
+      "anyOf": [
+        { "$ref": "#/$defs/runtimeBuild" },
+        { "$ref": "#/$defs/roslynBuild" },
+        { "$ref": "#/$defs/artifactBuild" },
+        { "$ref": "#/$defs/languageToolchainBuild" },
+        { "$ref": "#/$defs/externalToolchainBuild" }
+      ]
+    },
+    "runtimeDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceComponentId", "runtimeComponentId", "namedContext", "assets"],
+      "properties": {
+        "sourceComponentId": { "$ref": "#/$defs/id" },
+        "runtimeComponentId": { "$ref": "#/$defs/id" },
+        "namedContext": { "$ref": "#/$defs/nonEmpty" },
+        "assets": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "featureTags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime", "metadata"],
+      "properties": {
+        "runtime": { "$ref": "#/$defs/stringList" },
+        "metadata": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "artifactContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compatibilityGroup", "runtimeFamily", "metadataFeatureTags"],
+      "properties": {
+        "toolchainId": { "$ref": "#/$defs/id" },
+        "referenceSetId": { "$ref": "#/$defs/id" },
+        "targetFramework": { "$ref": "#/$defs/nonEmpty" },
+        "runtimeFamily": { "$ref": "#/$defs/id" },
+        "architecture": { "$ref": "#/$defs/id" },
+        "requiredRuntimeFeatureTags": { "$ref": "#/$defs/stringList" },
+        "runtimeFeatureTags": { "$ref": "#/$defs/stringList" },
+        "metadataFeatureTags": { "$ref": "#/$defs/idList" },
+        "compatibilityGroup": { "$ref": "#/$defs/id" }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\ArtifactStore\SharpLabNext.ArtifactStore.Client\SharpLabNext.ArtifactStore.Client.csproj" />
+    <ProjectReference Include="..\..\..\Infrastructure\SharpLabNext.Observability\SharpLabNext.Observability.csproj" />
+    <ProjectReference Include="..\..\..\RuntimeApi\SharpLabNext.Runtime\SharpLabNext.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\WorkerHost\SharpLabNext.WorkerHost\SharpLabNext.WorkerHost.csproj" />
+    <ProjectReference Include="..\SharpLabNext.Worker.FSharp.Compiler\SharpLabNext.Worker.FSharp.Compiler.fsproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpLabNext.Worker.FSharp.Tests" />
+  </ItemGroup>
+
+</Project>

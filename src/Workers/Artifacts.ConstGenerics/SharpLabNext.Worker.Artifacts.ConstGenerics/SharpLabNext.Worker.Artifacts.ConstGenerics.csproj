@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\ArtifactStore\SharpLabNext.ArtifactStore.Client\SharpLabNext.ArtifactStore.Client.csproj" />
+    <ProjectReference Include="..\..\..\Infrastructure\SharpLabNext.Observability\SharpLabNext.Observability.csproj" />
+    <ProjectReference Include="..\..\..\WorkerHost\SharpLabNext.ArtifactWorker.Sdk\SharpLabNext.ArtifactWorker.Sdk.csproj" />
+    <ProjectReference Include="..\SharpLabNext.Worker.Artifacts.ConstGenerics.Protocol\SharpLabNext.Worker.Artifacts.ConstGenerics.Protocol.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Update="artifact-worker.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpLabNext.Worker.Artifacts.ConstGenerics.Tests" />
+  </ItemGroup>
+
+</Project>

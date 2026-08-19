@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/deployment/v1/deployment-images.schema.json",
+  "title": "SharpLabNext Deployment Images",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "images"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "images": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/image" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "repository"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+        },
+        "immutableReference": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^[^@\\s]+@sha256:[0-9a-f]{64}$"
+        },
+        "always": { "type": "boolean" },
+        "composeService": { "$ref": "#/$defs/id" },
+        "toolchainId": { "$ref": "#/$defs/id" },
+        "runtimeId": { "$ref": "#/$defs/id" },
+        "artifactProcessorId": { "$ref": "#/$defs/id" },
+        "lockComponentId": { "$ref": "#/$defs/id" },
+        "lockComponentIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "releaseIdEnvironment": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "imageIdEnvironment": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        }
+      }
+    }
+  }
+}

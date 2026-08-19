@@ -1,0 +1,6 @@
+@SharpLabNext.Worker.Artifacts.Default_HostAddress = http://localhost:5114
+
+GET {{SharpLabNext.Worker.Artifacts.Default_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

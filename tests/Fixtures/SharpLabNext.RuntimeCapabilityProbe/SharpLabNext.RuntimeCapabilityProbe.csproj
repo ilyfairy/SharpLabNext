@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net20;netcoreapp2.0</TargetFrameworks>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp2.0'">
+    <RuntimeFrameworkVersion>2.0.9</RuntimeFrameworkVersion>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net20'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net20" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

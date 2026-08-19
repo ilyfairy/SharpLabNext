@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/runtime/v1/runtime-performance-policy.schema.json",
+  "title": "SharpLabNext Runtime Image Performance Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "sampleCounts",
+    "resourceLimits",
+    "image",
+    "scenarios"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "$ref": "#/$defs/id" },
+    "sampleCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cold", "warm"],
+      "properties": {
+        "cold": { "type": "integer", "minimum": 3, "maximum": 20 },
+        "warm": { "type": "integer", "minimum": 5, "maximum": 50 }
+      }
+    },
+    "resourceLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nanoCpus", "allowedMemoryBytes"],
+      "properties": {
+        "nanoCpus": {
+          "type": "integer",
+          "minimum": 250000000,
+          "maximum": 4000000000
+        },
+        "allowedMemoryBytes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 134217728,
+            "maximum": 2147483648
+          }
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximumSizeBytes"],
+      "properties": {
+        "maximumSizeBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 17179869184
+        }
+      }
+    },
+    "scenarios": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run", "jit", "mapping"],
+      "properties": {
+        "run": { "$ref": "#/$defs/scenarioBudget" },
+        "jit": { "$ref": "#/$defs/scenarioBudget" },
+        "mapping": { "$ref": "#/$defs/scenarioBudget" }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "scenarioBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cold", "warm"],
+      "properties": {
+        "cold": { "$ref": "#/$defs/modeBudget" },
+        "warm": { "$ref": "#/$defs/modeBudget" }
+      }
+    },
+    "modeBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maximumP95LatencyMilliseconds",
+        "maximumSampleLatencyMilliseconds",
+        "maximumPeakMemoryBytes"
+      ],
+      "properties": {
+        "maximumP95LatencyMilliseconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 60000
+        },
+        "maximumSampleLatencyMilliseconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 120000
+        },
+        "maximumPeakMemoryBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483648
+        }
+      }
+    }
+  }
+}

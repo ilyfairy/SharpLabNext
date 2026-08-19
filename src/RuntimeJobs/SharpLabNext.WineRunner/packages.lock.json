@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "sharplabnext.contracts": {
+        "type": "Project"
+      },
+      "sharplabnext.runtimeprotocol": {
+        "type": "Project",
+        "dependencies": {
+          "SharpLabNext.Contracts": "[0.1.0, )"
+        }
+      }
+    },
+    "net8.0": {
+      "sharplabnext.contracts": {
+        "type": "Project"
+      },
+      "sharplabnext.runtimeprotocol": {
+        "type": "Project",
+        "dependencies": {
+          "SharpLabNext.Contracts": "[0.1.0, )"
+        }
+      }
+    }
+  }
+}

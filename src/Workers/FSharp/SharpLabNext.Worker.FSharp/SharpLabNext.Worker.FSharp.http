@@ -1,0 +1,50 @@
+@host = http://localhost:5275
+
+GET {{host}}/health/ready
+Accept: application/json
+
+###
+
+GET {{host}}/api/v1/worker/describe
+Accept: application/json
+
+###
+
+POST {{host}}/api/v1/build
+Content-Type: application/json
+
+{
+  "RequestId": "manual-fsharp-build",
+  "IdempotencyKey": "manual-fsharp-build",
+  "PipelineResolutionId": "manual",
+  "ToolchainId": "fsharp-stable",
+  "ReferenceSetId": "net10-ref",
+  "Workspace": {
+    "SchemaVersion": 1,
+    "Revision": 1,
+    "SelectionRevision": 1,
+    "LanguageId": "fsharp",
+    "Files": [
+      {
+        "Path": "Program.fs",
+        "Version": 1,
+        "Text": "module Program\nopen System\n[<EntryPoint>]\nlet main _ = Console.WriteLine(42); 0\n"
+      }
+    ],
+    "ActiveFile": "Program.fs",
+    "SourceOrder": ["Program.fs"],
+    "ReferenceSetId": "net10-ref",
+    "BuildOptions": {
+      "Configuration": "release",
+      "Optimize": true,
+      "OutputKind": "console",
+      "AllowUnsafe": false,
+      "EmitPortablePdb": true,
+      "NullableContext": "disable",
+      "LanguageVersion": "9.0",
+      "CheckOverflow": true
+    }
+  },
+  "DeadlineUtc": "2099-01-01T00:00:00Z",
+  "Target": "artifact"
+}

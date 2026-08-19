@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/runtime/v1/runtime-performance-evidence.schema.json",
+  "title": "SharpLabNext Immutable Runtime Image Performance Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "planSha256",
+    "profileId",
+    "image",
+    "sourceRevision",
+    "policy",
+    "capabilities",
+    "sourceMappingKind",
+    "environment",
+    "completedAtUtc",
+    "result",
+    "scenarios"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "planSha256": { "$ref": "#/$defs/sha256" },
+    "profileId": { "$ref": "#/$defs/id" },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "imageId", "sizeBytes"],
+      "properties": {
+        "reference": { "$ref": "#/$defs/imageReference" },
+        "imageId": { "$ref": "#/$defs/sha256" },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 17179869184
+        }
+      }
+    },
+    "sourceRevision": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sha256"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["run", "jit-asm", "inspection", "execution-flow"]
+      }
+    },
+    "sourceMappingKind": {
+      "enum": ["not-applicable", "none", "linux-profiler", "checked-jit-debug-info"]
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runnerId",
+        "operatingSystem",
+        "architecture",
+        "nanoCpus",
+        "memoryLimitBytes"
+      ],
+      "properties": {
+        "runnerId": { "$ref": "#/$defs/id" },
+        "operatingSystem": { "const": "linux" },
+        "architecture": { "const": "x64" },
+        "nanoCpus": {
+          "type": "integer",
+          "minimum": 250000000,
+          "maximum": 4000000000
+        },
+        "memoryLimitBytes": {
+          "type": "integer",
+          "minimum": 134217728,
+          "maximum": 2147483648
+        }
+      }
+    },
+    "completedAtUtc": { "type": "string", "format": "date-time" },
+    "result": { "const": "passed" },
+    "scenarios": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run"],
+      "properties": {
+        "run": { "$ref": "#/$defs/scenario" },
+        "jit": { "$ref": "#/$defs/scenario" },
+        "mapping": { "$ref": "#/$defs/scenario" }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "imageReference": {
+      "type": "string",
+      "maxLength": 512,
+      "pattern": "^[^@\\s]+@sha256:[0-9a-f]{64}$"
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cold", "warm"],
+      "properties": {
+        "cold": { "$ref": "#/$defs/samples" },
+        "warm": { "$ref": "#/$defs/samples" }
+      }
+    },
+    "samples": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": { "$ref": "#/$defs/sample" }
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "latencyMilliseconds",
+        "peakMemoryBytes",
+        "operationId",
+        "resourceSampleCount",
+        "completedAtUtc"
+      ],
+      "properties": {
+        "latencyMilliseconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 120000
+        },
+        "peakMemoryBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483648
+        },
+        "operationId": {
+          "type": "string",
+          "pattern": "^op_[0-9a-f]{32}$"
+        },
+        "resourceSampleCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "completedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

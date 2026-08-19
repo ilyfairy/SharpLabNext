@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/catalog/v1/catalog.schema.json",
+  "title": "SharpLabNext Catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "revision", "releaseId", "languages", "toolchains", "referenceSets", "runtimes", "artifactProcessors", "outputs", "compatibility", "presets"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "revision": { "$ref": "#/$defs/nonEmpty" },
+    "releaseId": { "$ref": "#/$defs/nonEmpty" },
+    "languages": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/language" } },
+    "toolchains": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/toolchain" } },
+    "referenceSets": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/referenceSet" } },
+    "runtimes": { "type": "array", "items": { "$ref": "#/$defs/runtime" } },
+    "artifactProcessors": { "type": "array", "items": { "$ref": "#/$defs/processor" } },
+    "outputs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/output" } },
+    "compatibility": { "type": "array", "items": { "$ref": "#/$defs/compatibility" } },
+    "presets": { "type": "array", "items": { "$ref": "#/$defs/preset" } }
+  },
+  "$defs": {
+    "nonEmpty": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "supportStatus": { "enum": ["active", "maintenance", "preview", "legacy", "experimental"] },
+    "visibility": { "enum": ["visible", "hidden"] },
+    "supportEndDate": { "type": "string", "format": "date" },
+    "availability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["installed", "health"],
+      "properties": {
+        "installed": { "type": "boolean" },
+        "health": { "$ref": "#/$defs/nonEmpty" },
+        "reason": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "language": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "monacoLanguageId", "extensions", "defaultFileName", "defaultSource", "defaultToolchainId", "capabilities"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "displayName": { "$ref": "#/$defs/nonEmpty" },
+        "monacoLanguageId": { "$ref": "#/$defs/nonEmpty" },
+        "extensions": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^\\.[A-Za-z0-9._-]+$" } },
+        "defaultFileName": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "defaultSource": { "type": "string", "maxLength": 262144 },
+        "defaultToolchainId": { "$ref": "#/$defs/id" },
+        "capabilities": { "$ref": "#/$defs/ids" },
+        "legacyAliases": { "$ref": "#/$defs/ids" }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "workerId", "releaseTrack", "resolvedVersion", "defaultReferenceSetId", "supportedLanguageIds", "allowedReferenceSetIds", "producesArtifactFormats", "capabilities", "availability"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "displayName": { "$ref": "#/$defs/nonEmpty" },
+        "workerId": { "$ref": "#/$defs/id" },
+        "releaseTrack": { "enum": ["stable", "preview", "nightly", "experimental", "legacy"] },
+        "resolvedVersion": { "$ref": "#/$defs/nonEmpty" },
+        "defaultReferenceSetId": { "$ref": "#/$defs/id" },
+        "supportedLanguageIds": { "allOf": [{ "$ref": "#/$defs/ids" }], "minItems": 1 },
+        "allowedReferenceSetIds": { "allOf": [{ "$ref": "#/$defs/ids" }], "minItems": 1 },
+        "producesArtifactFormats": { "allOf": [{ "$ref": "#/$defs/ids" }], "minItems": 1 },
+        "capabilities": { "$ref": "#/$defs/ids" },
+        "metadataFeatureTags": { "$ref": "#/$defs/ids" },
+        "legacyAliases": { "$ref": "#/$defs/ids" },
+        "availability": { "$ref": "#/$defs/availability" }
+      }
+    },
+    "referenceSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "targetFramework", "digest", "runtimeFamily", "availability"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "displayName": { "$ref": "#/$defs/nonEmpty" },
+        "targetFramework": { "$ref": "#/$defs/nonEmpty" },
+        "digest": { "$ref": "#/$defs/nonEmpty" },
+        "runtimeFamily": { "$ref": "#/$defs/nonEmpty" },
+        "requiredRuntimeFeatureTags": { "$ref": "#/$defs/ids" },
+        "metadataFeatureTags": { "$ref": "#/$defs/ids" },
+        "supportStatus": { "$ref": "#/$defs/supportStatus" },
+        "supportEndDate": { "$ref": "#/$defs/supportEndDate" },
+        "visibility": { "$ref": "#/$defs/visibility" },
+        "replacementReferenceSetId": { "$ref": "#/$defs/id" },
+        "availability": { "$ref": "#/$defs/availability" }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "family", "resolvedVersion", "rid", "architecture", "acceptedArtifactFormats", "capabilities", "availability"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "displayName": { "$ref": "#/$defs/nonEmpty" },
+        "family": { "$ref": "#/$defs/nonEmpty" },
+        "resolvedVersion": { "$ref": "#/$defs/nonEmpty" },
+        "rid": { "type": "string", "pattern": "^linux-(x64|arm64)$" },
+        "architecture": { "enum": ["x64", "arm64"] },
+        "acceptedArtifactFormats": { "allOf": [{ "$ref": "#/$defs/ids" }], "minItems": 1 },
+        "capabilities": { "$ref": "#/$defs/ids" },
+        "runtimeCommit": { "$ref": "#/$defs/nonEmpty" },
+        "jitVersion": { "$ref": "#/$defs/nonEmpty" },
+        "jitCommit": { "$ref": "#/$defs/nonEmpty" },
+        "runtimeImageId": { "$ref": "#/$defs/nonEmpty" },
+        "acceptedRuntimeFamilies": { "$ref": "#/$defs/ids" },
+        "acceptedFrameworks": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/runtimeFramework" } },
+        "containerIsolationKind": { "$ref": "#/$defs/nonEmpty" },
+        "containerEnvironmentKind": { "$ref": "#/$defs/nonEmpty" },
+        "jitSourceMappingKind": { "$ref": "#/$defs/nonEmpty" },
+        "providedRuntimeFeatureTags": { "$ref": "#/$defs/ids" },
+        "providedMetadataFeatureTags": { "$ref": "#/$defs/ids" },
+        "legacyAliases": { "$ref": "#/$defs/ids" },
+        "supportStatus": { "$ref": "#/$defs/supportStatus" },
+        "supportEndDate": { "$ref": "#/$defs/supportEndDate" },
+        "visibility": { "$ref": "#/$defs/visibility" },
+        "availability": { "$ref": "#/$defs/availability" }
+      }
+    },
+    "runtimeFramework": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmpty" },
+        "minimumVersion": { "$ref": "#/$defs/nonEmpty" },
+        "maximumVersion": { "$ref": "#/$defs/nonEmpty" },
+        "exactVersion": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "processor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "resolvedVersion", "workerId", "acceptsArtifactFormats", "producesArtifactFormats", "capabilities", "availability"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "displayName": { "$ref": "#/$defs/nonEmpty" },
+        "resolvedVersion": { "$ref": "#/$defs/nonEmpty" },
+        "workerId": { "$ref": "#/$defs/id" },
+        "acceptsArtifactFormats": { "allOf": [{ "$ref": "#/$defs/ids" }], "minItems": 1 },
+        "producesArtifactFormats": { "allOf": [{ "$ref": "#/$defs/ids" }], "minItems": 1 },
+        "capabilities": { "$ref": "#/$defs/ids" },
+        "transformations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/transformation" }
+        },
+        "acceptedMetadataFeatureTags": { "$ref": "#/$defs/ids" },
+        "availability": { "$ref": "#/$defs/availability" }
+      }
+    },
+    "transformation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "inputArtifactFormat", "outputArtifactFormat"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "inputArtifactFormat": { "$ref": "#/$defs/id" },
+        "outputArtifactFormat": { "$ref": "#/$defs/id" }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "renderer", "requiresRuntime", "requiredCapabilities"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "displayName": { "$ref": "#/$defs/nonEmpty" },
+        "renderer": { "$ref": "#/$defs/id" },
+        "requiresRuntime": { "type": "boolean" },
+        "requiredCapabilities": { "$ref": "#/$defs/ids" },
+        "acceptedArtifactFormats": { "$ref": "#/$defs/ids" },
+        "outputArtifactFormat": { "$ref": "#/$defs/id" }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "fromId", "toId", "allowed"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["toolchain-reference-set", "artifact-processor", "artifact-runtime"] },
+        "fromId": { "$ref": "#/$defs/id" },
+        "toId": { "$ref": "#/$defs/id" },
+        "allowed": { "type": "boolean" },
+        "reason": { "$ref": "#/$defs/nonEmpty" },
+        "requiredMetadataFeatureTags": { "$ref": "#/$defs/ids" }
+      }
+    },
+    "preset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "languageId", "toolchainId", "referenceSetId", "defaultOutputId", "availability"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "displayName": { "$ref": "#/$defs/nonEmpty" },
+        "languageId": { "$ref": "#/$defs/id" },
+        "toolchainId": { "$ref": "#/$defs/id" },
+        "referenceSetId": { "$ref": "#/$defs/id" },
+        "defaultOutputId": { "$ref": "#/$defs/id" },
+        "defaultRuntimeId": { "$ref": "#/$defs/id" },
+        "legacyAliases": { "$ref": "#/$defs/ids" },
+        "supportStatus": { "$ref": "#/$defs/supportStatus" },
+        "supportEndDate": { "$ref": "#/$defs/supportEndDate" },
+        "visibility": { "$ref": "#/$defs/visibility" },
+        "availability": { "$ref": "#/$defs/availability" }
+      }
+    }
+  }
+}

@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Contracts\SharpLabNext.Contracts.Grpc\SharpLabNext.Contracts.Grpc.csproj" />
+    <ProjectReference Include="..\..\Contracts\SharpLabNext.Artifacts.Contracts\SharpLabNext.Artifacts.Contracts.csproj" />
+    <ProjectReference Include="..\..\ArtifactStore\SharpLabNext.ArtifactStore.Client\SharpLabNext.ArtifactStore.Client.csproj" />
+    <ProjectReference Include="..\..\Gateway\SharpLabNext.Operations\SharpLabNext.Operations.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\SharpLabNext.Observability\SharpLabNext.Observability.csproj" />
+    <ProjectReference Include="..\..\RuntimeJobs\SharpLabNext.RuntimeProtocol\SharpLabNext.RuntimeProtocol.csproj" />
+    <ProjectReference Include="..\..\WorkerHost\SharpLabNext.RuntimeProfile.Sdk\SharpLabNext.RuntimeProfile.Sdk.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Infrastructure\InternalServiceAuthentication.cs"
+             Link="Infrastructure\InternalServiceAuthentication.cs" />
+    <Compile Include="..\..\Infrastructure\OperationCapacityMiddleware.cs"
+             Link="Infrastructure\OperationCapacityMiddleware.cs" />
+    <Compile Include="..\..\Infrastructure\PascalCaseProblemDetails.cs"
+             Link="Infrastructure\PascalCaseProblemDetails.cs" />
+    <Compile Include="..\..\Infrastructure\PascalCaseQuery.cs"
+             Link="Infrastructure\PascalCaseQuery.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="security\runtime-job-seccomp.v1.json"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Contracts\SharpLabNext.Contracts\SharpLabNext.Contracts.csproj" />
+    <ProjectReference Include="..\SharpLabNext.Catalog\SharpLabNext.Catalog.csproj" />
+    <ProjectReference Include="..\SharpLabNext.PipelineResolver\SharpLabNext.PipelineResolver.csproj" />
+    <ProjectReference Include="..\..\ArtifactStore\SharpLabNext.ArtifactStore.Client\SharpLabNext.ArtifactStore.Client.csproj" />
+    <ProjectReference Include="..\..\Supervisor\SharpLabNext.RuntimeSupervisor.Client\SharpLabNext.RuntimeSupervisor.Client.csproj" />
+    <ProjectReference Include="..\..\WorkerHost\SharpLabNext.Worker.Client\SharpLabNext.Worker.Client.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\SharpLabNext.Observability\SharpLabNext.Observability.csproj" />
+    <ProjectReference Include="..\SharpLabNext.Operations\SharpLabNext.Operations.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpLabNext.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Infrastructure\InternalServiceAuthentication.cs"
+             Link="Infrastructure\InternalServiceAuthentication.cs" />
+    <Compile Include="..\..\Infrastructure\OperationCapacityMiddleware.cs"
+             Link="Infrastructure\OperationCapacityMiddleware.cs" />
+    <Compile Include="..\..\Infrastructure\PascalCaseProblemDetails.cs"
+             Link="Infrastructure\PascalCaseProblemDetails.cs" />
+    <Compile Include="..\..\Infrastructure\PascalCaseQuery.cs"
+             Link="Infrastructure\PascalCaseQuery.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\..\profiles\catalog\catalog.json" Link="profiles\catalog\catalog.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\..\profiles\lock.json" Link="profiles\lock.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\..\frontend\dist\**\*" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

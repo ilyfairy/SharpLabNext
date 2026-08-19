@@ -1,0 +1,380 @@
+.codemirror-host {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  contain: layout style;
+  background: #ffffff;
+  color: #1f2328;
+}
+
+.codemirror-host .cm-editor {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: #ffffff;
+  color: #1e1e1e;
+  font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  font-size: var(--editor-font-size, 14px);
+  font-weight: 450;
+  letter-spacing: 0;
+  -webkit-font-smoothing: auto;
+}
+
+.codemirror-host .cm-editor.cm-focused {
+  outline: none;
+}
+
+.codemirror-host .cm-scroller {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  line-height: calc(var(--editor-font-size, 14px) * 1.5);
+  overscroll-behavior: contain;
+}
+
+.codemirror-host .cm-content {
+  width: max-content;
+  min-width: 0;
+  padding: 12px 0 24px;
+  caret-color: #1f6feb;
+  font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  font-weight: 450;
+}
+
+.codemirror-host .cm-line {
+  padding: 0 12px 0 6px;
+  white-space: pre;
+}
+
+.codemirror-host .cm-gutters {
+  min-width: 42px;
+  border-right: 1px solid #e4e8ed;
+  background: #f7f8fa;
+  color: #68717d;
+}
+
+.codemirror-host .cm-lineNumbers .cm-gutterElement {
+  min-width: 3ch;
+  padding: 0 7px 0 6px;
+}
+
+.codemirror-host .cm-activeLineGutter {
+  background: #edf2f7;
+  color: #1f2328;
+}
+
+.codemirror-host .cm-activeLine {
+  background: rgba(237, 242, 247, 0.58);
+}
+
+.codemirror-host .cm-editor > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background: #d8e2ec;
+  /* CodeMirror positions this layer from glyph bounds, which are shorter than
+     the configured 1.5 line-height. Expand it to cover the complete row. */
+  --selection-extra-height: clamp(4px, calc(var(--editor-font-size, 14px) * 0.36), 10px);
+  /* biome-ignore lint/complexity/noImportantStyles: CodeMirror writes the glyph-height inline. */
+  min-height: calc(var(--editor-font-size, 14px) * 1.5) !important;
+  transform: translateY(calc(var(--selection-extra-height) * -0.4));
+  pointer-events: none;
+}
+
+.codemirror-host .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background: #add6ff;
+}
+
+.codemirror-host .cm-editor .cm-content .cm-line::selection,
+.codemirror-host .cm-editor .cm-content .cm-line *::selection {
+  /* biome-ignore lint/complexity/noImportantStyles: drawSelection hides native selection at highest precedence. */
+  color: inherit !important;
+  /* biome-ignore lint/complexity/noImportantStyles: drawSelection is the only visible selection layer. */
+  background: transparent !important;
+}
+
+.codemirror-host .cm-line.cm-selection-line {
+  /* Keep the full-row rhythm without hiding CodeMirror's real selection layer.
+     The selection layer is intentionally behind content, so an opaque line
+     background makes selected text look identical to unselected text. */
+  background-color: rgb(173 214 255 / 34%);
+}
+
+.codemirror-host .cm-selection-line-gutter {
+  background-color: #edf2f7;
+  color: #1f2328;
+}
+
+.codemirror-host .cm-cursor,
+.codemirror-host .cm-dropCursor {
+  border-left-color: #1f6feb;
+}
+
+.codemirror-host .cm-foldGutter {
+  width: 14px;
+}
+
+.codemirror-host .cm-foldGutter .cm-gutterElement {
+  color: #68717d;
+  cursor: pointer;
+}
+
+.codemirror-host .cm-tooltip {
+  max-width: min(560px, calc(100vw - 24px));
+  border: 1px solid #b8c3d1;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1f2328;
+  box-shadow: 0 6px 18px rgba(31, 35, 40, 0.16);
+  font-family: "Segoe UI", sans-serif;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.codemirror-host .cm-tooltip-autocomplete > ul > li {
+  min-height: 26px;
+  padding: 4px 8px;
+}
+
+.codemirror-host .cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: #0067c0;
+  color: #ffffff;
+}
+
+.codemirror-host .cm-completionLabel {
+  color: #1e1e1e;
+  font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  font-weight: 450;
+}
+
+.codemirror-host .cm-completionDetail {
+  color: #616b76;
+}
+
+.codemirror-host .cm-completionIcon {
+  width: 16px;
+  padding-right: 6px;
+  color: #616b76;
+  opacity: 1;
+}
+
+.codemirror-host .cm-completionIcon-keyword,
+.codemirror-host .cm-completionIcon-keyword + .cm-completionLabel {
+  color: #0000ff;
+}
+
+.codemirror-host .cm-completionIcon-class,
+.codemirror-host .cm-completionIcon-interface,
+.codemirror-host .cm-completionIcon-struct,
+.codemirror-host .cm-completionIcon-type,
+.codemirror-host .cm-completionIcon-enum,
+.codemirror-host .cm-completionIcon-class + .cm-completionLabel,
+.codemirror-host .cm-completionIcon-interface + .cm-completionLabel,
+.codemirror-host .cm-completionIcon-struct + .cm-completionLabel,
+.codemirror-host .cm-completionIcon-type + .cm-completionLabel,
+.codemirror-host .cm-completionIcon-enum + .cm-completionLabel {
+  color: #2b91af;
+}
+
+.codemirror-host .cm-completionIcon-function,
+.codemirror-host .cm-completionIcon-method,
+.codemirror-host .cm-completionIcon-function + .cm-completionLabel,
+.codemirror-host .cm-completionIcon-method + .cm-completionLabel {
+  color: #795e26;
+}
+
+.codemirror-host .cm-completionIcon-property,
+.codemirror-host .cm-completionIcon-variable,
+.codemirror-host .cm-completionIcon-constant,
+.codemirror-host .cm-completionIcon-property + .cm-completionLabel,
+.codemirror-host .cm-completionIcon-variable + .cm-completionLabel,
+.codemirror-host .cm-completionIcon-constant + .cm-completionLabel {
+  color: #001080;
+}
+
+.codemirror-host .cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionIcon,
+.codemirror-host .cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionLabel,
+.codemirror-host .cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.codemirror-host .cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionMatchedText {
+  color: #ffffff;
+  text-decoration-color: rgba(255, 255, 255, 0.9);
+}
+
+.codemirror-host .cm-lsp-hover {
+  max-height: 280px;
+  overflow: auto;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+}
+
+.codemirror-host .cm-lsp-hover-code {
+  margin: 0;
+  color: #1f2328;
+  font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.codemirror-host .cm-lsp-hover-assembly {
+  color: #af00db;
+}
+
+.codemirror-host .cm-lsp-hover-documentation {
+  color: #4b5563;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.codemirror-host .cm-lsp-hover-code + .cm-lsp-hover-documentation,
+.codemirror-host .cm-lsp-hover-documentation + .cm-lsp-hover-code,
+.codemirror-host .cm-lsp-hover-documentation + .cm-lsp-hover-documentation {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid #e4e8ed;
+}
+
+.codemirror-host .cm-signature-help {
+  max-width: min(620px, calc(100vw - 24px));
+  padding: 7px 10px;
+  overflow-wrap: anywhere;
+}
+
+.codemirror-host .cm-signature-heading {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+.codemirror-host .cm-signature-parameter {
+  color: #795e26;
+  font-weight: 700;
+}
+
+.codemirror-host .cm-signature-count {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #68717d;
+  font-family: "Segoe UI", sans-serif;
+  font-size: 11px;
+}
+
+.codemirror-host .cm-signature-documentation {
+  max-height: 120px;
+  margin-top: 6px;
+  overflow: auto;
+  color: #4b5563;
+  white-space: pre-wrap;
+}
+
+.codemirror-host .cm-lint-action-preferred {
+  font-weight: 600;
+}
+
+.codemirror-host .cm-diagnosticText {
+  overflow-wrap: anywhere;
+}
+
+.codemirror-host .cm-semantic-token {
+  font-style: inherit;
+}
+
+.codemirror-host .cm-semantic-namespace,
+.codemirror-host .cm-semantic-identifier {
+  color: #000000;
+}
+
+.codemirror-host .cm-semantic-type {
+  color: #2b91af;
+}
+
+.codemirror-host .cm-semantic-method {
+  color: #795e26;
+}
+
+.codemirror-host .cm-semantic-property,
+.codemirror-host .cm-semantic-field,
+.codemirror-host .cm-semantic-event,
+.codemirror-host .cm-semantic-parameter,
+.codemirror-host .cm-semantic-variable {
+  color: #001080;
+}
+
+.codemirror-host .cm-semantic-enum-member {
+  color: #0070c1;
+}
+
+.codemirror-host .cm-semantic-label,
+.codemirror-host .cm-semantic-macro {
+  color: #af00db;
+}
+
+.codemirror-host .cm-semantic-keyword {
+  color: #0000ff;
+}
+
+.codemirror-host .cm-semantic-string {
+  color: #a31515;
+}
+
+.codemirror-host .cm-semantic-escape {
+  color: #ee0000;
+}
+
+.codemirror-host .cm-semantic-number {
+  color: #098658;
+}
+
+.codemirror-host .cm-semantic-regexp {
+  color: #811f3f;
+}
+
+.codemirror-host .cm-semantic-operator {
+  color: #000000;
+}
+
+.codemirror-host .cm-semantic-comment {
+  color: #008000;
+}
+
+.codemirror-host .cm-semantic-deprecated {
+  text-decoration: line-through;
+}
+
+.codemirror-host .cm-semantic-readonly {
+  font-weight: 600;
+}
+
+.codemirror-host .cm-execution-flow-range {
+  border-bottom: 2px solid rgba(0, 122, 112, 0.78);
+  background: rgba(0, 122, 112, 0.12);
+}
+
+@media (max-width: 860px) {
+  .codemirror-host .cm-content {
+    padding-top: 8px;
+  }
+
+  .codemirror-host .cm-line {
+    padding-left: 4px;
+    padding-right: 8px;
+  }
+
+  .codemirror-host .cm-gutters {
+    min-width: 0;
+  }
+
+  .codemirror-host .cm-lineNumbers .cm-gutterElement {
+    min-width: 2ch;
+    padding-right: 4px;
+    padding-left: 2px;
+  }
+
+  .codemirror-host .cm-gutters .cm-foldGutter,
+  .codemirror-host .cm-gutters .cm-gutter-lint {
+    display: none !important;
+  }
+}

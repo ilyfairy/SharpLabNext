@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\ArtifactStore\SharpLabNext.ArtifactStore.Client\SharpLabNext.ArtifactStore.Client.csproj" />
+    <ProjectReference Include="..\..\WorkerHost\SharpLabNext.WorkerHost\SharpLabNext.WorkerHost.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsSharpLabNextPublicPackage>true</IsSharpLabNextPublicPackage>
+    <PackageId>SharpLabNext.LanguageWorker.Sdk</PackageId>
+    <Description>Public SDK for implementing SharpLabNext managed-language workers.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\..\schemas\language-worker-capability.schema.json"
+          Pack="true"
+          PackagePath="schemas\language-worker-capability.schema.json"
+          Visible="false" />
+  </ItemGroup>
+
+</Project>

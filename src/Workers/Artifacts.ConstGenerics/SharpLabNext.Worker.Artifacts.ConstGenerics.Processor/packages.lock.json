@@ -1,0 +1,48 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net8.0": {
+      "ICSharpCode.Decompiler": {
+        "type": "Direct",
+        "requested": "[10.1.0.8386, )",
+        "resolved": "10.1.0.8386",
+        "contentHash": "vq3sH7MW+GqT6N5V4kbhfdN4zotq7+QKOBzRjgNRgUX3D46QDNGpHgbO6lS4A/JEs203lZOrEVc/eiQMPONMsw==",
+        "dependencies": {
+          "System.Collections.Immutable": "9.0.0",
+          "System.Reflection.Metadata": "9.0.0"
+        }
+      },
+      "Microsoft.ILVerification": {
+        "type": "Direct",
+        "requested": "[10.0.9, )",
+        "resolved": "10.0.9",
+        "contentHash": "PreciilpOri7j1AjVTlLy4sc/81laO7DOtm2UH55P7O6vi4plzQf1kiFeYAlhmGOso3oR+nPp9st73p2/qMLgw==",
+        "dependencies": {
+          "System.Reflection.Metadata": "10.0.7"
+        }
+      },
+      "System.Collections.Immutable": {
+        "type": "Transitive",
+        "resolved": "10.0.7",
+        "contentHash": "0Ti4Jv1ga3eurH5HaCVsPybcBl+08YfzM9smqAJzHvqV494xK+0pSbytGrMTWhph+zsyKIaoGNiR5u3by5bj+A=="
+      },
+      "System.Reflection.Metadata": {
+        "type": "Transitive",
+        "resolved": "10.0.7",
+        "contentHash": "FEBU/i3gHeleqayWrbWieI5MlepDBTcjAxMzjGbK7FwGtlpxGSU1Lt11W1/o4ExdqsNtboiVhT5s4kNtH3eqvw==",
+        "dependencies": {
+          "System.Collections.Immutable": "10.0.7"
+        }
+      },
+      "sharplabnext.contracts": {
+        "type": "Project"
+      },
+      "sharplabnext.worker.artifacts.constgenerics.protocol": {
+        "type": "Project",
+        "dependencies": {
+          "SharpLabNext.Contracts": "[0.1.0, )"
+        }
+      }
+    }
+  }
+}

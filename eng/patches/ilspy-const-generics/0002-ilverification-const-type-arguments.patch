@@ -1,0 +1,63 @@
+diff --git a/src/coreclr/tools/Common/TypeSystem/Ecma/EcmaSignatureParser.cs b/src/coreclr/tools/Common/TypeSystem/Ecma/EcmaSignatureParser.cs
+--- a/src/coreclr/tools/Common/TypeSystem/Ecma/EcmaSignatureParser.cs
++++ b/src/coreclr/tools/Common/TypeSystem/Ecma/EcmaSignatureParser.cs
+@@ -240,6 +240,32 @@ namespace Internal.TypeSystem.Ecma
+                         else
+                             return null;
+                     }
++                case SignatureTypeCode.ConstTypeArgument:
++                    {
++                        SignatureTypeCode valueTypeCode = (SignatureTypeCode)_reader.ReadCompressedInteger();
++                        TypeDesc valueType = ParseType(valueTypeCode);
++                        int valueSize = valueTypeCode switch
++                        {
++                            SignatureTypeCode.Boolean => 1,
++                            SignatureTypeCode.SByte => 1,
++                            SignatureTypeCode.Byte => 1,
++                            SignatureTypeCode.Char => 2,
++                            SignatureTypeCode.Int16 => 2,
++                            SignatureTypeCode.UInt16 => 2,
++                            SignatureTypeCode.Int32 => 4,
++                            SignatureTypeCode.UInt32 => 4,
++                            SignatureTypeCode.Single => 4,
++                            SignatureTypeCode.Int64 => 8,
++                            SignatureTypeCode.UInt64 => 8,
++                            SignatureTypeCode.Double => 8,
++                            _ => throw new BadImageFormatException()
++                        };
++                        for (int index = 0; index < valueSize; index++)
++                        {
++                            _reader.ReadByte();
++                        }
++                        return valueType;
++                    }
+                 case SignatureTypeCode.TypedReference:
+                     return GetWellKnownType(WellKnownType.TypedReference);
+                 case SignatureTypeCode.FunctionPointer:
+diff --git a/src/coreclr/tools/ILVerification/ILVerification.csproj b/src/coreclr/tools/ILVerification/ILVerification.csproj
+--- a/src/coreclr/tools/ILVerification/ILVerification.csproj
++++ b/src/coreclr/tools/ILVerification/ILVerification.csproj
+@@ -16,6 +16,22 @@
+   <Import Project="ILVerification.projitems" />
+ 
+   <ItemGroup>
+-    <PackageReference Include="System.Reflection.Metadata" Version="$(SystemReflectionMetadataVersion)" />
++    <Reference Include="System.Reflection.Metadata">
++      <HintPath>$(ConstGenericsMetadataAssemblyPath)</HintPath>
++      <Private>true</Private>
++    </Reference>
++    <Reference Include="System.Collections.Immutable">
++      <HintPath>$(ConstGenericsImmutableAssemblyPath)</HintPath>
++      <Private>true</Private>
++    </Reference>
++    <PackageReference Include="System.Memory" Version="$(SystemMemoryVersion)" />
++    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="$(SystemRuntimeCompilerServicesUnsafeVersion)" />
+   </ItemGroup>
++
++  <Target Name="ValidateConstGenericsMetadata" BeforeTargets="ResolveReferences">
++    <Error Condition="!Exists('$(ConstGenericsMetadataAssemblyPath)')"
++           Text="The source-built ConstGenerics System.Reflection.Metadata assembly was not found." />
++    <Error Condition="!Exists('$(ConstGenericsImmutableAssemblyPath)')"
++           Text="The matching ConstGenerics System.Collections.Immutable assembly was not found." />
++  </Target>
+ </Project>

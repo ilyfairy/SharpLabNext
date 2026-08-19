@@ -1,0 +1,395 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/runtime/v1/runtime-matrix.schema.json",
+  "title": "SharpLabNext Runtime Matrix Source Lock",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "metadataSource", "resolvedAt", "controlRuntime", "coreClr", "mono", "framework"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "metadataSource": { "type": "string", "format": "uri" },
+    "resolvedAt": { "type": "string", "format": "date-time" },
+    "controlRuntime": { "$ref": "#/$defs/controlRuntime" },
+    "coreClr": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/coreClr" }
+    },
+    "mono": { "$ref": "#/$defs/mono" },
+    "framework": { "$ref": "#/$defs/framework" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "nonEmpty": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "sha512": { "type": "string", "pattern": "^[0-9a-f]{128}$" },
+    "digestPinnedImage": {
+      "type": "string",
+      "pattern": "^[^@\\s]+@sha256:[0-9a-f]{64}$"
+    },
+    "coreClrCommit": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
+    "packageHash": { "type": "string", "pattern": "^sha512-[A-Za-z0-9+/]{86}==$" },
+    "supportStatus": { "enum": ["active", "maintenance", "preview", "legacy", "experimental"] },
+    "visibility": { "enum": ["visible", "hidden"] },
+    "promotionState": { "enum": ["verified", "blocked"] },
+    "promotionReceiptReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^profiles/runtime-promotion-receipts/[a-z0-9][a-z0-9._-]*\\.json$"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["run", "jit-asm", "inspection", "execution-flow"] }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "sha512"],
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "sha512": { "$ref": "#/$defs/sha512" }
+      }
+    },
+    "checkedJit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "sourceArchive",
+        "builderImage",
+        "configuration",
+        "targetOs",
+        "architecture",
+        "buildComponent",
+        "pgoMode",
+        "compiler",
+        "generator",
+        "sourceMappingKind"
+      ],
+      "properties": {
+        "commit": { "$ref": "#/$defs/coreClrCommit" },
+        "sourceArchive": { "$ref": "#/$defs/checkedJitSourceArchive" },
+        "bootstrapSdk": { "$ref": "#/$defs/checkedJitBootstrapSdk" },
+        "builderImage": { "$ref": "#/$defs/digestPinnedImage" },
+        "configuration": { "const": "Checked" },
+        "targetOs": { "enum": ["Linux", "linux"] },
+        "architecture": { "const": "x64" },
+        "buildComponent": { "const": "jit" },
+        "pgoMode": { "enum": ["disabled-by-flag", "disabled-by-default"] },
+        "compiler": { "const": "gcc" },
+        "generator": { "const": "make" },
+        "versionGenerationMode": { "const": "skip-by-upstream-flag" },
+        "sourceMappingKind": { "enum": ["none", "checked-jit-debug-info"] }
+      }
+    },
+    "checkedJitSourceArchive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "sha512"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/dotnet/runtime/archive/[0-9a-f]{40}(?:[0-9a-f]{24})?\\.tar\\.gz$"
+        },
+        "sha512": { "$ref": "#/$defs/sha512" }
+      }
+    },
+    "checkedJitBootstrapSdk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "url", "sha512"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://builds\\.dotnet\\.microsoft\\.com/dotnet/Sdk/[0-9A-Za-z.-]+/dotnet-sdk-[0-9A-Za-z.-]+-linux-x64\\.tar\\.gz$"
+        },
+        "sha512": { "$ref": "#/$defs/sha512" }
+      }
+    },
+    "sourceProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "sourceUri"],
+      "properties": {
+        "commit": { "$ref": "#/$defs/coreClrCommit" },
+        "sourceUri": { "type": "string", "format": "uri" }
+      }
+    },
+    "profilerProvider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "builderImage",
+        "scaffold",
+        "runtimeHeaders",
+        "sourceMappingKind"
+      ],
+      "properties": {
+        "id": { "const": "sharplabnext-linux-profiler-v1" },
+        "builderImage": { "$ref": "#/$defs/digestPinnedImage" },
+        "scaffold": { "$ref": "#/$defs/sourceProvenance" },
+        "runtimeHeaders": { "$ref": "#/$defs/sourceProvenance" },
+        "sourceMappingKind": { "const": "linux-profiler" }
+      }
+    },
+    "referencePackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "url", "sha512", "packageContentHash"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmpty" },
+        "version": { "$ref": "#/$defs/nonEmpty" },
+        "url": { "type": "string", "format": "uri" },
+        "sha512": { "$ref": "#/$defs/sha512" },
+        "packageContentHash": { "$ref": "#/$defs/packageHash" }
+      }
+    },
+    "referenceComposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "resolvedVersion", "sourceIdentityDigest", "sources"],
+      "properties": {
+        "kind": { "const": "nuget-package-composition" },
+        "resolvedVersion": { "const": "net30-union-v1" },
+        "sourceIdentityDigest": { "$ref": "#/$defs/sha256" },
+        "sources": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["role", "targetId", "selection"],
+              "properties": {
+                "role": { "const": "base" },
+                "targetId": { "const": "netfx20" },
+                "selection": { "const": "all" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["role", "targetId", "selection"],
+              "properties": {
+                "role": { "const": "extension" },
+                "targetId": { "const": "netfx35" },
+                "selection": { "const": "assembly-version:3.0.0.0" }
+              }
+            }
+          ],
+          "items": false
+        }
+      }
+    },
+    "platformCapability": {
+      "anyOf": [
+        { "$ref": "#/$defs/blockedPlatformCapability" },
+        { "$ref": "#/$defs/verifiedPlatformCapability" }
+      ]
+    },
+    "winePlatformCapability": {
+      "anyOf": [
+        { "$ref": "#/$defs/blockedWinePlatformCapability" },
+        { "$ref": "#/$defs/verifiedWinePlatformCapability" }
+      ]
+    },
+    "blockedPlatformCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilities", "promotionState", "blockedReason"],
+      "properties": {
+        "capabilities": { "$ref": "#/$defs/capabilities" },
+        "instrumentationCapabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["inspection", "execution-flow"] },
+          "description": "Instrumentation capabilities with independent retained-image evidence. This field is required before a blocked capability can be promoted."
+        },
+        "promotionState": { "const": "blocked" },
+        "blockedReason": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "verifiedPlatformCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilities", "promotionState", "promotionReceipt"],
+      "properties": {
+        "capabilities": { "$ref": "#/$defs/capabilities" },
+        "instrumentationCapabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["inspection", "execution-flow"] },
+          "description": "Instrumentation capabilities with independent retained-image evidence. This field is required before a blocked capability can be promoted."
+        },
+        "promotionState": { "const": "verified" },
+        "promotionReceipt": { "$ref": "#/$defs/promotionReceiptReference" }
+      }
+    },
+    "blockedWinePlatformCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executionUser", "capabilities", "promotionState", "blockedReason"],
+      "properties": {
+        "executionUser": { "enum": ["0:0", "1654:1654"] },
+        "capabilities": { "$ref": "#/$defs/capabilities" },
+        "instrumentationCapabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["inspection", "execution-flow"] },
+          "description": "Instrumentation capabilities with independent retained-image evidence. This field is required before a blocked capability can be promoted."
+        },
+        "promotionState": { "const": "blocked" },
+        "blockedReason": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "verifiedWinePlatformCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executionUser", "capabilities", "promotionState", "promotionReceipt"],
+      "properties": {
+        "executionUser": { "enum": ["0:0", "1654:1654"] },
+        "capabilities": { "$ref": "#/$defs/capabilities" },
+        "instrumentationCapabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["inspection", "execution-flow"] },
+          "description": "Instrumentation capabilities with independent retained-image evidence. This field is required before a blocked capability can be promoted."
+        },
+        "promotionState": { "const": "verified" },
+        "promotionReceipt": { "$ref": "#/$defs/promotionReceiptReference" }
+      }
+    },
+    "controlRuntime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "targetFramework", "image"],
+      "properties": {
+        "version": { "$ref": "#/$defs/nonEmpty" },
+        "targetFramework": { "type": "string", "pattern": "^net[0-9]+(?:\\.[0-9]+)?$" },
+        "image": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "coreClr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "channel", "version", "releaseDate", "supportStatus", "visibility", "referenceSetId", "referencePackage", "linux", "windows", "linuxCapability", "wineCapability"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "channel": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+        "version": { "$ref": "#/$defs/nonEmpty" },
+        "releaseDate": { "type": "string", "format": "date" },
+        "supportEndDate": { "type": "string", "format": "date" },
+        "supportStatus": { "$ref": "#/$defs/supportStatus" },
+        "visibility": { "$ref": "#/$defs/visibility" },
+        "referenceSetId": { "$ref": "#/$defs/id" },
+        "referencePackage": { "$ref": "#/$defs/referencePackage" },
+        "runtimeCommit": { "$ref": "#/$defs/coreClrCommit" },
+        "jitCommit": { "$ref": "#/$defs/coreClrCommit" },
+        "linuxBaseImage": { "$ref": "#/$defs/nonEmpty" },
+        "linux": { "$ref": "#/$defs/payload" },
+        "checkedJit": { "$ref": "#/$defs/checkedJit" },
+        "profilerProvider": { "$ref": "#/$defs/profilerProvider" },
+        "windows": { "$ref": "#/$defs/payload" },
+        "linuxCapability": { "$ref": "#/$defs/platformCapability" },
+        "wineCapability": { "$ref": "#/$defs/winePlatformCapability" }
+      },
+      "dependentRequired": {
+        "checkedJit": ["runtimeCommit", "jitCommit"],
+        "profilerProvider": ["runtimeCommit", "jitCommit"]
+      },
+      "dependentSchemas": {
+        "checkedJit": {
+          "propertyNames": {
+            "not": { "const": "profilerProvider" }
+          }
+        }
+      }
+    },
+    "mono": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "image", "referenceSetId", "supportStatus", "visibility", "capability"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "version": { "$ref": "#/$defs/nonEmpty" },
+        "image": { "$ref": "#/$defs/digestPinnedImage" },
+        "referenceSetId": { "$ref": "#/$defs/id" },
+        "supportStatus": { "$ref": "#/$defs/supportStatus" },
+        "supportEndDate": { "type": "string", "format": "date" },
+        "visibility": { "$ref": "#/$defs/visibility" },
+        "capability": { "$ref": "#/$defs/platformCapability" }
+      }
+    },
+    "framework": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wineVersion", "operatorImageEnvironment", "targets"],
+      "properties": {
+        "wineVersion": { "$ref": "#/$defs/nonEmpty" },
+        "operatorImageEnvironment": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/frameworkTarget" }
+        }
+      }
+    },
+    "frameworkTarget": {
+      "oneOf": [
+        { "$ref": "#/$defs/frameworkPackageTarget" },
+        { "$ref": "#/$defs/frameworkCompositionTarget" }
+      ]
+    },
+    "frameworkPackageTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "targetFramework", "clrGeneration", "prefix", "referenceSetId", "referencePackage", "supportStatus", "visibility", "capability"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "version": { "$ref": "#/$defs/nonEmpty" },
+        "targetFramework": { "$ref": "#/$defs/nonEmpty" },
+        "clrGeneration": { "enum": ["clr2", "clr4"] },
+        "prefix": { "enum": ["/opt/wine-netfx-clr2", "/opt/wine-netfx-clr4"] },
+        "referenceSetId": { "$ref": "#/$defs/id" },
+        "referencePackage": { "$ref": "#/$defs/referencePackage" },
+        "supportStatus": { "$ref": "#/$defs/supportStatus" },
+        "supportEndDate": { "type": "string", "format": "date" },
+        "visibility": { "$ref": "#/$defs/visibility" },
+        "capability": { "$ref": "#/$defs/platformCapability" }
+      }
+    },
+    "frameworkCompositionTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "targetFramework", "clrGeneration", "prefix", "referenceSetId", "referenceComposition", "supportStatus", "visibility", "capability"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "version": { "$ref": "#/$defs/nonEmpty" },
+        "targetFramework": { "$ref": "#/$defs/nonEmpty" },
+        "clrGeneration": { "enum": ["clr2", "clr4"] },
+        "prefix": { "enum": ["/opt/wine-netfx-clr2", "/opt/wine-netfx-clr4"] },
+        "referenceSetId": { "$ref": "#/$defs/id" },
+        "referenceComposition": { "$ref": "#/$defs/referenceComposition" },
+        "supportStatus": { "$ref": "#/$defs/supportStatus" },
+        "supportEndDate": { "type": "string", "format": "date" },
+        "visibility": { "$ref": "#/$defs/visibility" },
+        "capability": { "$ref": "#/$defs/platformCapability" }
+      }
+    }
+  }
+}

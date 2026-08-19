@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sharplabnext.invalid/schemas/performance-gate-report.v1.json",
+  "title": "SharpLabNext Gateway Performance Gate Report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "startedAtUtc",
+    "completedAtUtc",
+    "thresholdProfile",
+    "target",
+    "environment",
+    "workload",
+    "warmup",
+    "baseline",
+    "concurrency",
+    "violations",
+    "passed"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "startedAtUtc": { "type": "string", "format": "date-time" },
+    "completedAtUtc": { "type": "string", "format": "date-time" },
+    "thresholdProfile": { "$ref": "#/$defs/thresholdProfile" },
+    "target": { "$ref": "#/$defs/target" },
+    "environment": { "$ref": "#/$defs/environment" },
+    "workload": { "$ref": "#/$defs/workload" },
+    "warmup": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sample" }
+    },
+    "baseline": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/scenarioMeasurement" }
+    },
+    "concurrency": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/concurrencyMeasurement" }
+    },
+    "violations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/violation" }
+    },
+    "passed": { "type": "boolean" }
+  },
+  "$defs": {
+    "thresholdProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "profileId", "configurationFile", "sha256"],
+      "properties": {
+        "schemaVersion": { "type": "integer", "minimum": 1 },
+        "profileId": { "type": "string", "minLength": 1 },
+        "configurationFile": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseAddress", "releaseId", "catalogRevision"],
+      "properties": {
+        "baseAddress": { "type": "string", "format": "uri" },
+        "releaseId": { "type": "string", "minLength": 1 },
+        "catalogRevision": { "type": "string", "minLength": 1 }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operatingSystem",
+        "processArchitecture",
+        "osArchitecture",
+        "processorCount",
+        "frameworkDescription",
+        "totalSystemMemoryBytes"
+      ],
+      "properties": {
+        "operatingSystem": { "type": "string" },
+        "processArchitecture": { "type": "string" },
+        "osArchitecture": { "type": "string" },
+        "processorCount": { "type": "integer", "minimum": 1 },
+        "frameworkDescription": { "type": "string" },
+        "totalSystemMemoryBytes": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "warmupSamplesPerScenario",
+        "baselineSamplesPerScenario",
+        "baselineMaxConcurrency",
+        "concurrencyLevels",
+        "operationTimeoutSeconds",
+        "overallTimeoutMinutes",
+        "pollIntervalMilliseconds",
+        "memorySampleIntervalMilliseconds"
+      ],
+      "properties": {
+        "warmupSamplesPerScenario": { "type": "integer", "minimum": 1 },
+        "baselineSamplesPerScenario": { "type": "integer", "minimum": 10 },
+        "baselineMaxConcurrency": { "const": 1 },
+        "concurrencyLevels": {
+          "type": "array",
+          "prefixItems": [{ "const": 10 }, { "const": 50 }],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "operationTimeoutSeconds": { "type": "integer", "minimum": 30 },
+        "overallTimeoutMinutes": { "type": "integer", "minimum": 10 },
+        "pollIntervalMilliseconds": { "type": "integer", "minimum": 25 },
+        "memorySampleIntervalMilliseconds": { "type": "integer", "minimum": 25 }
+      }
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sampleId",
+        "scenarioId",
+        "concurrencyLevel",
+        "durationMilliseconds",
+        "gatewayDispatchWaitMilliseconds",
+        "operationCount",
+        "succeeded",
+        "error"
+      ],
+      "properties": {
+        "sampleId": { "type": "string", "minLength": 1 },
+        "scenarioId": { "type": "string", "minLength": 1 },
+        "concurrencyLevel": { "type": "integer", "minimum": 1 },
+        "durationMilliseconds": { "type": "number", "minimum": 0 },
+        "gatewayDispatchWaitMilliseconds": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Gateway-observed accepted-to-first-non-accepted-event dispatch proxy; it does not measure downstream worker or runtime queueing."
+        },
+        "operationCount": { "type": "integer", "minimum": 0 },
+        "succeeded": { "type": "boolean" },
+        "error": { "type": ["string", "null"] }
+      }
+    },
+    "statisticalSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "minimum", "p50", "p95", "maximum"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "minimum": { "type": ["number", "null"], "minimum": 0 },
+        "p50": { "type": ["number", "null"], "minimum": 0 },
+        "p95": { "type": ["number", "null"], "minimum": 0 },
+        "maximum": { "type": ["number", "null"], "minimum": 0 }
+      }
+    },
+    "scenarioMeasurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenarioId",
+        "displayName",
+        "concurrencyLevel",
+        "sampleCount",
+        "successCount",
+        "failureCount",
+        "latencyMilliseconds",
+        "gatewayDispatchWaitMilliseconds",
+        "samples"
+      ],
+      "properties": {
+        "scenarioId": { "type": "string", "minLength": 1 },
+        "displayName": { "type": "string", "minLength": 1 },
+        "concurrencyLevel": { "type": "integer", "minimum": 1 },
+        "sampleCount": { "type": "integer", "minimum": 1 },
+        "successCount": { "type": "integer", "minimum": 0 },
+        "failureCount": { "type": "integer", "minimum": 0 },
+        "latencyMilliseconds": { "$ref": "#/$defs/statisticalSummary" },
+        "gatewayDispatchWaitMilliseconds": {
+          "$ref": "#/$defs/statisticalSummary",
+          "description": "Percentiles for the Gateway dispatch proxy, not downstream worker or runtime queueing."
+        },
+        "samples": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sample" }
+        }
+      }
+    },
+    "systemMemory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supported",
+        "totalBytes",
+        "availableBeforeBytes",
+        "minimumAvailableBytes",
+        "availableAfterBytes",
+        "peakUsedDeltaBytes"
+      ],
+      "properties": {
+        "supported": { "type": "boolean" },
+        "totalBytes": { "type": ["integer", "null"], "minimum": 0 },
+        "availableBeforeBytes": { "type": ["integer", "null"], "minimum": 0 },
+        "minimumAvailableBytes": { "type": ["integer", "null"], "minimum": 0 },
+        "availableAfterBytes": { "type": ["integer", "null"], "minimum": 0 },
+        "peakUsedDeltaBytes": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "concurrencyMeasurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["concurrencyLevel", "startedAtUtc", "durationMilliseconds", "systemMemory", "scenarios"],
+      "properties": {
+        "concurrencyLevel": { "type": "integer", "enum": [10, 50] },
+        "startedAtUtc": { "type": "string", "format": "date-time" },
+        "durationMilliseconds": { "type": "number", "minimum": 0 },
+        "systemMemory": { "$ref": "#/$defs/systemMemory" },
+        "scenarios": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/scenarioMeasurement" }
+        }
+      }
+    },
+    "violation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "scenarioId", "metric", "observed", "limit", "message"],
+      "properties": {
+        "scope": { "type": "string", "minLength": 1 },
+        "scenarioId": { "type": ["string", "null"] },
+        "metric": { "type": "string", "minLength": 1 },
+        "observed": { "type": ["number", "null"] },
+        "limit": { "type": "number" },
+        "message": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

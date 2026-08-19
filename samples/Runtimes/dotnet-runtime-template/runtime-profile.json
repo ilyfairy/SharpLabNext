@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "example-dotnet-linux-x64",
+  "image": "sharplabnext/runtime-example:development",
+  "family": "coreclr",
+  "acceptedRuntimeFamilies": [],
+  "acceptedFrameworks": [],
+  "runtimeVersion": "11.0.0-preview.5",
+  "runtimeCommit": "replace-with-runtime-commit",
+  "jitVersion": "11.0.0-preview.5",
+  "jitCommit": "replace-with-jit-commit",
+  "runtimeImageId": "sharplabnext/runtime-example:development",
+  "rid": "linux-x64",
+  "architecture": "x64",
+  "cpuFeatureProfile": "x64-v2",
+  "acceptedArtifactFormats": ["dotnet-managed-pe-v1"],
+  "capabilities": ["run", "jit-asm"],
+  "providedRuntimeFeatureTags": [],
+  "providedMetadataFeatureTags": [],
+  "allowedSecurityPolicyIds": ["runtime-job-default"],
+  "container": {
+    "isolationKind": "standard",
+    "environmentKind": "coreclr",
+    "executionUser": "1654:1654"
+  },
+  "layout": {
+    "dotNetHostPath": "dotnet",
+    "runnerAssemblyPath": "/opt/sharplabnext/SharpLabNext.Runner.dll",
+    "jitInspectorAssemblyPath": "/opt/sharplabnext/SharpLabNext.JitInspector.dll"
+  },
+  "securityPolicies": [
+    {
+      "id": "runtime-job-default",
+      "memoryBytes": 268435456,
+      "nanoCpus": 1000000000,
+      "pidsLimit": 64,
+      "maximumDurationSeconds": 10,
+      "maximumArtifactBytes": 67108864,
+      "maximumOutputBytes": 1048576,
+      "tmpfsBytes": 33554432
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "componentId": "artifacts-jsil",
+  "sourceComponentId": "jsil-source",
+  "compatibilityGroup": "jsil-managed-pe-javascript",
+  "status": "source-inputs-recorded",
+  "license": "MIT",
+  "patchSeries": [
+    {
+      "path": "eng/patches/jsil/0001-fix-mono-linux-path-handling.patch",
+      "purpose": "Correct upstream JSIL CLI filesystem URI and root config-search handling on Mono/Linux without changing translation semantics."
+    }
+  ],
+  "builder": {
+    "imageId": "mono-jsil",
+    "platform": "linux/amd64",
+    "sourceDateEpoch": 1783856194
+  },
+  "build": {
+    "configuration": "Release",
+    "legacyMetadataPolicy": "Accept only ordinary dotnet-managed-pe-v1 artifacts with no metadata feature tags.",
+    "processorRuntime": "Pinned Mono 6.12.0.182; each translation uses a bounded short-lived child process.",
+    "outputs": [
+      "/opt/jsil/JSILc.AnyCPU.exe",
+      "/opt/jsil/JSIL.dll",
+      "SharpLabNext.Worker.Artifacts.JSIL",
+      "javascript-v1"
+    ]
+  },
+  "featureEvidence": [
+    "Original sq/JSIL and the wherewhere/JSIL myget branch have identical compiler/runtime/project sources at the selected upstream revision.",
+    "The source-built image translates a real .NET 10 managed assembly when supplied the exact locked reference pack.",
+    "The locked JSIL.Meta source remains in the artifact worker source-build closure because upstream JSIL requires it to build; it is not exposed as a user compilation reference or attached to generated output.",
+    "The upstream classic emitter produces one non-manifest JavaScript file with JSIL.DeclareAssembly and global assembly bindings; generated text is not post-processed.",
+    "Gateway routes the output through Catalog processor capabilities and does not load JSIL or Mono types.",
+    "ConstGenerics, .NET Framework, C++/CLI, and J# artifacts fail closed in the first compatibility contract."
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "Mobius.ILasm": {
+        "type": "Direct",
+        "requested": "[0.1.0, )",
+        "resolved": "0.1.0",
+        "contentHash": "0uB5lko7fQZ4eOqkEyApSwxSwdMqdrduTpi6aAvr1nr03Lw+muS6UaAYCvk2ICN+AR94lPelvSx1+HCCwBMhTQ==",
+        "dependencies": {
+          "System.Security.Permissions": "5.0.0"
+        }
+      },
+      "System.Security.Permissions": {
+        "type": "Direct",
+        "requested": "[9.0.0, )",
+        "resolved": "9.0.0",
+        "contentHash": "H2VFD4SFVxieywNxn9/epb63/IOcPPfA0WOtfkljzNfu7GCcHIBQNuwP6zGCEIi7Ci/oj8aLPUNK9sYImMFf4Q==",
+        "dependencies": {
+          "System.Windows.Extensions": "9.0.0"
+        }
+      },
+      "System.Windows.Extensions": {
+        "type": "Transitive",
+        "resolved": "9.0.0",
+        "contentHash": "U9msthvnH2Fsw7xwAvIhNHOdnIjOQTwOc8Vd0oGOsiRcGMGoBFlUD6qtYawRUoQdKH9ysxesZ9juFElt1Jw/7A=="
+      },
+      "sharplabnext.contracts": {
+        "type": "Project"
+      }
+    }
+  }
+}

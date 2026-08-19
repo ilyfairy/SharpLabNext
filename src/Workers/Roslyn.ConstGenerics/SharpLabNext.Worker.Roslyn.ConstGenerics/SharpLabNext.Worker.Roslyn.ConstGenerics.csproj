@@ -1,0 +1,86 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\ArtifactStore\SharpLabNext.ArtifactStore.Client\SharpLabNext.ArtifactStore.Client.csproj" />
+    <ProjectReference Include="..\..\..\Contracts\SharpLabNext.Artifacts.Contracts\SharpLabNext.Artifacts.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\RuntimeApi\SharpLabNext.Runtime\SharpLabNext.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\WorkerHost\SharpLabNext.WorkerHost\SharpLabNext.WorkerHost.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <ConstGenericsPackageVersion Condition="'$(ConstGenericsPackageVersion)' == ''">4.8.0</ConstGenericsPackageVersion>
+    <NuGetLockFilePath Condition="'$(ConstGenericsSourceBuild)' == 'true'">packages.source.lock.json</NuGetLockFilePath>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(ConstGenericsSourceBuild)' != 'true'">
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="[$(ConstGenericsPackageVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" VersionOverride="[$(ConstGenericsPackageVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" VersionOverride="[$(ConstGenericsPackageVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic" VersionOverride="[$(ConstGenericsPackageVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic.Features" VersionOverride="[$(ConstGenericsPackageVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic.Workspaces" VersionOverride="[$(ConstGenericsPackageVersion)]" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(ConstGenericsSourceBuild)' == 'true'">
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" VersionOverride="[7.0.0]" />
+    <Reference Include="$(ConstGenericsAssemblyDirectory)/Microsoft.CodeAnalysis*.dll">
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="$(ConstGenericsMetadataAssemblyPath)">
+      <Private>true</Private>
+    </Reference>
+    <Content Include="$(ConstGenericsAssemblyDirectory)/Microsoft.CodeAnalysis*.dll">
+      <Link>%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="$(ConstGenericsMetadataAssemblyPath)">
+      <Link>System.Reflection.Metadata.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <PackageReference Include="Humanizer.Core" VersionOverride="[2.14.1]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Elfie" VersionOverride="[1.0.0]" />
+    <PackageReference Include="Microsoft.DiaSymReader" VersionOverride="[2.0.0]" />
+    <PackageReference Include="System.Composition" VersionOverride="[10.0.8]" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" VersionOverride="[10.0.1]" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" VersionOverride="[10.0.1]" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <Target Name="ValidateConstGenericsSourceBuild" BeforeTargets="ResolveReferences"
+          Condition="'$(ConstGenericsSourceBuild)' == 'true'">
+    <Error Condition="'$(ConstGenericsAssemblyDirectory)' == ''"
+           Text="ConstGenericsAssemblyDirectory is required for a ConstGenerics source build." />
+    <Error Condition="'$(ConstGenericsMetadataAssemblyPath)' == ''"
+           Text="ConstGenericsMetadataAssemblyPath is required for a ConstGenerics source build." />
+    <Error Condition="!Exists('$(ConstGenericsMetadataAssemblyPath)')"
+           Text="The matching ConstGenerics System.Reflection.Metadata assembly was not found." />
+    <Error Condition="!Exists('$(ConstGenericsAssemblyDirectory)/Microsoft.CodeAnalysis.CSharp.dll')"
+           Text="The exact-commit ConstGenerics C# compiler assembly was not found." />
+    <Error Condition="!Exists('$(ConstGenericsAssemblyDirectory)/Microsoft.CodeAnalysis.VisualBasic.dll')"
+           Text="The exact-commit ConstGenerics Visual Basic compiler assembly was not found." />
+    <Error Condition="!Exists('$(ConstGenericsAssemblyDirectory)/Microsoft.CodeAnalysis.CSharp.Features.dll')"
+           Text="The exact-commit ConstGenerics C# Features assembly was not found." />
+    <Error Condition="!Exists('$(ConstGenericsAssemblyDirectory)/Microsoft.CodeAnalysis.VisualBasic.Features.dll')"
+           Text="The exact-commit ConstGenerics Visual Basic Features assembly was not found." />
+    <Error Condition="!Exists('$(ConstGenericsAssemblyDirectory)/Microsoft.CodeAnalysis.Workspaces.dll')"
+           Text="The exact-commit ConstGenerics Workspaces assembly was not found." />
+    <Error Condition="!Exists('$(ConstGenericsAssemblyDirectory)/Microsoft.CodeAnalysis.CSharp.Workspaces.dll')"
+           Text="The exact-commit ConstGenerics C# Workspaces assembly was not found." />
+    <Error Condition="!Exists('$(ConstGenericsAssemblyDirectory)/Microsoft.CodeAnalysis.VisualBasic.Workspaces.dll')"
+           Text="The exact-commit ConstGenerics Visual Basic Workspaces assembly was not found." />
+    <Error Condition="!Exists('$(ConstGenericsAssemblyDirectory)/Microsoft.CodeAnalysis.Features.dll')"
+           Text="The exact-commit ConstGenerics Features assembly was not found." />
+    <Error Condition="!Exists('$(ConstGenericsAssemblyDirectory)/Microsoft.CodeAnalysis.Scripting.dll')"
+           Text="The exact-commit ConstGenerics Scripting assembly was not found." />
+  </Target>
+
+  <Import Project="..\..\Roslyn.Shared\SharpLabNext.Worker.Roslyn.Shared\SharpLabNext.Worker.Roslyn.Shared.projitems" />
+
+</Project>

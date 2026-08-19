@@ -1,0 +1,67 @@
+# syntax=docker/dockerfile:1.7
+
+ARG SDK_IMAGE
+ARG ASPNET_IMAGE
+
+FROM ${SDK_IMAGE} AS publish
+ARG SOURCE_REVISION
+WORKDIR /source
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+RUN dotnet restore \
+      src/Workers/CppCli/SharpLabNext.Worker.CppCli/SharpLabNext.Worker.CppCli.csproj \
+      --locked-mode
+RUN dotnet publish \
+      src/Workers/CppCli/SharpLabNext.Worker.CppCli/SharpLabNext.Worker.CppCli.csproj \
+      --configuration Release \
+      --no-restore \
+      --output /app/publish \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION}
+
+FROM ${ASPNET_IMAGE} AS aspnet
+
+FROM cppcli-prepared-base AS final
+ARG VERSION
+ARG SOURCE_REVISION
+ARG CPPCLI_COMPILER_VERSION
+ARG NETFX48_REFERENCE_VERSION
+ARG NETFX48_REFERENCE_DIGEST
+ARG NETFX48_REFERENCE_SOURCE_URI
+USER 0:0
+WORKDIR /
+RUN test -x /opt/msvc/bin/x64/cl \
+    && test -d /opt/wine-dotnet \
+    && test -n "${CPPCLI_COMPILER_VERSION}" \
+    && test -n "${NETFX48_REFERENCE_VERSION}" \
+    && test -n "${NETFX48_REFERENCE_DIGEST}" \
+    && test -n "${NETFX48_REFERENCE_SOURCE_URI}" \
+    && rm -rf /app /usr/share/dotnet \
+    && mkdir -p /app
+LABEL org.opencontainers.image.title="SharpLabNext MSVC C++/CLI Worker" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext"
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:8080 \
+    DOTNET_ROOT=/usr/share/dotnet \
+    DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    PATH=/usr/share/dotnet:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    SHARPLABNEXT_ASSEMBLY=SharpLabNext.Worker.CppCli.dll \
+    CppCli__CompilerVersion=${CPPCLI_COMPILER_VERSION} \
+    CppCli__CompilerPath=/opt/msvc/bin/x64/cl \
+    CppCli__WorkRoot=/tmp/sharplabnext-cppcli \
+    CppCli__ReferenceSetVersion=${NETFX48_REFERENCE_VERSION} \
+    CppCli__ReferenceSetDigest=${NETFX48_REFERENCE_DIGEST} \
+    CppCli__ReferenceSetContentDigest=${NETFX48_REFERENCE_DIGEST} \
+    CppCli__ReferenceSetSourceUri=${NETFX48_REFERENCE_SOURCE_URI} \
+    WINEDEBUG=-all
+COPY --from=aspnet /usr/share/dotnet/ /usr/share/dotnet/
+COPY --from=publish /app/publish/ ./
+COPY --chmod=0555 deploy/docker/service-entrypoint.sh /usr/local/bin/sharplabnext-service
+USER 0:0
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/sharplabnext-service"]

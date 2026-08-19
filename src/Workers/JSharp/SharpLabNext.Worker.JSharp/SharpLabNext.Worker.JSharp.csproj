@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Infrastructure\SharpLabNext.Observability\SharpLabNext.Observability.csproj" />
+    <ProjectReference Include="..\..\..\WorkerHost\SharpLabNext.LanguageWorker.Sdk\SharpLabNext.LanguageWorker.Sdk.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SharpLabNext.Worker.JSharp</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Update="language-worker.json" CopyToOutputDirectory="PreserveNewest" />
+    <InternalsVisibleTo Include="SharpLabNext.Worker.JSharp.Tests" />
+  </ItemGroup>
+
+</Project>

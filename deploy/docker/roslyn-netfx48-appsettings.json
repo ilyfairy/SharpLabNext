@@ -1,0 +1,42 @@
+{
+  "RoslynWorker": {
+    "ReleaseId": "development",
+    "ToolchainId": "roslyn-stable-netfx48",
+    "WorkerImageId": "unverified",
+    "CompilerVersion": "__pinned__",
+    "SupportedLanguageIds": ["csharp", "visual-basic"],
+    "ArtifactContract": {
+      "Format": "dotnet-framework-managed-pe-v1",
+      "RuntimeFamily": "netfx-clr-wine",
+      "FrameworkName": ".NETFramework",
+      "Architecture": "anycpu",
+      "ExecutableFileExtension": ".exe",
+      "LibraryFileExtension": ".dll"
+    },
+    "ArtifactTimeToLiveMinutes": 60,
+    "BuildProcess": {
+      "Enabled": true,
+      "MaximumConcurrentProcesses": 2,
+      "MaximumWorkingSetBytes": 536870912,
+      "MaximumRequestBytes": 2097152,
+      "MaximumResponseBytes": 67108864,
+      "MaximumStandardErrorBytes": 65536,
+      "MemoryPollIntervalMilliseconds": 25
+    },
+    "DevelopmentArtifactEnvelope": {
+      "Enabled": false,
+      "MaxBytes": 4194304
+    }
+  },
+  "ArtifactStore": {
+    "BaseUrl": "http://artifact-store:8080"
+  },
+  "ReferenceSets": {},
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*"
+}

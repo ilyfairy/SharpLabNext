@@ -1,0 +1,44 @@
+diff --git a/src/Compilers/Core/Portable/Microsoft.CodeAnalysis.csproj b/src/Compilers/Core/Portable/Microsoft.CodeAnalysis.csproj
+index 654b75a71d9..25295eb9a21 100644
+--- a/src/Compilers/Core/Portable/Microsoft.CodeAnalysis.csproj
++++ b/src/Compilers/Core/Portable/Microsoft.CodeAnalysis.csproj
+@@ -33,7 +33,5 @@
+     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="$(MicrosoftCodeAnalysisAnalyzersVersion)" Condition="'$(DotNetBuildFromSource)' != 'true'" PrivateAssets="ContentFiles" />
+-    <PackageReference Include="System.Collections.Immutable" Version="$(SystemCollectionsImmutableVersion)" />
+     <PackageReference Include="System.Memory" Version="$(SystemMemoryVersion)" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
+-    <PackageReference Include="System.Reflection.Metadata" Version="$(SystemReflectionMetadataVersion)" />
+     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="$(SystemRuntimeCompilerServicesUnsafeVersion)" />
+     <PackageReference Include="System.Threading.Tasks.Extensions" Version="$(SystemThreadingTasksExtensionsVersion)" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
+     <PackageReference Include="System.Text.Encoding.CodePages" Version="$(SystemTextEncodingCodePagesVersion)" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
+diff --git a/Directory.Build.targets b/Directory.Build.targets
+index 5fdf96abc97..f3e0427fc33 100644
+--- a/Directory.Build.targets
++++ b/Directory.Build.targets
+@@ -3,4 +3,14 @@
+   <Import Project="eng\targets\Imports.BeforeArcade.targets" />
+   <Import Project="Sdk.targets" Sdk="Microsoft.DotNet.Arcade.Sdk" />
+   <Import Project="eng\targets\Imports.targets" />
++  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
++    <Reference Include="System.Collections.Immutable">
++      <HintPath>/const-generics-metadata/System.Collections.Immutable.dll</HintPath>
++      <Private>true</Private>
++    </Reference>
++    <Reference Include="System.Reflection.Metadata">
++      <HintPath>/const-generics-metadata/System.Reflection.Metadata.dll</HintPath>
++      <Private>true</Private>
++    </Reference>
++  </ItemGroup>
+ </Project>
+diff --git a/src/Workspaces/SharedUtilitiesAndExtensions/Compiler/Core/CompilerExtensions.projitems b/src/Workspaces/SharedUtilitiesAndExtensions/Compiler/Core/CompilerExtensions.projitems
+index 4aaecdc89da..6c45344c937 100644
+--- a/src/Workspaces/SharedUtilitiesAndExtensions/Compiler/Core/CompilerExtensions.projitems
++++ b/src/Workspaces/SharedUtilitiesAndExtensions/Compiler/Core/CompilerExtensions.projitems
+@@ -444,7 +444,7 @@
+     <Compile Include="$(MSBuildThisFileDirectory)SymbolKey\SymbolKey.EventSymbolKey.cs" />
+     <Compile Include="$(MSBuildThisFileDirectory)SymbolKey\SymbolKey.FieldSymbolKey.cs" />
+     <Compile Include="$(MSBuildThisFileDirectory)SymbolKey\SymbolKey.FunctionPointerTypeSymbolKey.cs" />
+-    <Compile Include="$(MSBuildThisFileDirectory)symbolkey\SymbolKey.LiteralTypeSymbolKey.cs" />
++    <Compile Include="$(MSBuildThisFileDirectory)SymbolKey\SymbolKey.LiteralTypeSymbolKey.cs" />
+     <Compile Include="$(MSBuildThisFileDirectory)SymbolKey\SymbolKey.MethodSymbolKey.cs" />
+     <Compile Include="$(MSBuildThisFileDirectory)SymbolKey\SymbolKey.ModuleSymbolKey.cs" />
+     <Compile Include="$(MSBuildThisFileDirectory)SymbolKey\SymbolKey.NamedTypeSymbolKey.cs" />

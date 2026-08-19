@@ -1,0 +1,55 @@
+<Project>
+  <PropertyGroup>
+    <SharpLabNextILSenseProjectPath>$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', 'third_party', 'ILSense', 'src', 'EleCho.ILSense', 'EleCho.ILSense.csproj'))</SharpLabNextILSenseProjectPath>
+    <SharpLabNextILSenseNuGetLockPath>$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', 'src', 'Workers', 'IL', 'SharpLabNext.Worker.IL', 'packages.EleCho.ILSense.lock.json'))</SharpLabNextILSenseNuGetLockPath>
+    <SharpLabNextIsILSenseProject Condition="'$(MSBuildProjectFullPath)' == '$(SharpLabNextILSenseProjectPath)'">true</SharpLabNextIsILSenseProject>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(SharpLabNextIsILSenseProject)' == 'true'">
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <NuGetLockFilePath>$(SharpLabNextILSenseNuGetLockPath)</NuGetLockFilePath>
+    <SharpLabNextEvaluatedILSenseNuGetLockPath Condition="'$(NuGetLockFilePath)' != ''">$([MSBuild]::NormalizePath('$(NuGetLockFilePath)'))</SharpLabNextEvaluatedILSenseNuGetLockPath>
+    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
+  </PropertyGroup>
+
+  <Target Name="ValidateILSenseNuGetLock"
+          BeforeTargets="_GenerateRestoreProjectSpec"
+          Condition="'$(SharpLabNextIsILSenseProject)' == 'true' and '$(RestoreLockedMode)' == 'true'">
+    <Error Condition="'$(RestorePackagesWithLockFile)' != 'true'"
+           Text="The ILSense Core restore must require a NuGet lock." />
+    <Error Condition="'$(NuGetLockFilePath)' == ''"
+           Text="The ILSense Core restore must use the superproject-owned NuGet lock." />
+    <Error Condition="'$(SharpLabNextEvaluatedILSenseNuGetLockPath)' != '' and '$(SharpLabNextEvaluatedILSenseNuGetLockPath)' != '$(SharpLabNextILSenseNuGetLockPath)'"
+           Text="The ILSense Core restore must use the superproject-owned NuGet lock: $(SharpLabNextILSenseNuGetLockPath)" />
+    <Error Condition="!Exists('$(NuGetLockFilePath)')"
+           Text="The ILSense Core NuGet lock is missing: $(NuGetLockFilePath)" />
+  </Target>
+
+  <PropertyGroup Condition="'$(IsSharpLabNextPublicPackage)' == 'true'">
+    <IsPackable>true</IsPackable>
+    <Version>$(SharpLabNextPackageVersion)</Version>
+    <PackageVersion>$(SharpLabNextPackageVersion)</PackageVersion>
+    <Authors>SharpLabNext contributors</Authors>
+    <Company>SharpLabNext contributors</Company>
+    <Copyright>Copyright (c) SharpLabNext contributors</Copyright>
+    <PackageProjectUrl>https://github.com/sharplabnext/SharpLabNext</PackageProjectUrl>
+    <PackageLicenseExpression>BSD-2-Clause</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageTags>sharplabnext;dotnet;compiler;runtime;worker-sdk</PackageTags>
+  </PropertyGroup>
+
+  <Target Name="ValidateSharpLabNextPublicPackage" BeforeTargets="Pack"
+          Condition="'$(IsSharpLabNextPublicPackage)' == 'true'">
+    <Error Condition="'$(PackageId)' == ''" Text="Public SharpLabNext packages must declare PackageId." />
+    <Error Condition="'$(Description)' == ''" Text="Public SharpLabNext packages must declare Description." />
+    <Error Condition="'$(PackageReadmeFile)' == ''" Text="Public SharpLabNext packages must include a package README." />
+    <Error Condition="'$(PackageVersion)' != '$(SharpLabNextPackageVersion)'"
+           Text="Public SharpLabNext package versions must use SharpLabNextPackageVersion." />
+  </Target>
+
+  <Target Name="RejectLegacySharpLabReferences" BeforeTargets="ResolveProjectReferences">
+    <Error
+      Condition="$([System.String]::Copy('@(ProjectReference)').Contains('SharpLab\\source'))"
+      Text="SharpLabNext projects must not reference the legacy SharpLab source tree." />
+  </Target>
+</Project>

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "images": [
+    {
+      "id": "node-builder",
+      "bakeVariable": "BASE_NODE_IMAGE",
+      "reference": "node:24.18.0-bookworm-slim@sha256:0778d035a13f3f3833b7f2cb750e0df6cbce45583e84fd822f499f0c902a6c74"
+    },
+    {
+      "id": "dotnet-sdk",
+      "bakeVariable": "BASE_DOTNET_SDK_IMAGE",
+      "reference": "mcr.microsoft.com/dotnet/sdk:10.0.301-noble-amd64@sha256:493fca072aac81307027cbb7b7c9a82b6e87d222af315504d05dc6530e69b519"
+    },
+    {
+      "id": "dotnet-aspnet",
+      "bakeVariable": "BASE_DOTNET_ASPNET_IMAGE",
+      "reference": "mcr.microsoft.com/dotnet/aspnet:10.0.9-noble-amd64@sha256:68abecb063cf367fdce0a7f0ab5678beaa99f60c7f616df862ca2a51c387d4e7"
+    },
+    {
+      "id": "const-generics-aspnet",
+      "bakeVariable": "BASE_CONST_GENERICS_ASPNET_IMAGE",
+      "reference": "mcr.microsoft.com/dotnet/aspnet@sha256:051d91f13f57791f9c449576ba9ebde069e12d800d85c3c86e9c38fa353b0a1a"
+    },
+    {
+      "id": "dotnet-runtime-deps",
+      "bakeVariable": "BASE_DOTNET_RUNTIME_DEPS_IMAGE",
+      "reference": "mcr.microsoft.com/dotnet/runtime-deps:10.0.9-noble-amd64@sha256:2785f3f766217c9af963efa7cc299b01cd5c6c55ca97d41d5e914303e43b7878"
+    },
+    {
+      "id": "dotnet-runtime-build",
+      "bakeVariable": "BASE_DOTNET_RUNTIME_BUILD_IMAGE",
+      "reference": "mcr.microsoft.com/dotnet-buildtools/prereqs:ubuntu-22.04@sha256:bc0edbd1de4e727c4f0a91dc90058a8229a18c092dbb55c700b8e99242b75b5e"
+    },
+    {
+      "id": "mono-jsil",
+      "bakeVariable": "BASE_MONO_JSIL_IMAGE",
+      "reference": "mono:6.12@sha256:d2ae1881a608fb6401bcebbf0d444fc2fcadf0db27f07c87153a79e7b14e861a"
+    }
+  ]
+}

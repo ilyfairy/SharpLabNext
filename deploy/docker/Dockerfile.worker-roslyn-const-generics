@@ -1,0 +1,234 @@
+# syntax=docker/dockerfile:1.7
+
+ARG SDK_IMAGE
+ARG ASPNET_IMAGE
+ARG CONST_GENERICS_ROSLYN_COMMIT
+ARG CONST_GENERICS_ROSLYN_ARCHIVE_URL
+ARG CONST_GENERICS_ROSLYN_ARCHIVE_SHA256
+ARG CONST_GENERICS_ROSLYN_VERSION
+ARG CONST_GENERICS_RUNTIME_COMMIT
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_URL
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_SHA256
+ARG CONST_GENERICS_REFERENCE_VERSION
+ARG CONST_GENERICS_REFERENCE_DIGEST
+
+FROM const-generics-runtime AS runtime-assets
+
+FROM ${ASPNET_IMAGE} AS aspnet-assets
+
+FROM ${SDK_IMAGE} AS roslyn-source-build
+ARG CONST_GENERICS_ROSLYN_COMMIT
+ARG CONST_GENERICS_ROSLYN_ARCHIVE_URL
+ARG CONST_GENERICS_ROSLYN_ARCHIVE_SHA256
+ARG CONST_GENERICS_ROSLYN_VERSION
+ARG CONST_GENERICS_RUNTIME_COMMIT
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+    NUGET_XMLDOC_MODE=skip \
+    SOURCE_DATE_EPOCH=1694172012
+WORKDIR /roslyn-source
+RUN curl --fail --location --retry 3 --retry-all-errors --output /tmp/roslyn-source.tar.gz "${CONST_GENERICS_ROSLYN_ARCHIVE_URL}" \
+    && echo "${CONST_GENERICS_ROSLYN_ARCHIVE_SHA256}  /tmp/roslyn-source.tar.gz" | sha256sum --check --strict \
+    && tar --extract --gzip --file /tmp/roslyn-source.tar.gz --strip-components=1 \
+    && rm /tmp/roslyn-source.tar.gz \
+    && grep --fixed-strings --quiet '<SystemReflectionMetadataVersion>8.0.0-dev</SystemReflectionMetadataVersion>' eng/Versions.props \
+    && grep --fixed-strings --quiet 'CheckConstTypeArgument' src/Compilers/CSharp/Portable/Symbols/ConstraintsHelper.cs \
+    && grep --fixed-strings --quiet 'LiteralTypeArgumentSyntax' src/Compilers/CSharp/Portable/Parser/LanguageParser.cs \
+    && grep --fixed-strings --quiet 'ITypeParameterSymbol { Type: not null }' src/Workspaces/CSharp/Portable/Recommendations/CSharpRecommendationServiceRunner.cs
+RUN mkdir -p /const-generics-metadata
+COPY --from=runtime-assets /compiler-assets/const-generics/ /const-generics-metadata/
+RUN test -s /const-generics-metadata/System.Reflection.Metadata.dll \
+    && test -s /const-generics-metadata/System.Collections.Immutable.dll
+COPY eng/patches/roslyn-const-generics/0001-use-source-built-metadata.patch /tmp/0001-use-source-built-metadata.patch
+RUN git apply --check /tmp/0001-use-source-built-metadata.patch \
+    && git apply /tmp/0001-use-source-built-metadata.patch \
+    && ! grep --fixed-strings --quiet '<PackageReference Include="System.Reflection.Metadata"' src/Compilers/Core/Portable/Microsoft.CodeAnalysis.csproj \
+    && ! grep --fixed-strings --quiet '<PackageReference Include="System.Collections.Immutable"' src/Compilers/Core/Portable/Microsoft.CodeAnalysis.csproj
+COPY eng/roslyn-const-generics.slnf ./SharpLabNext.Roslyn.ConstGenerics.slnf
+RUN --mount=type=cache,id=sharplabnext-const-roslyn-nuget,target=/root/.nuget/packages \
+    --mount=type=cache,id=sharplabnext-const-roslyn-dotnet,target=/roslyn-source/.dotnet \
+    ./build.sh \
+      --restore \
+      --configuration Release \
+      --solution SharpLabNext.Roslyn.ConstGenerics.slnf \
+      /p:OfficialBuild=true \
+      /p:SourceRevisionId=${CONST_GENERICS_ROSLYN_COMMIT} \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceBuildTargetFrameworks= \
+      /p:UseSharedCompilation=false \
+      /p:UsingToolIbcOptimization=false \
+      /p:UsingToolVisualStudioIbcTraining=false
+RUN set -eux; \
+    mkdir /roslyn-const-generics; \
+    for name in \
+      Microsoft.CodeAnalysis \
+      Microsoft.CodeAnalysis.CSharp \
+      Microsoft.CodeAnalysis.VisualBasic \
+      Microsoft.CodeAnalysis.Workspaces \
+      Microsoft.CodeAnalysis.CSharp.Workspaces \
+      Microsoft.CodeAnalysis.VisualBasic.Workspaces \
+      Microsoft.CodeAnalysis.Features \
+      Microsoft.CodeAnalysis.CSharp.Features \
+      Microsoft.CodeAnalysis.VisualBasic.Features \
+      Microsoft.CodeAnalysis.Scripting; \
+    do \
+      cp "artifacts/bin/${name}/Release/netstandard2.0/${name}.dll" /roslyn-const-generics/; \
+    done; \
+    cp /const-generics-metadata/System.Reflection.Metadata.dll /roslyn-const-generics/; \
+    cp /const-generics-metadata/System.Collections.Immutable.dll /roslyn-const-generics/; \
+    cp License.txt /roslyn-const-generics/Roslyn-LICENSE.txt; \
+    cp THIRD-PARTY-NOTICES.txt /roslyn-const-generics/Roslyn-THIRD-PARTY-NOTICES.txt; \
+    printf '{"schemaVersion":1,"repository":"https://github.com/hez2010/roslyn","commit":"%s","sourceArchive":"%s","sourceArchiveSha256":"%s","compilerVersion":"%s","metadataRuntimeCommit":"%s"}\n' \
+      "${CONST_GENERICS_ROSLYN_COMMIT}" \
+      "${CONST_GENERICS_ROSLYN_ARCHIVE_URL}" \
+      "${CONST_GENERICS_ROSLYN_ARCHIVE_SHA256}" \
+      "${CONST_GENERICS_ROSLYN_VERSION}" \
+      "${CONST_GENERICS_RUNTIME_COMMIT}" \
+      > /roslyn-const-generics/roslyn-build.json; \
+    find /roslyn-const-generics -maxdepth 1 -type f -name '*.dll' -print0 | sort -z | xargs -0 sha256sum \
+      > /roslyn-const-generics/assemblies.sha256
+COPY eng/verify-roslyn-const-generics.cs /tools/verify-roslyn-const-generics.cs
+RUN cd /tools \
+    && NUGET_PACKAGES=/tmp/verify-nuget \
+    dotnet run verify-roslyn-const-generics.cs -- \
+      /roslyn-const-generics "${CONST_GENERICS_ROSLYN_VERSION}" "${CONST_GENERICS_ROSLYN_COMMIT}"
+
+FROM ${SDK_IMAGE} AS publish
+ARG CONFIGURATION=Release
+ARG CONST_GENERICS_RUNTIME_COMMIT
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_URL
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_SHA256
+ARG CONST_GENERICS_REFERENCE_VERSION
+ARG CONST_GENERICS_REFERENCE_DIGEST
+WORKDIR /source
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+    NUGET_XMLDOC_MODE=skip \
+    DOTNET_ROLL_FORWARD=Major \
+    SHARPLABNEXT_CONST_GENERICS_REF_PATH=/reference-sets/const-generics-ref
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+COPY eng/create-reference-set-attestation.cs /tools/create-reference-set-attestation.cs
+COPY --from=roslyn-source-build /roslyn-const-generics/ /roslyn-const-generics/
+COPY --from=runtime-assets /reference-sets/const-generics-ref/ /reference-sets/const-generics-ref/
+RUN dotnet restore \
+      src/Workers/Roslyn.ConstGenerics/SharpLabNext.Worker.Roslyn.ConstGenerics/SharpLabNext.Worker.Roslyn.ConstGenerics.csproj \
+      --locked-mode \
+      /p:ConstGenericsSourceBuild=true \
+      /p:ConstGenericsAssemblyDirectory=/roslyn-const-generics \
+      /p:ConstGenericsMetadataAssemblyPath=/roslyn-const-generics/System.Reflection.Metadata.dll \
+    && dotnet restore \
+      src/Workers/Roslyn.ConstGenerics/SharpLabNext.Worker.Roslyn.ConstGenerics.Tests/SharpLabNext.Worker.Roslyn.ConstGenerics.Tests.csproj \
+      --locked-mode \
+      /p:ConstGenericsSourceBuild=true \
+      /p:ConstGenericsAssemblyDirectory=/roslyn-const-generics \
+      /p:ConstGenericsMetadataAssemblyPath=/roslyn-const-generics/System.Reflection.Metadata.dll
+RUN dotnet publish \
+      src/Workers/Roslyn.ConstGenerics/SharpLabNext.Worker.Roslyn.ConstGenerics.Tests/SharpLabNext.Worker.Roslyn.ConstGenerics.Tests.csproj \
+      --configuration ${CONFIGURATION} \
+      --no-restore \
+      --output /app/tests \
+      /p:ConstGenericsSourceBuild=true \
+      /p:ConstGenericsAssemblyDirectory=/roslyn-const-generics \
+      /p:ConstGenericsMetadataAssemblyPath=/roslyn-const-generics/System.Reflection.Metadata.dll
+RUN dotnet publish \
+      src/Workers/Roslyn.ConstGenerics/SharpLabNext.Worker.Roslyn.ConstGenerics/SharpLabNext.Worker.Roslyn.ConstGenerics.csproj \
+      --configuration ${CONFIGURATION} \
+      --no-restore \
+      --output /app/publish \
+      /p:UseAppHost=false \
+      /p:ConstGenericsSourceBuild=true \
+      /p:ConstGenericsAssemblyDirectory=/roslyn-const-generics \
+      /p:ConstGenericsMetadataAssemblyPath=/roslyn-const-generics/System.Reflection.Metadata.dll
+RUN cp /app/publish/SharpLab.Runtime.dll /reference-sets/const-generics-ref/SharpLab.Runtime.dll \
+    && cp /roslyn-const-generics/System.Collections.Immutable.dll /app/publish/System.Collections.Immutable.dll \
+    && test -f /reference-sets/const-generics-ref/System.Runtime.dll \
+    && test -f /app/publish/System.Reflection.Metadata.dll \
+    && test -f /app/publish/System.Collections.Immutable.dll
+RUN dotnet run /tools/create-reference-set-attestation.cs -- \
+      --root /reference-sets/const-generics-ref \
+      --id const-generics-ref \
+      --target-framework net9.0 \
+      --digest "${CONST_GENERICS_REFERENCE_DIGEST}" \
+      --provenance-kind source-build \
+      --resolved-version "${CONST_GENERICS_REFERENCE_VERSION}" \
+      --package Microsoft.NETCore.App.Ref \
+      --source-uri "${CONST_GENERICS_RUNTIME_ARCHIVE_URL}" \
+      --commit "${CONST_GENERICS_RUNTIME_COMMIT}" \
+      --source-archive-digest "sha256:${CONST_GENERICS_RUNTIME_ARCHIVE_SHA256}"
+
+FROM runtime-assets AS worker-runtime-base
+ARG VERSION
+ARG SOURCE_REVISION
+ARG CONST_GENERICS_ROSLYN_COMMIT
+ARG CONST_GENERICS_ROSLYN_VERSION
+ARG CONST_GENERICS_ROSLYN_ARCHIVE_SHA256
+ARG CONST_GENERICS_RUNTIME_COMMIT
+ARG CONST_GENERICS_REFERENCE_VERSION
+ARG CONST_GENERICS_REFERENCE_DIGEST
+USER root
+RUN mkdir -p /usr/share/dotnet/shared/Microsoft.AspNetCore.App /var/lib/sharplabnext /app/.sharplabnext \
+    && chown -R 1654:1654 /var/lib/sharplabnext /app
+COPY --from=aspnet-assets /usr/share/dotnet/shared/Microsoft.AspNetCore.App/ /usr/share/dotnet/shared/Microsoft.AspNetCore.App/
+COPY --from=aspnet-assets /usr/share/dotnet/LICENSE.txt /app/.sharplabnext/AspNetCore-LICENSE.txt
+COPY --from=aspnet-assets /usr/share/dotnet/ThirdPartyNotices.txt /app/.sharplabnext/AspNetCore-ThirdPartyNotices.txt
+COPY --from=publish --chown=1654:1654 /reference-sets/ /reference-sets/
+LABEL org.opencontainers.image.title="SharpLabNext ConstGenerics Roslyn Worker" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${CONST_GENERICS_ROSLYN_COMMIT}" \
+      org.opencontainers.image.source="https://github.com/hez2010/roslyn" \
+      com.sharplabnext.toolchain-profile="roslyn-const-generics" \
+      com.sharplabnext.compatibility-group="const-generics-bcaed316" \
+      com.sharplabnext.runtime-family="coreclr-const-generics" \
+      com.sharplabnext.runtime-feature="runtime.const-generics.v1" \
+      com.sharplabnext.metadata-feature="metadata.const-generics.v1" \
+      io.sharplabnext.roslyn.commit="${CONST_GENERICS_ROSLYN_COMMIT}" \
+      io.sharplabnext.roslyn.source-archive-sha256="${CONST_GENERICS_ROSLYN_ARCHIVE_SHA256}" \
+      io.sharplabnext.metadata.runtime-commit="${CONST_GENERICS_RUNTIME_COMMIT}" \
+      io.sharplabnext.reference-set.const-generics-ref="${CONST_GENERICS_REFERENCE_DIGEST}"
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:8080 \
+    DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    DOTNET_ROLL_FORWARD=Major \
+    DOTNET_ROLL_FORWARD_TO_PRERELEASE=1 \
+    HOME=/tmp \
+    SHARPLABNEXT_CONST_GENERICS_REF_PATH=/reference-sets/const-generics-ref \
+    RoslynWorker__CompilerVersion=${CONST_GENERICS_ROSLYN_VERSION} \
+    RoslynWorker__CompilerCommit=${CONST_GENERICS_ROSLYN_COMMIT} \
+    ReferenceSets__const-generics-ref__FrameworkVersion=${CONST_GENERICS_REFERENCE_VERSION} \
+    ReferenceSets__const-generics-ref__Digest=${CONST_GENERICS_REFERENCE_DIGEST} \
+    SHARPLABNEXT_ASSEMBLY=SharpLabNext.Worker.Roslyn.ConstGenerics.dll
+COPY --chmod=0555 deploy/docker/service-entrypoint.sh /usr/local/bin/sharplabnext-service
+USER 1654:1654
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/sharplabnext-service"]
+CMD []
+
+FROM worker-runtime-base AS source-tests
+ARG CONST_GENERICS_ROSLYN_COMMIT
+ARG CONST_GENERICS_ROSLYN_VERSION
+ARG CONST_GENERICS_REFERENCE_VERSION
+ARG CONST_GENERICS_REFERENCE_DIGEST
+COPY --from=publish --chown=1654:1654 /app/tests/ /app/tests/
+RUN env \
+      "RoslynWorker__CompilerVersion=${CONST_GENERICS_ROSLYN_VERSION}" \
+      "RoslynWorker__CompilerCommit=${CONST_GENERICS_ROSLYN_COMMIT}" \
+      "ReferenceSets__const-generics-ref__FrameworkVersion=${CONST_GENERICS_REFERENCE_VERSION}" \
+      "ReferenceSets__const-generics-ref__Digest=${CONST_GENERICS_REFERENCE_DIGEST}" \
+      dotnet /app/tests/SharpLabNext.Worker.Roslyn.ConstGenerics.Tests.dll \
+      -automated \
+      -noLogo \
+      -noColor \
+      -parallel none \
+    && printf 'source-build-tests=passed\n' > /tmp/const-generics-source-tests.txt
+
+FROM worker-runtime-base AS final
+COPY --from=publish --chown=1654:1654 /app/publish/ ./
+COPY --from=roslyn-source-build --chown=1654:1654 /roslyn-const-generics/roslyn-build.json /app/.sharplabnext/roslyn-build.json
+COPY --from=roslyn-source-build --chown=1654:1654 /roslyn-const-generics/assemblies.sha256 /app/.sharplabnext/assemblies.sha256
+COPY --from=roslyn-source-build --chown=1654:1654 /roslyn-const-generics/Roslyn-LICENSE.txt /app/.sharplabnext/Roslyn-LICENSE.txt
+COPY --from=roslyn-source-build --chown=1654:1654 /roslyn-const-generics/Roslyn-THIRD-PARTY-NOTICES.txt /app/.sharplabnext/Roslyn-THIRD-PARTY-NOTICES.txt
+COPY --from=source-tests --chown=1654:1654 /tmp/const-generics-source-tests.txt /app/.sharplabnext/source-tests.txt
+ENTRYPOINT ["dotnet", "/app/SharpLabNext.Worker.Roslyn.ConstGenerics.dll"]

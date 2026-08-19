@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "componentId": "vjc-jsharp20",
+  "sourceComponentId": "msvc-wine-source",
+  "compatibilityGroup": "jsharp20-clr2-x64-wine",
+  "status": "source-inputs-recorded",
+  "license": "BSD-2-Clause worker; Microsoft Visual J# and .NET Framework binaries are proprietary operator-supplied inputs",
+  "builder": {
+    "imageId": "dotnet-sdk",
+    "platform": "linux/amd64",
+    "sourceDateEpoch": 1779634292
+  },
+  "build": {
+    "configuration": "Release",
+    "workerProject": "src/Workers/JSharp/SharpLabNext.Worker.JSharp/SharpLabNext.Worker.JSharp.csproj",
+    "operatorImageComponentId": "jsharp20",
+    "referenceSetId": "jsharp20-ref",
+    "runtimeComponentId": "wine-jsharp20-linux-x64",
+    "compilerPath": "/opt/sharplabnext/jsharp20/vjc.exe",
+    "compilerPlatform": "x64",
+    "artifactFormat": "dotnet-framework-managed-pe-v1",
+    "referenceContentManifest": {
+      "algorithm": "sha256 of C-locale filename-sorted lines: sha256:<file-sha256><two spaces><decimal size><two spaces><filename><LF>",
+      "files": [
+        "System.dll",
+        "mscorlib.dll",
+        "vjscor.dll",
+        "vjslib.dll"
+      ]
+    },
+    "redistributionPolicy": "operator-supplied-only",
+    "outputs": [
+      "SharpLabNext.Worker.JSharp",
+      "x64 J# CLR 2.0 managed PE"
+    ]
+  },
+  "featureEvidence": [
+    "Framework64 vjc.exe is invoked with /platform:x64 in the isolated compiler worker",
+    "Compiler output is validated as PE32+ AMD64, IL-only CLR 2.0 with no 32-bit-required or 32-bit-preferred flag",
+    "The approved reference content set is limited to System.dll, mscorlib.dll, vjscor.dll and vjslib.dll",
+    "Run is restricted to the dedicated x64 CLR 2.0/J# Wine runtime feature",
+    "The operator must supply the digest-pinned private image; Microsoft proprietary binaries are not redistributed as BSD project content"
+  ],
+  "artifactContract": {
+    "toolchainId": "vjc-jsharp20",
+    "referenceSetId": "jsharp20-ref",
+    "targetFramework": "net20",
+    "runtimeFamily": "netfx-clr-wine",
+    "architecture": "x64",
+    "requiredRuntimeFeatureTags": ["runtime.jsharp20-wine"],
+    "metadataFeatureTags": [],
+    "compatibilityGroup": "jsharp20-clr2-x64-wine"
+  }
+}

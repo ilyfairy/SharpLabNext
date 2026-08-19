@@ -1,0 +1,4779 @@
+{
+  "schemaVersion": 1,
+  "revision": "20260721.1",
+  "releaseId": "development",
+  "languages": [
+    {
+      "id": "csharp",
+      "displayName": "C#",
+      "monacoLanguageId": "csharp",
+      "extensions": [
+        ".cs"
+      ],
+      "defaultFileName": "Program.cs",
+      "defaultSource": "using System;\n\nConsole.WriteLine(\u0022Hello from SharpLabNext\u0022);\n",
+      "defaultToolchainId": "roslyn-main",
+      "capabilities": [
+        "diagnostics",
+        "completion",
+        "hover",
+        "signature-help",
+        "code-actions",
+        "semantic-tokens",
+        "ast",
+        "explain",
+        "multi-file"
+      ],
+      "legacyAliases": [
+        "cs"
+      ]
+    },
+    {
+      "id": "visual-basic",
+      "displayName": "Visual Basic",
+      "monacoLanguageId": "vb",
+      "extensions": [
+        ".vb"
+      ],
+      "defaultFileName": "Program.vb",
+      "defaultSource": "Imports System\n\nModule Program\n    Sub Main()\n        Console.WriteLine(\u0022Hello from SharpLabNext\u0022)\n    End Sub\nEnd Module\n",
+      "defaultToolchainId": "roslyn-stable",
+      "capabilities": [
+        "diagnostics",
+        "completion",
+        "hover",
+        "signature-help",
+        "code-actions",
+        "semantic-tokens",
+        "ast",
+        "multi-file"
+      ],
+      "legacyAliases": [
+        "vb"
+      ]
+    },
+    {
+      "id": "fsharp",
+      "displayName": "F#",
+      "monacoLanguageId": "fsharp",
+      "extensions": [
+        ".fs",
+        ".fsx"
+      ],
+      "defaultFileName": "Program.fs",
+      "defaultSource": "open System\n\nprintfn \u0022Hello from SharpLabNext\u0022\n",
+      "defaultToolchainId": "fsharp-stable",
+      "capabilities": [
+        "diagnostics",
+        "completion",
+        "hover",
+        "signature-help",
+        "semantic-tokens",
+        "ast",
+        "multi-file",
+        "source-order"
+      ],
+      "legacyAliases": [
+        "fs"
+      ]
+    },
+    {
+      "id": "gsharp",
+      "displayName": "G#",
+      "monacoLanguageId": "gsharp",
+      "extensions": [
+        ".gs"
+      ],
+      "defaultFileName": "Program.gs",
+      "defaultSource": "package SharpLab\n\nimport System\n\nConsole.WriteLine(\u0022Hello from G#\u0022)\n",
+      "defaultToolchainId": "gsharp-stable",
+      "capabilities": [
+        "diagnostics",
+        "completion",
+        "hover",
+        "signature-help",
+        "code-actions",
+        "semantic-tokens",
+        "document-symbols",
+        "folding-ranges",
+        "multi-file"
+      ],
+      "legacyAliases": [
+        "gs"
+      ]
+    },
+    {
+      "id": "php",
+      "displayName": "PHP",
+      "monacoLanguageId": "php",
+      "extensions": [
+        ".php"
+      ],
+      "defaultFileName": "index.php",
+      "defaultSource": "\u003C?php\n\nfunction square(int $value): int\n{\n    return $value * $value;\n}\n\necho square(7), PHP_EOL;\n",
+      "defaultToolchainId": "peachpie-stable",
+      "capabilities": [
+        "diagnostics",
+        "multi-file"
+      ],
+      "legacyAliases": [
+        "php"
+      ]
+    },
+    {
+      "id": "cppcli",
+      "displayName": "C\u002B\u002B/CLI",
+      "monacoLanguageId": "cpp",
+      "extensions": [
+        ".cpp",
+        ".cc",
+        ".cxx"
+      ],
+      "defaultFileName": "Program.cpp",
+      "defaultSource": "using namespace System;\n\nint main(array\u003CString^\u003E^)\n{\n    Console::WriteLine(\u0022Hello from C\u002B\u002B/CLI\u0022);\n    return 0;\n}\n",
+      "defaultToolchainId": "msvc-cppcli-netfx48",
+      "capabilities": [
+        "diagnostics"
+      ],
+      "legacyAliases": [
+        "cpp-cli"
+      ]
+    },
+    {
+      "id": "jsharp",
+      "displayName": "J#",
+      "monacoLanguageId": "java",
+      "extensions": [
+        ".jsl"
+      ],
+      "defaultFileName": "Program.jsl",
+      "defaultSource": "public class Program\n{\n    public static void main(String[] args)\n    {\n        System.Console.WriteLine(\u0022Hello from J#\u0022);\n    }\n}\n",
+      "defaultToolchainId": "vjc-jsharp20",
+      "capabilities": [
+        "diagnostics"
+      ]
+    },
+    {
+      "id": "il",
+      "displayName": "IL",
+      "monacoLanguageId": "il",
+      "extensions": [
+        ".il"
+      ],
+      "defaultFileName": "Program.il",
+      "defaultSource": ".assembly SharpLabNext.User {}\n.class public auto ansi Program extends [System.Runtime]System.Object\n{\n  .method public static void Main() cil managed\n  {\n    .entrypoint\n    .maxstack 1\n    ldstr \u0022Hello from SharpLabNext\u0022\n    call void [System.Console]System.Console::WriteLine(string)\n    ret\n  }\n}\n",
+      "defaultToolchainId": "mobius-ilasm-stable",
+      "capabilities": [
+        "diagnostics",
+        "completion",
+        "hover",
+        "signature-help",
+        "code-actions",
+        "semantic-tokens",
+        "document-symbols",
+        "folding-ranges",
+        "multi-file"
+      ],
+      "legacyAliases": [
+        "il"
+      ]
+    },
+    {
+      "id": "minilang",
+      "displayName": "MiniLang",
+      "monacoLanguageId": "minilang",
+      "extensions": [
+        ".mini"
+      ],
+      "defaultFileName": "Program.mini",
+      "defaultSource": "print \u0022Hello from a third-party language\u0022\n",
+      "defaultToolchainId": "minilang-stable",
+      "capabilities": [
+        "diagnostics",
+        "completion",
+        "multi-file"
+      ]
+    }
+  ],
+  "toolchains": [
+    {
+      "id": "roslyn-stable",
+      "displayName": "Roslyn Stable 5.6.0",
+      "workerId": "roslyn-stable",
+      "releaseTrack": "stable",
+      "resolvedVersion": "5.6.0",
+      "defaultReferenceSetId": "net10-ref",
+      "supportedLanguageIds": [
+        "csharp",
+        "visual-basic"
+      ],
+      "allowedReferenceSetIds": [
+        "net10-ref",
+        "net11-preview-ref"
+      ],
+      "producesArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [
+        "lsp",
+        "compile-check",
+        "managed-pe",
+        "portable-pdb",
+        "ast",
+        "explain",
+        "multi-file"
+      ],
+      "metadataFeatureTags": [],
+      "legacyAliases": [
+        "main"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "roslyn-stable-netfx48",
+      "displayName": "Roslyn Stable 5.6.0 / .NET Framework 4.8",
+      "workerId": "roslyn-stable-netfx48",
+      "releaseTrack": "stable",
+      "resolvedVersion": "5.6.0",
+      "defaultReferenceSetId": "netfx48-managed-ref",
+      "supportedLanguageIds": [
+        "csharp",
+        "visual-basic"
+      ],
+      "allowedReferenceSetIds": [
+        "netfx20-managed-ref",
+        "netfx30-managed-ref",
+        "netfx35-managed-ref",
+        "netfx40-managed-ref",
+        "netfx45-managed-ref",
+        "netfx451-managed-ref",
+        "netfx452-managed-ref",
+        "netfx46-managed-ref",
+        "netfx461-managed-ref",
+        "netfx462-managed-ref",
+        "netfx47-managed-ref",
+        "netfx471-managed-ref",
+        "netfx472-managed-ref",
+        "netfx48-managed-ref"
+      ],
+      "producesArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [
+        "lsp",
+        "compile-check",
+        "managed-pe",
+        "portable-pdb",
+        "ast",
+        "explain",
+        "multi-file"
+      ],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "roslyn-main",
+      "displayName": "Roslyn Main 5.10.0 (708c0a9669c6)",
+      "workerId": "roslyn-main",
+      "releaseTrack": "nightly",
+      "resolvedVersion": "5.10.0",
+      "defaultReferenceSetId": "net11-preview-ref",
+      "supportedLanguageIds": [
+        "csharp",
+        "visual-basic"
+      ],
+      "allowedReferenceSetIds": [
+        "net10-ref",
+        "net11-preview-ref"
+      ],
+      "producesArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [
+        "lsp",
+        "compile-check",
+        "managed-pe",
+        "portable-pdb",
+        "ast",
+        "explain",
+        "multi-file"
+      ],
+      "metadataFeatureTags": [],
+      "legacyAliases": [
+        "roslyn-main"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "roslyn-const-generics",
+      "displayName": "Const Generics Roslyn",
+      "workerId": "roslyn-const-generics",
+      "releaseTrack": "experimental",
+      "resolvedVersion": "4.8.0-const-generics.bcd209abd947",
+      "defaultReferenceSetId": "const-generics-ref",
+      "supportedLanguageIds": [
+        "csharp"
+      ],
+      "allowedReferenceSetIds": [
+        "const-generics-ref"
+      ],
+      "producesArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [
+        "lsp",
+        "compile-check",
+        "managed-pe",
+        "portable-pdb",
+        "ast",
+        "explain",
+        "multi-file"
+      ],
+      "metadataFeatureTags": [
+        "metadata.const-generics.v1"
+      ],
+      "legacyAliases": [
+        "const-generics"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "fsharp-stable",
+      "displayName": "F# Stable 43.12.204",
+      "workerId": "fsharp-stable",
+      "releaseTrack": "stable",
+      "resolvedVersion": "43.12.204",
+      "defaultReferenceSetId": "net10-ref",
+      "supportedLanguageIds": [
+        "fsharp"
+      ],
+      "allowedReferenceSetIds": [
+        "net10-ref",
+        "net11-preview-ref"
+      ],
+      "producesArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [
+        "lsp",
+        "compile-check",
+        "managed-pe",
+        "portable-pdb",
+        "ast",
+        "multi-file",
+        "source-order"
+      ],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "gsharp-stable",
+      "displayName": "G# Stable 0.3.33",
+      "workerId": "gsharp-stable",
+      "releaseTrack": "stable",
+      "resolvedVersion": "0.3.33",
+      "defaultReferenceSetId": "net10-ref",
+      "supportedLanguageIds": [
+        "gsharp"
+      ],
+      "allowedReferenceSetIds": [
+        "net10-ref"
+      ],
+      "producesArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [
+        "lsp",
+        "diagnostics",
+        "completion",
+        "hover",
+        "signature-help",
+        "code-actions",
+        "semantic-tokens",
+        "document-symbols",
+        "folding-ranges",
+        "compile-check",
+        "managed-pe",
+        "portable-pdb",
+        "multi-file"
+      ],
+      "metadataFeatureTags": [],
+      "legacyAliases": [
+        "gsharp"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "gsharp-legacy-0.3.8",
+      "displayName": "G# Legacy 0.3.8",
+      "workerId": "gsharp-stable",
+      "releaseTrack": "legacy",
+      "resolvedVersion": "0.3.8",
+      "defaultReferenceSetId": "net10-ref",
+      "supportedLanguageIds": [
+        "gsharp"
+      ],
+      "allowedReferenceSetIds": [
+        "net10-ref"
+      ],
+      "producesArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [
+        "lsp",
+        "diagnostics",
+        "completion",
+        "hover",
+        "signature-help",
+        "code-actions",
+        "semantic-tokens",
+        "document-symbols",
+        "folding-ranges",
+        "compile-check",
+        "managed-pe",
+        "portable-pdb",
+        "multi-file"
+      ],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "peachpie-stable",
+      "displayName": "PeachPie Stable 1.1.13",
+      "workerId": "peachpie-stable",
+      "releaseTrack": "stable",
+      "resolvedVersion": "1.1.13",
+      "defaultReferenceSetId": "net10-ref",
+      "supportedLanguageIds": [
+        "php"
+      ],
+      "allowedReferenceSetIds": [
+        "net10-ref"
+      ],
+      "producesArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [
+        "diagnostics",
+        "compile-check",
+        "managed-pe",
+        "multi-file"
+      ],
+      "metadataFeatureTags": [],
+      "legacyAliases": [
+        "peachpie"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "mobius-ilasm-stable",
+      "displayName": "Mobius ILAsm Stable",
+      "workerId": "mobius-ilasm-stable",
+      "releaseTrack": "stable",
+      "resolvedVersion": "0.1.0",
+      "defaultReferenceSetId": "net10-ref",
+      "supportedLanguageIds": [
+        "il"
+      ],
+      "allowedReferenceSetIds": [
+        "net10-ref",
+        "net11-preview-ref"
+      ],
+      "producesArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [
+        "lsp",
+        "diagnostics",
+        "completion",
+        "hover",
+        "signature-help",
+        "code-actions",
+        "semantic-tokens",
+        "document-symbols",
+        "folding-ranges",
+        "compile-check",
+        "managed-pe",
+        "multi-file"
+      ],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "minilang-stable",
+      "displayName": "MiniLang SDK Sample 1.0.0",
+      "workerId": "minilang-stable",
+      "releaseTrack": "stable",
+      "resolvedVersion": "1.0.0",
+      "defaultReferenceSetId": "net10-ref",
+      "supportedLanguageIds": [
+        "minilang"
+      ],
+      "allowedReferenceSetIds": [
+        "net10-ref",
+        "net11-preview-ref"
+      ],
+      "producesArtifactFormats": [
+        "cil-text-v1"
+      ],
+      "capabilities": [
+        "lsp",
+        "diagnostics",
+        "completion",
+        "compile-check",
+        "generated-il",
+        "multi-file"
+      ],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "msvc-cppcli-netfx48",
+      "displayName": "MSVC C\u002B\u002B/CLI 19.51 / .NET Framework 4.8",
+      "workerId": "msvc-cppcli-netfx48",
+      "releaseTrack": "experimental",
+      "resolvedVersion": "19.51.36248",
+      "defaultReferenceSetId": "netfx48-ref",
+      "supportedLanguageIds": [
+        "cppcli"
+      ],
+      "allowedReferenceSetIds": [
+        "netfx48-ref"
+      ],
+      "producesArtifactFormats": [
+        "dotnet-framework-mixed-pe-v1"
+      ],
+      "capabilities": [
+        "diagnostics",
+        "compile-check",
+        "managed-pe",
+        "mixed-pe"
+      ],
+      "metadataFeatureTags": [],
+      "legacyAliases": [
+        "msvc-cppcli"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "vjc-jsharp20",
+      "displayName": "Visual J# 2.0 Second Edition",
+      "workerId": "vjc-jsharp20",
+      "releaseTrack": "experimental",
+      "resolvedVersion": "2.0.50727.937",
+      "defaultReferenceSetId": "jsharp20-ref",
+      "supportedLanguageIds": [
+        "jsharp"
+      ],
+      "allowedReferenceSetIds": [
+        "jsharp20-ref"
+      ],
+      "producesArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [
+        "diagnostics",
+        "compile-check",
+        "managed-pe"
+      ],
+      "metadataFeatureTags": [],
+      "legacyAliases": [
+        "jsharp20"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    }
+  ],
+  "referenceSets": [
+    {
+      "id": "net10-ref",
+      "displayName": ".NET 10",
+      "targetFramework": "net10.0",
+      "digest": "sha512-rWQyRVuTET24XM2aUdxbWPmhRgd5mIypan61IN8BOCfZoQbqP5VX5EjRDcxLwF3RzzIkxTyeh0SbVuGLt93xGw==",
+      "runtimeFamily": "coreclr",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "net11-preview-ref",
+      "displayName": ".NET Main",
+      "targetFramework": "net11.0",
+      "digest": "sha512-16anh5wbcRpV0Dm2nZHURKka5JSL1VjMIlG4xD2NwYfXaI4ZSUknKttRhjH1TE1V70\u002Bd/XbwgbAfmCI7GNLK6A==",
+      "runtimeFamily": "coreclr",
+      "requiredRuntimeFeatureTags": [
+        "runtime.dotnet-11-preview"
+      ],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "const-generics-ref",
+      "displayName": "Const Generics",
+      "targetFramework": "net9.0",
+      "digest": "sha256:00f0f9fcfc083e931004ceaa914633990ad7e389ce8d21012b97af5844f501b4",
+      "runtimeFamily": "coreclr-const-generics",
+      "requiredRuntimeFeatureTags": [
+        "runtime.const-generics.v1"
+      ],
+      "metadataFeatureTags": [
+        "metadata.const-generics.v1"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "netfx48-ref",
+      "displayName": ".NET Framework 4.8",
+      "targetFramework": "net48",
+      "digest": "sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [
+        "runtime.netfx48-wine"
+      ],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "netfx48-managed-ref",
+      "displayName": ".NET Framework 4.8 Reference Assemblies",
+      "targetFramework": "net48",
+      "digest": "sha512-XWKgyeNadNcTQaIVvQB8BrdCNrEar6fo/de1OdQRZ9HFy0jcBSaM8IV5q64ZampsSnC8AlTsACaGZUuoFw41RA==",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "jsharp20-ref",
+      "displayName": "Visual J# 2.0 / CLR 2.0 Reference Assemblies",
+      "targetFramework": "net20",
+      "digest": "sha256:25288dc53b3190f14a65ebf96258601a262ebd4a8fa68e4881c897258b122013",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [
+        "runtime.jsharp20-wine"
+      ],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "netcoreapp2.0-ref",
+      "displayName": "2.0.9",
+      "targetFramework": "netcoreapp2.0",
+      "digest": "sha512-RA35OXXK2enpLyFQrBW6N5WxPQLGJ8cx4SVNPa0PRLEmPcIu1OmdiPzOlqaB\u002B\u002B7ejGWY5O3o3CKkOgEgsHzDqA==",
+      "runtimeFamily": "coreclr",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2018-10-01",
+      "visibility": "hidden"
+    },
+    {
+      "id": "netcoreapp2.1-ref",
+      "displayName": "2.1.30",
+      "targetFramework": "netcoreapp2.1",
+      "digest": "sha512-rjXfBeXZZOixeTIXi8F\u002BHkfXSf\u002BiauTQg0wO\u002BCZbzqDOm5XPesc2GypYQ0otFOBbfbFP4awZrZwNa60LaYVvYQ==",
+      "runtimeFamily": "coreclr",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2021-08-21",
+      "visibility": "hidden"
+    },
+    {
+      "id": "netcoreapp2.2-ref",
+      "displayName": "2.2.8",
+      "targetFramework": "netcoreapp2.2",
+      "digest": "sha512-WZ0ojrXi2DZ66MWxds4jU7ZWUyMgKOQB7gyQ70ovrvbrhzu50XNUjnlfTT7ZpWoxKDGAfneDoJjTHoJk\u002BOa1RA==",
+      "runtimeFamily": "coreclr",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2019-12-23",
+      "visibility": "hidden"
+    },
+    {
+      "id": "netcoreapp3.0-ref",
+      "displayName": "3.0.3",
+      "targetFramework": "netcoreapp3.0",
+      "digest": "sha512-JPbWGLnLSKJoP\u002BE4dqQd93QIQ4GqXXv/\u002Biltuzd1hFXHEqf1Ie5oOK/x/Z/oJn6PeFTSvOghef32T4cBUi9C1A==",
+      "runtimeFamily": "coreclr",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2020-03-03",
+      "visibility": "hidden"
+    },
+    {
+      "id": "netcoreapp3.1-ref",
+      "displayName": "3.1.32",
+      "targetFramework": "netcoreapp3.1",
+      "digest": "sha512-cTXlQgzxZx5XsAIVw8tcdYhvPpcScA3vG3AQ/ScleqMn32SMBCIQqetoE0X0EqPSjW3S\u002Bhw/pRIUli0msjiJ9A==",
+      "runtimeFamily": "coreclr",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-12-13",
+      "visibility": "hidden"
+    },
+    {
+      "id": "net5-ref",
+      "displayName": "5.0.17",
+      "targetFramework": "net5.0",
+      "digest": "sha512-bBp1LYzTBY58dMaCABHnp44CYBcBvW7RrfSsXENaS7iRq/yx39g\u002BjhWdgUBZcJQBoF6AZeGbHhKV\u002BJAoT3LHDw==",
+      "runtimeFamily": "coreclr",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-05-10",
+      "visibility": "hidden"
+    },
+    {
+      "id": "net6-ref",
+      "displayName": "6.0.36",
+      "targetFramework": "net6.0",
+      "digest": "sha512-qAcjjw2vDNJrTIw7R4UWLQuvslJbUpXxTrd1ckfDpWPqE0cEehOd9CvwizbD7HADjewzVv\u002BLKvB5aOWYnpNmKA==",
+      "runtimeFamily": "coreclr",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2024-11-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "net7-ref",
+      "displayName": "7.0.20",
+      "targetFramework": "net7.0",
+      "digest": "sha512-dk6z/ZqMpZ4lxVisgnPX1H\u002BMwiUTRQHhwq3e9VMSIRL5loVdqHlZ9fRFfAejEz3U8EbvGV43Vp3OwF5R7mlTTw==",
+      "runtimeFamily": "coreclr",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2024-05-14",
+      "visibility": "hidden"
+    },
+    {
+      "id": "net8-ref",
+      "displayName": "8.0.29",
+      "targetFramework": "net8.0",
+      "digest": "sha512-MxCbP4EyXRlKy\u002B3qvEL6rV71FCBRaUj7SOHxP9gVAhaCzXzkrkUW48gjiBM8cZEZj5md0jSoifWKe5cA/q1edw==",
+      "runtimeFamily": "coreclr",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "maintenance",
+      "supportEndDate": "2026-11-10",
+      "visibility": "visible"
+    },
+    {
+      "id": "net9-ref",
+      "displayName": "9.0.18",
+      "targetFramework": "net9.0",
+      "digest": "sha512-yuXsXQO/15gtlUWYy/NToZgXCESBJoFaEhf64a2FmZeMAh1s9ApQN8EiXCXKX4uPNfzJ25gDaIQ\u002Bd7inZWSuAQ==",
+      "runtimeFamily": "coreclr",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "maintenance",
+      "supportEndDate": "2026-11-10",
+      "visibility": "visible"
+    },
+    {
+      "id": "netfx20-managed-ref",
+      "displayName": "2.0",
+      "targetFramework": "net20",
+      "digest": "sha512-M1vB2xSMJY0FdXNSUH4kjj04aTqWIOPUKeUUfaCoVA5JVw30XGO9ID7mUuBo\u002BinSXLgmLvoMkSb3d98YEQwfyA==",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2011-07-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "netfx35-managed-ref",
+      "displayName": "3.5",
+      "targetFramework": "net35",
+      "digest": "sha512-l0U4pfjnh80q9nnMSy6h9OaaLt9289Qo2lOzYaoNXwz4BBUgx1FeQA/Bbz3hc1\u002BCUvDpziG77O8i1DZ6bXIK\u002BA==",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "maintenance",
+      "supportEndDate": "2029-01-09",
+      "visibility": "visible"
+    },
+    {
+      "id": "netfx40-managed-ref",
+      "displayName": "4.0",
+      "targetFramework": "net40",
+      "digest": "sha512-vUXmwPxi7lY1DEmxnrnve/a4JgN/Z1XE6Raozcmlqrf2OZxs9smXBb3Q9y2dZ2lCPtVMyZBRM4jQPBXz04InpQ==",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2016-01-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "netfx45-managed-ref",
+      "displayName": "4.5",
+      "targetFramework": "net45",
+      "digest": "sha512-zPJ5Pqc6\u002BcBg4ir33AWryA8CUxJJj68Cs1Cfo8plZt1HH3Q0B/EqVon6LRXw9b8dfQyLYMqTJJk2maXgLhGJIw==",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2016-01-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "netfx451-managed-ref",
+      "displayName": "4.5.1",
+      "targetFramework": "net451",
+      "digest": "sha512-fS2Qwxx3JboJ2aUCknMGdM13SaYLsgurXehv\u002BLp5lnbl/lKwtH55S/uI3K7KRBH5CqGxLqBfWWJvAz/elS9ACA==",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2016-01-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "netfx452-managed-ref",
+      "displayName": "4.5.2",
+      "targetFramework": "net452",
+      "digest": "sha512-Els1ywsbLD/XpEgQWV0yMpAOHk0Lecz4jWmOeLwzGSFJ3KFXB\u002B57wKjX4rEJxqJf97CIFnUmcO\u002BpvIz8LfTXvw==",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-04-26",
+      "visibility": "hidden"
+    },
+    {
+      "id": "netfx46-managed-ref",
+      "displayName": "4.6",
+      "targetFramework": "net46",
+      "digest": "sha512-2DUXmacjqNTXn5FE95qWE6bL22ae0m/0rL/SgK3aWsW6qClDzXVmo0kOLycCh6JV6i3dQU/KMuT2wtrT8EfZiA==",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-04-26",
+      "visibility": "hidden"
+    },
+    {
+      "id": "netfx461-managed-ref",
+      "displayName": "4.6.1",
+      "targetFramework": "net461",
+      "digest": "sha512-txfcwV2rUr4Dxr0r2jU637Dsx4W9Wo1PxHI5oTJPRsSsGHWV2QLS75DGm7vJ2e7sl9BMZZn174/ro3SDO/oBxg==",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-04-26",
+      "visibility": "hidden"
+    },
+    {
+      "id": "netfx462-managed-ref",
+      "displayName": "4.6.2",
+      "targetFramework": "net462",
+      "digest": "sha512-HMn0QQmPYcJsVuKet9WA8IQbBweZvc7US88N39itSRqcn/1XOT/Kao1QiiykxU\u002Bvx8k7/zim11cVmKtunju4MA==",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "netfx47-managed-ref",
+      "displayName": "4.7",
+      "targetFramework": "net47",
+      "digest": "sha512-x2ENtw\u002BCyAOV9EO1V5okeMkPkR8LGWW8F6xG\u002BndxwEq3GMlNmDo0CDBZtI690PP/0jMHTwlPwyQTvYBhUpGiZA==",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "netfx471-managed-ref",
+      "displayName": "4.7.1",
+      "targetFramework": "net471",
+      "digest": "sha512-Vxmc1FxJLU4hA0b2mcELn4O5S6P3AfxtlFHjg1Gw6oMaBPL8gMRt9XT\u002BIODkzDWeJ9bX/yYN4EPiJMz9Zh/2hQ==",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "netfx472-managed-ref",
+      "displayName": "4.7.2",
+      "targetFramework": "net472",
+      "digest": "sha512-PvZKpFbtsxtJBi6hJyzt/iaK71qGdu9mNVpJT43\u002Bi1Wp23ym57YVuQI\u002BBEnO/99K2pxPMEgYtz62n7yZFEgi2A==",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "netfx30-managed-ref",
+      "displayName": "3.0",
+      "targetFramework": "net30",
+      "digest": "sha256:d61880a865bf41757cd61d1006f72aade7fcf574a369a7c7189aea0d60579b96",
+      "runtimeFamily": "netfx-clr-wine",
+      "requiredRuntimeFeatureTags": [],
+      "metadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Reference package is locked but not installed in a worker image."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2011-07-12",
+      "visibility": "hidden"
+    }
+  ],
+  "runtimes": [
+    {
+      "id": "dotnet-10-linux-x64",
+      "displayName": ".NET 10",
+      "family": "coreclr",
+      "resolvedVersion": "10.0.9",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [
+        "run",
+        "jit-asm",
+        "inspection",
+        "execution-flow"
+      ],
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "dotnet-11-preview-linux-x64",
+      "displayName": ".NET Main",
+      "family": "coreclr",
+      "resolvedVersion": "11.0.0-preview.5.26302.115",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [
+        "run",
+        "jit-asm",
+        "inspection",
+        "execution-flow"
+      ],
+      "providedRuntimeFeatureTags": [
+        "runtime.dotnet-11-preview"
+      ],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "const-generics-linux-x64",
+      "displayName": "Const Generics Runtime",
+      "family": "coreclr-const-generics",
+      "resolvedVersion": "9.0.0-constgenerics.1.23470.1",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [
+        "run",
+        "jit-asm",
+        "inspection"
+      ],
+      "providedRuntimeFeatureTags": [
+        "runtime.const-generics.v1"
+      ],
+      "providedMetadataFeatureTags": [
+        "metadata.const-generics.v1"
+      ],
+      "legacyAliases": [
+        "const-generics"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "wine-netfx48-linux-x64",
+      "displayName": ".NET Framework 4.8 / Wine 9.0",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "wine-9.0\u002Bnetfx48",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1",
+        "dotnet-framework-mixed-pe-v1"
+      ],
+      "capabilities": [
+        "run"
+      ],
+      "providedRuntimeFeatureTags": [
+        "runtime.netfx48-wine"
+      ],
+      "providedMetadataFeatureTags": [],
+      "legacyAliases": [
+        "wine-netfx48"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "wine-jsharp20-linux-x64",
+      "displayName": "Visual J# 2.0 / CLR 2.0 / Wine 9.0",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "wine-9.0\u002Bclr2\u002Bjsharp-2.0.50727.937",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [
+        "run"
+      ],
+      "providedRuntimeFeatureTags": [
+        "runtime.jsharp20-wine"
+      ],
+      "providedMetadataFeatureTags": [],
+      "legacyAliases": [
+        "wine-jsharp20"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "dotnet-core-2.0-linux-x64",
+      "displayName": ".NET 2.0.9 / Linux x64",
+      "family": "coreclr",
+      "resolvedVersion": "2.0.9",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-dotnet-core-2.0-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "2.0.9"
+        }
+      ],
+      "containerIsolationKind": "standard",
+      "containerEnvironmentKind": "coreclr",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The net8 control bridge and target CoreCLR 2.0 runner have not passed the product image preflight."
+      },
+      "runtimeCommit": "1632fa1589b0eee3277a8841ce1770e554ece037",
+      "jitVersion": "2.0.9",
+      "jitCommit": "1632fa1589b0eee3277a8841ce1770e554ece037",
+      "supportStatus": "legacy",
+      "supportEndDate": "2018-10-01",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-dotnet-core-2.0-linux-x64",
+      "displayName": ".NET 2.0.9 / Wine x64",
+      "family": "coreclr-wine",
+      "resolvedVersion": "2.0.9",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-dotnet-core-2.0-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr-wine",
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "2.0.9"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Windows CoreCLR 2.x under Wine is outside the requested and tested matrix."
+      },
+      "runtimeCommit": "1632fa1589b0eee3277a8841ce1770e554ece037",
+      "jitVersion": "2.0.9",
+      "jitCommit": "1632fa1589b0eee3277a8841ce1770e554ece037",
+      "supportStatus": "legacy",
+      "supportEndDate": "2018-10-01",
+      "visibility": "hidden"
+    },
+    {
+      "id": "dotnet-core-2.1-linux-x64",
+      "displayName": ".NET 2.1.30 / Linux x64",
+      "family": "coreclr",
+      "resolvedVersion": "2.1.30",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-dotnet-core-2.1-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "2.1.30"
+        }
+      ],
+      "containerIsolationKind": "standard",
+      "containerEnvironmentKind": "coreclr",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The net8 control bridge and target CoreCLR 2.1 runner have not passed the product image preflight."
+      },
+      "runtimeCommit": "5e17f34de8b34fce04f665640e046d89e8991d00",
+      "jitVersion": "2.1.30",
+      "jitCommit": "5e17f34de8b34fce04f665640e046d89e8991d00",
+      "supportStatus": "legacy",
+      "supportEndDate": "2021-08-21",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-dotnet-core-2.1-linux-x64",
+      "displayName": ".NET 2.1.30 / Wine x64",
+      "family": "coreclr-wine",
+      "resolvedVersion": "2.1.30",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-dotnet-core-2.1-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr-wine",
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "2.1.30"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Windows CoreCLR 2.x under Wine is outside the requested and tested matrix."
+      },
+      "runtimeCommit": "5e17f34de8b34fce04f665640e046d89e8991d00",
+      "jitVersion": "2.1.30",
+      "jitCommit": "5e17f34de8b34fce04f665640e046d89e8991d00",
+      "supportStatus": "legacy",
+      "supportEndDate": "2021-08-21",
+      "visibility": "hidden"
+    },
+    {
+      "id": "dotnet-core-2.2-linux-x64",
+      "displayName": ".NET 2.2.8 / Linux x64",
+      "family": "coreclr",
+      "resolvedVersion": "2.2.8",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-dotnet-core-2.2-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "2.2.8"
+        }
+      ],
+      "containerIsolationKind": "standard",
+      "containerEnvironmentKind": "coreclr",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The net8 control bridge and target CoreCLR 2.2 runner have not passed the product image preflight."
+      },
+      "runtimeCommit": "b9aa1abc510165cdc4c92e59d938def6f3eee0e1",
+      "jitVersion": "2.2.8",
+      "jitCommit": "b9aa1abc510165cdc4c92e59d938def6f3eee0e1",
+      "supportStatus": "legacy",
+      "supportEndDate": "2019-12-23",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-dotnet-core-2.2-linux-x64",
+      "displayName": ".NET 2.2.8 / Wine x64",
+      "family": "coreclr-wine",
+      "resolvedVersion": "2.2.8",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-dotnet-core-2.2-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr-wine",
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "2.2.8"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Windows CoreCLR 2.x under Wine is outside the requested and tested matrix."
+      },
+      "runtimeCommit": "b9aa1abc510165cdc4c92e59d938def6f3eee0e1",
+      "jitVersion": "2.2.8",
+      "jitCommit": "b9aa1abc510165cdc4c92e59d938def6f3eee0e1",
+      "supportStatus": "legacy",
+      "supportEndDate": "2019-12-23",
+      "visibility": "hidden"
+    },
+    {
+      "id": "dotnet-core-3.0-linux-x64",
+      "displayName": ".NET 3.0.3 / Linux x64",
+      "family": "coreclr",
+      "resolvedVersion": "3.0.3",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-dotnet-core-3.0-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "minimumVersion": "3.0.1",
+          "maximumVersion": "3.0.3"
+        }
+      ],
+      "containerIsolationKind": "standard",
+      "containerEnvironmentKind": "coreclr",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The net8 control bridge and target CoreCLR 3.0 runner have not passed the product image preflight."
+      },
+      "runtimeCommit": "c03f2fe62663edec83d1bc12b4e9f11bd3de5d0e",
+      "jitVersion": "3.0.3",
+      "jitCommit": "c03f2fe62663edec83d1bc12b4e9f11bd3de5d0e",
+      "supportStatus": "legacy",
+      "supportEndDate": "2020-03-03",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-dotnet-core-3.0-linux-x64",
+      "displayName": ".NET 3.0.3 / Wine x64",
+      "family": "coreclr-wine",
+      "resolvedVersion": "3.0.3",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-dotnet-core-3.0-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr-wine",
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "minimumVersion": "3.0.1",
+          "maximumVersion": "3.0.3"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Windows CoreCLR 3.x under Wine is outside the requested and tested matrix."
+      },
+      "runtimeCommit": "c03f2fe62663edec83d1bc12b4e9f11bd3de5d0e",
+      "jitVersion": "3.0.3",
+      "jitCommit": "c03f2fe62663edec83d1bc12b4e9f11bd3de5d0e",
+      "supportStatus": "legacy",
+      "supportEndDate": "2020-03-03",
+      "visibility": "hidden"
+    },
+    {
+      "id": "dotnet-core-3.1-linux-x64",
+      "displayName": ".NET 3.1.32 / Linux x64",
+      "family": "coreclr",
+      "resolvedVersion": "3.1.32",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-dotnet-core-3.1-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "minimumVersion": "3.1.0",
+          "maximumVersion": "3.1.32"
+        }
+      ],
+      "containerIsolationKind": "standard",
+      "containerEnvironmentKind": "coreclr",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The net8 control bridge and target CoreCLR 3.1 runner have not passed the product image preflight."
+      },
+      "runtimeCommit": "f94bb2c3ff432dcc4a6229eca2f978197bf06150",
+      "jitVersion": "3.1.32",
+      "jitCommit": "f94bb2c3ff432dcc4a6229eca2f978197bf06150",
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-12-13",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-dotnet-core-3.1-linux-x64",
+      "displayName": ".NET 3.1.32 / Wine x64",
+      "family": "coreclr-wine",
+      "resolvedVersion": "3.1.32",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-dotnet-core-3.1-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr-wine",
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "minimumVersion": "3.1.0",
+          "maximumVersion": "3.1.32"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Windows CoreCLR 3.x under Wine is outside the requested and tested matrix."
+      },
+      "runtimeCommit": "f94bb2c3ff432dcc4a6229eca2f978197bf06150",
+      "jitVersion": "3.1.32",
+      "jitCommit": "f94bb2c3ff432dcc4a6229eca2f978197bf06150",
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-12-13",
+      "visibility": "hidden"
+    },
+    {
+      "id": "dotnet-5-linux-x64",
+      "displayName": ".NET 5.0.17 / Linux x64",
+      "family": "coreclr",
+      "resolvedVersion": "5.0.17",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-dotnet-5-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "minimumVersion": "5.0.0",
+          "maximumVersion": "5.0.17"
+        }
+      ],
+      "containerIsolationKind": "standard",
+      "containerEnvironmentKind": "coreclr",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The target-runtime runner and JIT inspector have not passed the .NET 5 Linux image preflight."
+      },
+      "runtimeCommit": "6a984143635bde23e728abaaccbde52f5ea8fa3e",
+      "jitVersion": "5.0.17",
+      "jitCommit": "6a984143635bde23e728abaaccbde52f5ea8fa3e",
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-05-10",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-dotnet-5-linux-x64",
+      "displayName": ".NET 5.0.17 / Wine x64",
+      "family": "coreclr-wine",
+      "resolvedVersion": "5.0.17",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-dotnet-5-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr-wine",
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "minimumVersion": "5.0.0",
+          "maximumVersion": "5.0.17"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Run works in the audit image, but the shared product Wine image has not passed release preflight."
+      },
+      "runtimeCommit": "6a984143635bde23e728abaaccbde52f5ea8fa3e",
+      "jitVersion": "5.0.17",
+      "jitCommit": "6a984143635bde23e728abaaccbde52f5ea8fa3e",
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-05-10",
+      "visibility": "hidden"
+    },
+    {
+      "id": "dotnet-6-linux-x64",
+      "displayName": ".NET 6.0.36 / Linux x64",
+      "family": "coreclr",
+      "resolvedVersion": "6.0.36",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-dotnet-6-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "6.0.36"
+        }
+      ],
+      "containerIsolationKind": "standard",
+      "containerEnvironmentKind": "coreclr",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The source-built Checked-JIT bridge and method-level JIT preflight have not passed against the retained .NET 6 candidate image."
+      },
+      "runtimeCommit": "f1dd57165bfd91875761329ac3a8b17f6606ad18",
+      "jitVersion": "6.0.36",
+      "jitCommit": "f1dd57165bfd91875761329ac3a8b17f6606ad18",
+      "jitSourceMappingKind": "none",
+      "supportStatus": "legacy",
+      "supportEndDate": "2024-11-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-dotnet-6-linux-x64",
+      "displayName": ".NET 6.0.36 / Wine x64",
+      "family": "coreclr-wine",
+      "resolvedVersion": "6.0.36",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-dotnet-6-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr-wine",
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "6.0.36"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Run works in the audit image, but the shared product Wine image has not passed release preflight."
+      },
+      "runtimeCommit": "f1dd57165bfd91875761329ac3a8b17f6606ad18",
+      "jitVersion": "6.0.36",
+      "jitCommit": "f1dd57165bfd91875761329ac3a8b17f6606ad18",
+      "supportStatus": "legacy",
+      "supportEndDate": "2024-11-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "dotnet-7-linux-x64",
+      "displayName": ".NET 7.0.20 / Linux x64",
+      "family": "coreclr",
+      "resolvedVersion": "7.0.20",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-dotnet-7-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "7.0.20"
+        }
+      ],
+      "containerIsolationKind": "standard",
+      "containerEnvironmentKind": "coreclr",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The source-built Checked-JIT bridge and debug-info source mapping have not passed the retained .NET 7 candidate image preflight."
+      },
+      "runtimeCommit": "0fb6ac59fb1edbe4ed3ad62661df0eb7eacd7903",
+      "jitVersion": "7.0.20",
+      "jitCommit": "0fb6ac59fb1edbe4ed3ad62661df0eb7eacd7903",
+      "jitSourceMappingKind": "checked-jit-debug-info",
+      "supportStatus": "legacy",
+      "supportEndDate": "2024-05-14",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-dotnet-7-linux-x64",
+      "displayName": ".NET 7.0.20 / Wine x64",
+      "family": "coreclr-wine",
+      "resolvedVersion": "7.0.20",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-dotnet-7-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr-wine",
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "7.0.20"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Run and method-level JIT work in the audit image, but the shared product Wine image has not passed release preflight."
+      },
+      "runtimeCommit": "0fb6ac59fb1edbe4ed3ad62661df0eb7eacd7903",
+      "jitVersion": "7.0.20",
+      "jitCommit": "0fb6ac59fb1edbe4ed3ad62661df0eb7eacd7903",
+      "jitSourceMappingKind": "none",
+      "supportStatus": "legacy",
+      "supportEndDate": "2024-05-14",
+      "visibility": "hidden"
+    },
+    {
+      "id": "dotnet-8-linux-x64",
+      "displayName": ".NET 8.0.29 / Linux x64",
+      "family": "coreclr",
+      "resolvedVersion": "8.0.29",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-dotnet-8-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "8.0.29"
+        }
+      ],
+      "containerIsolationKind": "standard",
+      "containerEnvironmentKind": "coreclr",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The .NET 8 product image must pass the real JIT and source-map promotion preflight."
+      },
+      "runtimeCommit": "18fd75c847399745c43b5970fec840ba71064e80",
+      "jitVersion": "8.0.29",
+      "jitCommit": "18fd75c847399745c43b5970fec840ba71064e80",
+      "jitSourceMappingKind": "checked-jit-debug-info",
+      "supportStatus": "maintenance",
+      "supportEndDate": "2026-11-10",
+      "visibility": "visible"
+    },
+    {
+      "id": "wine-dotnet-8-linux-x64",
+      "displayName": ".NET 8.0.29 / Wine x64",
+      "family": "coreclr-wine",
+      "resolvedVersion": "8.0.29",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-dotnet-8-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr-wine",
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "8.0.29"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Run and method-level JIT work in the audit image, but the shared product Wine image has not passed release preflight."
+      },
+      "runtimeCommit": "18fd75c847399745c43b5970fec840ba71064e80",
+      "jitVersion": "8.0.29",
+      "jitCommit": "18fd75c847399745c43b5970fec840ba71064e80",
+      "jitSourceMappingKind": "none",
+      "supportStatus": "maintenance",
+      "supportEndDate": "2026-11-10",
+      "visibility": "visible"
+    },
+    {
+      "id": "dotnet-9-linux-x64",
+      "displayName": ".NET 9.0.18 / Linux x64",
+      "family": "coreclr",
+      "resolvedVersion": "9.0.18",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-dotnet-9-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "9.0.18"
+        }
+      ],
+      "containerIsolationKind": "standard",
+      "containerEnvironmentKind": "coreclr",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The .NET 9 product image must pass the real JIT and source-map promotion preflight."
+      },
+      "runtimeCommit": "d839c41c85988aadc213e8e42269ecd7883a1790",
+      "jitVersion": "9.0.18",
+      "jitCommit": "d839c41c85988aadc213e8e42269ecd7883a1790",
+      "jitSourceMappingKind": "checked-jit-debug-info",
+      "supportStatus": "maintenance",
+      "supportEndDate": "2026-11-10",
+      "visibility": "visible"
+    },
+    {
+      "id": "wine-dotnet-9-linux-x64",
+      "displayName": ".NET 9.0.18 / Wine x64",
+      "family": "coreclr-wine",
+      "resolvedVersion": "9.0.18",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-dotnet-9-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr-wine",
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "9.0.18"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Run and method-level JIT work in the audit image, but the shared product Wine image has not passed release preflight."
+      },
+      "runtimeCommit": "d839c41c85988aadc213e8e42269ecd7883a1790",
+      "jitVersion": "9.0.18",
+      "jitCommit": "d839c41c85988aadc213e8e42269ecd7883a1790",
+      "jitSourceMappingKind": "none",
+      "supportStatus": "maintenance",
+      "supportEndDate": "2026-11-10",
+      "visibility": "visible"
+    },
+    {
+      "id": "wine-dotnet-10-linux-x64",
+      "displayName": ".NET 10.0.10 / Wine x64",
+      "family": "coreclr-wine",
+      "resolvedVersion": "10.0.10",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-dotnet-10-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr-wine",
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "10.0.10"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Run and method-level JIT work in the audit image, but the shared product Wine image has not passed release preflight."
+      },
+      "runtimeCommit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+      "jitVersion": "10.0.10",
+      "jitCommit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+      "jitSourceMappingKind": "none",
+      "supportStatus": "active",
+      "supportEndDate": "2028-11-14",
+      "visibility": "visible"
+    },
+    {
+      "id": "wine-dotnet-11-preview-linux-x64",
+      "displayName": ".NET 11.0.0-preview.6.26359.118 / Wine x64",
+      "family": "coreclr-wine",
+      "resolvedVersion": "11.0.0-preview.6.26359.118",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-dotnet-11-preview-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "coreclr-wine",
+        "coreclr"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": "Microsoft.NETCore.App",
+          "exactVersion": "11.0.0-preview.6.26359.118"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Run and method-level JIT work in the audit image, but the shared product Wine image has not passed release preflight."
+      },
+      "runtimeCommit": "ba53d0ed335bed4ab7bfd01988c8e3953ee5ffbe",
+      "jitVersion": "11.0.0-preview.6.26359.118",
+      "jitCommit": "ba53d0ed335bed4ab7bfd01988c8e3953ee5ffbe",
+      "jitSourceMappingKind": "none",
+      "supportStatus": "preview",
+      "visibility": "visible"
+    },
+    {
+      "id": "wine-netfx20-linux-x64",
+      "displayName": ".NET Framework 2.0 / Wine x64",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "2.0",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-netfx20-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "netfx-clr-wine"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": ".NETFramework",
+          "exactVersion": "2.0"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The proprietary CLR2 prefix is operator-supplied and has not passed the product release gate."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2011-07-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-netfx30-linux-x64",
+      "displayName": ".NET Framework 3.0 / Wine x64",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "3.0",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-netfx30-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "netfx-clr-wine"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": ".NETFramework",
+          "exactVersion": "3.0"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The deterministic net20 plus net35-v3.0 reference composition is locked, but the exact proprietary CLR2 runtime has not passed the product release gate."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2011-07-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-netfx35-linux-x64",
+      "displayName": ".NET Framework 3.5 / Wine x64",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "3.5",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-netfx35-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "netfx-clr-wine"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": ".NETFramework",
+          "exactVersion": "3.5"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The proprietary CLR2 prefix is operator-supplied and has not passed the product release gate."
+      },
+      "supportStatus": "maintenance",
+      "supportEndDate": "2029-01-09",
+      "visibility": "visible"
+    },
+    {
+      "id": "wine-netfx40-linux-x64",
+      "displayName": ".NET Framework 4.0 / Wine x64",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "4.0",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-netfx40-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "netfx-clr-wine"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": ".NETFramework",
+          "exactVersion": "4.0"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "An exact .NET Framework 4.0 operator image and registry preflight have not passed the product release gate."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2016-01-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-netfx45-linux-x64",
+      "displayName": ".NET Framework 4.5 / Wine x64",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "4.5",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-netfx45-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "netfx-clr-wine"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": ".NETFramework",
+          "exactVersion": "4.5"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "An exact .NET Framework 4.5 operator image and registry preflight have not passed the product release gate."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2016-01-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-netfx451-linux-x64",
+      "displayName": ".NET Framework 4.5.1 / Wine x64",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "4.5.1",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-netfx451-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "netfx-clr-wine"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": ".NETFramework",
+          "exactVersion": "4.5.1"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "An exact .NET Framework 4.5.1 operator image and registry preflight have not passed the product release gate."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2016-01-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-netfx452-linux-x64",
+      "displayName": ".NET Framework 4.5.2 / Wine x64",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "4.5.2",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-netfx452-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "netfx-clr-wine"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": ".NETFramework",
+          "exactVersion": "4.5.2"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "An exact .NET Framework 4.5.2 operator image and registry preflight have not passed the product release gate."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-04-26",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-netfx46-linux-x64",
+      "displayName": ".NET Framework 4.6 / Wine x64",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "4.6",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-netfx46-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "netfx-clr-wine"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": ".NETFramework",
+          "exactVersion": "4.6"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "An exact .NET Framework 4.6 operator image and registry preflight have not passed the product release gate."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-04-26",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-netfx461-linux-x64",
+      "displayName": ".NET Framework 4.6.1 / Wine x64",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "4.6.1",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-netfx461-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "netfx-clr-wine"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": ".NETFramework",
+          "exactVersion": "4.6.1"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "An exact .NET Framework 4.6.1 operator image and registry preflight have not passed the product release gate."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-04-26",
+      "visibility": "hidden"
+    },
+    {
+      "id": "wine-netfx462-linux-x64",
+      "displayName": ".NET Framework 4.6.2 / Wine x64",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "4.6.2",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-netfx462-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "netfx-clr-wine"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": ".NETFramework",
+          "exactVersion": "4.6.2"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "An exact .NET Framework 4.6.2 operator image and registry preflight have not passed the product release gate."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "wine-netfx47-linux-x64",
+      "displayName": ".NET Framework 4.7 / Wine x64",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "4.7",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-netfx47-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "netfx-clr-wine"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": ".NETFramework",
+          "exactVersion": "4.7"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "An exact .NET Framework 4.7 operator image and registry preflight have not passed the product release gate."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "wine-netfx471-linux-x64",
+      "displayName": ".NET Framework 4.7.1 / Wine x64",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "4.7.1",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-netfx471-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "netfx-clr-wine"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": ".NETFramework",
+          "exactVersion": "4.7.1"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "An exact .NET Framework 4.7.1 operator image and registry preflight have not passed the product release gate."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "wine-netfx472-linux-x64",
+      "displayName": ".NET Framework 4.7.2 / Wine x64",
+      "family": "netfx-clr-wine",
+      "resolvedVersion": "4.7.2",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-wine-netfx472-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "netfx-clr-wine"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": ".NETFramework",
+          "exactVersion": "4.7.2"
+        }
+      ],
+      "containerIsolationKind": "wine",
+      "containerEnvironmentKind": "wine",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "An exact .NET Framework 4.7.2 operator image and registry preflight have not passed the product release gate."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "mono-6.12-linux-x64",
+      "displayName": "Mono 6.12.0.182 / Linux x64",
+      "family": "mono",
+      "resolvedVersion": "6.12.0.182",
+      "rid": "linux-x64",
+      "architecture": "x64",
+      "acceptedArtifactFormats": [
+        "dotnet-framework-managed-pe-v1"
+      ],
+      "capabilities": [],
+      "runtimeImageId": "sharplabnext/runtime-mono-6.12-linux-x64:candidate",
+      "acceptedRuntimeFamilies": [
+        "mono",
+        "netfx-clr-wine"
+      ],
+      "acceptedFrameworks": [
+        {
+          "name": ".NETFramework",
+          "exactVersion": "4.8"
+        }
+      ],
+      "containerIsolationKind": "standard",
+      "containerEnvironmentKind": "mono",
+      "providedRuntimeFeatureTags": [],
+      "providedMetadataFeatureTags": [],
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "Mono 6.12.0.182 passed restricted Run and bounded x64 JIT ASM probes, but the shared product candidate has not passed Supervisor capability, performance, and immutable-registry preflight."
+      },
+      "jitSourceMappingKind": "none",
+      "supportStatus": "legacy",
+      "visibility": "hidden"
+    }
+  ],
+  "artifactProcessors": [
+    {
+      "id": "artifacts-default",
+      "displayName": "ILSpy and ILVerify",
+      "resolvedVersion": "ilspy/10.1.0.8386\u002Bilverify/10.0.9",
+      "workerId": "artifacts-default",
+      "acceptsArtifactFormats": [
+        "dotnet-managed-pe-v1",
+        "dotnet-framework-managed-pe-v1",
+        "dotnet-framework-mixed-pe-v1"
+      ],
+      "producesArtifactFormats": [
+        "dotnet-managed-pe-v1",
+        "dotnet-framework-managed-pe-v1",
+        "dotnet-framework-mixed-pe-v1",
+        "il-text-v1",
+        "decompiled-csharp-v1",
+        "il-verification-v1"
+      ],
+      "capabilities": [
+        "il",
+        "decompiled-csharp",
+        "il-verify",
+        "execution-flow",
+        "run-il"
+      ],
+      "transformations": [
+        {
+          "id": "runtime-instrumentation-v1",
+          "inputArtifactFormat": "dotnet-managed-pe-v1",
+          "outputArtifactFormat": "dotnet-managed-pe-v1"
+        }
+      ],
+      "acceptedMetadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "artifacts-const-generics",
+      "displayName": "Const Generics ILSpy",
+      "resolvedVersion": "a2042c704a93-79f7f1408b2c-ctarg-v1",
+      "workerId": "artifacts-const-generics",
+      "acceptsArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "producesArtifactFormats": [
+        "dotnet-managed-pe-v1",
+        "il-text-v1",
+        "decompiled-csharp-v1",
+        "il-verification-v1"
+      ],
+      "capabilities": [
+        "il",
+        "decompiled-csharp",
+        "il-verify"
+      ],
+      "transformations": [],
+      "acceptedMetadataFeatureTags": [
+        "metadata.const-generics.v1"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "artifacts-jsil",
+      "displayName": "JSIL",
+      "resolvedVersion": "0.8.2\u002Bmono.6.12.0.182",
+      "workerId": "artifacts-jsil",
+      "acceptsArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "producesArtifactFormats": [
+        "javascript-v1"
+      ],
+      "capabilities": [
+        "javascript"
+      ],
+      "transformations": [],
+      "acceptedMetadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "il-assembler",
+      "displayName": "Public IL Assembler",
+      "resolvedVersion": "0.1.0",
+      "workerId": "il-assembler",
+      "acceptsArtifactFormats": [
+        "cil-text-v1"
+      ],
+      "producesArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "capabilities": [
+        "generated-il",
+        "assemble-il",
+        "managed-pe"
+      ],
+      "transformations": [
+        {
+          "id": "assemble-il",
+          "inputArtifactFormat": "cil-text-v1",
+          "outputArtifactFormat": "dotnet-managed-pe-v1"
+        }
+      ],
+      "acceptedMetadataFeatureTags": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "id": "compile-check",
+      "displayName": "Compile Check",
+      "renderer": "diagnostics",
+      "requiresRuntime": false,
+      "requiredCapabilities": [
+        "compile-check"
+      ],
+      "acceptedArtifactFormats": []
+    },
+    {
+      "id": "ast",
+      "displayName": "AST",
+      "renderer": "ast-tree",
+      "requiresRuntime": false,
+      "requiredCapabilities": [
+        "ast"
+      ],
+      "acceptedArtifactFormats": []
+    },
+    {
+      "id": "generated-source",
+      "displayName": "Generated Source",
+      "renderer": "source",
+      "requiresRuntime": false,
+      "requiredCapabilities": [
+        "generated-source"
+      ],
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ]
+    },
+    {
+      "id": "generated-il",
+      "displayName": "Generated IL",
+      "renderer": "il",
+      "requiresRuntime": false,
+      "requiredCapabilities": [
+        "generated-il"
+      ],
+      "acceptedArtifactFormats": [
+        "cil-text-v1"
+      ]
+    },
+    {
+      "id": "il",
+      "displayName": "IL",
+      "renderer": "il",
+      "requiresRuntime": false,
+      "requiredCapabilities": [
+        "managed-pe",
+        "il"
+      ],
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1",
+        "dotnet-framework-managed-pe-v1",
+        "dotnet-framework-mixed-pe-v1"
+      ]
+    },
+    {
+      "id": "decompiled-csharp",
+      "displayName": "Decompiled C#",
+      "renderer": "csharp",
+      "requiresRuntime": false,
+      "requiredCapabilities": [
+        "managed-pe",
+        "decompiled-csharp"
+      ],
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1",
+        "dotnet-framework-managed-pe-v1",
+        "dotnet-framework-mixed-pe-v1"
+      ]
+    },
+    {
+      "id": "javascript",
+      "displayName": "JavaScript (JSIL)",
+      "renderer": "javascript",
+      "requiresRuntime": false,
+      "requiredCapabilities": [
+        "managed-pe",
+        "javascript"
+      ],
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ],
+      "outputArtifactFormat": "javascript-v1"
+    },
+    {
+      "id": "il-verify",
+      "displayName": "IL Verify",
+      "renderer": "verification",
+      "requiresRuntime": false,
+      "requiredCapabilities": [
+        "managed-pe",
+        "il-verify"
+      ],
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ]
+    },
+    {
+      "id": "jit-asm",
+      "displayName": "JIT ASM",
+      "renderer": "asm",
+      "requiresRuntime": true,
+      "requiredCapabilities": [
+        "managed-pe",
+        "jit-asm"
+      ],
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ]
+    },
+    {
+      "id": "run",
+      "displayName": "Run",
+      "renderer": "runtime-output",
+      "requiresRuntime": true,
+      "requiredCapabilities": [
+        "managed-pe",
+        "run"
+      ],
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1",
+        "dotnet-framework-managed-pe-v1",
+        "dotnet-framework-mixed-pe-v1"
+      ]
+    },
+    {
+      "id": "explain",
+      "displayName": "Explain",
+      "renderer": "explain",
+      "requiresRuntime": false,
+      "requiredCapabilities": [
+        "explain"
+      ],
+      "acceptedArtifactFormats": []
+    },
+    {
+      "id": "execution-flow",
+      "displayName": "Execution Flow",
+      "renderer": "flow",
+      "requiresRuntime": true,
+      "requiredCapabilities": [
+        "managed-pe",
+        "portable-pdb",
+        "execution-flow",
+        "run"
+      ],
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ]
+    },
+    {
+      "id": "run-il",
+      "displayName": "Rewritten Run IL",
+      "renderer": "il",
+      "requiresRuntime": false,
+      "requiredCapabilities": [
+        "managed-pe",
+        "run-il"
+      ],
+      "acceptedArtifactFormats": [
+        "dotnet-managed-pe-v1"
+      ]
+    }
+  ],
+  "compatibility": [
+    {
+      "id": "roslyn-stable-net10",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable",
+      "toId": "net10-ref",
+      "allowed": true
+    },
+    {
+      "id": "roslyn-stable-net11",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable",
+      "toId": "net11-preview-ref",
+      "allowed": true
+    },
+    {
+      "id": "roslyn-stable-netfx48-managed",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable-netfx48",
+      "toId": "netfx48-managed-ref",
+      "allowed": true
+    },
+    {
+      "id": "roslyn-main-net10",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-main",
+      "toId": "net10-ref",
+      "allowed": true
+    },
+    {
+      "id": "roslyn-main-net11",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-main",
+      "toId": "net11-preview-ref",
+      "allowed": true
+    },
+    {
+      "id": "const-generics-atomic-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-const-generics",
+      "toId": "const-generics-ref",
+      "allowed": true,
+      "requiredMetadataFeatureTags": [
+        "metadata.const-generics.v1"
+      ]
+    },
+    {
+      "id": "fsharp-net10",
+      "kind": "toolchain-reference-set",
+      "fromId": "fsharp-stable",
+      "toId": "net10-ref",
+      "allowed": true
+    },
+    {
+      "id": "fsharp-net11",
+      "kind": "toolchain-reference-set",
+      "fromId": "fsharp-stable",
+      "toId": "net11-preview-ref",
+      "allowed": true
+    },
+    {
+      "id": "gsharp-net10",
+      "kind": "toolchain-reference-set",
+      "fromId": "gsharp-stable",
+      "toId": "net10-ref",
+      "allowed": true
+    },
+    {
+      "id": "gsharp-legacy-net10",
+      "kind": "toolchain-reference-set",
+      "fromId": "gsharp-legacy-0.3.8",
+      "toId": "net10-ref",
+      "allowed": true
+    },
+    {
+      "id": "peachpie-net10",
+      "kind": "toolchain-reference-set",
+      "fromId": "peachpie-stable",
+      "toId": "net10-ref",
+      "allowed": true
+    },
+    {
+      "id": "il-net10",
+      "kind": "toolchain-reference-set",
+      "fromId": "mobius-ilasm-stable",
+      "toId": "net10-ref",
+      "allowed": true
+    },
+    {
+      "id": "il-net11",
+      "kind": "toolchain-reference-set",
+      "fromId": "mobius-ilasm-stable",
+      "toId": "net11-preview-ref",
+      "allowed": true
+    },
+    {
+      "id": "minilang-net10",
+      "kind": "toolchain-reference-set",
+      "fromId": "minilang-stable",
+      "toId": "net10-ref",
+      "allowed": true
+    },
+    {
+      "id": "minilang-net11",
+      "kind": "toolchain-reference-set",
+      "fromId": "minilang-stable",
+      "toId": "net11-preview-ref",
+      "allowed": true
+    },
+    {
+      "id": "cppcli-netfx48",
+      "kind": "toolchain-reference-set",
+      "fromId": "msvc-cppcli-netfx48",
+      "toId": "netfx48-ref",
+      "allowed": true
+    },
+    {
+      "id": "jsharp20-net20",
+      "kind": "toolchain-reference-set",
+      "fromId": "vjc-jsharp20",
+      "toId": "jsharp20-ref",
+      "allowed": true
+    },
+    {
+      "id": "cil-text-il-assembler",
+      "kind": "artifact-processor",
+      "fromId": "cil-text-v1",
+      "toId": "il-assembler",
+      "allowed": true
+    },
+    {
+      "id": "managed-pe-default-processor",
+      "kind": "artifact-processor",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "artifacts-default",
+      "allowed": true
+    },
+    {
+      "id": "managed-pe-jsil-processor",
+      "kind": "artifact-processor",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "artifacts-jsil",
+      "allowed": true
+    },
+    {
+      "id": "netfx-managed-pe-default-processor",
+      "kind": "artifact-processor",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "artifacts-default",
+      "allowed": true
+    },
+    {
+      "id": "mixed-pe-default-processor",
+      "kind": "artifact-processor",
+      "fromId": "dotnet-framework-mixed-pe-v1",
+      "toId": "artifacts-default",
+      "allowed": true
+    },
+    {
+      "id": "managed-pe-const-processor",
+      "kind": "artifact-processor",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "artifacts-const-generics",
+      "allowed": true,
+      "requiredMetadataFeatureTags": [
+        "metadata.const-generics.v1"
+      ]
+    },
+    {
+      "id": "managed-pe-net10",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "dotnet-10-linux-x64",
+      "allowed": true
+    },
+    {
+      "id": "managed-pe-net11",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "dotnet-11-preview-linux-x64",
+      "allowed": true
+    },
+    {
+      "id": "managed-pe-const-runtime",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "const-generics-linux-x64",
+      "allowed": true,
+      "requiredMetadataFeatureTags": [
+        "metadata.const-generics.v1"
+      ]
+    },
+    {
+      "id": "netfx-managed-pe-wine-netfx48",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-netfx48-linux-x64",
+      "allowed": true
+    },
+    {
+      "id": "netfx-managed-pe-wine-jsharp20",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-jsharp20-linux-x64",
+      "allowed": true
+    },
+    {
+      "id": "mixed-pe-wine-netfx48",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-mixed-pe-v1",
+      "toId": "wine-netfx48-linux-x64",
+      "allowed": true
+    },
+    {
+      "id": "roslyn-stable-netcoreapp2.0-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable",
+      "toId": "netcoreapp2.0-ref",
+      "allowed": false,
+      "reason": "legacy CoreCLR reference package is not installed in a worker image"
+    },
+    {
+      "id": "roslyn-main-netcoreapp2.0-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-main",
+      "toId": "netcoreapp2.0-ref",
+      "allowed": false,
+      "reason": "legacy CoreCLR reference package is not installed in a worker image"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-wine-dotnet-core-2.0-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "wine-dotnet-core-2.0-linux-x64",
+      "allowed": false,
+      "reason": "Wine CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netcoreapp2.1-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable",
+      "toId": "netcoreapp2.1-ref",
+      "allowed": false,
+      "reason": "legacy CoreCLR reference package is not installed in a worker image"
+    },
+    {
+      "id": "roslyn-main-netcoreapp2.1-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-main",
+      "toId": "netcoreapp2.1-ref",
+      "allowed": false,
+      "reason": "legacy CoreCLR reference package is not installed in a worker image"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-wine-dotnet-core-2.1-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "wine-dotnet-core-2.1-linux-x64",
+      "allowed": false,
+      "reason": "Wine CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netcoreapp2.2-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable",
+      "toId": "netcoreapp2.2-ref",
+      "allowed": false,
+      "reason": "legacy CoreCLR reference package is not installed in a worker image"
+    },
+    {
+      "id": "roslyn-main-netcoreapp2.2-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-main",
+      "toId": "netcoreapp2.2-ref",
+      "allowed": false,
+      "reason": "legacy CoreCLR reference package is not installed in a worker image"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-wine-dotnet-core-2.2-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "wine-dotnet-core-2.2-linux-x64",
+      "allowed": false,
+      "reason": "Wine CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netcoreapp3.0-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable",
+      "toId": "netcoreapp3.0-ref",
+      "allowed": false,
+      "reason": "legacy CoreCLR reference package is not installed in a worker image"
+    },
+    {
+      "id": "roslyn-main-netcoreapp3.0-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-main",
+      "toId": "netcoreapp3.0-ref",
+      "allowed": false,
+      "reason": "legacy CoreCLR reference package is not installed in a worker image"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-wine-dotnet-core-3.0-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "wine-dotnet-core-3.0-linux-x64",
+      "allowed": false,
+      "reason": "Wine CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netcoreapp3.1-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable",
+      "toId": "netcoreapp3.1-ref",
+      "allowed": false,
+      "reason": "legacy CoreCLR reference package is not installed in a worker image"
+    },
+    {
+      "id": "roslyn-main-netcoreapp3.1-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-main",
+      "toId": "netcoreapp3.1-ref",
+      "allowed": false,
+      "reason": "legacy CoreCLR reference package is not installed in a worker image"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-wine-dotnet-core-3.1-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "wine-dotnet-core-3.1-linux-x64",
+      "allowed": false,
+      "reason": "Wine CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-net5-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable",
+      "toId": "net5-ref",
+      "allowed": false,
+      "reason": "runtime matrix candidate has not passed worker image preflight"
+    },
+    {
+      "id": "roslyn-main-net5-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-main",
+      "toId": "net5-ref",
+      "allowed": false,
+      "reason": "runtime matrix candidate has not passed worker image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-wine-dotnet-5-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "wine-dotnet-5-linux-x64",
+      "allowed": false,
+      "reason": "Wine CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-net6-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable",
+      "toId": "net6-ref",
+      "allowed": false,
+      "reason": "runtime matrix candidate has not passed worker image preflight"
+    },
+    {
+      "id": "roslyn-main-net6-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-main",
+      "toId": "net6-ref",
+      "allowed": false,
+      "reason": "runtime matrix candidate has not passed worker image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-wine-dotnet-6-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "wine-dotnet-6-linux-x64",
+      "allowed": false,
+      "reason": "Wine CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-net7-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable",
+      "toId": "net7-ref",
+      "allowed": false,
+      "reason": "runtime matrix candidate has not passed worker image preflight"
+    },
+    {
+      "id": "roslyn-main-net7-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-main",
+      "toId": "net7-ref",
+      "allowed": false,
+      "reason": "runtime matrix candidate has not passed worker image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-wine-dotnet-7-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "wine-dotnet-7-linux-x64",
+      "allowed": false,
+      "reason": "Wine CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-net8-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable",
+      "toId": "net8-ref",
+      "allowed": false,
+      "reason": "runtime matrix candidate has not passed worker image preflight"
+    },
+    {
+      "id": "roslyn-main-net8-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-main",
+      "toId": "net8-ref",
+      "allowed": false,
+      "reason": "runtime matrix candidate has not passed worker image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-wine-dotnet-8-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "wine-dotnet-8-linux-x64",
+      "allowed": false,
+      "reason": "Wine CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-net9-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable",
+      "toId": "net9-ref",
+      "allowed": false,
+      "reason": "runtime matrix candidate has not passed worker image preflight"
+    },
+    {
+      "id": "roslyn-main-net9-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-main",
+      "toId": "net9-ref",
+      "allowed": false,
+      "reason": "runtime matrix candidate has not passed worker image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-wine-dotnet-9-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "wine-dotnet-9-linux-x64",
+      "allowed": false,
+      "reason": "Wine CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-wine-dotnet-10-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "wine-dotnet-10-linux-x64",
+      "allowed": false,
+      "reason": "Wine CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-wine-dotnet-11-preview-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "wine-dotnet-11-preview-linux-x64",
+      "allowed": false,
+      "reason": "Wine CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "dotnet-framework-managed-pe-v1-wine-netfx20-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-netfx20-linux-x64",
+      "allowed": false,
+      "reason": "Framework Wine prefix is operator-supplied and has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netfx48-netfx20-managed-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable-netfx48",
+      "toId": "netfx20-managed-ref",
+      "allowed": false,
+      "reason": "Framework reference package or Wine prefix is not installed"
+    },
+    {
+      "id": "dotnet-framework-managed-pe-v1-wine-netfx30-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-netfx30-linux-x64",
+      "allowed": false,
+      "reason": "Framework Wine prefix is operator-supplied and has not passed product-image preflight"
+    },
+    {
+      "id": "dotnet-framework-managed-pe-v1-wine-netfx35-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-netfx35-linux-x64",
+      "allowed": false,
+      "reason": "Framework Wine prefix is operator-supplied and has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netfx48-netfx35-managed-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable-netfx48",
+      "toId": "netfx35-managed-ref",
+      "allowed": false,
+      "reason": "Framework reference package or Wine prefix is not installed"
+    },
+    {
+      "id": "dotnet-framework-managed-pe-v1-wine-netfx40-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-netfx40-linux-x64",
+      "allowed": false,
+      "reason": "Framework Wine prefix is operator-supplied and has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netfx48-netfx40-managed-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable-netfx48",
+      "toId": "netfx40-managed-ref",
+      "allowed": false,
+      "reason": "Framework reference package or Wine prefix is not installed"
+    },
+    {
+      "id": "dotnet-framework-managed-pe-v1-wine-netfx45-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-netfx45-linux-x64",
+      "allowed": false,
+      "reason": "Framework Wine prefix is operator-supplied and has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netfx48-netfx45-managed-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable-netfx48",
+      "toId": "netfx45-managed-ref",
+      "allowed": false,
+      "reason": "Framework reference package or Wine prefix is not installed"
+    },
+    {
+      "id": "dotnet-framework-managed-pe-v1-wine-netfx451-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-netfx451-linux-x64",
+      "allowed": false,
+      "reason": "Framework Wine prefix is operator-supplied and has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netfx48-netfx451-managed-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable-netfx48",
+      "toId": "netfx451-managed-ref",
+      "allowed": false,
+      "reason": "Framework reference package or Wine prefix is not installed"
+    },
+    {
+      "id": "dotnet-framework-managed-pe-v1-wine-netfx452-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-netfx452-linux-x64",
+      "allowed": false,
+      "reason": "Framework Wine prefix is operator-supplied and has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netfx48-netfx452-managed-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable-netfx48",
+      "toId": "netfx452-managed-ref",
+      "allowed": false,
+      "reason": "Framework reference package or Wine prefix is not installed"
+    },
+    {
+      "id": "dotnet-framework-managed-pe-v1-wine-netfx46-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-netfx46-linux-x64",
+      "allowed": false,
+      "reason": "Framework Wine prefix is operator-supplied and has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netfx48-netfx46-managed-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable-netfx48",
+      "toId": "netfx46-managed-ref",
+      "allowed": false,
+      "reason": "Framework reference package or Wine prefix is not installed"
+    },
+    {
+      "id": "dotnet-framework-managed-pe-v1-wine-netfx461-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-netfx461-linux-x64",
+      "allowed": false,
+      "reason": "Framework Wine prefix is operator-supplied and has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netfx48-netfx461-managed-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable-netfx48",
+      "toId": "netfx461-managed-ref",
+      "allowed": false,
+      "reason": "Framework reference package or Wine prefix is not installed"
+    },
+    {
+      "id": "dotnet-framework-managed-pe-v1-wine-netfx462-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-netfx462-linux-x64",
+      "allowed": false,
+      "reason": "Framework Wine prefix is operator-supplied and has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netfx48-netfx462-managed-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable-netfx48",
+      "toId": "netfx462-managed-ref",
+      "allowed": false,
+      "reason": "Framework reference package or Wine prefix is not installed"
+    },
+    {
+      "id": "dotnet-framework-managed-pe-v1-wine-netfx47-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-netfx47-linux-x64",
+      "allowed": false,
+      "reason": "Framework Wine prefix is operator-supplied and has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netfx48-netfx47-managed-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable-netfx48",
+      "toId": "netfx47-managed-ref",
+      "allowed": false,
+      "reason": "Framework reference package or Wine prefix is not installed"
+    },
+    {
+      "id": "dotnet-framework-managed-pe-v1-wine-netfx471-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-netfx471-linux-x64",
+      "allowed": false,
+      "reason": "Framework Wine prefix is operator-supplied and has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netfx48-netfx471-managed-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable-netfx48",
+      "toId": "netfx471-managed-ref",
+      "allowed": false,
+      "reason": "Framework reference package or Wine prefix is not installed"
+    },
+    {
+      "id": "dotnet-framework-managed-pe-v1-wine-netfx472-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "wine-netfx472-linux-x64",
+      "allowed": false,
+      "reason": "Framework Wine prefix is operator-supplied and has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netfx48-netfx472-managed-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable-netfx48",
+      "toId": "netfx472-managed-ref",
+      "allowed": false,
+      "reason": "Framework reference package or Wine prefix is not installed"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-dotnet-core-2.0-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "dotnet-core-2.0-linux-x64",
+      "allowed": false,
+      "reason": "Linux CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-dotnet-core-2.1-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "dotnet-core-2.1-linux-x64",
+      "allowed": false,
+      "reason": "Linux CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-dotnet-core-2.2-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "dotnet-core-2.2-linux-x64",
+      "allowed": false,
+      "reason": "Linux CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-dotnet-core-3.0-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "dotnet-core-3.0-linux-x64",
+      "allowed": false,
+      "reason": "Linux CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-dotnet-core-3.1-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "dotnet-core-3.1-linux-x64",
+      "allowed": false,
+      "reason": "Linux CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-dotnet-5-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "dotnet-5-linux-x64",
+      "allowed": false,
+      "reason": "Linux CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-dotnet-6-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "dotnet-6-linux-x64",
+      "allowed": false,
+      "reason": "Linux CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-dotnet-7-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "dotnet-7-linux-x64",
+      "allowed": false,
+      "reason": "Linux CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-dotnet-8-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "dotnet-8-linux-x64",
+      "allowed": false,
+      "reason": "Linux CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "dotnet-managed-pe-v1-dotnet-9-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-managed-pe-v1",
+      "toId": "dotnet-9-linux-x64",
+      "allowed": false,
+      "reason": "Linux CoreCLR candidate has not passed product-image preflight"
+    },
+    {
+      "id": "dotnet-framework-managed-pe-v1-mono-6.12-linux-x64",
+      "kind": "artifact-runtime",
+      "fromId": "dotnet-framework-managed-pe-v1",
+      "toId": "mono-6.12-linux-x64",
+      "allowed": false,
+      "reason": "Mono candidate has not passed product-image preflight"
+    },
+    {
+      "id": "roslyn-stable-netfx48-netfx30-managed-ref",
+      "kind": "toolchain-reference-set",
+      "fromId": "roslyn-stable-netfx48",
+      "toId": "netfx30-managed-ref",
+      "allowed": false,
+      "reason": "Framework reference package or Wine prefix is not installed"
+    }
+  ],
+  "presets": [
+    {
+      "id": "csharp-stable-net10",
+      "displayName": "C# / Stable / .NET 10",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net10-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-10-linux-x64",
+      "legacyAliases": [
+        "main"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "csharp-stable-net11-preview",
+      "displayName": "C# / Stable / .NET 11 Preview",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net11-preview-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-11-preview-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "csharp-stable-netfx48",
+      "displayName": "C# / Stable / .NET Framework 4.8",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx48-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx48-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "csharp-main-net11-preview",
+      "displayName": "C# / Roslyn Main / .NET 11 Preview",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-main",
+      "referenceSetId": "net11-preview-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-11-preview-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "vb-stable-net10",
+      "displayName": "VB / Stable / .NET 10",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net10-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-10-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "vb-stable-net11-preview",
+      "displayName": "VB / Stable / .NET 11 Preview",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net11-preview-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-11-preview-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "vb-stable-netfx48",
+      "displayName": "VB / Stable / .NET Framework 4.8",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx48-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx48-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "vb-main-net11-preview",
+      "displayName": "VB / Roslyn Main / .NET 11 Preview",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-main",
+      "referenceSetId": "net11-preview-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-11-preview-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "fsharp-stable-net10",
+      "displayName": "F# / Stable / .NET 10",
+      "languageId": "fsharp",
+      "toolchainId": "fsharp-stable",
+      "referenceSetId": "net10-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-10-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "fsharp-stable-net11-preview",
+      "displayName": "F# / Stable / .NET 11 Preview",
+      "languageId": "fsharp",
+      "toolchainId": "fsharp-stable",
+      "referenceSetId": "net11-preview-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-11-preview-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "gsharp-stable-net10",
+      "displayName": "G# / Stable / .NET 10",
+      "languageId": "gsharp",
+      "toolchainId": "gsharp-stable",
+      "referenceSetId": "net10-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-10-linux-x64",
+      "legacyAliases": [
+        "gsharp"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "gsharp-legacy-0.3.8-net10",
+      "displayName": "G# / Legacy 0.3.8 / .NET 10",
+      "languageId": "gsharp",
+      "toolchainId": "gsharp-legacy-0.3.8",
+      "referenceSetId": "net10-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-10-linux-x64",
+      "legacyAliases": [],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "php-peachpie-net10",
+      "displayName": "PHP / PeachPie / .NET 10",
+      "languageId": "php",
+      "toolchainId": "peachpie-stable",
+      "referenceSetId": "net10-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-10-linux-x64",
+      "legacyAliases": [
+        "php",
+        "peachpie"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "il-mobius-net10",
+      "displayName": "IL / Mobius / .NET 10",
+      "languageId": "il",
+      "toolchainId": "mobius-ilasm-stable",
+      "referenceSetId": "net10-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-10-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "il-mobius-net11-preview",
+      "displayName": "IL / Mobius / .NET 11 Preview",
+      "languageId": "il",
+      "toolchainId": "mobius-ilasm-stable",
+      "referenceSetId": "net11-preview-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-11-preview-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "minilang-net10",
+      "displayName": "MiniLang / SDK Sample / .NET 10",
+      "languageId": "minilang",
+      "toolchainId": "minilang-stable",
+      "referenceSetId": "net10-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-10-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "minilang-net11-preview",
+      "displayName": "MiniLang / SDK Sample / .NET 11 Preview",
+      "languageId": "minilang",
+      "toolchainId": "minilang-stable",
+      "referenceSetId": "net11-preview-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-11-preview-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "csharp-const-generics",
+      "displayName": "C# / Const Generics",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-const-generics",
+      "referenceSetId": "const-generics-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "const-generics-linux-x64",
+      "legacyAliases": [
+        "const-generics"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "cppcli-msvc-netfx48",
+      "displayName": "C\u002B\u002B/CLI / MSVC / .NET Framework 4.8",
+      "languageId": "cppcli",
+      "toolchainId": "msvc-cppcli-netfx48",
+      "referenceSetId": "netfx48-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx48-linux-x64",
+      "legacyAliases": [
+        "cpp-cli"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "jsharp-vjc-net20",
+      "displayName": "J# / Visual J# 2.0 / CLR 2.0",
+      "languageId": "jsharp",
+      "toolchainId": "vjc-jsharp20",
+      "referenceSetId": "jsharp20-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-jsharp20-linux-x64",
+      "legacyAliases": [
+        "jsharp"
+      ],
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      }
+    },
+    {
+      "id": "csharp-roslyn-stable-dotnet-core-2.0",
+      "displayName": "C# / 2.0.9",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "netcoreapp2.0-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-core-2.0-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2018-10-01",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-dotnet-core-2.0",
+      "displayName": "Visual Basic / 2.0.9",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "netcoreapp2.0-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-core-2.0-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2018-10-01",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-dotnet-core-2.1",
+      "displayName": "C# / 2.1.30",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "netcoreapp2.1-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-core-2.1-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2021-08-21",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-dotnet-core-2.1",
+      "displayName": "Visual Basic / 2.1.30",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "netcoreapp2.1-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-core-2.1-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2021-08-21",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-dotnet-core-2.2",
+      "displayName": "C# / 2.2.8",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "netcoreapp2.2-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-core-2.2-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2019-12-23",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-dotnet-core-2.2",
+      "displayName": "Visual Basic / 2.2.8",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "netcoreapp2.2-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-core-2.2-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2019-12-23",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-dotnet-core-3.0",
+      "displayName": "C# / 3.0.3",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "netcoreapp3.0-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-core-3.0-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2020-03-03",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-dotnet-core-3.0",
+      "displayName": "Visual Basic / 3.0.3",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "netcoreapp3.0-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-core-3.0-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2020-03-03",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-dotnet-core-3.1",
+      "displayName": "C# / 3.1.32",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "netcoreapp3.1-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-core-3.1-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-12-13",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-dotnet-core-3.1",
+      "displayName": "Visual Basic / 3.1.32",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "netcoreapp3.1-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-core-3.1-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-12-13",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-dotnet-5",
+      "displayName": "C# / 5.0.17",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net5-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-5-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-05-10",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-dotnet-5",
+      "displayName": "Visual Basic / 5.0.17",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net5-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-5-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-05-10",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-dotnet-6",
+      "displayName": "C# / 6.0.36",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net6-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-6-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2024-11-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-dotnet-6",
+      "displayName": "Visual Basic / 6.0.36",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net6-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-6-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2024-11-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-dotnet-7",
+      "displayName": "C# / 7.0.20",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net7-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-7-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2024-05-14",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-dotnet-7",
+      "displayName": "Visual Basic / 7.0.20",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net7-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-7-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2024-05-14",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-dotnet-8",
+      "displayName": "C# / 8.0.29",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net8-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-8-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "maintenance",
+      "supportEndDate": "2026-11-10",
+      "visibility": "visible"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-dotnet-8",
+      "displayName": "Visual Basic / 8.0.29",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net8-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-8-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "maintenance",
+      "supportEndDate": "2026-11-10",
+      "visibility": "visible"
+    },
+    {
+      "id": "csharp-roslyn-stable-dotnet-9",
+      "displayName": "C# / 9.0.18",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net9-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-9-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "maintenance",
+      "supportEndDate": "2026-11-10",
+      "visibility": "visible"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-dotnet-9",
+      "displayName": "Visual Basic / 9.0.18",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net9-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-9-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "maintenance",
+      "supportEndDate": "2026-11-10",
+      "visibility": "visible"
+    },
+    {
+      "id": "csharp-roslyn-stable-dotnet-10",
+      "displayName": "C# / 10.0.10",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net10-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-10-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "active",
+      "supportEndDate": "2028-11-14",
+      "visibility": "visible"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-dotnet-10",
+      "displayName": "Visual Basic / 10.0.10",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net10-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-10-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "active",
+      "supportEndDate": "2028-11-14",
+      "visibility": "visible"
+    },
+    {
+      "id": "csharp-roslyn-stable-dotnet-11-preview",
+      "displayName": "C# / 11.0.0-preview.6.26359.118",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net11-preview-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-11-preview-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "preview",
+      "visibility": "visible"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-dotnet-11-preview",
+      "displayName": "Visual Basic / 11.0.0-preview.6.26359.118",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable",
+      "referenceSetId": "net11-preview-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "dotnet-11-preview-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "preview",
+      "visibility": "visible"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-netfx20",
+      "displayName": "C# / 2.0",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx20-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx20-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2011-07-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-netfx20",
+      "displayName": "Visual Basic / 2.0",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx20-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx20-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2011-07-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-netfx35",
+      "displayName": "C# / 3.5",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx35-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx35-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "maintenance",
+      "supportEndDate": "2029-01-09",
+      "visibility": "visible"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-netfx35",
+      "displayName": "Visual Basic / 3.5",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx35-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx35-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "maintenance",
+      "supportEndDate": "2029-01-09",
+      "visibility": "visible"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-netfx40",
+      "displayName": "C# / 4.0",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx40-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx40-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2016-01-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-netfx40",
+      "displayName": "Visual Basic / 4.0",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx40-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx40-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2016-01-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-netfx45",
+      "displayName": "C# / 4.5",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx45-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx45-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2016-01-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-netfx45",
+      "displayName": "Visual Basic / 4.5",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx45-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx45-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2016-01-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-netfx451",
+      "displayName": "C# / 4.5.1",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx451-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx451-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2016-01-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-netfx451",
+      "displayName": "Visual Basic / 4.5.1",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx451-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx451-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2016-01-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-netfx452",
+      "displayName": "C# / 4.5.2",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx452-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx452-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-04-26",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-netfx452",
+      "displayName": "Visual Basic / 4.5.2",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx452-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx452-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-04-26",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-netfx46",
+      "displayName": "C# / 4.6",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx46-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx46-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-04-26",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-netfx46",
+      "displayName": "Visual Basic / 4.6",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx46-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx46-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-04-26",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-netfx461",
+      "displayName": "C# / 4.6.1",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx461-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx461-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-04-26",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-netfx461",
+      "displayName": "Visual Basic / 4.6.1",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx461-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx461-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2022-04-26",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-netfx462",
+      "displayName": "C# / 4.6.2",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx462-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx462-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-netfx462",
+      "displayName": "Visual Basic / 4.6.2",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx462-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx462-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-netfx47",
+      "displayName": "C# / 4.7",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx47-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx47-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-netfx47",
+      "displayName": "Visual Basic / 4.7",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx47-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx47-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-netfx471",
+      "displayName": "C# / 4.7.1",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx471-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx471-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-netfx471",
+      "displayName": "Visual Basic / 4.7.1",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx471-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx471-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-netfx472",
+      "displayName": "C# / 4.7.2",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx472-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx472-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-netfx472",
+      "displayName": "Visual Basic / 4.7.2",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx472-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx472-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-netfx48",
+      "displayName": "C# / 4.8",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx48-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx48-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-netfx48",
+      "displayName": "Visual Basic / 4.8",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx48-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx48-linux-x64",
+      "availability": {
+        "installed": true,
+        "health": "healthy"
+      },
+      "supportStatus": "maintenance",
+      "visibility": "visible"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-mono-6.12-linux-x64",
+      "displayName": "C# / 6.12.0.182",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx48-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "mono-6.12-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-mono-6.12-linux-x64",
+      "displayName": "Visual Basic / 6.12.0.182",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx48-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "mono-6.12-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "visibility": "hidden"
+    },
+    {
+      "id": "csharp-roslyn-stable-netfx48-netfx30",
+      "displayName": "C# / 3.0",
+      "languageId": "csharp",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx30-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx30-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2011-07-12",
+      "visibility": "hidden"
+    },
+    {
+      "id": "visual-basic-roslyn-stable-netfx48-netfx30",
+      "displayName": "Visual Basic / 3.0",
+      "languageId": "visual-basic",
+      "toolchainId": "roslyn-stable-netfx48",
+      "referenceSetId": "netfx30-managed-ref",
+      "defaultOutputId": "decompiled-csharp",
+      "defaultRuntimeId": "wine-netfx30-linux-x64",
+      "availability": {
+        "installed": false,
+        "health": "not-installed",
+        "reason": "The runtime matrix candidate has not passed product preflight."
+      },
+      "supportStatus": "legacy",
+      "supportEndDate": "2011-07-12",
+      "visibility": "hidden"
+    }
+  ]
+}

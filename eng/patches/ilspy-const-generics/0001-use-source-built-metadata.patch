@@ -1,0 +1,100 @@
+diff --git a/ICSharpCode.Decompiler/ICSharpCode.Decompiler.csproj b/ICSharpCode.Decompiler/ICSharpCode.Decompiler.csproj
+index f809a98f..2b2f53d3 100644
+--- a/ICSharpCode.Decompiler/ICSharpCode.Decompiler.csproj
++++ b/ICSharpCode.Decompiler/ICSharpCode.Decompiler.csproj
+@@ -84,7 +84,8 @@
+       <PrivateAssets>all</PrivateAssets>
+       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+     </PackageReference>
+-    <PackageReference Include="System.Collections.Immutable" Version="9.0.0" />
++    <PackageReference Include="System.Memory" Version="4.5.5" />
++    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
+     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
+       <PrivateAssets>all</PrivateAssets>
+       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+@@ -741,8 +742,24 @@
+ 
+   <ItemGroup>
+     <Reference Include="System.Reflection.Metadata">
+-      <HintPath>Library/System.Reflection.Metadata.dll</HintPath>
++      <HintPath>$(ConstGenericsMetadataAssemblyPath)</HintPath>
++      <Private>true</Private>
++    </Reference>
++    <Reference Include="System.Collections.Immutable">
++      <HintPath>$(ConstGenericsImmutableAssemblyPath)</HintPath>
++      <Private>true</Private>
+     </Reference>
+   </ItemGroup>
+ 
++  <Target Name="ValidateConstGenericsMetadata" BeforeTargets="ResolveReferences">
++    <Error Condition="'$(ConstGenericsMetadataAssemblyPath)' == ''"
++           Text="ConstGenericsMetadataAssemblyPath is required." />
++    <Error Condition="!Exists('$(ConstGenericsMetadataAssemblyPath)')"
++           Text="The source-built ConstGenerics System.Reflection.Metadata assembly was not found." />
++    <Error Condition="'$(ConstGenericsImmutableAssemblyPath)' == ''"
++           Text="ConstGenericsImmutableAssemblyPath is required." />
++    <Error Condition="!Exists('$(ConstGenericsImmutableAssemblyPath)')"
++           Text="The source-built ConstGenerics System.Collections.Immutable assembly was not found." />
++  </Target>
++
+ </Project>
+diff --git a/ICSharpCode.Decompiler/packages.lock.json b/ICSharpCode.Decompiler/packages.lock.json
+index 64746c5..5ad3d32 100644
+--- a/ICSharpCode.Decompiler/packages.lock.json
++++ b/ICSharpCode.Decompiler/packages.lock.json
+@@ -27,16 +27,23 @@
+           "Microsoft.NETCore.Platforms": "1.1.0"
+         }
+       },
+-      "System.Collections.Immutable": {
++      "System.Memory": {
+         "type": "Direct",
+-        "requested": "[9.0.0, )",
+-        "resolved": "9.0.0",
+-        "contentHash": "QhkXUl2gNrQtvPmtBTQHb0YsUrDiDQ2QS09YbtTTiSjGcf7NBqtYbrG/BE06zcBPCKEwQGzIv13IVdXNOSub2w==",
++        "requested": "[4.5.5, )",
++        "resolved": "4.5.5",
++        "contentHash": "XIWiDvKPXaTveaB7HVganDlOCRoj03l+jrwNvcge/t8vhGYKvqV+dMv6G4SAX2NoNmN0wZfVPTAlFwZcZvVOUw==",
+         "dependencies": {
+-          "System.Memory": "4.5.5",
+-          "System.Runtime.CompilerServices.Unsafe": "6.0.0"
++          "System.Buffers": "4.5.1",
++          "System.Numerics.Vectors": "4.4.0",
++          "System.Runtime.CompilerServices.Unsafe": "4.5.3"
+         }
+       },
++      "System.Runtime.CompilerServices.Unsafe": {
++        "type": "Direct",
++        "requested": "[6.0.0, )",
++        "resolved": "6.0.0",
++        "contentHash": "/iUeP3tq1S0XdNNoMz5C9twLSrM/TH+qElHkXWaPvuNOt+99G75NrV0OS2EqHx5wMN7popYjpc8oTjC1y16DLg=="
++      },
+       "TunnelVisionLabs.ReferenceAssemblyAnnotator": {
+         "type": "Direct",
+         "requested": "[1.0.0-alpha.160, )",
+@@ -63,25 +70,10 @@
+         "resolved": "4.5.1",
+         "contentHash": "Rw7ijyl1qqRS0YQD/WycNst8hUUMgrMH4FCn1nNm27M4VxchZ1js3fVjQaANHO5f3sN4isvP4a+Met9Y4YomAg=="
+       },
+-      "System.Memory": {
+-        "type": "Transitive",
+-        "resolved": "4.5.5",
+-        "contentHash": "XIWiDvKPXaTveaB7HVganDlOCRoj03l+jrwNvcge/t8vhGYKvqV+dMv6G4SAX2NoNmN0wZfVPTAlFwZcZvVOUw==",
+-        "dependencies": {
+-          "System.Buffers": "4.5.1",
+-          "System.Numerics.Vectors": "4.4.0",
+-          "System.Runtime.CompilerServices.Unsafe": "4.5.3"
+-        }
+-      },
+       "System.Numerics.Vectors": {
+         "type": "Transitive",
+         "resolved": "4.4.0",
+         "contentHash": "UiLzLW+Lw6HLed1Hcg+8jSRttrbuXv7DANVj0DkL9g6EnnzbL75EB7EWsw5uRbhxd/4YdG8li5XizGWepmG3PQ=="
+-      },
+-      "System.Runtime.CompilerServices.Unsafe": {
+-        "type": "Transitive",
+-        "resolved": "6.0.0",
+-        "contentHash": "/iUeP3tq1S0XdNNoMz5C9twLSrM/TH+qElHkXWaPvuNOt+99G75NrV0OS2EqHx5wMN7popYjpc8oTjC1y16DLg=="
+       }
+     },
+     ".NETStandard,Version=v2.0/linux-x64": {}

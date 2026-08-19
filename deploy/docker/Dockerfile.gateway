@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1.7
+
+ARG NODE_IMAGE
+ARG SDK_IMAGE
+ARG ASPNET_IMAGE
+
+FROM ${NODE_IMAGE} AS frontend
+WORKDIR /source/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN --mount=type=cache,id=sharplabnext-frontend-npm,target=/root/.npm \
+    npm ci --no-audit --no-fund --prefer-offline \
+      --fetch-retries=5 \
+      --fetch-retry-mintimeout=2000 \
+      --fetch-retry-maxtimeout=30000 \
+      --fetch-timeout=300000
+COPY frontend/ ./
+RUN npm run lint && npm run build
+
+FROM ${SDK_IMAGE} AS publish
+ARG CONFIGURATION=Release
+WORKDIR /source
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY src/ ./src/
+COPY profiles/ ./profiles/
+RUN dotnet restore src/Gateway/SharpLabNext.Gateway/SharpLabNext.Gateway.csproj --locked-mode
+RUN dotnet publish src/Gateway/SharpLabNext.Gateway/SharpLabNext.Gateway.csproj \
+    --configuration ${CONFIGURATION} \
+    --no-restore \
+    --output /app/publish \
+    /p:UseAppHost=false
+COPY --from=frontend /source/frontend/dist/ /app/publish/wwwroot/
+
+FROM ${ASPNET_IMAGE} AS final
+ARG VERSION
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.title="SharpLabNext Gateway" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext"
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:8080 \
+    ProfileUpdates__StatusPath=/app/config/profile-update-status.json \
+    DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    HOME=/tmp
+RUN mkdir -p /app/config
+COPY --from=publish --chown=1654:1654 /app/publish/ ./
+USER 1654:1654
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "SharpLabNext.Gateway.dll"]

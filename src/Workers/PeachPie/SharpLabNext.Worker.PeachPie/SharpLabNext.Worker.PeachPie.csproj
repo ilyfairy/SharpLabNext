@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Infrastructure\SharpLabNext.Observability\SharpLabNext.Observability.csproj" />
+    <ProjectReference Include="..\..\..\WorkerHost\SharpLabNext.LanguageWorker.Sdk\SharpLabNext.LanguageWorker.Sdk.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageDownload Include="Peachpie.CodeAnalysis" Version="[$(PeachPieVersion)]" />
+    <PackageReference Include="Devsense.Php.Parser" />
+    <PackageReference Include="Devsense.PHP.Phar" />
+    <PackageReference Include="Peachpie.Library" />
+    <PackageReference Include="Peachpie.Microsoft.CodeAnalysis" />
+    <PackageReference Include="Peachpie.Runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Peachpie.CodeAnalysis">
+      <HintPath>$(NuGetPackageRoot)peachpie.codeanalysis/$(PeachPieVersion)/lib/net6.0/Peachpie.CodeAnalysis.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SharpLabNext.Worker.PeachPie</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Update="language-worker.json" CopyToOutputDirectory="PreserveNewest" />
+    <InternalsVisibleTo Include="SharpLabNext.Worker.PeachPie.Tests" />
+  </ItemGroup>
+
+</Project>

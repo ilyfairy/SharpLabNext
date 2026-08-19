@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Contracts\SharpLabNext.Contracts\SharpLabNext.Contracts.csproj" />
+    <ProjectReference Include="..\..\Contracts\SharpLabNext.Artifacts.Contracts\SharpLabNext.Artifacts.Contracts.csproj" />
+    <InternalsVisibleTo Include="SharpLabNext.UnitTests" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsSharpLabNextPublicPackage>true</IsSharpLabNextPublicPackage>
+    <PackageId>SharpLabNext.ArtifactStore.Client</PackageId>
+    <Description>Bounded streaming client and canonical artifact identity helpers for SharpLabNext workers.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

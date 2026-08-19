@@ -1,0 +1,11 @@
+@SharpLabNext.ArtifactStore_HostAddress = http://localhost:5260
+
+GET {{SharpLabNext.ArtifactStore_HostAddress}}/health/live
+Accept: application/json
+
+###
+
+GET {{SharpLabNext.ArtifactStore_HostAddress}}/health/ready
+Accept: application/json
+
+###

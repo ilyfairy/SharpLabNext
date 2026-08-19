@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net8.0": {
+      "sharplabnext.contracts": {
+        "type": "Project"
+      },
+      "sharplabnext.worker.artifacts.constgenerics.protocol": {
+        "type": "Project",
+        "dependencies": {
+          "SharpLabNext.Contracts": "[0.1.0, )"
+        }
+      }
+    }
+  }
+}

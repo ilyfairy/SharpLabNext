@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "workerId": "artifacts-const-generics",
+  "protocolVersion": "1.0",
+  "capabilities": [
+    "il",
+    "decompiled-csharp",
+    "il-verify"
+  ],
+  "acceptedArtifactFormats": [
+    "dotnet-managed-pe-v1"
+  ],
+  "producedArtifactFormats": [
+    "il-text-v1",
+    "decompiled-csharp-v1",
+    "il-verification-v1"
+  ],
+  "transformIds": [],
+  "renderOutputIds": [
+    "il",
+    "decompiled-csharp"
+  ],
+  "verificationProfileIds": [
+    "il-verify"
+  ],
+  "limits": {
+    "maximumInputArtifactBytes": 67108864,
+    "maximumOutputArtifactBytes": 8388608,
+    "maximumConcurrentOperations": 2,
+    "maximumOperationMilliseconds": 15000,
+    "maximumRetainedOperations": 256,
+    "maximumEventsPerOperation": 16
+  }
+}

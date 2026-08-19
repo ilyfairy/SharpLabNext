@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 2,
+  "workerId": "vjc-jsharp20",
+  "languageId": "jsharp",
+  "toolchainIds": ["vjc-jsharp20"],
+  "protocolVersion": "1.0",
+  "capabilities": [
+    "artifact",
+    "compile-check"
+  ],
+  "producedArtifactFormats": [
+    "dotnet-framework-managed-pe-v1"
+  ],
+  "supportedReferenceSetIds": [
+    "jsharp20-ref"
+  ],
+  "limits": {
+    "maximumFiles": 1,
+    "maximumSourceUtf8Bytes": 1048576,
+    "maximumArtifactBytes": 16777216,
+    "maximumConcurrentBuilds": 1,
+    "maximumBuildMilliseconds": 20000,
+    "maximumLspMessageBytes": 1048576
+  }
+}

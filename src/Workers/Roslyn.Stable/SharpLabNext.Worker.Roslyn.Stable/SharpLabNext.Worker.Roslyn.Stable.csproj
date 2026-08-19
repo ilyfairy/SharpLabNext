@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\ArtifactStore\SharpLabNext.ArtifactStore.Client\SharpLabNext.ArtifactStore.Client.csproj" />
+    <ProjectReference Include="..\..\..\Contracts\SharpLabNext.Artifacts.Contracts\SharpLabNext.Artifacts.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\RuntimeApi\SharpLabNext.Runtime\SharpLabNext.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\WorkerHost\SharpLabNext.WorkerHost\SharpLabNext.WorkerHost.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="[$(RoslynStableVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" VersionOverride="[$(RoslynStableVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" VersionOverride="[$(RoslynStableVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic" VersionOverride="[$(RoslynStableVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic.Features" VersionOverride="[$(RoslynStableVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic.Workspaces" VersionOverride="[$(RoslynStableVersion)]" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpLabNext.Worker.Roslyn.Stable.Tests" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <Import Project="..\..\Roslyn.Shared\SharpLabNext.Worker.Roslyn.Shared\SharpLabNext.Worker.Roslyn.Shared.projitems" />
+
+</Project>

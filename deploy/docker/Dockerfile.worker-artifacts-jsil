@@ -1,0 +1,243 @@
+# syntax=docker/dockerfile:1.7
+
+ARG SDK_IMAGE
+ARG ASPNET_IMAGE
+ARG MONO_IMAGE
+ARG JSIL_VERSION
+ARG JSIL_COMMIT
+ARG JSIL_ARCHIVE_URL
+ARG JSIL_ARCHIVE_SHA256
+ARG JSIL_META_COMMIT
+ARG JSIL_META_ARCHIVE_URL
+ARG JSIL_META_ARCHIVE_SHA256
+ARG JSIL_ILSPY_COMMIT
+ARG JSIL_ILSPY_ARCHIVE_URL
+ARG JSIL_ILSPY_ARCHIVE_SHA256
+ARG JSIL_NREFACTORY_COMMIT
+ARG JSIL_NREFACTORY_ARCHIVE_URL
+ARG JSIL_NREFACTORY_ARCHIVE_SHA256
+ARG JSIL_CECIL_COMMIT
+ARG JSIL_CECIL_ARCHIVE_URL
+ARG JSIL_CECIL_ARCHIVE_SHA256
+
+FROM ${SDK_IMAGE} AS jsil-source
+ARG JSIL_COMMIT
+ARG JSIL_ARCHIVE_URL
+ARG JSIL_ARCHIVE_SHA256
+ARG JSIL_META_COMMIT
+ARG JSIL_META_ARCHIVE_URL
+ARG JSIL_META_ARCHIVE_SHA256
+ARG JSIL_ILSPY_COMMIT
+ARG JSIL_ILSPY_ARCHIVE_URL
+ARG JSIL_ILSPY_ARCHIVE_SHA256
+ARG JSIL_NREFACTORY_COMMIT
+ARG JSIL_NREFACTORY_ARCHIVE_URL
+ARG JSIL_NREFACTORY_ARCHIVE_SHA256
+ARG JSIL_CECIL_COMMIT
+ARG JSIL_CECIL_ARCHIVE_URL
+ARG JSIL_CECIL_ARCHIVE_SHA256
+WORKDIR /jsil-source
+RUN curl --fail --location --retry 3 --retry-all-errors --output /tmp/jsil.tar.gz "${JSIL_ARCHIVE_URL}" \
+    && echo "${JSIL_ARCHIVE_SHA256}  /tmp/jsil.tar.gz" | sha256sum --check --strict \
+    && tar --extract --gzip --file /tmp/jsil.tar.gz --strip-components=1 \
+    && mkdir -p Meta Upstream/ILSpy/NRefactory Upstream/ILSpy/cecil \
+    && curl --fail --location --retry 3 --retry-all-errors --output /tmp/jsil-meta.tar.gz "${JSIL_META_ARCHIVE_URL}" \
+    && echo "${JSIL_META_ARCHIVE_SHA256}  /tmp/jsil-meta.tar.gz" | sha256sum --check --strict \
+    && tar --extract --gzip --file /tmp/jsil-meta.tar.gz --directory Meta --strip-components=1 \
+    && curl --fail --location --retry 3 --retry-all-errors --output /tmp/jsil-ilspy.tar.gz "${JSIL_ILSPY_ARCHIVE_URL}" \
+    && echo "${JSIL_ILSPY_ARCHIVE_SHA256}  /tmp/jsil-ilspy.tar.gz" | sha256sum --check --strict \
+    && tar --extract --gzip --file /tmp/jsil-ilspy.tar.gz --directory Upstream/ILSpy --strip-components=1 \
+    && curl --fail --location --retry 3 --retry-all-errors --output /tmp/jsil-nrefactory.tar.gz "${JSIL_NREFACTORY_ARCHIVE_URL}" \
+    && echo "${JSIL_NREFACTORY_ARCHIVE_SHA256}  /tmp/jsil-nrefactory.tar.gz" | sha256sum --check --strict \
+    && tar --extract --gzip --file /tmp/jsil-nrefactory.tar.gz --directory Upstream/ILSpy/NRefactory --strip-components=1 \
+    && curl --fail --location --retry 3 --retry-all-errors --output /tmp/jsil-cecil.tar.gz "${JSIL_CECIL_ARCHIVE_URL}" \
+    && echo "${JSIL_CECIL_ARCHIVE_SHA256}  /tmp/jsil-cecil.tar.gz" | sha256sum --check --strict \
+    && tar --extract --gzip --file /tmp/jsil-cecil.tar.gz --directory Upstream/ILSpy/cecil --strip-components=1 \
+    && rm /tmp/jsil*.tar.gz \
+    && test -f LICENSE \
+    && test -f Meta/Meta.csproj \
+    && test -f Upstream/ILSpy/ICSharpCode.Decompiler/ICSharpCode.Decompiler.csproj \
+    && test -f Upstream/ILSpy/NRefactory/doc/license.txt \
+    && test -f Upstream/ILSpy/cecil/LICENSE.md
+COPY eng/patches/jsil/0001-fix-mono-linux-path-handling.patch /tmp/0001-fix-mono-linux-path-handling.patch
+RUN git apply --check /tmp/0001-fix-mono-linux-path-handling.patch \
+    && git apply /tmp/0001-fix-mono-linux-path-handling.patch \
+    && grep --fixed-strings --quiet 'new Uri("file://" + cwdPath + "/")' Compiler/Program.cs \
+    && printf '{"schemaVersion":1,"repository":"https://github.com/sq/JSIL","commit":"%s","archive":"%s","archiveSha256":"%s","metaCommit":"%s","metaArchiveSha256":"%s","ilspyCommit":"%s","ilspyArchiveSha256":"%s","nrefactoryCommit":"%s","nrefactoryArchiveSha256":"%s","cecilCommit":"%s","cecilArchiveSha256":"%s"}\n' \
+      "${JSIL_COMMIT}" "${JSIL_ARCHIVE_URL}" "${JSIL_ARCHIVE_SHA256}" \
+      "${JSIL_META_COMMIT}" "${JSIL_META_ARCHIVE_SHA256}" \
+      "${JSIL_ILSPY_COMMIT}" "${JSIL_ILSPY_ARCHIVE_SHA256}" \
+      "${JSIL_NREFACTORY_COMMIT}" "${JSIL_NREFACTORY_ARCHIVE_SHA256}" \
+      "${JSIL_CECIL_COMMIT}" "${JSIL_CECIL_ARCHIVE_SHA256}" \
+      > /tmp/jsil-source-build.json
+
+FROM ${MONO_IMAGE} AS jsil-build
+ARG JSIL_VERSION
+ARG JSIL_COMMIT
+WORKDIR /jsil-source
+COPY --from=jsil-source /jsil-source/ ./
+COPY --from=jsil-source /tmp/jsil-source-build.json /tmp/jsil-source-build.json
+RUN xbuild Compiler/Compiler.csproj \
+      /property:Configuration=Release \
+      /property:Platform=AnyCPU \
+      /verbosity:minimal \
+    && mkdir -p /opt/jsil/licenses \
+    && cp -a bin/. /opt/jsil/ \
+    && cp LICENSE /opt/jsil/licenses/JSIL-MIT.txt \
+    && cp Upstream/ILSpy/README.txt /opt/jsil/licenses/ILSpy-MIT.txt \
+    && cp Upstream/ILSpy/NRefactory/doc/license.txt /opt/jsil/licenses/NRefactory-MIT.txt \
+    && cp Upstream/ILSpy/cecil/LICENSE.md /opt/jsil/licenses/Mono-Cecil-MIT.txt \
+    && cp /usr/share/doc/mono-runtime-sgen/copyright /opt/jsil/licenses/Mono-runtime-sgen-copyright.txt \
+    && cp /usr/share/doc/mono-runtime-common/copyright /opt/jsil/licenses/Mono-runtime-common-copyright.txt \
+    && cp /usr/share/doc/libgssapi-krb5-2/copyright /opt/jsil/licenses/MIT-Kerberos-copyright.txt \
+    && cp /usr/share/doc/libkeyutils1/copyright /opt/jsil/licenses/keyutils-copyright.txt \
+    && cp /usr/share/common-licenses/LGPL-2 /opt/jsil/licenses/LGPL-2.0.txt \
+    && cp /tmp/jsil-source-build.json /opt/jsil/jsil-source-build.json \
+    && test -s /opt/jsil/JSILc.AnyCPU.exe \
+    && test -s /opt/jsil/JSIL.dll \
+    && mono /opt/jsil/JSILc.AnyCPU.exe 2>&1 | grep --fixed-strings --quiet 'JSILc v'
+
+FROM ${SDK_IMAGE} AS publish
+WORKDIR /source
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+COPY eng/extract-zip.cs /tools/extract-zip.cs
+COPY eng/create-reference-set-attestation.cs /tools/create-reference-set-attestation.cs
+COPY --chmod=0555 deploy/docker/fetch-verified-reference-package.sh /tools/fetch-verified-reference-package
+RUN dotnet restore \
+      src/Workers/Artifacts.JSIL/SharpLabNext.Worker.Artifacts.JSIL/SharpLabNext.Worker.Artifacts.JSIL.csproj \
+      --locked-mode \
+    && dotnet restore \
+      src/Workers/Artifacts.JSIL/SharpLabNext.Worker.Artifacts.JSIL.Fixture/SharpLabNext.Worker.Artifacts.JSIL.Fixture.csproj \
+      --locked-mode
+RUN dotnet publish \
+      src/Workers/Artifacts.JSIL/SharpLabNext.Worker.Artifacts.JSIL/SharpLabNext.Worker.Artifacts.JSIL.csproj \
+      --configuration Release \
+      --no-restore \
+      --output /app/publish \
+      /p:UseAppHost=false \
+    && dotnet build \
+      src/Workers/Artifacts.JSIL/SharpLabNext.Worker.Artifacts.JSIL.Fixture/SharpLabNext.Worker.Artifacts.JSIL.Fixture.csproj \
+      --configuration Release \
+      --no-restore \
+      --output /fixture \
+      /p:UseAppHost=false \
+    && test -s /fixture/SharpLabNext.Worker.Artifacts.JSIL.Fixture.dll
+
+FROM publish AS reference-sets
+ARG NET10_REFERENCE_PACK_VERSION
+ARG NET10_REFERENCE_URL
+ARG NET10_REFERENCE_SHA512
+ARG NET10_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NET11_REFERENCE_VERSION
+ARG NET11_REFERENCE_URL
+ARG NET11_REFERENCE_SHA512
+ARG NET11_REFERENCE_PACKAGE_CONTENT_HASH
+RUN --mount=type=cache,id=sharplabnext-reference-archives,target=/reference-archives,sharing=locked \
+    mkdir -p /reference-sets/net10-ref /reference-sets/net11-preview-ref \
+    && /tools/fetch-verified-reference-package \
+      "${NET10_REFERENCE_URL}" "${NET10_REFERENCE_SHA512}" \
+      "/reference-archives/microsoft.netcore.app.ref.${NET10_REFERENCE_PACK_VERSION}.nupkg" \
+    && cd /tools \
+    && NUGET_PACKAGES=/tmp/jsil-reference-nuget dotnet run extract-zip.cs -- \
+      "/reference-archives/microsoft.netcore.app.ref.${NET10_REFERENCE_PACK_VERSION}.nupkg" /tmp/net10-ref \
+    && cp -a "/tmp/net10-ref/ref/net10.0/." /reference-sets/net10-ref/ \
+    && /tools/fetch-verified-reference-package \
+      "${NET11_REFERENCE_URL}" "${NET11_REFERENCE_SHA512}" \
+      "/reference-archives/microsoft.netcore.app.ref.${NET11_REFERENCE_VERSION}.nupkg" \
+    && NUGET_PACKAGES=/tmp/jsil-reference-nuget dotnet run extract-zip.cs -- \
+      "/reference-archives/microsoft.netcore.app.ref.${NET11_REFERENCE_VERSION}.nupkg" /tmp/net11-ref \
+    && cp -a "/tmp/net11-ref/ref/net11.0/." /reference-sets/net11-preview-ref/ \
+    && test -s /reference-sets/net10-ref/System.Runtime.dll \
+    && test -s /reference-sets/net11-preview-ref/System.Runtime.dll
+RUN dotnet run /tools/create-reference-set-attestation.cs -- \
+      --root /reference-sets/net10-ref \
+      --id net10-ref \
+      --target-framework net10.0 \
+      --digest "${NET10_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --provenance-kind nuget-package \
+      --resolved-version "${NET10_REFERENCE_PACK_VERSION}" \
+      --package Microsoft.NETCore.App.Ref \
+      --source-uri "${NET10_REFERENCE_URL}" \
+      --source-archive-digest "sha512:${NET10_REFERENCE_SHA512}" \
+    && dotnet run /tools/create-reference-set-attestation.cs -- \
+      --root /reference-sets/net11-preview-ref \
+      --id net11-preview-ref \
+      --target-framework net11.0 \
+      --digest "${NET11_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --provenance-kind nuget-package \
+      --resolved-version "${NET11_REFERENCE_VERSION}" \
+      --package Microsoft.NETCore.App.Ref \
+      --source-uri "${NET11_REFERENCE_URL}" \
+      --source-archive-digest "sha512:${NET11_REFERENCE_SHA512}"
+
+FROM jsil-build AS jsil-preflight
+COPY --from=publish /fixture/SharpLabNext.Worker.Artifacts.JSIL.Fixture.dll /preflight/input/Fixture.dll
+COPY --from=reference-sets /reference-sets/net10-ref/ /preflight/references/
+RUN mkdir -p /preflight/output \
+    && find /preflight/references -maxdepth 1 -type f -name '*.dll' \
+      -exec ln -s '{}' /preflight/input/ ';' \
+    && mono /opt/jsil/JSILc.AnyCPU.exe \
+      --quiet --nothreads --nodeps \
+      --out /preflight/output \
+      /preflight/input/Fixture.dll \
+    && test "$(find /preflight/output -maxdepth 1 -type f -name '*.js' ! -name '*.manifest.js' | wc -l)" -eq 1 \
+    && grep --fixed-strings --quiet 'JSIL.DeclareAssembly' /preflight/output/*.js \
+    && grep --fixed-strings --quiet 'Program_Add' /preflight/output/*.js \
+    && grep --fixed-strings --quiet "'use strict';" /preflight/output/*.js \
+    && grep --extended-regexp --quiet '^var \$asm[0-9A-F]+ = JSIL\.DeclareAssembly' /preflight/output/*.js
+
+FROM ${ASPNET_IMAGE} AS final
+ARG VERSION
+ARG SOURCE_REVISION
+ARG JSIL_VERSION
+ARG JSIL_COMMIT
+ARG NET10_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NET11_REFERENCE_PACKAGE_CONTENT_HASH
+LABEL org.opencontainers.image.title="SharpLabNext JSIL Artifact Worker" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      io.sharplabnext.jsil.commit="${JSIL_COMMIT}" \
+      io.sharplabnext.reference-set.net10-ref="${NET10_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      io.sharplabnext.reference-set.net11-preview-ref="${NET11_REFERENCE_PACKAGE_CONTENT_HASH}"
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:8080 \
+    DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    HOME=/tmp \
+    SHARPLABNEXT_ASSEMBLY=SharpLabNext.Worker.Artifacts.JSIL.dll \
+    Jsil__Version=${JSIL_VERSION} \
+    Jsil__Commit=${JSIL_COMMIT} \
+    Jsil__MonoPath=/usr/bin/mono \
+    Jsil__CompilerPath=/opt/jsil/JSILc.AnyCPU.exe
+COPY --from=publish --chown=1654:1654 /app/publish/ ./
+COPY --from=reference-sets --chown=1654:1654 /reference-sets/ /reference-sets/
+COPY --from=jsil-preflight --chown=1654:1654 /opt/jsil/ /opt/jsil/
+COPY --from=jsil-build /usr/bin/mono-sgen /usr/bin/mono-sgen
+COPY --from=jsil-build /usr/lib/mono/4.5/ /usr/lib/mono/4.5/
+COPY --from=jsil-build /usr/lib/mono/gac/ /usr/lib/mono/gac/
+COPY --from=jsil-build /usr/lib/libMonoPosixHelper.so /usr/lib/libMonoPosixHelper.so
+COPY --from=jsil-build /usr/lib/libmono-native.so.0.0.0 /usr/lib/libmono-native.so.0.0.0
+COPY --from=jsil-build /usr/lib/libmono-btls-shared.so /usr/lib/libmono-btls-shared.so
+COPY --from=jsil-build /usr/lib/x86_64-linux-gnu/libgssapi_krb5.so.2* /usr/lib/x86_64-linux-gnu/
+COPY --from=jsil-build /usr/lib/x86_64-linux-gnu/libkrb5.so.3* /usr/lib/x86_64-linux-gnu/
+COPY --from=jsil-build /usr/lib/x86_64-linux-gnu/libk5crypto.so.3* /usr/lib/x86_64-linux-gnu/
+COPY --from=jsil-build /usr/lib/x86_64-linux-gnu/libkrb5support.so.0* /usr/lib/x86_64-linux-gnu/
+COPY --from=jsil-build /lib/x86_64-linux-gnu/libkeyutils.so.1* /lib/x86_64-linux-gnu/
+COPY --from=jsil-build /etc/mono/ /etc/mono/
+COPY --chmod=0555 deploy/docker/service-entrypoint.sh /usr/local/bin/sharplabnext-service
+RUN ln -s mono-sgen /usr/bin/mono \
+    && ln -s libmono-native.so.0.0.0 /usr/lib/libmono-native.so \
+    && mono --version | grep --fixed-strings --quiet '6.12.0.182' \
+    && test "$(ldd /usr/lib/libmono-native.so.0.0.0 | grep --count 'not found')" -eq 0 \
+    && test -s /opt/jsil/jsil-source-build.json \
+    && test -s /opt/jsil/licenses/Mono-runtime-sgen-copyright.txt \
+    && test -s /opt/jsil/licenses/Mono-runtime-common-copyright.txt \
+    && test -s /opt/jsil/licenses/MIT-Kerberos-copyright.txt \
+    && test -s /opt/jsil/licenses/keyutils-copyright.txt \
+    && test -s /opt/jsil/licenses/LGPL-2.0.txt
+USER 1654:1654
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/sharplabnext-service"]

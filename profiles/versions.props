@@ -1,0 +1,32 @@
+<Project>
+  <PropertyGroup>
+    <RoslynStableVersion>5.6.0</RoslynStableVersion>
+    <RoslynMainVersion>5.10.0</RoslynMainVersion>
+    <RoslynMainCommit>708c0a9669c6c996b7e13ea4b161d841bbfdf8b2</RoslynMainCommit>
+    <RoslynMainArchiveUrl>https://github.com/dotnet/roslyn/archive/708c0a9669c6c996b7e13ea4b161d841bbfdf8b2.tar.gz</RoslynMainArchiveUrl>
+    <RoslynMainArchiveSha256>3af860c05820fc9177f603aae87501fb66bcaa42d32a2e585018dbbd3227988f</RoslynMainArchiveSha256>
+    <FSharpCompilerServiceVersion>43.12.204</FSharpCompilerServiceVersion>
+    <FSharpCoreVersion>10.1.204</FSharpCoreVersion>
+    <PeachPieVersion>1.1.13</PeachPieVersion>
+    <PeachPieCommit>608bf30cf3f43f97e32825076a2cfdaa25043e50</PeachPieCommit>
+    <PeachPieParserVersion>8.5.17973</PeachPieParserVersion>
+    <PeachPiePharVersion>1.0.40</PeachPiePharVersion>
+    <PeachPieMicrosoftCodeAnalysisVersion>3.7.4</PeachPieMicrosoftCodeAnalysisVersion>
+    <ILSpyVersion>10.1.0.8386</ILSpyVersion>
+    <ILVerificationVersion>10.0.9</ILVerificationVersion>
+    <MobiusILAsmVersion>0.1.0</MobiusILAsmVersion>
+    <DotNet10RuntimeVersion>10.0.9</DotNet10RuntimeVersion>
+    <DotNet10RuntimeCommit>901ca941248413c79832d2fdbd709da0c4386353</DotNet10RuntimeCommit>
+    <DotNet10JitCommit>901ca941248413c79832d2fdbd709da0c4386353</DotNet10JitCommit>
+    <DotNet11RuntimeVersion>11.0.0-preview.5.26302.115</DotNet11RuntimeVersion>
+    <DotNet11RuntimeCommit>f7b4c5716faaee8fb8a289aed29118cad955c45f</DotNet11RuntimeCommit>
+    <DotNet11JitCommit>f7b4c5716faaee8fb8a289aed29118cad955c45f</DotNet11JitCommit>
+    <Net10ReferencePackVersion>10.0.9</Net10ReferencePackVersion>
+    <Net11ReferencePackVersion>11.0.0-preview.5.26302.115</Net11ReferencePackVersion>
+    <ConstGenericsIlSpyCommit>a2042c704a935a5402c6d700626e52702866ed6d</ConstGenericsIlSpyCommit>
+    <ConstGenericsRuntimeCommit>79f7f1408b2c811904c983419b45139e654f1e46</ConstGenericsRuntimeCommit>
+    <ConstGenericsReferenceVersion>9.0.0-constgenerics.1.23470.1</ConstGenericsReferenceVersion>
+    <ConstGenericsIlSpyProcessorVersion>$(ConstGenericsIlSpyCommit)</ConstGenericsIlSpyProcessorVersion>
+    <ConstGenericsVerificationProcessorVersion>$(ConstGenericsRuntimeCommit)+ctarg-v1</ConstGenericsVerificationProcessorVersion>
+  </PropertyGroup>
+</Project>

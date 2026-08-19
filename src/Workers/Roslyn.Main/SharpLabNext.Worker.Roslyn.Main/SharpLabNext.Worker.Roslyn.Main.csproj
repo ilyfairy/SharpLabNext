@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\ArtifactStore\SharpLabNext.ArtifactStore.Client\SharpLabNext.ArtifactStore.Client.csproj" />
+    <ProjectReference Include="..\..\..\Contracts\SharpLabNext.Artifacts.Contracts\SharpLabNext.Artifacts.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\RuntimeApi\SharpLabNext.Runtime\SharpLabNext.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\WorkerHost\SharpLabNext.WorkerHost\SharpLabNext.WorkerHost.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <RoslynMainPackageVersion Condition="'$(RoslynMainPackageVersion)' == ''">5.10.0-1.26352.10</RoslynMainPackageVersion>
+    <NuGetLockFilePath Condition="'$(RoslynMainSourceBuild)' == 'true'">packages.source.lock.json</NuGetLockFilePath>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(RoslynMainSourceBuild)' != 'true'">
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="[$(RoslynMainPackageVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" VersionOverride="[$(RoslynMainPackageVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" VersionOverride="[$(RoslynMainPackageVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic" VersionOverride="[$(RoslynMainPackageVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic.Features" VersionOverride="[$(RoslynMainPackageVersion)]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic.Workspaces" VersionOverride="[$(RoslynMainPackageVersion)]" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RoslynMainSourceBuild)' == 'true'">
+    <Reference Include="$(RoslynMainAssemblyDirectory)/Microsoft.CodeAnalysis*.dll">
+      <Private>true</Private>
+    </Reference>
+    <Content Include="$(RoslynMainAssemblyDirectory)/Microsoft.CodeAnalysis*.dll">
+      <Link>%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <PackageReference Include="Humanizer.Core" VersionOverride="[2.14.1]" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Elfie" VersionOverride="[1.0.0]" />
+    <PackageReference Include="Microsoft.DiaSymReader" VersionOverride="[2.0.0]" />
+    <PackageReference Include="System.Composition" VersionOverride="[10.0.8]" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" VersionOverride="[10.0.1]" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" VersionOverride="[10.0.1]" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <Target Name="ValidateRoslynMainSourceBuild" BeforeTargets="ResolveReferences"
+          Condition="'$(RoslynMainSourceBuild)' == 'true'">
+    <Error Condition="'$(RoslynMainAssemblyDirectory)' == ''"
+           Text="RoslynMainAssemblyDirectory is required for a Roslyn Main source build." />
+    <Error Condition="!Exists('$(RoslynMainAssemblyDirectory)/Microsoft.CodeAnalysis.CSharp.dll')"
+           Text="The exact-commit Roslyn Main C# compiler assembly was not found." />
+    <Error Condition="!Exists('$(RoslynMainAssemblyDirectory)/Microsoft.CodeAnalysis.VisualBasic.dll')"
+           Text="The exact-commit Roslyn Main Visual Basic compiler assembly was not found." />
+    <Error Condition="!Exists('$(RoslynMainAssemblyDirectory)/Microsoft.CodeAnalysis.CSharp.Features.dll')"
+           Text="The exact-commit Roslyn Main C# Features assembly was not found." />
+    <Error Condition="!Exists('$(RoslynMainAssemblyDirectory)/Microsoft.CodeAnalysis.VisualBasic.Features.dll')"
+           Text="The exact-commit Roslyn Main Visual Basic Features assembly was not found." />
+    <Error Condition="!Exists('$(RoslynMainAssemblyDirectory)/Microsoft.CodeAnalysis.Workspaces.dll')"
+           Text="The exact-commit Roslyn Main Workspaces assembly was not found." />
+    <Error Condition="!Exists('$(RoslynMainAssemblyDirectory)/Microsoft.CodeAnalysis.CSharp.Workspaces.dll')"
+           Text="The exact-commit Roslyn Main C# Workspaces assembly was not found." />
+    <Error Condition="!Exists('$(RoslynMainAssemblyDirectory)/Microsoft.CodeAnalysis.VisualBasic.Workspaces.dll')"
+           Text="The exact-commit Roslyn Main Visual Basic Workspaces assembly was not found." />
+    <Error Condition="!Exists('$(RoslynMainAssemblyDirectory)/Microsoft.CodeAnalysis.Features.dll')"
+           Text="The exact-commit Roslyn Main Features assembly was not found." />
+    <Error Condition="!Exists('$(RoslynMainAssemblyDirectory)/Microsoft.CodeAnalysis.Scripting.dll')"
+           Text="The exact-commit Roslyn Main Scripting assembly was not found." />
+  </Target>
+
+  <Import Project="..\..\Roslyn.Shared\SharpLabNext.Worker.Roslyn.Shared\SharpLabNext.Worker.Roslyn.Shared.projitems" />
+
+</Project>

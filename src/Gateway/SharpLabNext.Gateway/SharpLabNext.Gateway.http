@@ -1,0 +1,27 @@
+@SharpLabNext.Gateway_HostAddress = http://localhost:5247
+
+GET {{SharpLabNext.Gateway_HostAddress}}/health/ready
+Accept: application/json
+
+###
+
+GET {{SharpLabNext.Gateway_HostAddress}}/api/v1/catalog
+Accept: application/json
+
+###
+
+POST {{SharpLabNext.Gateway_HostAddress}}/api/v1/selections/resolve
+Content-Type: application/json
+
+{
+  "LanguageId": "csharp",
+  "ToolchainId": "roslyn-stable",
+  "ReferenceSetId": "net10-ref",
+  "OutputId": "compile-check",
+  "RuntimeId": null,
+  "BuildMode": "release",
+  "CatalogRevision": "20260712.3-dev",
+  "WorkspaceRevision": 1
+}
+
+###

@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\SharpLabNext.Contracts\SharpLabNext.Contracts.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsSharpLabNextPublicPackage>true</IsSharpLabNextPublicPackage>
+    <PackageId>SharpLabNext.Artifacts.Contracts</PackageId>
+    <Description>Content-addressed artifact manifest contracts for SharpLabNext compilers, processors, and runtimes.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

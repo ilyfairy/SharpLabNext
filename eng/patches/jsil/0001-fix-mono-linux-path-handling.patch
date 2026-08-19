@@ -1,0 +1,62 @@
+diff --git a/Compiler/Program.cs b/Compiler/Program.cs
+index 0dfa6e51..047a1513 100644
+--- a/Compiler/Program.cs
++++ b/Compiler/Program.cs
+@@ -22,10 +22,23 @@ namespace JSIL.Compiler {
+         static Configuration CachedTypeInfoProviderConfiguration = null;
+ 
+         public static string ShortenPath (string path) {
+-            var cwd = new Uri(Environment.CurrentDirectory);
++            var cwdPath = Path.GetFullPath(Environment.CurrentDirectory)
++                .Replace('\\', '/').TrimEnd('/');
++            if (!cwdPath.StartsWith("/"))
++                cwdPath = "/" + cwdPath;
++            var cwd = new Uri("file://" + cwdPath + "/");
+ 
+             Uri pathUri;
+-            if (Uri.TryCreate(path, UriKind.Absolute, out pathUri)) {
++            if (Path.IsPathRooted(path)) {
++                var absolutePath = Path.GetFullPath(path)
++                    .Replace('\\', '/');
++                if (!absolutePath.StartsWith("/"))
++                    absolutePath = "/" + absolutePath;
++                pathUri = new Uri("file://" + absolutePath);
++            } else if (!Uri.TryCreate(path, UriKind.Absolute, out pathUri)) {
++                pathUri = null;
++            }
++            if (pathUri != null) {
+                 var relativeUri = cwd.MakeRelativeUri(pathUri);
+                 var shortened = Uri.UnescapeDataString(relativeUri.ToString()).Replace('/', Path.DirectorySeparatorChar);
+                 if (shortened.Length < path.Length)
+@@ -736,21 +749,24 @@ namespace JSIL.Compiler {
+ 
+                     string fileConfigPath;
+                     var fileConfigSearchDir = Path.GetDirectoryName(filename);
+-                    var separators = new char[] { '/', '\\' };
+-
+                     do {
+                         fileConfigPath = Path.Combine(
+                             fileConfigSearchDir,
+                             String.Format("{0}.jsilconfig", Path.GetFileName(filename))
+                         );
+ 
+-                        if (!File.Exists(fileConfigPath))
+-                            fileConfigSearchDir = Path.GetFullPath(Path.Combine(fileConfigSearchDir, ".."));
+-                        else
++                        if (File.Exists(fileConfigPath))
+                             break;
+-                    } while (fileConfigSearchDir.IndexOfAny(separators, 3) > 0);
+ 
+-                    var fileConfig = File.Exists(fileConfigPath)
++                        var parent = Directory.GetParent(fileConfigSearchDir);
++                        if (parent == null) {
++                            fileConfigPath = null;
++                            break;
++                        }
++                        fileConfigSearchDir = parent.FullName;
++                    } while (true);
++
++                    var fileConfig = (fileConfigPath != null) && File.Exists(fileConfigPath)
+                         ? new Configuration[] { LoadConfiguration(fileConfigPath), commandLineConfiguration }
+                         : new Configuration[] { commandLineConfiguration };
+ 

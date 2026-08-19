@@ -1,0 +1,256 @@
+# syntax=docker/dockerfile:1.7
+
+ARG SDK_IMAGE
+ARG ASPNET_IMAGE
+ARG CONST_GENERICS_ILSPY_COMMIT
+ARG CONST_GENERICS_ILSPY_ARCHIVE_URL
+ARG CONST_GENERICS_ILSPY_ARCHIVE_SHA256
+ARG CONST_GENERICS_RUNTIME_COMMIT
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_URL
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_SHA256
+ARG CONST_GENERICS_VERSIONTOOLS_VERSION
+ARG CONST_GENERICS_VERSIONTOOLS_PACKAGE_SHA256
+ARG CONST_GENERICS_VERSIONTOOLS_SOURCE_URI
+ARG CONST_GENERICS_REFERENCE_VERSION
+
+FROM const-generics-runtime AS runtime-assets
+
+FROM ${SDK_IMAGE} AS fork-dependencies
+RUN mkdir -p /const-generics-dependencies
+COPY --from=runtime-assets /compiler-assets/const-generics/System.Reflection.Metadata.dll /const-generics-dependencies/System.Reflection.Metadata.dll
+COPY --from=runtime-assets /compiler-assets/const-generics/System.Collections.Immutable.dll /const-generics-dependencies/System.Collections.Immutable.dll
+RUN test -s /const-generics-dependencies/System.Reflection.Metadata.dll \
+    && test -s /const-generics-dependencies/System.Collections.Immutable.dll \
+    && sha256sum /const-generics-dependencies/*.dll > /const-generics-dependencies/compiler-managed.sha256
+
+FROM ${SDK_IMAGE} AS ilspy-source-build
+ARG CONST_GENERICS_ILSPY_COMMIT
+ARG CONST_GENERICS_ILSPY_ARCHIVE_URL
+ARG CONST_GENERICS_ILSPY_ARCHIVE_SHA256
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+    NUGET_XMLDOC_MODE=skip \
+    SOURCE_DATE_EPOCH=1740740604
+WORKDIR /ilspy-source
+RUN curl --fail --location --retry 3 --retry-all-errors --output /tmp/ilspy-source.tar.gz "${CONST_GENERICS_ILSPY_ARCHIVE_URL}" \
+    && echo "${CONST_GENERICS_ILSPY_ARCHIVE_SHA256}  /tmp/ilspy-source.tar.gz" | sha256sum --check --strict \
+    && tar --extract --gzip --file /tmp/ilspy-source.tar.gz --strip-components=1 \
+    && rm /tmp/ilspy-source.tar.gz \
+    && grep --fixed-strings --quiet 'GetConstValueType' ICSharpCode.Decompiler/TypeSystem/TypeProvider.cs \
+    && grep --fixed-strings --quiet 'GetConstValueType' ICSharpCode.Decompiler/Disassembler/DisassemblerSignatureTypeProvider.cs \
+    && rm ICSharpCode.Decompiler/Library/System.Reflection.Metadata.dll \
+    && test ! -e ICSharpCode.Decompiler/Library/System.Reflection.Metadata.dll
+COPY --from=fork-dependencies /const-generics-dependencies/ /const-generics-dependencies/
+COPY eng/patches/ilspy-const-generics/0001-use-source-built-metadata.patch /tmp/0001-use-source-built-metadata.patch
+RUN git apply --check --ignore-space-change /tmp/0001-use-source-built-metadata.patch \
+    && git apply --ignore-space-change /tmp/0001-use-source-built-metadata.patch \
+    && ! grep --fixed-strings --quiet 'Library/System.Reflection.Metadata.dll' ICSharpCode.Decompiler/ICSharpCode.Decompiler.csproj \
+    && ! grep --fixed-strings --quiet '<PackageReference Include="System.Collections.Immutable"' ICSharpCode.Decompiler/ICSharpCode.Decompiler.csproj \
+    && grep --fixed-strings --quiet '<PackageReference Include="System.Memory" Version="4.5.5" />' ICSharpCode.Decompiler/ICSharpCode.Decompiler.csproj \
+    && grep --fixed-strings --quiet '<PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />' ICSharpCode.Decompiler/ICSharpCode.Decompiler.csproj \
+    && ! grep --fixed-strings --quiet '"System.Collections.Immutable":' ICSharpCode.Decompiler/packages.lock.json
+RUN --mount=type=cache,id=sharplabnext-const-ilspy-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore ICSharpCode.Decompiler/ICSharpCode.Decompiler.csproj \
+      --locked-mode \
+      --runtime linux-x64 \
+      /p:ConstGenericsMetadataAssemblyPath=/const-generics-dependencies/System.Reflection.Metadata.dll \
+      /p:ConstGenericsImmutableAssemblyPath=/const-generics-dependencies/System.Collections.Immutable.dll
+RUN --mount=type=cache,id=sharplabnext-const-ilspy-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore ICSharpCode.Decompiler/ICSharpCode.Decompiler.csproj \
+      --locked-mode \
+      --runtime linux-x64 \
+      /p:ConstGenericsMetadataAssemblyPath=/const-generics-dependencies/System.Reflection.Metadata.dll \
+      /p:ConstGenericsImmutableAssemblyPath=/const-generics-dependencies/System.Collections.Immutable.dll \
+    && dotnet build ICSharpCode.Decompiler/ICSharpCode.Decompiler.csproj \
+      --configuration Release \
+      --no-restore \
+      --runtime linux-x64 \
+      --self-contained false \
+      --output /ilspy-output \
+      /p:SourceRevisionId=${CONST_GENERICS_ILSPY_COMMIT} \
+      /p:EnableSourceLink=false \
+      /p:PublishRepositoryUrl=false \
+      /p:EmbedUntrackedSources=false \
+      /p:UseSharedCompilation=false \
+      /p:ConstGenericsMetadataAssemblyPath=/const-generics-dependencies/System.Reflection.Metadata.dll \
+      /p:ConstGenericsImmutableAssemblyPath=/const-generics-dependencies/System.Collections.Immutable.dll \
+    && test -s /ilspy-output/ICSharpCode.Decompiler.dll \
+    && cp LICENSE /ilspy-output/ILSpy-LICENSE.txt \
+    && printf '{"schemaVersion":1,"repository":"https://github.com/ilyfairy/ILSpy","commit":"%s","sourceArchive":"%s","sourceArchiveSha256":"%s","legacyMetadataExcluded":true}\n' \
+      "${CONST_GENERICS_ILSPY_COMMIT}" \
+      "${CONST_GENERICS_ILSPY_ARCHIVE_URL}" \
+      "${CONST_GENERICS_ILSPY_ARCHIVE_SHA256}" \
+      > /ilspy-output/ilspy-build.json
+
+FROM ${SDK_IMAGE} AS ilverification-source-build
+ARG CONST_GENERICS_RUNTIME_COMMIT
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_URL
+ARG CONST_GENERICS_RUNTIME_ARCHIVE_SHA256
+ARG CONST_GENERICS_VERSIONTOOLS_VERSION
+ARG CONST_GENERICS_VERSIONTOOLS_PACKAGE_SHA256
+ARG CONST_GENERICS_VERSIONTOOLS_SOURCE_URI
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+    NUGET_XMLDOC_MODE=skip \
+    SOURCE_DATE_EPOCH=1695171340
+WORKDIR /runtime-source
+RUN curl --fail --location --retry 3 --retry-all-errors --output /tmp/runtime-source.tar.gz "${CONST_GENERICS_RUNTIME_ARCHIVE_URL}" \
+    && echo "${CONST_GENERICS_RUNTIME_ARCHIVE_SHA256}  /tmp/runtime-source.tar.gz" | sha256sum --check --strict \
+    && curl --fail --location --retry 3 --retry-all-errors --output /tmp/microsoft.dotnet.versiontools.tasks.nupkg "${CONST_GENERICS_VERSIONTOOLS_SOURCE_URI}" \
+    && echo "${CONST_GENERICS_VERSIONTOOLS_PACKAGE_SHA256}  /tmp/microsoft.dotnet.versiontools.tasks.nupkg" | sha256sum --check --strict \
+    && tar --extract --gzip --file /tmp/runtime-source.tar.gz --strip-components=1 \
+    && rm /tmp/runtime-source.tar.gz \
+    && grep --fixed-strings --quiet 'ConstTypeArgument' src/libraries/System.Reflection.Metadata/src/System/Reflection/Metadata/Signatures/SignatureTypeCode.cs
+COPY --from=fork-dependencies /const-generics-dependencies/ /const-generics-dependencies/
+COPY eng/patches/ilspy-const-generics/0002-ilverification-const-type-arguments.patch /tmp/0002-ilverification-const-type-arguments.patch
+RUN git apply --check /tmp/0002-ilverification-const-type-arguments.patch \
+    && git apply /tmp/0002-ilverification-const-type-arguments.patch \
+    && grep --fixed-strings --quiet 'SignatureTypeCode.ConstTypeArgument' src/coreclr/tools/Common/TypeSystem/Ecma/EcmaSignatureParser.cs
+RUN --mount=type=cache,id=sharplabnext-const-runtime-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore src/coreclr/tools/ILVerification/ILVerification.csproj \
+      --locked-mode \
+      /p:MicrosoftDotNetVersionToolsTasksVersion=${CONST_GENERICS_VERSIONTOOLS_VERSION} \
+      /p:ConstGenericsMetadataAssemblyPath=/const-generics-dependencies/System.Reflection.Metadata.dll \
+      /p:ConstGenericsImmutableAssemblyPath=/const-generics-dependencies/System.Collections.Immutable.dll
+RUN --mount=type=cache,id=sharplabnext-const-runtime-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore src/coreclr/tools/ILVerification/ILVerification.csproj \
+      --locked-mode \
+      /p:MicrosoftDotNetVersionToolsTasksVersion=${CONST_GENERICS_VERSIONTOOLS_VERSION} \
+      /p:ConstGenericsMetadataAssemblyPath=/const-generics-dependencies/System.Reflection.Metadata.dll \
+      /p:ConstGenericsImmutableAssemblyPath=/const-generics-dependencies/System.Collections.Immutable.dll \
+    && dotnet build src/coreclr/tools/ILVerification/ILVerification.csproj \
+      --configuration Release \
+      --no-restore \
+      --output /ilverification-output \
+      /p:SourceRevisionId=${CONST_GENERICS_RUNTIME_COMMIT} \
+      /p:MicrosoftDotNetVersionToolsTasksVersion=${CONST_GENERICS_VERSIONTOOLS_VERSION} \
+      /p:EnableSourceLink=false \
+      /p:UseSharedCompilation=false \
+      /p:LangVersion=12.0 \
+      /p:_SkipUpgradeNetAnalyzersNuGetWarning=true \
+      /p:ConstGenericsMetadataAssemblyPath=/const-generics-dependencies/System.Reflection.Metadata.dll \
+      /p:ConstGenericsImmutableAssemblyPath=/const-generics-dependencies/System.Collections.Immutable.dll \
+    && test -s /ilverification-output/ILVerification.dll \
+    && printf '{"schemaVersion":1,"repository":"https://github.com/hez2010/runtime","commit":"%s","sourceArchive":"%s","sourceArchiveSha256":"%s","patch":"ctarg-v1"}\n' \
+      "${CONST_GENERICS_RUNTIME_COMMIT}" \
+      "${CONST_GENERICS_RUNTIME_ARCHIVE_URL}" \
+      "${CONST_GENERICS_RUNTIME_ARCHIVE_SHA256}" \
+      > /ilverification-output/ilverification-build.json
+
+FROM ${SDK_IMAGE} AS publish
+ARG CONFIGURATION=Release
+ARG CONST_GENERICS_ILSPY_COMMIT
+ARG CONST_GENERICS_RUNTIME_COMMIT
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+    NUGET_XMLDOC_MODE=skip
+WORKDIR /source
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+COPY --from=fork-dependencies /const-generics-dependencies/ /const-generics-dependencies/
+COPY --from=ilspy-source-build /ilspy-output/ICSharpCode.Decompiler.dll /const-generics-dependencies/ICSharpCode.Decompiler.dll
+COPY --from=ilverification-source-build /ilverification-output/ILVerification.dll /const-generics-dependencies/ILVerification.dll
+RUN dotnet restore \
+      src/Workers/Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics.Processor/SharpLabNext.Worker.Artifacts.ConstGenerics.Processor.csproj \
+      --locked-mode \
+      /p:ConstGenericsDependenciesDirectory=/const-generics-dependencies \
+    && dotnet restore \
+      src/Workers/Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics.csproj \
+      --locked-mode \
+    && dotnet restore \
+      src/Workers/Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics.Tests/SharpLabNext.Worker.Artifacts.ConstGenerics.Tests.csproj \
+      --locked-mode \
+      /p:ConstGenericsDependenciesDirectory=/const-generics-dependencies
+RUN dotnet test \
+      src/Workers/Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics.Tests/SharpLabNext.Worker.Artifacts.ConstGenerics.Tests.csproj \
+      --configuration ${CONFIGURATION} \
+      --no-restore \
+      /p:ConstGenericsDependenciesDirectory=/const-generics-dependencies \
+      /p:ConstGenericsIlSpyCommit=${CONST_GENERICS_ILSPY_COMMIT} \
+      /p:ConstGenericsRuntimeCommit=${CONST_GENERICS_RUNTIME_COMMIT}
+RUN dotnet publish \
+      src/Workers/Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics.Processor/SharpLabNext.Worker.Artifacts.ConstGenerics.Processor.csproj \
+      --configuration ${CONFIGURATION} \
+      --no-restore \
+      --output /app/processor \
+      /p:UseAppHost=false \
+      /p:ConstGenericsDependenciesDirectory=/const-generics-dependencies \
+      /p:ConstGenericsIlSpyCommit=${CONST_GENERICS_ILSPY_COMMIT} \
+      /p:ConstGenericsRuntimeCommit=${CONST_GENERICS_RUNTIME_COMMIT} \
+    && dotnet publish \
+      src/Workers/Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics.csproj \
+      --configuration ${CONFIGURATION} \
+      --no-restore \
+      --output /app/worker \
+      /p:UseAppHost=false \
+      /p:ConstGenericsIlSpyCommit=${CONST_GENERICS_ILSPY_COMMIT} \
+      /p:ConstGenericsRuntimeCommit=${CONST_GENERICS_RUNTIME_COMMIT} \
+    && test -s /app/processor/ICSharpCode.Decompiler.dll \
+    && test -s /app/processor/ILVerification.dll \
+    && test -s /app/processor/System.Reflection.Metadata.dll \
+    && test -s /app/processor/System.Collections.Immutable.dll
+
+FROM ${ASPNET_IMAGE} AS final-base
+ARG VERSION
+ARG SOURCE_REVISION
+ARG CONST_GENERICS_ILSPY_COMMIT
+ARG CONST_GENERICS_ILSPY_ARCHIVE_SHA256
+ARG CONST_GENERICS_RUNTIME_COMMIT
+ARG CONST_GENERICS_REFERENCE_VERSION
+RUN test -n "${CONST_GENERICS_ILSPY_COMMIT}" \
+    && test -n "${CONST_GENERICS_RUNTIME_COMMIT}" \
+    && test -n "${CONST_GENERICS_REFERENCE_VERSION}" \
+    && mkdir -p /app/processor /app/.sharplabnext /opt/const-runtime /reference-sets/const-generics-ref /var/lib/sharplabnext \
+    && chown -R 1654:1654 /app /opt/const-runtime /reference-sets /var/lib/sharplabnext
+LABEL org.opencontainers.image.title="SharpLabNext ConstGenerics Artifact Worker" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/ilyfairy/ILSpy" \
+      com.sharplabnext.artifact-processor="artifacts-const-generics" \
+      com.sharplabnext.compatibility-group="const-generics-bcaed316" \
+      com.sharplabnext.runtime-family="coreclr-const-generics" \
+      com.sharplabnext.runtime-feature="runtime.const-generics.v1" \
+      com.sharplabnext.metadata-feature="metadata.const-generics.v1" \
+      io.sharplabnext.ilspy.commit="${CONST_GENERICS_ILSPY_COMMIT}" \
+      io.sharplabnext.ilspy.source-archive-sha256="${CONST_GENERICS_ILSPY_ARCHIVE_SHA256}" \
+      io.sharplabnext.ilverification.runtime-commit="${CONST_GENERICS_RUNTIME_COMMIT}"
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:8080 \
+    DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    DOTNET_ROLL_FORWARD=Major \
+    HOME=/tmp \
+    SHARPLABNEXT_ASSEMBLY=SharpLabNext.Worker.Artifacts.ConstGenerics.dll \
+    ConstGenericsArtifactWorker__ReleaseId=${VERSION} \
+    ConstGenericsArtifactWorker__WorkerImageId=ilspy-const-generics-${CONST_GENERICS_ILSPY_COMMIT} \
+    ConstGenericsArtifactWorker__ProcessorDotNetHostPath=/opt/const-runtime/dotnet \
+    ConstGenericsArtifactWorker__ProcessorAssemblyPath=/app/processor/SharpLabNext.Worker.Artifacts.ConstGenerics.Processor.dll \
+    ConstGenericsArtifactWorker__ReferenceRoot=/reference-sets/const-generics-ref \
+    ConstGenericsArtifactWorker__RuntimeReferenceRoot=/opt/const-runtime/shared/Microsoft.NETCore.App/${CONST_GENERICS_REFERENCE_VERSION} \
+    ConstGenericsArtifactWorker__FrameworkVersion=${CONST_GENERICS_REFERENCE_VERSION} \
+    ArtifactStore__BaseUrl=http://artifact-store:8080
+COPY --from=publish --chown=1654:1654 /app/worker/ ./
+COPY --from=publish --chown=1654:1654 /app/processor/ /app/processor/
+COPY --from=runtime-assets --chown=1654:1654 /usr/share/dotnet/ /opt/const-runtime/
+COPY --from=runtime-assets --chown=1654:1654 /reference-sets/const-generics-ref/ /reference-sets/const-generics-ref/
+COPY --from=ilspy-source-build --chown=1654:1654 /ilspy-output/ILSpy-LICENSE.txt /app/.sharplabnext/ILSpy-LICENSE.txt
+COPY --from=ilspy-source-build --chown=1654:1654 /ilspy-output/ilspy-build.json /app/.sharplabnext/ilspy-build.json
+COPY --from=ilverification-source-build --chown=1654:1654 /ilverification-output/ilverification-build.json /app/.sharplabnext/ilverification-build.json
+COPY --from=fork-dependencies --chown=1654:1654 /const-generics-dependencies/compiler-managed.sha256 /app/.sharplabnext/compiler-managed.sha256
+COPY --chmod=0555 deploy/docker/service-entrypoint.sh /usr/local/bin/sharplabnext-service
+USER 1654:1654
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/sharplabnext-service"]
+
+FROM final-base AS preflight
+ARG CONST_GENERICS_ILSPY_COMMIT
+ARG CONST_GENERICS_RUNTIME_COMMIT
+RUN /opt/const-runtime/dotnet /app/processor/SharpLabNext.Worker.Artifacts.ConstGenerics.Processor.dll --describe > /tmp/processor.json \
+    && grep --fixed-strings --quiet "${CONST_GENERICS_ILSPY_COMMIT}" /tmp/processor.json \
+    && grep --fixed-strings --quiet "${CONST_GENERICS_RUNTIME_COMMIT}" /tmp/processor.json \
+    && grep --fixed-strings --quiet 'metadata.const-generics.v1' /tmp/processor.json \
+    && grep --fixed-strings --quiet 'const-generics-bcaed316' /tmp/processor.json
+
+FROM final-base AS final
+COPY --from=preflight --chown=1654:1654 /tmp/processor.json /app/.sharplabnext/processor-preflight.json

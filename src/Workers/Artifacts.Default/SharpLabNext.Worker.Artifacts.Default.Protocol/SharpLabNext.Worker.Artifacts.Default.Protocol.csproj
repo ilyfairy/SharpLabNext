@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Contracts\SharpLabNext.Contracts\SharpLabNext.Contracts.csproj" />
+    <AssemblyMetadata Include="SharpLabNext.ILSpyVersion" Value="$(ILSpyVersion)" />
+    <AssemblyMetadata Include="SharpLabNext.ILVerificationVersion" Value="$(ILVerificationVersion)" />
+  </ItemGroup>
+
+</Project>

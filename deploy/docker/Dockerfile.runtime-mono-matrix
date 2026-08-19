@@ -1,0 +1,142 @@
+# syntax=docker/dockerfile:1.7
+
+# Candidate-only Mono runtime image.  The Mono distribution is supplied as a
+# digest-pinned build argument; this Dockerfile never installs a mutable apt
+# package or downloads a runtime at job time.  The net10 control host and the
+# low-target TargetRuntimeRunner is shared with every Mono/Desktop CLR row.
+
+ARG SDK_IMAGE
+ARG CONTROL_IMAGE
+ARG MONO_IMAGE
+ARG CONTROL_TFM
+
+FROM ${SDK_IMAGE} AS publish
+ARG SDK_IMAGE
+ARG CONTROL_IMAGE
+ARG MONO_IMAGE
+ARG SOURCE_REVISION
+ARG CONTROL_TFM
+WORKDIR /source
+COPY deploy/docker/validate-digest-pinned-image.sh /usr/local/bin/sharplabnext-validate-image
+RUN chmod 0555 /usr/local/bin/sharplabnext-validate-image \
+    && /usr/local/bin/sharplabnext-validate-image \
+         SDK_IMAGE "${SDK_IMAGE}" \
+         CONTROL_IMAGE "${CONTROL_IMAGE}" \
+         MONO_IMAGE "${MONO_IMAGE}"
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+RUN dotnet restore \
+      src/RuntimeJobs/SharpLabNext.TargetRuntimeRunner/SharpLabNext.TargetRuntimeRunner.csproj \
+      --locked-mode
+RUN dotnet restore \
+      src/RuntimeJobs/SharpLabNext.MonoJitInspector/SharpLabNext.MonoJitInspector.csproj \
+      --locked-mode
+RUN dotnet publish \
+      src/RuntimeJobs/SharpLabNext.TargetRuntimeRunner/SharpLabNext.TargetRuntimeRunner.csproj \
+      --configuration Release \
+      --framework net20 \
+      --no-restore \
+      --output /target-runtime-runner \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION}
+RUN dotnet publish \
+      src/RuntimeJobs/SharpLabNext.MonoJitInspector/SharpLabNext.MonoJitInspector.csproj \
+      --configuration Release \
+      --framework ${CONTROL_TFM} \
+      --no-restore \
+      --output /mono-jit-inspector \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION}
+
+# Keep the source image intact. It is the operator's responsibility to provide
+# an image whose Mono version and native dependencies were audited.
+FROM ${MONO_IMAGE} AS mono-source
+
+FROM mono-source AS mono-runtime-check
+ARG MONO_VERSION
+RUN test -n "${MONO_VERSION}" \
+    && command -v mono \
+    && mono --version | grep --fixed-strings --quiet "${MONO_VERSION}" \
+    && test -x /usr/bin/mono-sgen \
+    && test -d /usr/lib/mono \
+    && test -d /etc/mono \
+    && test "$(ldd /usr/bin/mono-sgen 2>/dev/null | grep --count 'not found')" -eq 0
+
+FROM ${CONTROL_IMAGE} AS control-image
+RUN test -x /usr/share/dotnet/dotnet \
+    && /usr/share/dotnet/dotnet --info
+
+# Mono remains the final base so its native runtime and distribution
+# dependencies stay byte-for-byte within the digest-pinned source image. The
+# separately pinned control runtime is copied in and exercised below; it never
+# executes the user assembly directly.
+FROM mono-runtime-check AS final
+ARG VERSION
+ARG SOURCE_REVISION
+ARG PROFILE_ID
+ARG MONO_VERSION
+ARG CONTROL_IMAGE
+ARG MONO_IMAGE
+ARG RUNTIME_COMPONENT_DIGEST
+ARG RUNTIME_COMPONENT_SOURCE_URI
+
+RUN test -n "${VERSION}" \
+    && test -n "${SOURCE_REVISION}" \
+    && test -n "${PROFILE_ID}" \
+    && test -n "${MONO_VERSION}" \
+    && test -n "${MONO_IMAGE}" \
+    && printf '%s\n' "${RUNTIME_COMPONENT_DIGEST}" | grep -Eq '^sha256:[0-9a-f]{64}$' \
+    && test -n "${RUNTIME_COMPONENT_SOURCE_URI}" \
+    && mkdir -p /opt/sharplabnext/control-dotnet /workspace \
+    && chown 1654:1654 /workspace
+
+COPY --from=control-image /usr/share/dotnet/ /usr/share/dotnet/
+RUN test -x /usr/share/dotnet/dotnet \
+    && test -x /usr/bin/mono \
+    && test -x /usr/bin/mono-sgen \
+    && command -v objdump \
+    && test "$(ldd /usr/bin/mono-sgen 2>/dev/null | grep --count 'not found')" -eq 0 \
+    && /usr/share/dotnet/dotnet --info \
+    && ln -s /usr/share/dotnet/dotnet /opt/sharplabnext/control-dotnet/dotnet \
+    && test -x /opt/sharplabnext/control-dotnet/dotnet
+
+LABEL org.opencontainers.image.title="SharpLabNext Mono Matrix Runtime Candidate" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      com.sharplabnext.runtime-candidate="true" \
+      com.sharplabnext.runtime-profile="${PROFILE_ID}" \
+      io.sharplabnext.runtime.environment="mono" \
+      io.sharplabnext.runtime.version="${MONO_VERSION}" \
+      io.sharplabnext.runtime.component-digest="${RUNTIME_COMPONENT_DIGEST}" \
+      io.sharplabnext.runtime.component-source-uri="${RUNTIME_COMPONENT_SOURCE_URI}" \
+      io.sharplabnext.operator-image.mono="${MONO_IMAGE}" \
+      io.sharplabnext.control-image="${CONTROL_IMAGE}"
+
+COPY --from=publish /target-runtime-runner/ /opt/sharplabnext/
+COPY --from=publish /mono-jit-inspector/ /opt/sharplabnext/
+COPY --chmod=0555 deploy/docker/runtime-entrypoint.sh /opt/sharplabnext/runtime-entrypoint.sh
+RUN set -eu; \
+    test -s /opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe; \
+    test -s /opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe.config; \
+    test -s /opt/sharplabnext/SharpLabNext.MonoJitInspector.dll; \
+    frames="$(TMPDIR=/tmp /usr/bin/mono \
+      /opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe self-test)"; \
+    test "$(printf '%s\n' "${frames}" | grep --count .)" -eq 1; \
+    jit_frames="$(HOME=/tmp TMPDIR=/tmp /usr/share/dotnet/dotnet \
+      /opt/sharplabnext/SharpLabNext.MonoJitInspector.dll self-test)"; \
+    test "$(printf '%s\n' "${jit_frames}" | grep --count .)" -eq 1
+
+ENV DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    HOME=/tmp \
+    TMPDIR=/tmp \
+    MONO_LOG_LEVEL=error
+WORKDIR /workspace
+USER 0:0
+ENTRYPOINT ["/opt/sharplabnext/runtime-entrypoint.sh"]
+CMD ["/usr/bin/mono", "--version"]

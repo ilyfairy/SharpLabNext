@@ -1,0 +1,37 @@
+<Project>
+  <PropertyGroup>
+    <SharpLabNextProfileVersionsPath Condition="'$(SharpLabNextProfileVersionsPath)' == ''">$(MSBuildThisFileDirectory)profiles/versions.props</SharpLabNextProfileVersionsPath>
+  </PropertyGroup>
+  <Import Project="$(SharpLabNextProfileVersionsPath)" />
+  <PropertyGroup>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+    <PackageVersion Include="FSharp.Compiler.Service" Version="$(FSharpCompilerServiceVersion)" />
+    <PackageVersion Include="FSharp.Core" Version="$(FSharpCoreVersion)" />
+    <PackageVersion Include="ICSharpCode.Decompiler" Version="$(ILSpyVersion)" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.ILVerification" Version="$(ILVerificationVersion)" />
+    <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies.net20" Version="1.0.3" />
+    <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
+    <PackageVersion Include="Mobius.ILasm" Version="$(MobiusILAsmVersion)" />
+    <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.16.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.16.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.16.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.16.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.16.0" />
+    <PackageVersion Include="Devsense.Php.Parser" Version="$(PeachPieParserVersion)" />
+    <PackageVersion Include="Devsense.PHP.Phar" Version="$(PeachPiePharVersion)" />
+    <PackageVersion Include="Peachpie.CodeAnalysis" Version="$(PeachPieVersion)" />
+    <PackageVersion Include="Peachpie.Library" Version="$(PeachPieVersion)" />
+    <PackageVersion Include="Peachpie.Microsoft.CodeAnalysis" Version="$(PeachPieMicrosoftCodeAnalysisVersion)" />
+    <PackageVersion Include="Peachpie.Runtime" Version="$(PeachPieVersion)" />
+    <PackageVersion Include="System.Security.Permissions" Version="9.0.0" />
+    <PackageVersion Include="YamlDotNet" Version="18.1.0" />
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+</Project>

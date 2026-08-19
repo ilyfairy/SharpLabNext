@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "winetricksVersion": "20240105",
+  "companionPrefixes": {
+    "clr2": {
+      "prefix": "/opt/wine-netfx-clr2",
+      "winetricksVerb": "dotnet35sp1"
+    },
+    "clr4": {
+      "prefix": "/opt/wine-netfx-clr4",
+      "winetricksVerb": "dotnet48"
+    }
+  },
+  "targets": [
+    {
+      "id": "netfx20",
+      "version": "2.0",
+      "clrGeneration": "clr2",
+      "prefix": "/opt/wine-netfx-clr2",
+      "recipe": {
+        "kind": "winetricks",
+        "verb": "dotnet20"
+      }
+    },
+    {
+      "id": "netfx30",
+      "version": "3.0",
+      "clrGeneration": "clr2",
+      "prefix": "/opt/wine-netfx-clr2",
+      "recipe": {
+        "kind": "winetricks",
+        "verb": "dotnet35sp1",
+        "sharedClr2FeaturePack": true
+      }
+    },
+    {
+      "id": "netfx35",
+      "version": "3.5",
+      "clrGeneration": "clr2",
+      "prefix": "/opt/wine-netfx-clr2",
+      "recipe": {
+        "kind": "winetricks",
+        "verb": "dotnet35sp1"
+      }
+    },
+    {
+      "id": "netfx40",
+      "version": "4.0",
+      "clrGeneration": "clr4",
+      "prefix": "/opt/wine-netfx-clr4",
+      "recipe": {
+        "kind": "winetricks",
+        "verb": "dotnet40"
+      }
+    },
+    {
+      "id": "netfx45",
+      "version": "4.5",
+      "clrGeneration": "clr4",
+      "prefix": "/opt/wine-netfx-clr4",
+      "recipe": {
+        "kind": "winetricks",
+        "verb": "dotnet45"
+      }
+    },
+    {
+      "id": "netfx451",
+      "version": "4.5.1",
+      "clrGeneration": "clr4",
+      "prefix": "/opt/wine-netfx-clr4",
+      "recipe": {
+        "kind": "operator-installer",
+        "fileName": "NDP451-KB2858728-x86-x64-AllOS-ENU.exe",
+        "sha256": "5ded8628ce233a5afa8e0efc19ad34690f05e9bb492f2ed0413508546af890fe",
+        "prerequisiteVerb": "dotnet40",
+        "arguments": [
+          "/q",
+          "/norestart"
+        ]
+      }
+    },
+    {
+      "id": "netfx452",
+      "version": "4.5.2",
+      "clrGeneration": "clr4",
+      "prefix": "/opt/wine-netfx-clr4",
+      "recipe": {
+        "kind": "winetricks",
+        "verb": "dotnet452"
+      }
+    },
+    {
+      "id": "netfx46",
+      "version": "4.6",
+      "clrGeneration": "clr4",
+      "prefix": "/opt/wine-netfx-clr4",
+      "recipe": {
+        "kind": "winetricks",
+        "verb": "dotnet46"
+      }
+    },
+    {
+      "id": "netfx461",
+      "version": "4.6.1",
+      "clrGeneration": "clr4",
+      "prefix": "/opt/wine-netfx-clr4",
+      "recipe": {
+        "kind": "winetricks",
+        "verb": "dotnet461"
+      }
+    },
+    {
+      "id": "netfx462",
+      "version": "4.6.2",
+      "clrGeneration": "clr4",
+      "prefix": "/opt/wine-netfx-clr4",
+      "recipe": {
+        "kind": "winetricks",
+        "verb": "dotnet462"
+      }
+    },
+    {
+      "id": "netfx47",
+      "version": "4.7",
+      "clrGeneration": "clr4",
+      "prefix": "/opt/wine-netfx-clr4",
+      "recipe": {
+        "kind": "operator-installer",
+        "fileName": "NDP47-KB3186497-x86-x64-AllOS-ENU.exe",
+        "sha256": "24762159579ec9763baec8c23555464360bd31677ee8894a58bdb67262e7e470",
+        "prerequisiteVerb": "dotnet462",
+        "arguments": [
+          "/q",
+          "/norestart"
+        ]
+      }
+    },
+    {
+      "id": "netfx471",
+      "version": "4.7.1",
+      "clrGeneration": "clr4",
+      "prefix": "/opt/wine-netfx-clr4",
+      "recipe": {
+        "kind": "winetricks",
+        "verb": "dotnet471"
+      }
+    },
+    {
+      "id": "netfx472",
+      "version": "4.7.2",
+      "clrGeneration": "clr4",
+      "prefix": "/opt/wine-netfx-clr4",
+      "recipe": {
+        "kind": "winetricks",
+        "verb": "dotnet472"
+      }
+    },
+    {
+      "id": "netfx48",
+      "version": "4.8",
+      "clrGeneration": "clr4",
+      "prefix": "/opt/wine-netfx-clr4",
+      "recipe": {
+        "kind": "winetricks",
+        "verb": "dotnet48"
+      }
+    }
+  ]
+}

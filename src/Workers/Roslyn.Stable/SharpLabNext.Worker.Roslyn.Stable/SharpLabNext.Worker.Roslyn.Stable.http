@@ -1,0 +1,52 @@
+@SharpLabNext.Worker.Roslyn.Stable_HostAddress = http://localhost:5148
+
+GET {{SharpLabNext.Worker.Roslyn.Stable_HostAddress}}/health/ready
+Accept: application/json
+
+###
+
+GET {{SharpLabNext.Worker.Roslyn.Stable_HostAddress}}/api/v1/worker/describe
+Accept: application/json
+
+###
+
+POST {{SharpLabNext.Worker.Roslyn.Stable_HostAddress}}/api/v1/build
+Content-Type: application/json
+
+{
+  "RequestId": "manual-compile-check",
+  "IdempotencyKey": "manual-compile-check-1",
+  "PipelineResolutionId": "manual-pipeline",
+  "ToolchainId": "roslyn-stable",
+  "ReferenceSetId": "net10-ref",
+  "Workspace": {
+    "SchemaVersion": 1,
+    "Revision": 1,
+    "SelectionRevision": 1,
+    "LanguageId": "csharp",
+    "Files": [
+      {
+        "Path": "Program.cs",
+        "Version": 1,
+        "Text": "System.Console.WriteLine(42);"
+      }
+    ],
+    "ActiveFile": "Program.cs",
+    "SourceOrder": ["Program.cs"],
+    "ReferenceSetId": "net10-ref",
+    "BuildOptions": {
+      "Configuration": "release",
+      "Optimize": true,
+      "OutputKind": "console",
+      "AllowUnsafe": false,
+      "EmitPortablePdb": true,
+      "NullableContext": "enable",
+      "LanguageVersion": "preview",
+      "CheckOverflow": false
+    }
+  },
+  "DeadlineUtc": "2099-01-01T00:00:00Z",
+  "Target": "compile-check"
+}
+
+###

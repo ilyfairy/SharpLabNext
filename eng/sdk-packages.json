@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "id": "SharpLab.Runtime",
+      "project": "src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj",
+      "targetFrameworks": ["netstandard2.1", "net10.0"],
+      "dependencies": [],
+      "requiredFiles": ["README.md"]
+    },
+    {
+      "id": "SharpLabNext.Contracts",
+      "project": "src/Contracts/SharpLabNext.Contracts/SharpLabNext.Contracts.csproj",
+      "targetFrameworks": ["net8.0", "net10.0"],
+      "dependencies": [],
+      "requiredFiles": ["README.md"]
+    },
+    {
+      "id": "SharpLabNext.Artifacts.Contracts",
+      "project": "src/Contracts/SharpLabNext.Artifacts.Contracts/SharpLabNext.Artifacts.Contracts.csproj",
+      "targetFrameworks": ["net8.0", "net10.0"],
+      "dependencies": ["SharpLabNext.Contracts"],
+      "requiredFiles": ["README.md"]
+    },
+    {
+      "id": "SharpLabNext.Contracts.Grpc",
+      "project": "src/Contracts/SharpLabNext.Contracts.Grpc/SharpLabNext.Contracts.Grpc.csproj",
+      "targetFrameworks": ["net8.0", "net10.0"],
+      "dependencies": ["SharpLabNext.Artifacts.Contracts", "SharpLabNext.Contracts"],
+      "requiredFiles": ["README.md"]
+    },
+    {
+      "id": "SharpLabNext.ArtifactStore.Client",
+      "project": "src/ArtifactStore/SharpLabNext.ArtifactStore.Client/SharpLabNext.ArtifactStore.Client.csproj",
+      "targetFrameworks": ["net8.0", "net10.0"],
+      "dependencies": ["SharpLabNext.Artifacts.Contracts", "SharpLabNext.Contracts"],
+      "requiredFiles": ["README.md"]
+    },
+    {
+      "id": "SharpLabNext.WorkerHost",
+      "project": "src/WorkerHost/SharpLabNext.WorkerHost/SharpLabNext.WorkerHost.csproj",
+      "targetFrameworks": ["net8.0", "net10.0"],
+      "dependencies": ["SharpLabNext.Contracts.Grpc"],
+      "requiredFiles": ["README.md"]
+    },
+    {
+      "id": "SharpLabNext.LanguageWorker.Sdk",
+      "project": "src/WorkerHost/SharpLabNext.LanguageWorker.Sdk/SharpLabNext.LanguageWorker.Sdk.csproj",
+      "targetFrameworks": ["net10.0"],
+      "dependencies": ["SharpLabNext.ArtifactStore.Client", "SharpLabNext.WorkerHost"],
+      "requiredFiles": ["README.md", "schemas/language-worker-capability.schema.json"]
+    },
+    {
+      "id": "SharpLabNext.LanguageWorker.Conformance",
+      "project": "src/WorkerHost/SharpLabNext.LanguageWorker.Conformance/SharpLabNext.LanguageWorker.Conformance.csproj",
+      "targetFrameworks": ["net10.0"],
+      "dependencies": ["SharpLabNext.ArtifactStore.Client", "SharpLabNext.LanguageWorker.Sdk"],
+      "requiredFiles": ["README.md"]
+    },
+    {
+      "id": "SharpLabNext.ArtifactWorker.Sdk",
+      "project": "src/WorkerHost/SharpLabNext.ArtifactWorker.Sdk/SharpLabNext.ArtifactWorker.Sdk.csproj",
+      "targetFrameworks": ["net10.0"],
+      "dependencies": ["SharpLabNext.ArtifactStore.Client", "SharpLabNext.Artifacts.Contracts", "SharpLabNext.WorkerHost"],
+      "requiredFiles": ["README.md", "schemas/artifact-worker-capability.schema.json"]
+    },
+    {
+      "id": "SharpLabNext.RuntimeProfile.Sdk",
+      "project": "src/WorkerHost/SharpLabNext.RuntimeProfile.Sdk/SharpLabNext.RuntimeProfile.Sdk.csproj",
+      "targetFrameworks": ["net10.0"],
+      "dependencies": [],
+      "requiredFiles": ["README.md", "schemas/runtime-profile.schema.json"]
+    }
+  ]
+}

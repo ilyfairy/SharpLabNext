@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "status": "unknown",
+  "checked": false,
+  "active": {
+    "releaseId": "development",
+    "lockDigest": null
+  },
+  "lastKnownGood": null,
+  "candidate": null,
+  "updateAvailable": null,
+  "checkedAt": null,
+  "updatedAt": "2026-07-11T00:00:00Z",
+  "lastStage": {
+    "stage": "none",
+    "outcome": "not-checked",
+    "startedAt": null,
+    "completedAt": null,
+    "error": null
+  }
+}

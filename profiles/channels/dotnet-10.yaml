@@ -1,0 +1,18 @@
+id: dotnet-10-linux-x64
+kind: runtime-channel
+source:
+  type: dotnet-release-metadata
+  channel: "10.0"
+  policy: latest-release
+sdkComponentId: dotnet-sdk-host
+referenceSet:
+  id: net10-ref
+  package: Microsoft.NETCore.App.Ref
+platform:
+  os: linux
+  libc: glibc
+  architecture: x64
+update:
+  pollInterval: 6h
+  autoPromoteAfterTests: false
+  retainLastKnownGood: true

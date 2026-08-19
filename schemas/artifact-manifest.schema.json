@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/artifacts/v1/artifact-manifest.schema.json",
+  "title": "SharpLabNext Artifact Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifestVersion", "artifactId", "producer", "referenceSetId", "targetFramework", "artifactFormat", "runtimeRequirement", "metadataFeatureTags", "outputKind", "entryAssembly", "files"],
+  "properties": {
+    "manifestVersion": { "const": 1 },
+    "artifactId": { "$ref": "#/$defs/sha256" },
+    "producer": { "$ref": "#/$defs/producer" },
+    "referenceSetId": { "$ref": "#/$defs/id" },
+    "targetFramework": { "$ref": "#/$defs/nonEmpty" },
+    "artifactFormat": { "$ref": "#/$defs/id" },
+    "runtimeRequirement": { "$ref": "#/$defs/runtimeRequirement" },
+    "metadataFeatureTags": { "$ref": "#/$defs/ids" },
+    "outputKind": { "enum": ["console", "library", "windows-application"] },
+    "entryAssembly": { "$ref": "#/$defs/safePath" },
+    "entryPoint": { "$ref": "#/$defs/nonEmpty" },
+    "files": { "type": "array", "minItems": 1, "maxItems": 1024, "items": { "$ref": "#/$defs/file" } },
+    "derivation": { "$ref": "#/$defs/derivation" },
+    "metadata": {
+      "type": "object",
+      "propertyNames": { "type": "string", "minLength": 1, "maxLength": 128 },
+      "additionalProperties": { "type": "string", "maxLength": 4096 }
+    }
+  },
+  "$defs": {
+    "nonEmpty": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "safePath": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)[^\\u0000]+$" },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["releaseId", "languageId", "toolchainId", "compilerVersion", "workerImageId"],
+      "properties": {
+        "releaseId": { "$ref": "#/$defs/nonEmpty" },
+        "languageId": { "$ref": "#/$defs/id" },
+        "toolchainId": { "$ref": "#/$defs/id" },
+        "compilerVersion": { "$ref": "#/$defs/nonEmpty" },
+        "compilerCommit": { "$ref": "#/$defs/nonEmpty" },
+        "workerImageId": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "runtimeRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family", "frameworks", "architecture", "requiredRuntimeFeatureTags"],
+      "properties": {
+        "family": { "$ref": "#/$defs/nonEmpty" },
+        "frameworks": { "type": "array", "items": { "$ref": "#/$defs/framework" } },
+        "architecture": { "$ref": "#/$defs/nonEmpty" },
+        "requiredRuntimeFeatureTags": { "$ref": "#/$defs/ids" }
+      }
+    },
+    "framework": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "minimumVersion"],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmpty" },
+        "minimumVersion": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "path", "size", "digest"],
+      "properties": {
+        "role": { "$ref": "#/$defs/id" },
+        "path": { "$ref": "#/$defs/safePath" },
+        "size": { "type": "integer", "minimum": 0, "maximum": 1073741824 },
+        "digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "derivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parentArtifactId", "processorId", "processorVersion", "optionsDigest"],
+      "properties": {
+        "parentArtifactId": { "$ref": "#/$defs/sha256" },
+        "processorId": { "$ref": "#/$defs/id" },
+        "processorVersion": { "$ref": "#/$defs/nonEmpty" },
+        "optionsDigest": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

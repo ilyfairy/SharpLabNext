@@ -1,0 +1,7 @@
+<Project>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)*.cs"
+             Link="Roslyn.Shared/%(Filename)%(Extension)" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)..\..\..\Infrastructure\SharpLabNext.Observability\SharpLabNext.Observability.csproj" />
+  </ItemGroup>
+</Project>

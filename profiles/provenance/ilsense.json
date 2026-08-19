@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "componentId": "ilsense",
+  "sourceComponentId": "ilsense-source",
+  "compatibilityGroup": "ilsense-v0.1.0",
+  "status": "source-inputs-recorded",
+  "license": "MIT",
+  "builder": {
+    "imageId": "dotnet-sdk",
+    "platform": "linux/amd64",
+    "sourceDateEpoch": 1784639716
+  },
+  "build": {
+    "configuration": "Release",
+    "targetFramework": "net10.0",
+    "compilerProject": "src/Workers/IL/SharpLabNext.Worker.IL.Compiler/SharpLabNext.Worker.IL.Compiler.csproj",
+    "languageServerProject": "third_party/ILSense/src/EleCho.ILSense/EleCho.ILSense.csproj",
+    "outputs": [
+      "EleCho.ILSense.dll",
+      "SharpLabNext.Worker.IL.dll"
+    ]
+  },
+  "featureEvidence": [
+    "The exact ILSense gitlink is initialized in clean clones and every detached profile-candidate worktree.",
+    "Only the protocol-neutral EleCho.ILSense core library is linked into the IL worker; the upstream demo host is excluded.",
+    "ILSense performs metadata-only reference indexing and does not load or execute indexed assemblies."
+  ]
+}

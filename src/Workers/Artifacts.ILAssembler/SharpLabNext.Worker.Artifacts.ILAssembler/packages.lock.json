@@ -1,0 +1,151 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "OpenTelemetry": {
+        "type": "Transitive",
+        "resolved": "1.16.0",
+        "contentHash": "nE/Px3MUvQC8c0UG0DOP5OJE7vMtiMaPYi/6TkSS/o/O0s/oPq+8WaPYTVEPzb7lwu/QyLgknc+sFm2FjPXe2A==",
+        "dependencies": {
+          "OpenTelemetry.Api.ProviderBuilderExtensions": "1.16.0"
+        }
+      },
+      "OpenTelemetry.Api": {
+        "type": "Transitive",
+        "resolved": "1.16.0",
+        "contentHash": "WZP8Eb6vZTeNqeV+fjBitc7iefBoTHIhaWorqg/h/YiQBlcQJu0bICuTqKV0XRyjiE0eWs80yLlnUtHAFSkFWA=="
+      },
+      "OpenTelemetry.Api.ProviderBuilderExtensions": {
+        "type": "Transitive",
+        "resolved": "1.16.0",
+        "contentHash": "hZwaHAkXvUNn9+cS+vEvYBgIrIQOQRz2cIRUODZ5gxHsDsLeNCueLgZFkybopjE0jUhLut6lm5eL3LTqbW0hMg==",
+        "dependencies": {
+          "OpenTelemetry.Api": "1.16.0"
+        }
+      },
+      "System.Windows.Extensions": {
+        "type": "Transitive",
+        "resolved": "9.0.0",
+        "contentHash": "U9msthvnH2Fsw7xwAvIhNHOdnIjOQTwOc8Vd0oGOsiRcGMGoBFlUD6qtYawRUoQdKH9ysxesZ9juFElt1Jw/7A=="
+      },
+      "sharplabnext.artifacts.contracts": {
+        "type": "Project",
+        "dependencies": {
+          "SharpLabNext.Contracts": "[0.1.0, )"
+        }
+      },
+      "sharplabnext.artifactstore.client": {
+        "type": "Project",
+        "dependencies": {
+          "SharpLabNext.Artifacts.Contracts": "[0.1.0, )",
+          "SharpLabNext.Contracts": "[0.1.0, )"
+        }
+      },
+      "sharplabnext.artifactworker.sdk": {
+        "type": "Project",
+        "dependencies": {
+          "SharpLabNext.ArtifactStore.Client": "[0.1.0, )",
+          "SharpLabNext.Artifacts.Contracts": "[0.1.0, )",
+          "SharpLabNext.WorkerHost": "[0.1.0, )"
+        }
+      },
+      "sharplabnext.contracts": {
+        "type": "Project"
+      },
+      "sharplabnext.contracts.grpc": {
+        "type": "Project",
+        "dependencies": {
+          "SharpLabNext.Artifacts.Contracts": "[0.1.0, )",
+          "SharpLabNext.Contracts": "[0.1.0, )"
+        }
+      },
+      "sharplabnext.observability": {
+        "type": "Project",
+        "dependencies": {
+          "OpenTelemetry.Exporter.OpenTelemetryProtocol": "[1.16.0, )",
+          "OpenTelemetry.Extensions.Hosting": "[1.16.0, )",
+          "OpenTelemetry.Instrumentation.AspNetCore": "[1.16.0, )",
+          "OpenTelemetry.Instrumentation.Http": "[1.16.0, )",
+          "OpenTelemetry.Instrumentation.Runtime": "[1.16.0, )"
+        }
+      },
+      "sharplabnext.worker.il.compiler": {
+        "type": "Project",
+        "dependencies": {
+          "Mobius.ILasm": "[0.1.0, )",
+          "SharpLabNext.Contracts": "[0.1.0, )",
+          "System.Security.Permissions": "[9.0.0, )"
+        }
+      },
+      "sharplabnext.workerhost": {
+        "type": "Project",
+        "dependencies": {
+          "SharpLabNext.Contracts.Grpc": "[0.1.0, )"
+        }
+      },
+      "Mobius.ILasm": {
+        "type": "CentralTransitive",
+        "requested": "[0.1.0, )",
+        "resolved": "0.1.0",
+        "contentHash": "0uB5lko7fQZ4eOqkEyApSwxSwdMqdrduTpi6aAvr1nr03Lw+muS6UaAYCvk2ICN+AR94lPelvSx1+HCCwBMhTQ==",
+        "dependencies": {
+          "System.Security.Permissions": "5.0.0"
+        }
+      },
+      "OpenTelemetry.Exporter.OpenTelemetryProtocol": {
+        "type": "CentralTransitive",
+        "requested": "[1.16.0, )",
+        "resolved": "1.16.0",
+        "contentHash": "gzYLY8sVDY5FYtVlCYSzBYX53xslRlvBLxwFYOdNIhc76SgKdFYUoDQXOeQI3WPBCrZp51QNcP6fZHh1+HtpIQ==",
+        "dependencies": {
+          "OpenTelemetry": "1.16.0"
+        }
+      },
+      "OpenTelemetry.Extensions.Hosting": {
+        "type": "CentralTransitive",
+        "requested": "[1.16.0, )",
+        "resolved": "1.16.0",
+        "contentHash": "/YfrO5MRaA156vhNanYGPX2JjOwKUrA0+Jf7ltT2eD3VkfHqXcEJY5Oxt/nWH8lqBOTc1nJpn2soBtD5Cml8Dg==",
+        "dependencies": {
+          "OpenTelemetry": "1.16.0"
+        }
+      },
+      "OpenTelemetry.Instrumentation.AspNetCore": {
+        "type": "CentralTransitive",
+        "requested": "[1.16.0, )",
+        "resolved": "1.16.0",
+        "contentHash": "vSC5EsmBVNcqXMh9BGkkq8zkoUjrg8ghBDb9zbKR8Bqjd05utjVgVft+fqsqQVsvlV5olGj1pBliHBngcIGSIg==",
+        "dependencies": {
+          "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.16.0, 2.0.0)"
+        }
+      },
+      "OpenTelemetry.Instrumentation.Http": {
+        "type": "CentralTransitive",
+        "requested": "[1.16.0, )",
+        "resolved": "1.16.0",
+        "contentHash": "+Sz3lfvMXwWE8s/sMruHCDlO/+cArFVc6oBg1tCb70BKlL9FCC7uK4Ar2/VP9Hhwvs+UwaW1vGzE/uiByVHXiA==",
+        "dependencies": {
+          "OpenTelemetry.Api.ProviderBuilderExtensions": "[1.16.0, 2.0.0)"
+        }
+      },
+      "OpenTelemetry.Instrumentation.Runtime": {
+        "type": "CentralTransitive",
+        "requested": "[1.16.0, )",
+        "resolved": "1.16.0",
+        "contentHash": "3mKCZZo32UYn/vcVFxxrWgO+BcDy9EZBdW1rfCzdtK+CGCFIMnf6AY96MrnVnyNK/f3ehq9t6qLec8OTNxgzRw==",
+        "dependencies": {
+          "OpenTelemetry.Api": "[1.16.0, 2.0.0)"
+        }
+      },
+      "System.Security.Permissions": {
+        "type": "CentralTransitive",
+        "requested": "[9.0.0, )",
+        "resolved": "9.0.0",
+        "contentHash": "H2VFD4SFVxieywNxn9/epb63/IOcPPfA0WOtfkljzNfu7GCcHIBQNuwP6zGCEIi7Ci/oj8aLPUNK9sYImMFf4Q==",
+        "dependencies": {
+          "System.Windows.Extensions": "9.0.0"
+        }
+      }
+    }
+  }
+}

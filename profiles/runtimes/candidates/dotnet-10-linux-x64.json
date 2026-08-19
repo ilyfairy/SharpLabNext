@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "id": "dotnet-10-linux-x64",
+  "image": "sharplabnext/runtime-dotnet-10-linux-x64:candidate",
+  "family": "coreclr",
+  "acceptedRuntimeFamilies": [
+    "coreclr"
+  ],
+  "acceptedFrameworks": [
+    {
+      "name": "Microsoft.NETCore.App",
+      "exactVersion": "10.0.10"
+    }
+  ],
+  "runtimeVersion": "10.0.10",
+  "runtimeCommit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+  "jitVersion": "10.0.10",
+  "jitCommit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+  "runtimeImageId": "sharplabnext/runtime-dotnet-10-linux-x64:candidate",
+  "rid": "linux-x64",
+  "architecture": "x64",
+  "cpuFeatureProfile": "x64-v2",
+  "acceptedArtifactFormats": [
+    "dotnet-managed-pe-v1"
+  ],
+  "capabilities": [
+    "run",
+    "jit-asm"
+  ],
+  "providedRuntimeFeatureTags": [],
+  "providedMetadataFeatureTags": [],
+  "allowedSecurityPolicyIds": [
+    "runtime-job-default"
+  ],
+  "container": {
+    "isolationKind": "standard",
+    "environmentKind": "coreclr",
+    "executionUser": "1654:1654"
+  },
+  "operations": {
+    "run": {
+      "implementationId": "sharplabnext-runner-v1",
+      "pathStyle": "unix",
+      "command": {
+        "executable": "/opt/sharplabnext/target-dotnet/dotnet",
+        "argv": [
+          "/opt/sharplabnext/SharpLabNext.Runner.dll",
+          "{entryAssembly}",
+          "--",
+          "{arguments}"
+        ]
+      }
+    },
+    "jit": {
+      "implementationId": "sharplabnext-jit-inspector-v1",
+      "pathStyle": "unix",
+      "command": {
+        "executable": "/opt/sharplabnext/target-dotnet/dotnet",
+        "argv": [
+          "/opt/sharplabnext/SharpLabNext.JitInspector.dll",
+          "{entryAssembly}",
+          "{methodFilter}"
+        ]
+      },
+      "sourceMappingKind": "linux-profiler",
+      "profilerPath": "/opt/sharplabnext/SharpLabNext.JitProfiler.so"
+    }
+  },
+  "layout": {
+    "runnerKind": "dotnet",
+    "dotNetHostPath": "/opt/sharplabnext/target-dotnet/dotnet",
+    "runnerAssemblyPath": "/opt/sharplabnext/SharpLabNext.Runner.dll",
+    "jitInspectorAssemblyPath": "/opt/sharplabnext/SharpLabNext.JitInspector.dll"
+  },
+  "securityPolicies": [
+    {
+      "id": "runtime-job-default",
+      "memoryBytes": 268435456,
+      "nanoCpus": 1000000000,
+      "pidsLimit": 64,
+      "maximumDurationSeconds": 10,
+      "maximumArtifactBytes": 67108864,
+      "maximumOutputBytes": 1048576,
+      "tmpfsBytes": 33554432
+    }
+  ]
+}

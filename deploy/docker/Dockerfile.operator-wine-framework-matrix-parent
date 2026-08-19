@@ -1,0 +1,100 @@
+# Shared operator parent for all exact .NET Framework/Wine rows. The generated
+# build Dockerfile replaces the row-mount marker below with one target-prefix
+# digest-pinned named BuildKit mount per matrix row. Prefix bytes are never
+# copied into a raw context image or an intermediate layer.
+
+ARG ROOT_IMAGE
+ARG WINE_IMAGE
+
+FROM ${WINE_IMAGE} AS wine-source
+
+FROM ${ROOT_IMAGE} AS final
+ARG ROOT_IMAGE
+ARG WINE_IMAGE
+ARG VERSION
+ARG SOURCE_REVISION
+ARG FRAMEWORK_MATRIX_INPUT_SHA256
+ARG FRAMEWORK_MATRIX_SOURCE_URI
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+COPY --from=wine-source /usr/ /usr/
+COPY --from=wine-source /etc/fonts/ /etc/fonts/
+COPY deploy/docker/assemble-framework-prefix-matrix.py /usr/local/bin/sharplabnext-assemble-framework-prefix-matrix
+COPY deploy/docker/dedupe-wine-prefixes.py /usr/local/bin/sharplabnext-dedupe-wine-prefixes
+COPY deploy/docker/wine-netfx-framework-preflight.sh /usr/local/bin/sharplabnext-wine-netfx-preflight
+
+# The metadata image is bounded JSON only. Each generated row mount reads the
+# target prefix directly from the corresponding immutable operator image. The
+# assembler writes directly to the final path and incrementally hard-links
+# audited static-runtime duplicates after each copied prefix.
+RUN --mount=type=bind,from=framework-matrix-metadata,source=/,target=/run/sharplabnext-framework-matrix-metadata,ro \
+    # SHARPLABNEXT_FRAMEWORK_ROW_MOUNTS
+    set -euo pipefail; \
+    rm -rf /usr/lib/x86_64-linux-gnu/wine/i386-windows; \
+    [[ "${ROOT_IMAGE}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; \
+    [[ "${WINE_IMAGE}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; \
+    [[ "${SOURCE_REVISION}" == development || "${SOURCE_REVISION}" =~ ^[0-9a-f]{40,64}$ ]]; \
+    [[ "${FRAMEWORK_MATRIX_INPUT_SHA256}" =~ ^sha256:[0-9a-f]{64}$ ]]; \
+    [[ "${FRAMEWORK_MATRIX_SOURCE_URI}" =~ ^docker://[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; \
+    chmod 0555 /usr/local/bin/sharplabnext-assemble-framework-prefix-matrix \
+      /usr/local/bin/sharplabnext-dedupe-wine-prefixes \
+      /usr/local/bin/sharplabnext-wine-netfx-preflight; \
+    test -s /run/sharplabnext-framework-matrix-metadata/matrix-input.json; \
+    printf '%s  %s\n' "${FRAMEWORK_MATRIX_INPUT_SHA256#sha256:}" \
+      /run/sharplabnext-framework-matrix-metadata/matrix-input.json | sha256sum --check --status; \
+    test ! -e /opt/sharplabnext; \
+    /usr/local/bin/sharplabnext-assemble-framework-prefix-matrix assemble \
+      --input /run/sharplabnext-framework-matrix-metadata \
+      --row-prefix-root /run/sharplabnext-framework-rows \
+      --output /opt/sharplabnext \
+      --dedupe-helper /usr/local/bin/sharplabnext-dedupe-wine-prefixes \
+      --preflight-command /usr/local/bin/sharplabnext-wine-netfx-preflight; \
+    test -s /opt/sharplabnext/framework-matrix.json; \
+    test -s /opt/sharplabnext/.wine-prefix-layout.json; \
+    printf '%s\n' "${WINE_IMAGE}" > /opt/sharplabnext/.operator-wine-image; \
+    printf '%s\n' "${FRAMEWORK_MATRIX_INPUT_SHA256}" > /opt/sharplabnext/.framework-matrix-input-sha256; \
+    printf '%s\n' "${FRAMEWORK_MATRIX_SOURCE_URI}" > /opt/sharplabnext/.framework-matrix-source-uri; \
+    chmod 0444 /opt/sharplabnext/.operator-wine-image \
+      /opt/sharplabnext/.framework-matrix-input-sha256 \
+      /opt/sharplabnext/.framework-matrix-source-uri; \
+    test ! -e /opt/wine-netfx-clr2; \
+    test ! -e /opt/wine-netfx-clr4
+
+# The BuildKit bind mounts vanish after the assembly step. Recompute the
+# complete row/layout identities from the final layer before publishing it.
+RUN set -euo pipefail; \
+    test ! -e /run/sharplabnext-framework-matrix-metadata; \
+    test ! -e /run/sharplabnext-framework-rows; \
+    test ! -e /usr/lib/x86_64-linux-gnu/wine/i386-windows; \
+    test -x /usr/local/bin/sharplabnext-assemble-framework-prefix-matrix; \
+    test -x /usr/local/bin/sharplabnext-dedupe-wine-prefixes; \
+    test -x /usr/local/bin/sharplabnext-wine-netfx-preflight; \
+    test -f /opt/sharplabnext/.operator-wine-image && test ! -L /opt/sharplabnext/.operator-wine-image; \
+    test -f /opt/sharplabnext/.framework-matrix-input-sha256 && test ! -L /opt/sharplabnext/.framework-matrix-input-sha256; \
+    test -f /opt/sharplabnext/.framework-matrix-source-uri && test ! -L /opt/sharplabnext/.framework-matrix-source-uri; \
+    test "$(cat /opt/sharplabnext/.operator-wine-image)" = "${WINE_IMAGE}"; \
+    test "$(cat /opt/sharplabnext/.framework-matrix-input-sha256)" = "${FRAMEWORK_MATRIX_INPUT_SHA256}"; \
+    test "$(cat /opt/sharplabnext/.framework-matrix-source-uri)" = "${FRAMEWORK_MATRIX_SOURCE_URI}"; \
+    /usr/local/bin/sharplabnext-assemble-framework-prefix-matrix verify \
+      --root /opt/sharplabnext/framework-prefixes \
+      --dedupe-helper /usr/local/bin/sharplabnext-dedupe-wine-prefixes \
+      --expected-input-manifest-sha256 "${FRAMEWORK_MATRIX_INPUT_SHA256}"
+
+LABEL org.opencontainers.image.title="SharpLabNext shared Wine .NET Framework operator parent" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      io.sharplabnext.operator-only="true" \
+      io.sharplabnext.framework.matrix="true" \
+      io.sharplabnext.framework.matrix-strategy="shared-framework-target-prefix-matrix-v1" \
+      io.sharplabnext.framework.layout-strategy="hardlink-static-runtime-matrix-v1" \
+      io.sharplabnext.framework.dedupe-policy="wine-static-runtime-payload-v1" \
+      io.sharplabnext.framework.matrix-manifest="/opt/sharplabnext/framework-matrix.json" \
+      io.sharplabnext.framework.layout-manifest="/opt/sharplabnext/.wine-prefix-layout.json" \
+      io.sharplabnext.framework.matrix-input-sha256="${FRAMEWORK_MATRIX_INPUT_SHA256}" \
+      io.sharplabnext.framework.matrix-source-uri="${FRAMEWORK_MATRIX_SOURCE_URI}" \
+      io.sharplabnext.operator-image.wine="${WINE_IMAGE}" \
+      io.sharplabnext.operator-root="${ROOT_IMAGE}"
+
+WORKDIR /opt
+USER 0:0

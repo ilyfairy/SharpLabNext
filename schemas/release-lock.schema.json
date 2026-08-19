@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/releases/v1/release-lock.schema.json",
+  "title": "SharpLabNext Release Lock",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "releaseId", "resolvedAt", "components"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "releaseId": { "$ref": "#/$defs/nonEmpty" },
+    "resolvedAt": { "type": "string", "format": "date-time" },
+    "components": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/component" }
+    }
+  },
+  "$defs": {
+    "nonEmpty": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "resolvedVersion"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/id" },
+        "resolvedVersion": { "$ref": "#/$defs/nonEmpty" },
+        "commit": { "type": "string", "minLength": 7, "maxLength": 64, "pattern": "^[0-9a-f]+$" },
+        "jitCommit": { "type": "string", "minLength": 7, "maxLength": 64, "pattern": "^[0-9a-f]+$" },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "patchDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "imageId": {
+          "description": "Generated immutable image identity. It may be omitted from a development source lock and is required in a generated release bundle lock.",
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "sourceUri": { "type": "string", "format": "uri", "maxLength": 2048 },
+        "sha512": { "type": "string", "pattern": "^[0-9a-f]{128}$" },
+        "package": { "$ref": "#/$defs/nonEmpty" },
+        "packageContentHash": { "type": "string", "minLength": 16, "maxLength": 256 },
+        "releaseDate": { "type": "string", "format": "date" }
+      }
+    }
+  }
+}

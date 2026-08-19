@@ -1,0 +1,55 @@
+releaseInputs:
+  - id: gsharp
+    version: 0.3.33
+  - id: peachpie
+    version: 1.1.13
+    provenanceCommit: 608bf30cf3f43f97e32825076a2cfdaa25043e50
+channels:
+  - id: roslyn-stable
+    kind: toolchain
+    source: { type: nuget, package: Microsoft.CodeAnalysis.CSharp, policy: latest-stable }
+  - id: roslyn-main
+    kind: toolchain
+    source: { type: github-commit, repository: dotnet/roslyn, branch: main }
+  - id: fsharp-stable
+    kind: toolchain
+    source: { type: nuget, package: FSharp.Compiler.Service, policy: latest-stable }
+  - id: fsharp-core
+    kind: runtime-dependency
+    source: { type: nuget, package: FSharp.Core, policy: latest-stable }
+  - id: gsharp-stable
+    kind: toolchain
+    releaseInput: gsharp
+    sourceComponentId: gsharp-source
+    source: { type: github-commit, repository: DavidObando/gsharp, tagPrefix: v }
+  - id: peachpie-stable
+    kind: toolchain
+    releaseInput: peachpie
+    source: { type: nuget, package: Peachpie.CodeAnalysis, policy: exact }
+  - id: peachpie-runtime
+    kind: runtime-dependency
+    releaseInput: peachpie
+    source: { type: nuget, package: Peachpie.Runtime, policy: exact }
+  - id: peachpie-library
+    kind: runtime-dependency
+    releaseInput: peachpie
+    source: { type: nuget, package: Peachpie.Library, policy: exact }
+  - id: mobius-ilasm-stable
+    kind: toolchain
+    source: { type: nuget, package: Mobius.ILasm, policy: exact, version: 0.1.0 }
+  - id: ilspy
+    kind: artifact-processor
+    source: { type: nuget, package: ICSharpCode.Decompiler, policy: latest-stable }
+  - id: dotnet-ilverify
+    kind: artifact-processor
+    source: { type: nuget, package: Microsoft.ILVerification, policy: latest-stable }
+derivedComponents:
+  - id: roslyn-stable-netfx48
+    kind: toolchain
+    versionTemplate: "{roslyn-stable}"
+  - id: artifacts-default
+    kind: artifact-processor
+    versionTemplate: "ilspy/{ilspy}+ilverify/{dotnet-ilverify}"
+update:
+  pollInterval: 6h
+  autoPromoteAfterTests: false

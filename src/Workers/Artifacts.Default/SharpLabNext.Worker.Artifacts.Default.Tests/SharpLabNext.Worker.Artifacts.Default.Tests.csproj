@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Infrastructure\SharpLabNext.Observability\SharpLabNext.Observability.csproj" />
+    <ProjectReference Include="..\SharpLabNext.Worker.Artifacts.Default\SharpLabNext.Worker.Artifacts.Default.csproj" Aliases="global,ArtifactWorkerHost" />
+    <ProjectReference Include="..\SharpLabNext.Worker.Artifacts.Default.Fixture\SharpLabNext.Worker.Artifacts.Default.Fixture.csproj" />
+    <ProjectReference Include="..\SharpLabNext.Worker.Artifacts.Default.Processor\SharpLabNext.Worker.Artifacts.Default.Processor.csproj" />
+    <ProjectReference Include="..\SharpLabNext.Worker.Artifacts.Default.Protocol\SharpLabNext.Worker.Artifacts.Default.Protocol.csproj" />
+    <ProjectReference Include="..\..\..\RuntimeJobs\SharpLabNext.Runner\SharpLabNext.Runner.csproj" />
+    <ProjectReference Include="..\..\..\RuntimeJobs\SharpLabNext.RuntimeProtocol\SharpLabNext.RuntimeProtocol.csproj" />
+  </ItemGroup>
+
+</Project>

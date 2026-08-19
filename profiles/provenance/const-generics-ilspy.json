@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "componentId": "artifacts-const-generics",
+  "sourceComponentId": "const-generics-ilspy-source",
+  "compatibilityGroup": "const-generics-bcaed316",
+  "status": "source-inputs-recorded",
+  "license": "MIT",
+  "patchSeries": [
+    {
+      "path": "eng/patches/ilspy-const-generics/0001-use-source-built-metadata.patch",
+      "purpose": "Build ILSpy against the metadata and immutable assemblies produced by the locked runtime source target, replacing the Immutable package while explicitly retaining ILSpy's locked System.Memory and Unsafe dependencies."
+    },
+    {
+      "path": "eng/patches/ilspy-const-generics/0002-ilverification-const-type-arguments.patch",
+      "purpose": "Teach source-built ILVerification to consume constant type arguments and use matching metadata dependencies."
+    }
+  ],
+  "runtimeDependency": {
+    "sourceComponentId": "const-generics-runtime-source",
+    "runtimeComponentId": "const-generics-linux-x64",
+    "namedContext": "target:runtime-const-generics",
+    "assets": [
+      "/compiler-assets/const-generics/System.Reflection.Metadata.dll",
+      "/compiler-assets/const-generics/System.Collections.Immutable.dll",
+      "const-generics-ref",
+      "custom dotnet runtime"
+    ]
+  },
+  "builder": {
+    "imageId": "dotnet-sdk",
+    "platform": "linux/amd64",
+    "sourceDateEpoch": 1740740604
+  },
+  "build": {
+    "configuration": "Release",
+    "legacyMetadataPolicy": "deleted-before-restore",
+    "processorRuntime": "/opt/const-runtime/dotnet",
+    "outputs": [
+      "ICSharpCode.Decompiler.dll",
+      "ILVerification.dll",
+      "System.Reflection.Metadata.dll",
+      "System.Collections.Immutable.dll",
+      "artifact worker",
+      "short-lived processor"
+    ]
+  },
+  "artifactContract": {
+    "toolchainId": "roslyn-const-generics",
+    "referenceSetId": "const-generics-ref",
+    "targetFramework": "net9.0",
+    "runtimeFamily": "coreclr-const-generics",
+    "architecture": "anycpu",
+    "runtimeFeatureTags": ["runtime.const-generics.v1"],
+    "metadataFeatureTags": ["metadata.const-generics.v1"],
+    "compatibilityGroup": "const-generics-bcaed316"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "componentId": "gsharp-stable",
+  "sourceComponentId": "gsharp-source",
+  "compatibilityGroup": "gsharp-v0.3.33",
+  "status": "source-inputs-recorded",
+  "license": "MIT",
+  "builder": {
+    "imageId": "dotnet-sdk",
+    "platform": "linux/amd64",
+    "sourceDateEpoch": 1784074284
+  },
+  "build": {
+    "configuration": "Release",
+    "targetFramework": "net10.0",
+    "compilerProject": "src/Compiler/Compiler.csproj",
+    "languageServerProject": "src/LanguageServer/LanguageServer.csproj",
+    "outputs": [
+      "/opt/gsharp/0.3.33/compiler/gsc.dll",
+      "/opt/gsharp/0.3.33/language-server/GSharp.LanguageServer.dll"
+    ]
+  },
+  "featureEvidence": [
+    "G# compiler emits a managed PE and portable PDB for the existing artifact pipeline",
+    "G# Language Server is bridged as standard LSP over WebSocket",
+    "G# v0.3.33 is restricted to the net10-ref reference set"
+  ]
+}

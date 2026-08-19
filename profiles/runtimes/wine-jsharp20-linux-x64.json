@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "id": "wine-jsharp20-linux-x64",
+  "image": "sharplabnext/runtime-wine-jsharp20:development",
+  "family": "netfx-clr-wine",
+  "acceptedRuntimeFamilies": [],
+  "acceptedFrameworks": [
+    {
+      "name": ".NETFramework",
+      "exactVersion": "2.0"
+    }
+  ],
+  "runtimeVersion": "wine-9.0+clr2+jsharp-2.0.50727.937",
+  "runtimeCommit": "not-applicable",
+  "jitVersion": "not-applicable",
+  "jitCommit": "not-applicable",
+  "runtimeImageId": "sharplabnext/runtime-wine-jsharp20:development",
+  "rid": "linux-x64",
+  "architecture": "x64",
+  "cpuFeatureProfile": "x64-v2",
+  "acceptedArtifactFormats": [
+    "dotnet-framework-managed-pe-v1"
+  ],
+  "capabilities": [
+    "run"
+  ],
+  "providedRuntimeFeatureTags": [
+    "runtime.jsharp20-wine"
+  ],
+  "providedMetadataFeatureTags": [],
+  "allowedSecurityPolicyIds": [
+    "runtime-job-wine-jsharp20"
+  ],
+  "container": {
+    "isolationKind": "wine",
+    "environmentKind": "wine",
+    "executionUser": "0:0",
+    "winePrefixPath": "/opt/wine-jsharp20"
+  },
+  "operations": {
+    "run": {
+      "implementationId": "sharplabnext-wine-runner-v1",
+      "pathStyle": "wine-z",
+      "command": {
+        "executable": "dotnet",
+        "argv": [
+          "/opt/sharplabnext/SharpLabNext.WineRunner.dll",
+          "bridge",
+          "/usr/lib/wine/wine64",
+          "{entryAssembly}",
+          "--",
+          "{arguments}"
+        ]
+      }
+    }
+  },
+  "layout": {
+    "runnerKind": "wine-jsharp20",
+    "dotNetHostPath": "dotnet",
+    "wineHostPath": "/usr/lib/wine/wine64",
+    "winePrefixPath": "/opt/wine-jsharp20",
+    "runnerAssemblyPath": "/opt/sharplabnext/SharpLabNext.WineRunner.dll"
+  },
+  "securityPolicies": [
+    {
+      "id": "runtime-job-wine-jsharp20",
+      "memoryBytes": 1073741824,
+      "nanoCpus": 1000000000,
+      "pidsLimit": 64,
+      "maximumDurationSeconds": 30,
+      "maximumArtifactBytes": 67108864,
+      "maximumOutputBytes": 1048576,
+      "tmpfsBytes": 33554432
+    }
+  ]
+}

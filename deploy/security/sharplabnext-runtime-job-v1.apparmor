@@ -1,0 +1,17 @@
+#include <tunables/global>
+
+profile sharplabnext-runtime-job-v1 flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  file,
+  # Wine's wineserver and managed runtimes require local AF_UNIX IPC. Docker's
+  # network=none remains the primary namespace boundary; AppArmor separately
+  # denies IPv4 and IPv6 sockets without breaking process-local IPC.
+  network unix,
+  deny network inet,
+  deny network inet6,
+  deny mount,
+  deny umount,
+  deny pivot_root,
+  deny ptrace,
+}

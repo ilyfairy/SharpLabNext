@@ -1,0 +1,329 @@
+name: Profile Update Candidate
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: Optional immutable release ID for a changed candidate
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: profile-update-candidate
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Resolve, validate, and bundle profile updates
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+      PROFILE_STATE_ROOT: ${{ runner.temp }}/sharplabnext-profile-updater
+      PROFILE_OUTPUT_ROOT: ${{ github.workspace }}/artifacts/profile-update-release
+      PROFILE_BUNDLE_PATH: ${{ github.workspace }}/artifacts/profile-update-release/bundle
+      SIGNING_PRIVATE_KEY: ${{ secrets.PROFILE_BUNDLE_SIGNING_PRIVATE_KEY }}
+      SIGNING_PUBLIC_KEY: ${{ secrets.PROFILE_BUNDLE_SIGNING_PUBLIC_KEY }}
+      SIGNING_KEY_ID: ${{ secrets.PROFILE_BUNDLE_SIGNING_KEY_ID }}
+
+    steps:
+      - name: Check out source with history
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install locked .NET SDK
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/packages.*.lock.json
+
+      - name: Install locked Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Configure Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Select release identity
+        id: release
+        shell: bash
+        env:
+          REQUESTED_RELEASE_ID: ${{ inputs.release_id }}
+        run: |
+          set -euo pipefail
+          release_id="${REQUESTED_RELEASE_ID:-profile-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}}"
+          if [[ ! "$release_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "release_id must be usable as an immutable Docker tag" >&2
+            exit 64
+          fi
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+
+      - name: Check official channels
+        id: check
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p "$PROFILE_STATE_ROOT" "$PROFILE_OUTPUT_ROOT"
+          set +e
+          dotnet run --project src/Tools/SharpLabNext.ProfileUpdater -- \
+            check \
+            --state-root "$PROFILE_STATE_ROOT" \
+            --http-timeout 600 \
+            --fail-on-change \
+            > "$PROFILE_STATE_ROOT/check-result.json"
+          exit_code=$?
+          set -e
+          case "$exit_code" in
+            0) echo "changed=false" >> "$GITHUB_OUTPUT" ;;
+            2) echo "changed=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "Profile update check failed with exit code $exit_code" >&2; exit "$exit_code" ;;
+          esac
+
+      - name: Reclaim hosted runner disk space
+        if: steps.check.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/local/.ghcup \
+            /usr/local/lib/android \
+            /usr/share/swift
+          docker system prune --all --force --volumes
+
+      - name: Install browser test dependencies
+        if: steps.check.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix frontend ci --no-audit --no-fund
+          npx --prefix frontend playwright install --with-deps chromium
+
+      - name: Resolve exact candidate
+        if: steps.check.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run --project src/Tools/SharpLabNext.ProfileUpdater -- \
+            resolve \
+            --release-id '${{ steps.release.outputs.release_id }}' \
+            --state-root "$PROFILE_STATE_ROOT" \
+            --http-timeout 600 \
+            > "$PROFILE_STATE_ROOT/resolve-result.json"
+
+      - name: Build candidate dependencies and images
+        if: steps.check.outputs.changed == 'true'
+        timeout-minutes: 170
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run --project src/Tools/SharpLabNext.ProfileUpdater -- \
+            build \
+            --state-root "$PROFILE_STATE_ROOT" \
+            --configuration Release \
+            > "$PROFILE_STATE_ROOT/build-result.json"
+
+      - name: Run full candidate gate
+        if: steps.check.outputs.changed == 'true'
+        timeout-minutes: 120
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run --project src/Tools/SharpLabNext.ProfileUpdater -- \
+            test \
+            --state-root "$PROFILE_STATE_ROOT" \
+            --configuration Release \
+            --test-scope full \
+            > "$PROFILE_STATE_ROOT/test-result.json"
+
+      - name: Cleanup candidate Docker resources
+        if: always() && steps.check.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          resolve_result="$PROFILE_STATE_ROOT/resolve-result.json"
+          if [[ ! -f "$resolve_result" ]]; then
+            echo 'No resolved candidate metadata exists; candidate cleanup is a no-op.'
+            exit 0
+          fi
+          candidate_digest="$(jq -er '.candidateDigest' "$resolve_result")"
+          if [[ ! "$candidate_digest" =~ ^sha256:([0-9a-f]{64})$ ]]; then
+            echo 'Resolved candidate digest is malformed; refusing broad Docker cleanup.' >&2
+            exit 1
+          fi
+          digest_hex="${candidate_digest#sha256:}"
+          candidate_project="sln-profile-${digest_hex:0:12}-1"
+          candidate_release_id='${{ steps.release.outputs.release_id }}'
+
+          runtime_containers="$(
+            docker container ls --all --quiet \
+              --filter label=com.sharplabnext.runtime-job=true \
+              --filter "label=com.sharplabnext.release-id=$candidate_release_id" \
+              --filter "label=com.sharplabnext.resource-scope=$candidate_digest"
+          )"
+          if [[ -n "$runtime_containers" ]]; then
+            xargs --no-run-if-empty docker container rm --force <<< "$runtime_containers"
+          fi
+
+          docker container ls --all --quiet \
+            --filter "label=com.docker.compose.project=$candidate_project" \
+            | xargs --no-run-if-empty docker container rm --force
+          docker network ls --quiet \
+            --filter "label=com.docker.compose.project=$candidate_project" \
+            | xargs --no-run-if-empty docker network rm
+          docker volume ls --quiet \
+            --filter "label=com.docker.compose.project=$candidate_project" \
+            | xargs --no-run-if-empty docker volume rm
+
+          docker volume ls --quiet \
+            --filter label=com.sharplabnext.runtime-job=workspace \
+            --filter "label=com.sharplabnext.release-id=$candidate_release_id" \
+            --filter "label=com.sharplabnext.resource-scope=$candidate_digest" \
+            | xargs --no-run-if-empty docker volume rm
+
+          remaining_project_containers="$(
+            docker container ls --all --quiet \
+              --filter "label=com.docker.compose.project=$candidate_project"
+          )"
+          remaining_project_networks="$(
+            docker network ls --quiet \
+              --filter "label=com.docker.compose.project=$candidate_project"
+          )"
+          remaining_project_volumes="$(
+            docker volume ls --quiet \
+              --filter "label=com.docker.compose.project=$candidate_project"
+          )"
+          remaining_runtime_containers="$(
+            docker container ls --all --quiet \
+              --filter label=com.sharplabnext.runtime-job=true \
+              --filter "label=com.sharplabnext.release-id=$candidate_release_id" \
+              --filter "label=com.sharplabnext.resource-scope=$candidate_digest"
+          )"
+          remaining_runtime_volumes="$(
+            docker volume ls --quiet \
+              --filter label=com.sharplabnext.runtime-job=workspace \
+              --filter "label=com.sharplabnext.release-id=$candidate_release_id" \
+              --filter "label=com.sharplabnext.resource-scope=$candidate_digest"
+          )"
+          if [[ -n "$remaining_project_containers" || \
+                -n "$remaining_project_networks" || \
+                -n "$remaining_project_volumes" || \
+                -n "$remaining_runtime_containers" || \
+                -n "$remaining_runtime_volumes" ]]; then
+            echo 'Candidate Docker cleanup left labeled resources behind.' >&2
+            printf '%s\n' "$remaining_project_containers" >&2
+            printf '%s\n' "$remaining_project_networks" >&2
+            printf '%s\n' "$remaining_project_volumes" >&2
+            printf '%s\n' "$remaining_runtime_containers" >&2
+            printf '%s\n' "$remaining_runtime_volumes" >&2
+            exit 1
+          fi
+
+      - name: Promote candidate material locally
+        if: steps.check.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run --project src/Tools/SharpLabNext.ProfileUpdater -- \
+            promote \
+            --state-root "$PROFILE_STATE_ROOT" \
+            > "$PROFILE_STATE_ROOT/promote-result.json"
+
+      - name: Create clean local release commit
+        if: steps.check.outputs.changed == 'true'
+        id: release_commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'SharpLabNext Profile Updater'
+          git config user.email 'profile-updater@sharplabnext.invalid'
+          git add profiles/lock.json profiles/catalog/catalog.json profiles/versions.props
+          while IFS= read -r -d '' lock_file; do
+            git add -- "$lock_file"
+          done < <(git ls-files -z -- ':(glob)**/packages*.lock.json')
+          if git diff --cached --quiet; then
+            echo 'Check reported changes but promotion produced no tracked release material.' >&2
+            exit 1
+          fi
+          git commit -m "Update locked profiles for ${{ steps.release.outputs.release_id }}"
+          source_revision="$(git rev-parse --verify HEAD)"
+          git status --porcelain=v1 --untracked-files=all
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          git format-patch -1 --stdout > "$PROFILE_OUTPUT_ROOT/profile-update.patch"
+          echo "source_revision=$source_revision" >> "$GITHUB_OUTPUT"
+
+      - name: Generate source-verified offline bundle
+        if: steps.check.outputs.changed == 'true'
+        timeout-minutes: 170
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/profile-updater "$PROFILE_OUTPUT_ROOT"
+          cp "$PROFILE_STATE_ROOT/status.public.json" artifacts/profile-updater/status.public.json
+
+          present=0
+          [[ -n "$SIGNING_PRIVATE_KEY" ]] && present=$((present + 1))
+          [[ -n "$SIGNING_PUBLIC_KEY" ]] && present=$((present + 1))
+          [[ -n "$SIGNING_KEY_ID" ]] && present=$((present + 1))
+          if [[ "$present" != 0 && "$present" != 3 ]]; then
+            echo 'Profile bundle signing secrets must be all present or all absent.' >&2
+            exit 1
+          fi
+
+          bundle_args=(
+            --output "$PROFILE_BUNDLE_PATH"
+            --source-revision '${{ steps.release_commit.outputs.source_revision }}'
+          )
+          private_key="$RUNNER_TEMP/profile-update-private.pem"
+          public_key="$RUNNER_TEMP/profile-update-public.pem"
+          trap 'rm -f "$private_key" "$public_key"' EXIT
+          if [[ "$present" == 3 ]]; then
+            printf '%s' "$SIGNING_PRIVATE_KEY" > "$private_key"
+            printf '%s' "$SIGNING_PUBLIC_KEY" > "$public_key"
+            chmod 600 "$private_key"
+            bundle_args+=(
+              --signing-key "$private_key"
+              --signing-public-key "$public_key"
+              --signing-key-id "$SIGNING_KEY_ID"
+            )
+          fi
+
+          ./eng/bundle.sh "${bundle_args[@]}"
+
+      - name: Collect public status and diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "$PROFILE_OUTPUT_ROOT"
+          if [[ -f "$PROFILE_STATE_ROOT/status.public.json" ]]; then
+            cp "$PROFILE_STATE_ROOT/status.public.json" "$PROFILE_OUTPUT_ROOT/status.public.json"
+          fi
+          git status --short > "$PROFILE_OUTPUT_ROOT/git-status.txt"
+          docker system df > "$PROFILE_OUTPUT_ROOT/docker-system-df.txt" 2>&1
+
+      - name: Upload profile update candidate
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: profile-update-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: artifacts/profile-update-release/

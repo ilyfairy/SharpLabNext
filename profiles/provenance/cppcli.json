@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "componentId": "msvc-cppcli-netfx48",
+  "sourceComponentId": "msvc-wine-source",
+  "compatibilityGroup": "msvc-cppcli-netfx48-wine",
+  "status": "source-inputs-recorded",
+  "license": "ISC wrapper; Microsoft compiler, SDK and .NET Framework binaries are proprietary operator-supplied inputs",
+  "builder": {
+    "imageId": "dotnet-sdk",
+    "platform": "linux/amd64",
+    "sourceDateEpoch": 1779634292
+  },
+  "build": {
+    "configuration": "Release",
+    "workerProject": "src/Workers/CppCli/SharpLabNext.Worker.CppCli/SharpLabNext.Worker.CppCli.csproj",
+    "operatorImageComponentId": "msvc-cppcli-private-image",
+    "referenceSetId": "netfx48-ref",
+    "runtimeComponentId": "wine-netfx48-linux-x64",
+    "compilerPath": "/opt/msvc/bin/x64/cl",
+    "artifactFormat": "dotnet-framework-mixed-pe-v1",
+    "redistributionPolicy": "operator-supplied-only",
+    "outputs": [
+      "SharpLabNext.Worker.CppCli",
+      "x64 C++/CLI .NET Framework 4.8 mixed PE"
+    ]
+  },
+  "featureEvidence": [
+    "Wine 9.0 invokes MSVC 19.51 with /clr and /EHa in the isolated compiler worker",
+    "The compiler output is validated as PE32+ AMD64 with CLR metadata and without CorFlags.ILOnly",
+    "The artifact entry point remains native and is never routed to CoreCLR Run or JIT",
+    "The operator must supply the digest-pinned prepared composition base whose labels retain the raw private operator lineage; the two image identities are not interchangeable and Microsoft proprietary binaries are not redistributed as BSD project content"
+  ],
+  "artifactContract": {
+    "toolchainId": "msvc-cppcli-netfx48",
+    "referenceSetId": "netfx48-ref",
+    "targetFramework": "net48",
+    "runtimeFamily": "netfx-clr-wine",
+    "architecture": "x64",
+    "requiredRuntimeFeatureTags": ["runtime.netfx48-wine"],
+    "metadataFeatureTags": [],
+    "compatibilityGroup": "msvc-cppcli-netfx48-wine"
+  }
+}

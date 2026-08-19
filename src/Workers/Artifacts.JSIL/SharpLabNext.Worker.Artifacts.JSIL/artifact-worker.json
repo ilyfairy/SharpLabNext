@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "workerId": "artifacts-jsil",
+  "protocolVersion": "1.0",
+  "capabilities": [
+    "javascript"
+  ],
+  "acceptedArtifactFormats": [
+    "dotnet-managed-pe-v1"
+  ],
+  "producedArtifactFormats": [
+    "javascript-v1"
+  ],
+  "transformIds": [],
+  "renderOutputIds": [
+    "javascript"
+  ],
+  "verificationProfileIds": [],
+  "limits": {
+    "maximumInputArtifactBytes": 16777216,
+    "maximumOutputArtifactBytes": 4194304,
+    "maximumConcurrentOperations": 2,
+    "maximumOperationMilliseconds": 15000,
+    "maximumRetainedOperations": 128,
+    "maximumEventsPerOperation": 16
+  }
+}

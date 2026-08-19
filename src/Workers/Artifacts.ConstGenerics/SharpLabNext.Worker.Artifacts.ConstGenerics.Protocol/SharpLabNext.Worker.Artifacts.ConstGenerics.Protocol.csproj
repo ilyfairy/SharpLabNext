@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Contracts\SharpLabNext.Contracts\SharpLabNext.Contracts.csproj" />
+    <AssemblyMetadata Include="SharpLabNext.ConstGenericsIlSpyCommit"
+                      Value="$(ConstGenericsIlSpyCommit)" />
+    <AssemblyMetadata Include="SharpLabNext.ConstGenericsRuntimeCommit"
+                      Value="$(ConstGenericsRuntimeCommit)" />
+    <AssemblyMetadata Include="SharpLabNext.ConstGenericsIlSpyProcessorVersion"
+                      Value="$(ConstGenericsIlSpyProcessorVersion)" />
+    <AssemblyMetadata Include="SharpLabNext.ConstGenericsVerificationProcessorVersion"
+                      Value="$(ConstGenericsVerificationProcessorVersion)" />
+  </ItemGroup>
+
+  <Target Name="ValidateConstGenericsProcessorIdentity" BeforeTargets="GenerateAssemblyInfo">
+    <Error
+      Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(ConstGenericsIlSpyCommit)', '^[0-9a-f]{40}$'))"
+      Text="ConstGenericsIlSpyCommit must be an exact lowercase 40-character commit." />
+    <Error
+      Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(ConstGenericsRuntimeCommit)', '^[0-9a-f]{40}$'))"
+      Text="ConstGenericsRuntimeCommit must be an exact lowercase 40-character commit." />
+    <Error
+      Condition="'$(ConstGenericsIlSpyProcessorVersion)' != '$(ConstGenericsIlSpyCommit)'"
+      Text="ConstGenericsIlSpyProcessorVersion must match ConstGenericsIlSpyCommit." />
+    <Error
+      Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(ConstGenericsVerificationProcessorVersion)', '^$(ConstGenericsRuntimeCommit)\+[a-z0-9][a-z0-9.-]*$'))"
+      Text="ConstGenericsVerificationProcessorVersion must identify the matching runtime commit and patch revision." />
+  </Target>
+
+</Project>

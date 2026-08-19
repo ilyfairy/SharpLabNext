@@ -1,0 +1,266 @@
+# syntax=docker/dockerfile:1.7
+
+ARG SDK_IMAGE
+ARG ASPNET_IMAGE
+ARG JSHARP_TOOLCHAIN_IMAGE
+ARG CONTROL_TFM
+
+FROM ${JSHARP_TOOLCHAIN_IMAGE} AS operator-toolchain
+
+FROM operator-toolchain AS wine-root
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN <<'SH'
+set -euo pipefail
+
+stage() {
+    printf '[jsharp-wine-base] stage=%s\n' "$1"
+}
+
+root=/jsharp-wine-root
+prefix="${root}/opt/wine-jsharp20"
+mkdir -p \
+    "${root}/usr/bin" \
+    "${root}/usr/lib/wine" \
+    "${root}/usr/lib/x86_64-linux-gnu/wine" \
+    "${root}/usr/share" \
+    "${root}/etc"
+
+stage collect-wine64
+install -m 0555 /usr/bin/wine-stable "${root}/usr/bin/wine-stable"
+install -m 0555 /usr/lib/wine/wineserver "${root}/usr/bin/wineserver"
+install -m 0555 /usr/lib/wine/wine64 "${root}/usr/lib/wine/wine64"
+install -m 0555 /usr/lib/wine/wineserver64 "${root}/usr/lib/wine/wineserver64"
+cp -a /usr/lib/x86_64-linux-gnu/wine/x86_64-unix \
+    "${root}/usr/lib/x86_64-linux-gnu/wine/"
+cp -a /usr/lib/x86_64-linux-gnu/wine/x86_64-windows \
+    "${root}/usr/lib/x86_64-linux-gnu/wine/"
+cp -a /usr/share/wine "${root}/usr/share/"
+cp -a /usr/share/fonts "${root}/usr/share/"
+cp -a /usr/share/fontconfig "${root}/usr/share/"
+cp -a /etc/fonts "${root}/etc/"
+
+dependency_list=/tmp/jsharp-wine-dependencies
+{
+    for binary in /usr/lib/wine/wine64 /usr/lib/wine/wineserver64; do
+        ldd "${binary}" 2>/dev/null || true
+    done
+    for library in \
+        /lib/x86_64-linux-gnu/libfreetype.so.6 \
+        /lib/x86_64-linux-gnu/libfontconfig.so.1; do
+        printf '%s\n' "${library}"
+        ldd "${library}" 2>/dev/null || true
+    done
+    while IFS= read -r module; do
+        ldd "${module}" 2>/dev/null || true
+    done < <(find /usr/lib/x86_64-linux-gnu/wine/x86_64-unix -type f -name '*.so' -print)
+} | awk '
+    /=> \// { print $3 }
+    /^[[:space:]]*\// { print $1 }
+' | sort -u > "${dependency_list}"
+
+while IFS= read -r library; do
+    case "${library}" in
+        /lib/*) destination="${root}/usr${library}" ;;
+        /usr/lib/*) destination="${root}${library}" ;;
+        *) continue ;;
+    esac
+    mkdir -p "$(dirname "${destination}")"
+    cp -L --preserve=mode,timestamps "${library}" "${destination}"
+done < "${dependency_list}"
+
+stage copy-prefix
+mkdir -p "${root}/opt"
+cp -a /opt/wine-jsharp20 "${root}/opt/"
+
+framework="${prefix}/drive_c/windows/Microsoft.NET/Framework"
+framework64="${prefix}/drive_c/windows/Microsoft.NET/Framework64/v2.0.50727"
+legacy_resource="${framework}/v2.0.50727/1033/vjscui.dll"
+test -f "${framework64}/1033/vjscui.dll"
+stage prune-x86-and-install-cache
+rm -rf \
+    "${prefix}/drive_c/Program Files" \
+    "${prefix}/drive_c/Program Files (x86)" \
+    "${prefix}/drive_c/windows/Installer" \
+    "${prefix}/drive_c/windows/syswow64" \
+    "${framework}" \
+    "${prefix}/drive_c/windows/assembly/GAC_32" \
+    "${prefix}/drive_c/windows/assembly/NativeImages_v2.0.50727_32"
+find "${prefix}/drive_c/windows/winsxs" -maxdepth 1 -mindepth 1 \
+    -type d -name 'x86_*' -exec rm -rf {} +
+mkdir -p "$(dirname "${legacy_resource}")"
+cp "${framework64}/1033/vjscui.dll" "${legacy_resource}"
+operator_toolchain="${root}/opt/sharplabnext/jsharp20"
+mkdir -p "${operator_toolchain}"
+ln -s "${framework64#${root}}/vjc.exe" "${operator_toolchain}/vjc.exe"
+ln -s "${framework64#${root}}/vjsc.dll" "${operator_toolchain}/vjsc.dll"
+ln -s "${framework64#${root}}/vjslib.dll" "${operator_toolchain}/vjslib.dll"
+ln -s "${framework64#${root}}/vjscor.dll" "${operator_toolchain}/vjscor.dll"
+ln -s "${framework64#${root}}/vjsnativ.dll" "${operator_toolchain}/vjsnativ.dll"
+rm -rf \
+    "${prefix}/drive_c/windows/temp/"* \
+    "${prefix}/drive_c/users/root/Temp/"* \
+    "${framework64}/SetupCache"
+find "${prefix}" -type f \
+    \( -iname dotnetfx35.exe -o -iname 'vjredist*.exe' -o -iname '*.msi' -o -iname '*.msp' \) \
+    -delete
+
+stage verify-x64-root
+fail_root() {
+    printf '[jsharp-wine-base] failed=%s\n' "$1" >&2
+    exit 1
+}
+require_executable() {
+    test -x "$2" || fail_root "$1"
+}
+require_absent() {
+    test ! -e "$2" || fail_root "$1"
+}
+require_x64() {
+    objdump -f "$2" 2>/dev/null \
+        | grep -Fq 'architecture: i386:x86-64' \
+        || fail_root "$1"
+}
+require_ilonly_neutral() {
+    python3 - "$2" <<'PY' || fail_root "$1"
+import struct
+import sys
+
+try:
+    data = open(sys.argv[1], "rb").read()
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    if data[pe:pe + 4] != b"PE\0\0":
+        raise ValueError
+    machine = struct.unpack_from("<H", data, pe + 4)[0]
+    optional_size = struct.unpack_from("<H", data, pe + 20)[0]
+    optional = pe + 24
+    if machine != 0x14C or struct.unpack_from("<H", data, optional)[0] != 0x10B:
+        raise ValueError
+    section_count = struct.unpack_from("<H", data, pe + 6)[0]
+    cli_directory = optional + 96 + (14 * 8)
+    cli_rva, cli_size = struct.unpack_from("<II", data, cli_directory)
+    if cli_rva == 0 or cli_size < 72:
+        raise ValueError
+    section_table = optional + optional_size
+    cli_offset = None
+    for index in range(section_count):
+        section = section_table + (index * 40)
+        virtual_size, virtual_address, raw_size, raw_offset = struct.unpack_from(
+            "<IIII", data, section + 8)
+        if virtual_address <= cli_rva < virtual_address + max(virtual_size, raw_size):
+            cli_offset = raw_offset + (cli_rva - virtual_address)
+            break
+    if cli_offset is None:
+        raise ValueError
+    flags = struct.unpack_from("<I", data, cli_offset + 16)[0]
+    if flags & 0x1 == 0 or flags & (0x2 | 0x10 | 0x20000):
+        raise ValueError
+except Exception:
+    raise SystemExit(1) from None
+PY
+}
+require_executable wine64-loader "${root}/usr/lib/wine/wine64"
+require_executable wine64-server "${root}/usr/lib/wine/wineserver64"
+require_absent wine32-loader "${root}/usr/lib/wine/wine"
+require_absent wine32-server "${root}/usr/lib/wine/wineserver32"
+require_absent wine-i386-modules "${root}/usr/lib/x86_64-linux-gnu/wine/i386-windows"
+require_absent msvc-tree "${root}/opt/msvc"
+require_absent prefix-syswow64 "${prefix}/drive_c/windows/syswow64"
+require_absent prefix-gac32 "${prefix}/drive_c/windows/assembly/GAC_32"
+require_absent prefix-nativeimages32 "${prefix}/drive_c/windows/assembly/NativeImages_v2.0.50727_32"
+require_x64 arch-vjc "${framework64}/vjc.exe"
+require_x64 arch-vjsc "${framework64}/vjsc.dll"
+require_x64 arch-vjslib "${framework64}/vjslib.dll"
+require_ilonly_neutral neutral-ilonly-vjscor "${framework64}/vjscor.dll"
+require_x64 arch-vjscui "${legacy_resource}"
+require_x64 arch-vjsnativ "${framework64}/vjsnativ.dll"
+stage complete
+SH
+
+FROM ${ASPNET_IMAGE} AS built-jsharp-wine-base
+ARG VERSION
+ARG SOURCE_REVISION
+ARG JSHARP_TOOLCHAIN_VERSION
+ARG JSHARP_COMPILER_VERSION
+ARG JSHARP_TOOLCHAIN_DIGEST
+ARG JSHARP_TOOLCHAIN_SOURCE_URI
+RUN test -n "${VERSION}" \
+    && test -n "${SOURCE_REVISION}" \
+    && test -n "${JSHARP_TOOLCHAIN_VERSION}" \
+    && test -n "${JSHARP_COMPILER_VERSION}" \
+    && test -n "${JSHARP_TOOLCHAIN_SOURCE_URI}" \
+    && case "${JSHARP_TOOLCHAIN_DIGEST}" in sha256:????????????????????????????????????????????????????????????????) ;; *) exit 1 ;; esac
+LABEL org.opencontainers.image.title="SharpLabNext J# 2.0 x64 Wine Base" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      io.sharplabnext.operator-only="true" \
+      io.sharplabnext.component.jsharp20.version="${JSHARP_TOOLCHAIN_VERSION}" \
+      io.sharplabnext.component.jsharp20.digest="${JSHARP_TOOLCHAIN_DIGEST}" \
+      io.sharplabnext.component.jsharp20.source-uri="${JSHARP_TOOLCHAIN_SOURCE_URI}" \
+      io.sharplabnext.component.vjc-jsharp20.version="${JSHARP_COMPILER_VERSION}"
+COPY --from=wine-root /jsharp-wine-root/ /
+RUN test -x /usr/bin/wine-stable \
+    && test -x /usr/bin/wineserver \
+    && test -x /usr/lib/wine/wine64 \
+    && test -x /usr/lib/wine/wineserver64 \
+    && test -f /opt/wine-jsharp20/drive_c/windows/Microsoft.NET/Framework64/v2.0.50727/vjc.exe \
+    && test -L /opt/sharplabnext/jsharp20/vjc.exe \
+    && test -f /opt/sharplabnext/jsharp20/vjc.exe \
+    && test ! -e /opt/msvc \
+    && test ! -e /usr/lib/wine/wine \
+    && test ! -e /opt/wine-jsharp20/drive_c/windows/syswow64
+ENV DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    WINEPREFIX=/opt/wine-jsharp20 \
+    WINEARCH=win64 \
+    WINELOADER=/usr/lib/wine/wine64 \
+    WINESERVER=/usr/lib/wine/wineserver64 \
+    WINEDEBUG=-all
+
+FROM ${SDK_IMAGE} AS publish
+ARG SOURCE_REVISION
+ARG CONTROL_TFM
+WORKDIR /source
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+RUN dotnet restore \
+      src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj \
+      --locked-mode
+RUN dotnet publish \
+      src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj \
+      --configuration Release \
+      --framework ${CONTROL_TFM} \
+      --no-restore \
+      --output /runner \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION}
+
+FROM jsharp-wine-base-context AS final
+ARG VERSION
+ARG SOURCE_REVISION
+ARG WINE_JSHARP20_RUNTIME_VERSION
+ARG WINE_JSHARP20_RUNTIME_DIGEST
+ARG WINE_JSHARP20_RUNTIME_SOURCE_URI
+RUN test -n "${WINE_JSHARP20_RUNTIME_VERSION}" \
+    && test -n "${WINE_JSHARP20_RUNTIME_SOURCE_URI}" \
+    && case "${WINE_JSHARP20_RUNTIME_DIGEST}" in sha256:????????????????????????????????????????????????????????????????) ;; *) exit 1 ;; esac \
+    && find /opt/sharplabnext -mindepth 1 -maxdepth 1 ! -name jsharp20 -exec rm -rf -- {} + \
+    && mkdir -p /opt/sharplabnext/control-dotnet /workspace \
+    && test -x /usr/share/dotnet/dotnet \
+    && ln -s /usr/share/dotnet/dotnet /opt/sharplabnext/control-dotnet/dotnet
+LABEL org.opencontainers.image.title="SharpLabNext Wine J# 2.0 x64 Runtime" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      io.sharplabnext.runtime.framework=".NETFramework,Version=v2.0" \
+      io.sharplabnext.runtime.framework-version="${WINE_JSHARP20_RUNTIME_VERSION}" \
+      io.sharplabnext.component.wine-jsharp20-linux-x64.version="${WINE_JSHARP20_RUNTIME_VERSION}" \
+      io.sharplabnext.component.wine-jsharp20-linux-x64.digest="${WINE_JSHARP20_RUNTIME_DIGEST}" \
+      io.sharplabnext.component.wine-jsharp20-linux-x64.source-uri="${WINE_JSHARP20_RUNTIME_SOURCE_URI}"
+COPY --from=publish /runner/ /opt/sharplabnext/
+COPY --chmod=0555 deploy/docker/runtime-entrypoint.sh /usr/local/bin/sharplabnext-runtime
+WORKDIR /workspace
+USER 0:0
+ENTRYPOINT ["/usr/local/bin/sharplabnext-runtime"]

@@ -1,0 +1,6 @@
+@SharpLabNext.Worker.Roslyn.Main_HostAddress = http://localhost:5191
+
+GET {{SharpLabNext.Worker.Roslyn.Main_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,206 @@
+# syntax=docker/dockerfile:1.7
+
+# Candidate-only combined compatibility image.  The operator supplies one
+# immutable image which has already been audited to contain Linux Mono and the
+# x64 Wine prefixes used by the Framework/CoreCLR candidates.  Keeping this as
+# a separate candidate target is deliberate: the active profile channel still
+# records one runtime identity per profile and cannot silently infer that a
+# shared image is equivalent to a preflight for every runtime.
+
+ARG SDK_IMAGE
+ARG CONTROL_IMAGE
+ARG MONO_WINE_IMAGE
+ARG CONTROL_TFM
+
+FROM ${SDK_IMAGE} AS publish
+ARG SDK_IMAGE
+ARG CONTROL_IMAGE
+ARG MONO_WINE_IMAGE
+ARG SOURCE_REVISION
+ARG CONTROL_TFM
+WORKDIR /source
+COPY deploy/docker/validate-digest-pinned-image.sh /usr/local/bin/sharplabnext-validate-image
+RUN chmod 0555 /usr/local/bin/sharplabnext-validate-image \
+    && /usr/local/bin/sharplabnext-validate-image \
+         SDK_IMAGE "${SDK_IMAGE}" \
+         CONTROL_IMAGE "${CONTROL_IMAGE}" \
+         MONO_WINE_IMAGE "${MONO_WINE_IMAGE}"
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+RUN dotnet restore \
+      src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj \
+      --locked-mode
+RUN dotnet restore \
+      src/RuntimeJobs/SharpLabNext.LegacyJitInspector/SharpLabNext.LegacyJitInspector.csproj \
+      --locked-mode
+RUN dotnet restore \
+      src/RuntimeJobs/SharpLabNext.TargetRuntimeRunner/SharpLabNext.TargetRuntimeRunner.csproj \
+      --locked-mode
+RUN dotnet publish \
+      src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj \
+      --configuration Release \
+      --framework ${CONTROL_TFM} \
+      --no-restore \
+      --output /wine-runner \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION}
+RUN dotnet publish \
+      src/RuntimeJobs/SharpLabNext.LegacyJitInspector/SharpLabNext.LegacyJitInspector.csproj \
+      --configuration Release \
+      --framework netcoreapp2.0 \
+      --no-restore \
+      --output /legacy-jit-helper \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION}
+RUN dotnet publish \
+      src/RuntimeJobs/SharpLabNext.TargetRuntimeRunner/SharpLabNext.TargetRuntimeRunner.csproj \
+      --configuration Release \
+      --framework net20 \
+      --no-restore \
+      --output /target-runtime-runner \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION}
+
+# The combined input is an operator artifact, not a mutable package source.
+# Do all compatibility checks before copying its userspace into the control
+# image.  The three prefixes are intentionally independent so CLR generation
+# selection remains a profile property at execution time.
+FROM ${MONO_WINE_IMAGE} AS runtime-source
+RUN set -eux; \
+    command -v mono; \
+    test -x /usr/bin/mono-sgen; \
+    test -x /usr/bin/wine-stable; \
+    test -x /usr/lib/wine/wine64; \
+    test -x /usr/lib/wine/wineserver64; \
+    test -d /usr/lib/mono; \
+    test -d /etc/mono; \
+    test -d /opt/wine-dotnet/drive_c/windows; \
+    test -d /opt/wine-netfx-clr2/drive_c/windows/Microsoft.NET/Framework64/v2.0.50727; \
+    test -f /opt/wine-netfx-clr2/drive_c/windows/Microsoft.NET/Framework64/v2.0.50727/mscorlib.dll; \
+    test -d /opt/wine-netfx-clr4/drive_c/windows/Microsoft.NET/Framework64/v4.0.30319; \
+    test -f /opt/wine-netfx-clr4/drive_c/windows/Microsoft.NET/Framework64/v4.0.30319/mscorlib.dll; \
+    for prefix in /opt/wine-netfx-clr2 /opt/wine-netfx-clr4 /opt/wine-dotnet; do \
+      test -r "${prefix}/system.reg"; \
+      test "$(awk 'index($0, "#arch=") == 1 { value=substr($0, 7); sub(/\r$/, "", value); print value; exit }' "${prefix}/system.reg")" = win64; \
+    done; \
+    test ! -e /usr/lib/x86_64-linux-gnu/wine/i386-windows
+
+FROM ${CONTROL_IMAGE} AS control-image
+RUN test -x /usr/share/dotnet/dotnet \
+    && /usr/share/dotnet/dotnet --info >/dev/null
+
+FROM runtime-source AS runtime-base
+ARG SDK_IMAGE
+ARG VERSION
+ARG SOURCE_REVISION
+ARG PROFILE_GROUP_ID
+ARG RUNTIME_COMPONENT_DIGEST
+ARG RUNTIME_COMPONENT_SOURCE_URI
+ARG CONTROL_IMAGE
+ARG MONO_WINE_IMAGE
+
+RUN test -n "${VERSION}" \
+    && test -n "${SOURCE_REVISION}" \
+    && test -n "${PROFILE_GROUP_ID}" \
+    && printf '%s\n' "${RUNTIME_COMPONENT_DIGEST}" | grep -Eq '^sha256:[0-9a-f]{64}$' \
+    && test -n "${RUNTIME_COMPONENT_SOURCE_URI}" \
+    && rm -rf /usr/share/dotnet \
+    && mkdir -p /usr/share/dotnet /opt/sharplabnext/control-dotnet /workspace
+
+# Retain the audited combined operator image as the runtime filesystem and copy
+# only the independently pinned control runtime plus shared helpers into it.
+COPY --from=control-image /usr/share/dotnet/ /usr/share/dotnet/
+COPY --from=publish /wine-runner/ /opt/sharplabnext/
+COPY --from=publish /legacy-jit-helper/ /opt/sharplabnext/
+COPY --from=publish /target-runtime-runner/ /opt/sharplabnext/
+COPY --chmod=0555 deploy/docker/runtime-entrypoint.sh /opt/sharplabnext/runtime-entrypoint.sh
+
+RUN set -eux; \
+    test -x /usr/bin/mono; \
+    test -x /usr/bin/mono-sgen; \
+    test -x /usr/bin/wine-stable; \
+    test -x /usr/lib/wine/wine64; \
+    test -x /usr/lib/wine/wineserver64; \
+    test -d /opt/wine-dotnet/drive_c/windows; \
+    test -f /opt/wine-netfx-clr2/drive_c/windows/Microsoft.NET/Framework64/v2.0.50727/mscorlib.dll; \
+    test -f /opt/wine-netfx-clr4/drive_c/windows/Microsoft.NET/Framework64/v4.0.30319/mscorlib.dll; \
+    for prefix in /opt/wine-netfx-clr2 /opt/wine-netfx-clr4 /opt/wine-dotnet; do \
+      test -r "${prefix}/system.reg"; \
+      test "$(awk 'index($0, "#arch=") == 1 { value=substr($0, 7); sub(/\r$/, "", value); print value; exit }' "${prefix}/system.reg")" = win64; \
+    done; \
+    test ! -e /usr/lib/x86_64-linux-gnu/wine/i386-windows; \
+    test -x /usr/share/dotnet/dotnet; \
+    ln -s /usr/share/dotnet/dotnet /opt/sharplabnext/control-dotnet/dotnet; \
+    test -s /opt/sharplabnext/SharpLabNext.WineRunner.dll; \
+    test -s /opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll; \
+    test -s /opt/sharplabnext/SharpLabNext.LegacyJitInspector.runtimeconfig.json; \
+    test -s /opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe; \
+    test -s /opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe.config; \
+    chown 1654:1654 /workspace
+
+ENV DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    HOME=/tmp \
+    WINEARCH=win64 \
+    WINELOADER=/usr/lib/wine/wine64 \
+    WINESERVER=/usr/lib/wine/wineserver64 \
+    WINEDEBUG=-all \
+    TMPDIR=/tmp \
+    TEMP="Z:\\tmp" \
+    TMP="Z:\\tmp" \
+    MONO_LOG_LEVEL=error
+
+FROM runtime-base AS preflight
+RUN set -eu; \
+    /usr/share/dotnet/dotnet --info >/dev/null; \
+    mono_frames="$(/usr/share/dotnet/dotnet \
+      /opt/sharplabnext/SharpLabNext.WineRunner.dll \
+      bridge /usr/bin/mono --version --)"; \
+    wine_frames="$(/usr/share/dotnet/dotnet \
+      /opt/sharplabnext/SharpLabNext.WineRunner.dll \
+      bridge /usr/bin/wine-stable -- --version)"; \
+    target_frames="$(/usr/bin/mono \
+      /opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe self-test)"; \
+    clr2_frames="$(WINEPREFIX=/opt/wine-netfx-clr2 /usr/lib/wine/wine64 \
+      'Z:\\opt\\sharplabnext\\SharpLabNext.TargetRuntimeRunner.exe' self-test)"; \
+    clr4_frames="$(WINEPREFIX=/opt/wine-netfx-clr4 /usr/lib/wine/wine64 \
+      'Z:\\opt\\sharplabnext\\SharpLabNext.TargetRuntimeRunner.exe' self-test)"; \
+    test -n "${mono_frames}"; \
+    test -n "${wine_frames}"; \
+    test "$(printf '%s\n' "${target_frames}" | grep --count .)" -eq 1; \
+    test "$(printf '%s\n' "${clr2_frames}" | grep --count .)" -eq 1; \
+    test "$(printf '%s\n' "${clr4_frames}" | grep --count .)" -eq 1; \
+    printf 'mono-wine-control-preflight-v1\n' > /runtime-image-preflight
+
+FROM runtime-base AS final
+ARG SDK_IMAGE
+ARG VERSION
+ARG SOURCE_REVISION
+ARG PROFILE_GROUP_ID
+ARG RUNTIME_COMPONENT_DIGEST
+ARG RUNTIME_COMPONENT_SOURCE_URI
+ARG CONTROL_IMAGE
+ARG MONO_WINE_IMAGE
+COPY --from=preflight /runtime-image-preflight /opt/sharplabnext/.image-preflight
+
+LABEL org.opencontainers.image.title="SharpLabNext Combined Mono/Wine Runtime Candidate" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      com.sharplabnext.runtime-candidate="true" \
+      io.sharplabnext.runtime.matrix.profile-group="${PROFILE_GROUP_ID}" \
+      io.sharplabnext.runtime.matrix.digest="${RUNTIME_COMPONENT_DIGEST}" \
+      io.sharplabnext.runtime.matrix.source-uri="${RUNTIME_COMPONENT_SOURCE_URI}" \
+      io.sharplabnext.control-image="${CONTROL_IMAGE}" \
+      io.sharplabnext.operator-image.mono-wine="${MONO_WINE_IMAGE}" \
+      io.sharplabnext.base-image.dotnet-sdk="${SDK_IMAGE}"
+
+WORKDIR /workspace
+USER 0:0
+ENTRYPOINT ["/opt/sharplabnext/runtime-entrypoint.sh"]
+CMD ["/usr/lib/wine/wine64", "--version"]

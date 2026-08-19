@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/url/v3/url-v3.schema.json",
+  "title": "SharpLabNext URL v3 Payload",
+  "description": "The canonical compact JSON payload stored inside an SLN3 raw or RFC 1951 deflate-raw envelope.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "l", "tc", "rs", "o", "rt", "m", "rv", "af", "so", "f"],
+  "properties": {
+    "v": { "const": 3 },
+    "l": { "$ref": "#/$defs/id" },
+    "tc": { "$ref": "#/$defs/id" },
+    "rs": { "$ref": "#/$defs/id" },
+    "o": { "$ref": "#/$defs/id" },
+    "rt": {
+      "anyOf": [
+        { "$ref": "#/$defs/id" },
+        { "type": "null" }
+      ]
+    },
+    "m": { "enum": ["debug", "release"] },
+    "rv": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "af": { "$ref": "#/$defs/safePath" },
+    "so": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/safePath" }
+    },
+    "f": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 2,
+        "prefixItems": [
+          { "$ref": "#/$defs/safePath" },
+          { "type": "string", "maxLength": 262144 }
+        ],
+        "items": false
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "safePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)[^\\u0000]+$"
+    }
+  }
+}

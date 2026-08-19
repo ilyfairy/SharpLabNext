@@ -1,0 +1,278 @@
+# syntax=docker/dockerfile:1.7
+
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE} AS final
+
+ARG BASE_IMAGE
+ARG CLR2_INSTALLER_SHA256
+ARG JSHARP_INSTALLER_SHA256
+ARG ACCEPT_MICROSOFT_DOTNET_EULA
+ARG ACCEPT_MICROSOFT_JSHARP_EULA
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ENV WINEPREFIX=/opt/wine-jsharp20 \
+    WINEARCH=win64 \
+    WINEDEBUG=-all
+
+RUN --mount=type=secret,id=dotnet-clr2-url \
+    --mount=type=secret,id=visual-jsharp-url \
+    --mount=type=bind,from=dotnet-clr2-installer-context,target=/run/operator-assets/dotnet-clr2 \
+    --mount=type=bind,from=visual-jsharp-installer-context,target=/run/operator-assets/visual-jsharp <<'SH'
+set -euo pipefail
+
+[[ "${BASE_IMAGE}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]
+[[ "${CLR2_INSTALLER_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+[[ "${JSHARP_INSTALLER_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+test "${ACCEPT_MICROSOFT_DOTNET_EULA}" = "true"
+test "${ACCEPT_MICROSOFT_JSHARP_EULA}" = "true"
+for command in python3 sha256sum winetricks cabextract xvfb-run wine-stable wineserver timeout objdump tail; do
+    command -v "${command}" >/dev/null
+done
+
+installer_root="$(mktemp -d /tmp/sharplabnext-jsharp20.XXXXXX)"
+cleanup() {
+    rm -rf "${installer_root}"
+}
+trap cleanup EXIT
+
+stage() {
+    printf '[jsharp-bootstrap] stage=%s\n' "$1"
+}
+
+bounded_log_tail() {
+    tail -c 16384 "$1" | tail -n 80 | python3 -c '
+import re
+import sys
+
+for line in sys.stdin:
+    line = re.sub(r"https?://\S+", "<redacted-url>", line, flags=re.IGNORECASE)
+    line = line.replace("/run/operator-assets/dotnet-clr2/installer.bin", "<operator-asset>")
+    line = line.replace("/run/operator-assets/visual-jsharp/installer.bin", "<operator-asset>")
+    line = line.replace("/run/secrets/dotnet-clr2-url", "<url-secret>")
+    line = line.replace("/run/secrets/visual-jsharp-url", "<url-secret>")
+    sys.stdout.write(line)
+'
+}
+
+run_logged() {
+    local operation="$1"
+    shift
+    local log="${installer_root}/${operation}.log"
+    if "$@" >"${log}" 2>&1; then
+        rm -f "${log}"
+        return 0
+    fi
+    printf '[jsharp-bootstrap] failed=%s log-tail-bytes<=16384 log-tail-lines<=80\n' "${operation}" >&2
+    bounded_log_tail "${log}" >&2 || true
+    return 1
+}
+
+download_from_url_secret() {
+    local secret_path="$1"
+    local destination="$2"
+    python3 - "${secret_path}" "${destination}" <<'PY'
+import shutil
+import sys
+import urllib.parse
+import urllib.request
+
+secret_path, destination = sys.argv[1:]
+try:
+    with open(secret_path, encoding="utf-8") as secret:
+        url = secret.read().strip()
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc or any(character.isspace() for character in url):
+        raise ValueError
+    request = urllib.request.Request(url, headers={"User-Agent": "SharpLabNext-operator-bootstrap"})
+    with urllib.request.urlopen(request, timeout=300) as response, open(destination, "xb") as output:
+        shutil.copyfileobj(response, output, length=1024 * 1024)
+except Exception:
+    print("Operator asset download failed.", file=sys.stderr)
+    raise SystemExit(1) from None
+PY
+}
+
+materialize_asset() {
+    local url_secret_id="$1"
+    local installer_path="$2"
+    local destination="$3"
+    local url_secret="/run/secrets/${url_secret_id}"
+    local url_present=0
+    local installer_present=0
+    test -s "${url_secret}" && url_present=1
+    test -s "${installer_path}" && installer_present=1
+    test "$((url_present + installer_present))" -eq 1
+    if test "${installer_present}" -eq 1; then
+        cp "${installer_path}" "${destination}"
+    else
+        download_from_url_secret "${url_secret}" "${destination}"
+    fi
+}
+
+clr2_installer="${installer_root}/dotnet-clr2-installer.exe"
+jsharp_installer="${installer_root}/visual-jsharp-se-x64-installer.exe"
+stage materialize-assets
+materialize_asset dotnet-clr2-url /run/operator-assets/dotnet-clr2/installer.bin "${clr2_installer}"
+materialize_asset visual-jsharp-url /run/operator-assets/visual-jsharp/installer.bin "${jsharp_installer}"
+printf '%s  %s\n' "${CLR2_INSTALLER_SHA256}" "${clr2_installer}" | sha256sum --check --status -
+printf '%s  %s\n' "${JSHARP_INSTALLER_SHA256}" "${jsharp_installer}" | sha256sum --check --status -
+
+stage install-clr2
+rm -rf "${WINEPREFIX}"
+mkdir -p "${WINEPREFIX}"
+export W_CACHE="${installer_root}/winetricks-cache"
+mkdir -p "${W_CACHE}/dotnet35sp1"
+cp "${clr2_installer}" "${W_CACHE}/dotnet35sp1/dotnetfx35.exe"
+run_logged install-clr2-winetricks \
+    timeout --signal=KILL 900 xvfb-run -a \
+    winetricks --optout --unattended dotnet35sp1
+run_logged install-clr2-wineserver wineserver -w
+
+stage extract-jsharp
+jsharp_extract="${installer_root}/visual-jsharp-se-x64"
+mkdir -p "${jsharp_extract}"
+run_logged extract-jsharp-cab cabextract -q -d "${jsharp_extract}" "${jsharp_installer}"
+jsharp_bootstrap="$(find "${jsharp_extract}" -type f -iname install.exe -print -quit)"
+test -n "${jsharp_bootstrap}"
+
+install_jsharp() {
+    cd "$(dirname "${jsharp_bootstrap}")"
+    timeout --signal=KILL 600 xvfb-run -a wine-stable "$(basename "${jsharp_bootstrap}")" /q
+}
+
+stage install-jsharp
+run_logged install-jsharp-bootstrap install_jsharp
+run_logged install-jsharp-wineserver wineserver -w
+
+stage cleanup-private-assets
+rm -rf \
+    "${WINEPREFIX}/drive_c/windows/temp/"* \
+    "${WINEPREFIX}/drive_c/users/root/Temp/"*
+find "${WINEPREFIX}" -type f \
+    \( -iname dotnetfx35.exe -o -iname 'vjredist*.exe' -o -iname 'visual-jsharp-*-installer.exe' \) \
+    -delete
+stage cleanup
+cleanup
+trap - EXIT
+SH
+
+RUN set -euo pipefail <<'SH'
+fail_verify() {
+    printf '[jsharp-verify] failed=%s\n' "$1" >&2
+    exit 1
+}
+
+require_file() {
+    test -f "$2" || fail_verify "$1"
+}
+
+require_x64() {
+    if ! objdump -f "$2" 2>/dev/null | grep -Fq 'architecture: i386:x86-64'; then
+        fail_verify "$1"
+    fi
+}
+
+require_ilonly_neutral() {
+    python3 - "$2" <<'PY' || fail_verify "$1"
+import struct
+import sys
+
+try:
+    data = open(sys.argv[1], "rb").read()
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    if data[pe:pe + 4] != b"PE\0\0":
+        raise ValueError
+    machine = struct.unpack_from("<H", data, pe + 4)[0]
+    optional_size = struct.unpack_from("<H", data, pe + 20)[0]
+    optional = pe + 24
+    if machine != 0x14C or struct.unpack_from("<H", data, optional)[0] != 0x10B:
+        raise ValueError
+    section_count = struct.unpack_from("<H", data, pe + 6)[0]
+    cli_directory = optional + 96 + (14 * 8)
+    cli_rva, cli_size = struct.unpack_from("<II", data, cli_directory)
+    if cli_rva == 0 or cli_size < 72:
+        raise ValueError
+    section_table = optional + optional_size
+    cli_offset = None
+    for index in range(section_count):
+        section = section_table + (index * 40)
+        virtual_size, virtual_address, raw_size, raw_offset = struct.unpack_from(
+            "<IIII", data, section + 8)
+        if virtual_address <= cli_rva < virtual_address + max(virtual_size, raw_size):
+            cli_offset = raw_offset + (cli_rva - virtual_address)
+            break
+    if cli_offset is None:
+        raise ValueError
+    flags = struct.unpack_from("<I", data, cli_offset + 16)[0]
+    if flags & 0x1 == 0 or flags & (0x2 | 0x10 | 0x20000):
+        raise ValueError
+except Exception:
+    raise SystemExit(1) from None
+PY
+}
+
+link_export() {
+    if ! ln -s "$2" "$3" 2>/dev/null; then
+        fail_verify "$1"
+    fi
+}
+
+framework64="${WINEPREFIX}/drive_c/windows/Microsoft.NET/Framework64/v2.0.50727"
+require_file framework64-mscorwks "${framework64}/mscorwks.dll"
+require_file framework64-mscorlib "${framework64}/mscorlib.dll"
+require_file framework64-vjc "${framework64}/vjc.exe"
+require_file framework64-vjc-config "${framework64}/vjc.exe.config"
+require_file framework64-vjsc "${framework64}/vjsc.dll"
+require_file framework64-vjslib "${framework64}/vjslib.dll"
+require_file framework64-vjscor "${framework64}/vjscor.dll"
+if ! tr -d '\000' < "${framework64}/vjc.exe.config" | grep -Fq 'v2.0.50727'; then
+    fail_verify config-vjc-clr2
+fi
+require_x64 arch-mscorwks "${framework64}/mscorwks.dll"
+require_x64 arch-vjc "${framework64}/vjc.exe"
+require_x64 arch-vjsc "${framework64}/vjsc.dll"
+require_x64 arch-vjslib "${framework64}/vjslib.dll"
+require_ilonly_neutral neutral-ilonly-vjscor "${framework64}/vjscor.dll"
+
+gac64="${WINEPREFIX}/drive_c/windows/assembly/GAC_64"
+gac64_vjslib="$(find "${gac64}" -type f -iname vjslib.dll -print -quit 2>/dev/null || true)"
+test -n "${gac64_vjslib}" || fail_verify gac64-vjslib-runtime
+require_x64 arch-gac64-vjslib "${gac64_vjslib}"
+
+vjsnativ="${framework64}/vjsnativ.dll"
+require_file framework64-vjsnativ "${vjsnativ}"
+require_x64 arch-vjsnativ "${vjsnativ}"
+
+operator_toolchain=/opt/sharplabnext/jsharp20
+if ! mkdir -p "${operator_toolchain}" 2>/dev/null; then
+    fail_verify export-directory
+fi
+link_export export-vjc "${framework64}/vjc.exe" "${operator_toolchain}/vjc.exe"
+link_export export-vjsc "${framework64}/vjsc.dll" "${operator_toolchain}/vjsc.dll"
+link_export export-vjslib "${framework64}/vjslib.dll" "${operator_toolchain}/vjslib.dll"
+link_export export-vjscor "${framework64}/vjscor.dll" "${operator_toolchain}/vjscor.dll"
+link_export export-vjsnativ "${vjsnativ}" "${operator_toolchain}/vjsnativ.dll"
+
+if ! rm -rf \
+    "${WINEPREFIX}/drive_c/windows/Microsoft.NET/Framework/v2.0.50727/SetupCache" \
+    "${WINEPREFIX}/drive_c/windows/Microsoft.NET/Framework64/v2.0.50727/SetupCache" 2>/dev/null; then
+    fail_verify setupcache-cleanup
+fi
+if ! remaining_installer="$(find "${WINEPREFIX}" -type f \
+    \( -iname dotnetfx35.exe -o -iname 'vjredist*.exe' -o -iname 'visual-jsharp-*-installer.exe' \) \
+    -print -quit 2>/dev/null)"; then
+    fail_verify private-installer-scan
+fi
+if test -n "${remaining_installer}"; then
+    fail_verify private-installer-cleanup
+fi
+printf '[jsharp-verify] status=ok\n'
+SH
+
+LABEL org.opencontainers.image.title="SharpLabNext Operator Visual J# 2.0 SE x64 Toolchain" \
+      io.sharplabnext.operator-only="true" \
+      io.sharplabnext.redistribution="operator-supplied-only"
+
+WORKDIR /opt/sharplabnext/jsharp20
+USER 0:0

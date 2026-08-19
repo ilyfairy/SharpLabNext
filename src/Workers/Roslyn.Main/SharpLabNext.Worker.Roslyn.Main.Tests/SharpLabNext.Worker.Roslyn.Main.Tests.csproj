@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <DefineConstants Condition="'$(RoslynMainSourceBuild)' == 'true'">$(DefineConstants);ROSLYN_MAIN_SOURCE_BUILD</DefineConstants>
+    <NuGetLockFilePath Condition="'$(RoslynMainSourceBuild)' == 'true'">packages.source.lock.json</NuGetLockFilePath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SharpLabNext.Worker.Roslyn.Main\SharpLabNext.Worker.Roslyn.Main.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RoslynMainSourceBuild)' == 'true'">
+    <Reference Include="$(RoslynMainAssemblyDirectory)/Microsoft.CodeAnalysis*.dll">
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,869 @@
+{
+  "schemaVersion": 1,
+  "metadataSource": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/releases-index.json",
+  "resolvedAt": "2026-07-22T00:00:00Z",
+  "controlRuntime": {
+    "version": "10.0.9",
+    "targetFramework": "net10.0",
+    "image": "mcr.microsoft.com/dotnet/aspnet:10.0.9-noble-amd64@sha256:68abecb063cf367fdce0a7f0ab5678beaa99f60c7f616df862ca2a51c387d4e7"
+  },
+  "coreClr": [
+    {
+      "id": "dotnet-core-2.0",
+      "channel": "2.0",
+      "version": "2.0.9",
+      "runtimeCommit": "1632fa1589b0eee3277a8841ce1770e554ece037",
+      "jitCommit": "1632fa1589b0eee3277a8841ce1770e554ece037",
+      "releaseDate": "2018-07-10",
+      "supportEndDate": "2018-10-01",
+      "supportStatus": "legacy",
+      "visibility": "hidden",
+      "referenceSetId": "netcoreapp2.0-ref",
+      "referencePackage": {
+        "id": "Microsoft.NETCore.App",
+        "version": "2.0.9",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app/2.0.9/microsoft.netcore.app.2.0.9.nupkg",
+        "sha512": "440df93975cad9e9e92f2150ac15ba3795b13d02c627c731e1254d3dad0f44b1263dc22ed4e99d88fcce96a681fbeede8c6598e4ede8dc22a43a0120b07cc3a8",
+        "packageContentHash": "sha512-RA35OXXK2enpLyFQrBW6N5WxPQLGJ8cx4SVNPa0PRLEmPcIu1OmdiPzOlqaB++7ejGWY5O3o3CKkOgEgsHzDqA=="
+      },
+      "linuxBaseImage": "mcr.microsoft.com/dotnet/core/runtime:1.1.13-stretch@sha256:e5a5701f73eb4013d1b542c835113b240109cb4017a29032766b639103745314",
+      "linux": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/2.0.9/dotnet-runtime-2.0.9-linux-x64.tar.gz",
+        "sha512": "2b49b24ef712fbfc056e0fda95ff18037b4ec938ca8bb41f4c336b6a50870e922f5093684ac92c4bb8e1155b03c36d132d7f90817793f31c9ade5267fff6629a"
+      },
+      "windows": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/2.0.9/dotnet-runtime-2.0.9-win-x64.zip",
+        "sha512": "4e03072925ca65f350112916eac8f442ee86f84de5fd8643d6db9eb96e2175351fdee0fb8ebed6a508b5ce2a3f73bdd4b7a084adc0c765c5249c019f601179f4"
+      },
+      "linuxCapability": {
+        "capabilities": ["run"],
+        "promotionState": "blocked",
+        "blockedReason": "The net8 control bridge and target CoreCLR 2.0 runner have not passed the product image preflight."
+      },
+      "wineCapability": {
+        "executionUser": "0:0",
+        "capabilities": [],
+        "promotionState": "blocked",
+        "blockedReason": "Windows CoreCLR 2.x under Wine is outside the requested and tested matrix."
+      }
+    },
+    {
+      "id": "dotnet-core-2.1",
+      "channel": "2.1",
+      "version": "2.1.30",
+      "runtimeCommit": "5e17f34de8b34fce04f665640e046d89e8991d00",
+      "jitCommit": "5e17f34de8b34fce04f665640e046d89e8991d00",
+      "releaseDate": "2021-08-19",
+      "supportEndDate": "2021-08-21",
+      "supportStatus": "legacy",
+      "visibility": "hidden",
+      "referenceSetId": "netcoreapp2.1-ref",
+      "referencePackage": {
+        "id": "Microsoft.NETCore.App",
+        "version": "2.1.30",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app/2.1.30/microsoft.netcore.app.2.1.30.nupkg",
+        "sha512": "ae35df05e5d964e8b17932178bc17e1e47d749ffa26ae4d0834c0ef8265bcea0ce9b95cf7ac7361b2a58434a2d14e05b7db14fe1ac19ad9c0d6bad0b69856f61",
+        "packageContentHash": "sha512-rjXfBeXZZOixeTIXi8F+HkfXSf+iauTQg0wO+CZbzqDOm5XPesc2GypYQ0otFOBbfbFP4awZrZwNa60LaYVvYQ=="
+      },
+      "linuxBaseImage": "mcr.microsoft.com/dotnet/core/runtime:2.1.30-stretch-slim@sha256:ea0a74b6a3804708cab2dd72caa6f9d58240dd862d7bccd748018d368ba8efe2",
+      "linux": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/2.1.30/dotnet-runtime-2.1.30-linux-x64.tar.gz",
+        "sha512": "b7433c9f03f7363759a044b50d8cca9486cfe402fdf62163696ba6a172e9839a140553e3d3298bb75c89dda2f6f4bec294847411f3fc2796fa4881a2b01a7178"
+      },
+      "windows": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/2.1.30/dotnet-runtime-2.1.30-win-x64.zip",
+        "sha512": "3656c1a5dcf2196a34a06a01eb98851cad94663d654b8500b20b4a80cb5e7477b07172590b132805d3367bde2fc8dd7b7624a2f57f7ac425333e99424612b3fa"
+      },
+      "linuxCapability": {
+        "capabilities": ["run"],
+        "promotionState": "blocked",
+        "blockedReason": "The net8 control bridge and target CoreCLR 2.1 runner have not passed the product image preflight."
+      },
+      "wineCapability": {
+        "executionUser": "0:0",
+        "capabilities": [],
+        "promotionState": "blocked",
+        "blockedReason": "Windows CoreCLR 2.x under Wine is outside the requested and tested matrix."
+      }
+    },
+    {
+      "id": "dotnet-core-2.2",
+      "channel": "2.2",
+      "version": "2.2.8",
+      "runtimeCommit": "b9aa1abc510165cdc4c92e59d938def6f3eee0e1",
+      "jitCommit": "b9aa1abc510165cdc4c92e59d938def6f3eee0e1",
+      "releaseDate": "2019-11-19",
+      "supportEndDate": "2019-12-23",
+      "supportStatus": "legacy",
+      "visibility": "hidden",
+      "referenceSetId": "netcoreapp2.2-ref",
+      "referencePackage": {
+        "id": "Microsoft.NETCore.App",
+        "version": "2.2.8",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app/2.2.8/microsoft.netcore.app.2.2.8.nupkg",
+        "sha512": "599d288eb5e2d8367ae8c5b176ce2353b65653232028e401ee0c90ef4a2faef6eb873bb9d173548e795f4d3ed9a56a312831807e7783a098d31e8264f8e6b544",
+        "packageContentHash": "sha512-WZ0ojrXi2DZ66MWxds4jU7ZWUyMgKOQB7gyQ70ovrvbrhzu50XNUjnlfTT7ZpWoxKDGAfneDoJjTHoJk+Oa1RA=="
+      },
+      "linuxBaseImage": "mcr.microsoft.com/dotnet/core/runtime:2.2.8-stretch-slim@sha256:8f81aab10b63e73c0797fe728f3d0e9134387c02aa4c1c418eb30639f07964e5",
+      "linux": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/2.2.8/dotnet-runtime-2.2.8-linux-x64.tar.gz",
+        "sha512": "b818557b0090ec047be0fb2e5ffee212e23e8417e1b0164f455e3a880bf5b94967dc4c86d6ed82397af9acc1f7415674904f6225a1abff85d28d2a6d5de8073b"
+      },
+      "windows": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/2.2.8/dotnet-runtime-2.2.8-win-x64.zip",
+        "sha512": "5864a40f662388761bc108510df9540b0b6672ae0f5a04cac71112ef0d1aa5781ffa3c856e919eed68eba6161f21a38c52f0e8850e8ecdf22609c42d2387d848"
+      },
+      "linuxCapability": {
+        "capabilities": ["run"],
+        "promotionState": "blocked",
+        "blockedReason": "The net8 control bridge and target CoreCLR 2.2 runner have not passed the product image preflight."
+      },
+      "wineCapability": {
+        "executionUser": "0:0",
+        "capabilities": [],
+        "promotionState": "blocked",
+        "blockedReason": "Windows CoreCLR 2.x under Wine is outside the requested and tested matrix."
+      }
+    },
+    {
+      "id": "dotnet-core-3.0",
+      "channel": "3.0",
+      "version": "3.0.3",
+      "runtimeCommit": "c03f2fe62663edec83d1bc12b4e9f11bd3de5d0e",
+      "jitCommit": "c03f2fe62663edec83d1bc12b4e9f11bd3de5d0e",
+      "releaseDate": "2020-02-18",
+      "supportEndDate": "2020-03-03",
+      "supportStatus": "legacy",
+      "visibility": "hidden",
+      "referenceSetId": "netcoreapp3.0-ref",
+      "referencePackage": {
+        "id": "Microsoft.NETCore.App.Ref",
+        "version": "3.0.1",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/3.0.1/microsoft.netcore.app.ref.3.0.1.nupkg",
+        "sha512": "24f6d618b9cb48a2683fe13876a41df774084381aa5d7bfffa296dbb37758455c712a7f521ee6838aff1fd9fe8267e8f7854d2bce82179fdf64f8701522f42d4",
+        "packageContentHash": "sha512-JPbWGLnLSKJoP+E4dqQd93QIQ4GqXXv/+iltuzd1hFXHEqf1Ie5oOK/x/Z/oJn6PeFTSvOghef32T4cBUi9C1A=="
+      },
+      "linuxBaseImage": "mcr.microsoft.com/dotnet/core/runtime:3.0.3-buster-slim@sha256:490b4a95e8d3cf651f648f05ebd12a8dfa53f0e0d73aed6159a443f6b2287650",
+      "linux": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/3.0.3/dotnet-runtime-3.0.3-linux-x64.tar.gz",
+        "sha512": "3d1f0ba2f293f43e087a8940a0f4736561f43b9f28bc5beda79a61f887e258543aea4dc71e88414a7c6e271dcda984a989afb62fc659a72223707a179cdde9c5"
+      },
+      "windows": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/3.0.3/dotnet-runtime-3.0.3-win-x64.zip",
+        "sha512": "00428351d01f90e2951699f035d60068313f59e8ca5f07dfe228f1196644d2e1e4d7d8e80396bbc659001ac47df000c2f3b73433cba5f18ee7a39c0465daf60b"
+      },
+      "linuxCapability": {
+        "capabilities": ["run"],
+        "promotionState": "blocked",
+        "blockedReason": "The net8 control bridge and target CoreCLR 3.0 runner have not passed the product image preflight."
+      },
+      "wineCapability": {
+        "executionUser": "0:0",
+        "capabilities": [],
+        "promotionState": "blocked",
+        "blockedReason": "Windows CoreCLR 3.x under Wine is outside the requested and tested matrix."
+      }
+    },
+    {
+      "id": "dotnet-core-3.1",
+      "channel": "3.1",
+      "version": "3.1.32",
+      "runtimeCommit": "f94bb2c3ff432dcc4a6229eca2f978197bf06150",
+      "jitCommit": "f94bb2c3ff432dcc4a6229eca2f978197bf06150",
+      "releaseDate": "2022-12-13",
+      "supportEndDate": "2022-12-13",
+      "supportStatus": "legacy",
+      "visibility": "hidden",
+      "referenceSetId": "netcoreapp3.1-ref",
+      "referencePackage": {
+        "id": "Microsoft.NETCore.App.Ref",
+        "version": "3.1.0",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/3.1.0/microsoft.netcore.app.ref.3.1.0.nupkg",
+        "sha512": "7135e5420cf1671e57b00215c3cb5c75886f3e9712700def1b7010fd27257aa327df648c042210a9eb681345f412a3d28d6dd2fa1c3fa51214962d26b23889f4",
+        "packageContentHash": "sha512-cTXlQgzxZx5XsAIVw8tcdYhvPpcScA3vG3AQ/ScleqMn32SMBCIQqetoE0X0EqPSjW3S+hw/pRIUli0msjiJ9A=="
+      },
+      "linuxBaseImage": "mcr.microsoft.com/dotnet/core/runtime:3.1.32-buster-slim@sha256:341b5768c787690f502625e510041ffeb17851a6b40acffa8a1c717475e24057",
+      "linux": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/3.1.32/dotnet-runtime-3.1.32-linux-x64.tar.gz",
+        "sha512": "a1de9bbc3d2e3a4f5f52b7742c678b182a58a724d36232997511e390027044d60144a7e010a29d6ee016ec91f2911daef28ac5712a827fff8bdde73314b7e002"
+      },
+      "windows": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/3.1.32/dotnet-runtime-3.1.32-win-x64.zip",
+        "sha512": "72a3feb6784c5c69cb464ad4a8678e719615bd1e4e9a7c3cf5c1f67a4f01e08c073424532772f1e320d05f63c01079c6a089be45f4777abe035f14ffbf06f38b"
+      },
+      "linuxCapability": {
+        "capabilities": ["run"],
+        "promotionState": "blocked",
+        "blockedReason": "The net8 control bridge and target CoreCLR 3.1 runner have not passed the product image preflight."
+      },
+      "wineCapability": {
+        "executionUser": "0:0",
+        "capabilities": [],
+        "promotionState": "blocked",
+        "blockedReason": "Windows CoreCLR 3.x under Wine is outside the requested and tested matrix."
+      }
+    },
+    {
+      "id": "dotnet-5",
+      "channel": "5.0",
+      "version": "5.0.17",
+      "runtimeCommit": "6a984143635bde23e728abaaccbde52f5ea8fa3e",
+      "jitCommit": "6a984143635bde23e728abaaccbde52f5ea8fa3e",
+      "releaseDate": "2022-05-10",
+      "supportEndDate": "2022-05-10",
+      "supportStatus": "legacy",
+      "visibility": "hidden",
+      "referenceSetId": "net5-ref",
+      "referencePackage": {
+        "id": "Microsoft.NETCore.App.Ref",
+        "version": "5.0.0",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/5.0.0/microsoft.netcore.app.ref.5.0.0.nupkg",
+        "sha512": "6c1a752d8cd3058e7c74c6820011e7a78e02601701bd6ed1adf4ac5c435a4bb891abfcb1dfd83e8e159d814059709401a05e8065e19b1e1295f890284f72c70f",
+        "packageContentHash": "sha512-bBp1LYzTBY58dMaCABHnp44CYBcBvW7RrfSsXENaS7iRq/yx39g+jhWdgUBZcJQBoF6AZeGbHhKV+JAoT3LHDw=="
+      },
+      "linuxBaseImage": "mcr.microsoft.com/dotnet/runtime-deps:5.0.17-bullseye-slim-amd64@sha256:4ad701bcf8b58aa254fb81915597e7d3a89764fc029e9bff3046ca7abfbd3e0a",
+      "linux": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/5.0.17/dotnet-runtime-5.0.17-linux-x64.tar.gz",
+        "sha512": "a9c4784930a977abbc42aff1337dda06ec588c1ec4769a59f9fcab4d5df4fc9efe65f8e61e5433db078f67a94ea2dfe870c32c482a50d4c16283ffacacff4261"
+      },
+      "windows": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/5.0.17/dotnet-runtime-5.0.17-win-x64.zip",
+        "sha512": "424df2b535f73c40aea164623a8a8f549bd18f89406eb2cb84289cb4cfceb3450db7762c5582756263d79ed628a574730e708d87dc906fd2c00d29f64942c782"
+      },
+      "linuxCapability": {
+        "capabilities": ["run"],
+        "promotionState": "blocked",
+        "blockedReason": "The target-runtime runner and JIT inspector have not passed the .NET 5 Linux image preflight."
+      },
+      "wineCapability": {
+        "executionUser": "1654:1654",
+        "capabilities": ["run"],
+        "promotionState": "blocked",
+        "blockedReason": "Run works in the audit image, but the shared product Wine image has not passed release preflight."
+      }
+    },
+    {
+      "id": "dotnet-6",
+      "channel": "6.0",
+      "version": "6.0.36",
+      "runtimeCommit": "f1dd57165bfd91875761329ac3a8b17f6606ad18",
+      "jitCommit": "f1dd57165bfd91875761329ac3a8b17f6606ad18",
+      "releaseDate": "2024-11-12",
+      "supportEndDate": "2024-11-12",
+      "supportStatus": "legacy",
+      "visibility": "hidden",
+      "referenceSetId": "net6-ref",
+      "referencePackage": {
+        "id": "Microsoft.NETCore.App.Ref",
+        "version": "6.0.36",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/6.0.36/microsoft.netcore.app.ref.6.0.36.nupkg",
+        "sha512": "a807238f0daf0cd26b4c8c3b4785162d0bafb2525b5295f14eb7757247c3a563ea1347047a139df42bf08b36c3ec70038dec3356ff8b2af07968e5989e936628",
+        "packageContentHash": "sha512-qAcjjw2vDNJrTIw7R4UWLQuvslJbUpXxTrd1ckfDpWPqE0cEehOd9CvwizbD7HADjewzVv+LKvB5aOWYnpNmKA=="
+      },
+      "linuxBaseImage": "mcr.microsoft.com/dotnet/runtime-deps:6.0.36-bookworm-slim-amd64@sha256:3ea9957629b2d75980b7b291cc3d59cbeca78aaf1d4f0cac7571e449347855d8",
+      "linux": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/6.0.36/dotnet-runtime-6.0.36-linux-x64.tar.gz",
+        "sha512": "afb6018fcabec468ccd7ae2f1131d8c9de7f4de7645b8f0c223efbbdbfdc515fb0642a399ebfe372c02044416c4cae463c9c802cd156b9da4181efff0e33ee94"
+      },
+      "checkedJit": {
+        "commit": "f1dd57165bfd91875761329ac3a8b17f6606ad18",
+        "sourceArchive": {
+          "url": "https://github.com/dotnet/runtime/archive/f1dd57165bfd91875761329ac3a8b17f6606ad18.tar.gz",
+          "sha512": "84a708e22ec056af855b507e41f206224f9921dc45ae3df0953e77aa52ed9291d1dfa65f53858cf7349a91ee729c7ee7264b2578c6df5447ca5a2a5a9cbb2a91"
+        },
+        "bootstrapSdk": {
+          "version": "6.0.135",
+          "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/6.0.135/dotnet-sdk-6.0.135-linux-x64.tar.gz",
+          "sha512": "f990fa0636385a3a4ea6b0e1ccaa45613fef442d3610015236fc2474895f2c2446559f2fb942c901171bb847cd825fcc575fb82d120cc5d1cf175d5c0ae01cff"
+        },
+        "builderImage": "mcr.microsoft.com/dotnet-buildtools/prereqs:ubuntu-20.04-amd64@sha256:31fc9eb29aaacaa1f2ccc0836007e73458a2986d6a7e28ba291eae52b378ec66",
+        "configuration": "Checked",
+        "targetOs": "Linux",
+        "architecture": "x64",
+        "buildComponent": "jit",
+        "pgoMode": "disabled-by-flag",
+        "compiler": "gcc",
+        "generator": "make",
+        "versionGenerationMode": "skip-by-upstream-flag",
+        "sourceMappingKind": "none"
+      },
+      "windows": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/6.0.36/dotnet-runtime-6.0.36-win-x64.zip",
+        "sha512": "935db5c6cee19f2c016e67168bfae7b491044735de76c673abb3b125dd325fd5e779d7efe12ba80178d46689ae70a25e558a3fa846417d44c5f4ca256e7f4bf2"
+      },
+      "linuxCapability": {
+        "capabilities": ["run", "jit-asm"],
+        "promotionState": "blocked",
+        "blockedReason": "The source-built Checked-JIT bridge and method-level JIT preflight have not passed against the retained .NET 6 candidate image."
+      },
+      "wineCapability": {
+        "executionUser": "1654:1654",
+        "capabilities": ["run"],
+        "promotionState": "blocked",
+        "blockedReason": "Run works in the audit image, but the shared product Wine image has not passed release preflight."
+      }
+    },
+    {
+      "id": "dotnet-7",
+      "channel": "7.0",
+      "version": "7.0.20",
+      "runtimeCommit": "0fb6ac59fb1edbe4ed3ad62661df0eb7eacd7903",
+      "jitCommit": "0fb6ac59fb1edbe4ed3ad62661df0eb7eacd7903",
+      "releaseDate": "2024-05-28",
+      "supportEndDate": "2024-05-14",
+      "supportStatus": "legacy",
+      "visibility": "hidden",
+      "referenceSetId": "net7-ref",
+      "referencePackage": {
+        "id": "Microsoft.NETCore.App.Ref",
+        "version": "7.0.20",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/7.0.20/microsoft.netcore.app.ref.7.0.20.nupkg",
+        "sha512": "764eb3fd9a8ca59e25c558ac8273d7d47f8cc225134501e1c2addef553122112f996855da87959f5f4457c07a3133dd4f046ef195e37569dcec05e51ee69534f",
+        "packageContentHash": "sha512-dk6z/ZqMpZ4lxVisgnPX1H+MwiUTRQHhwq3e9VMSIRL5loVdqHlZ9fRFfAejEz3U8EbvGV43Vp3OwF5R7mlTTw=="
+      },
+      "linuxBaseImage": "mcr.microsoft.com/dotnet/runtime-deps:7.0.20-bookworm-slim-amd64@sha256:f9fc3fba459ff026298bafd637b3ec2304a44965bbbaeae5c3da8db8d2b87d99",
+      "linux": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/7.0.20/dotnet-runtime-7.0.20-linux-x64.tar.gz",
+        "sha512": "87855297338555a7b577d7e314e5dbf2c2350f8c867a489cd1e535634bad5c123a1871464d37fc9421837ff5d426c2eadecbe0f60bbf3fd32bc2461f47790a40"
+      },
+      "checkedJit": {
+        "commit": "0fb6ac59fb1edbe4ed3ad62661df0eb7eacd7903",
+        "sourceArchive": {
+          "url": "https://github.com/dotnet/runtime/archive/0fb6ac59fb1edbe4ed3ad62661df0eb7eacd7903.tar.gz",
+          "sha512": "73bc874f521071274148eca339e42db20c96159ec249881bb166d724c15e683d645a177d9b639b89fca95f2bf0ca6d9c2aa8664164ac9e79064000d5b39147c8"
+        },
+        "builderImage": "mcr.microsoft.com/dotnet-buildtools/prereqs:ubuntu-20.04-amd64@sha256:31fc9eb29aaacaa1f2ccc0836007e73458a2986d6a7e28ba291eae52b378ec66",
+        "configuration": "Checked",
+        "targetOs": "Linux",
+        "architecture": "x64",
+        "buildComponent": "jit",
+        "pgoMode": "disabled-by-default",
+        "compiler": "gcc",
+        "generator": "make",
+        "sourceMappingKind": "checked-jit-debug-info"
+      },
+      "windows": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/7.0.20/dotnet-runtime-7.0.20-win-x64.zip",
+        "sha512": "4943862d33d3c483396adae24c932d254b218aaaa4638e47b22bdd1d61eea248f90f5a768a0842b8c743db8b96039506941af6384411e8c891aeefdebd7db4fd"
+      },
+      "linuxCapability": {
+        "capabilities": ["run", "jit-asm"],
+        "promotionState": "blocked",
+        "blockedReason": "The source-built Checked-JIT bridge and debug-info source mapping have not passed the retained .NET 7 candidate image preflight."
+      },
+      "wineCapability": {
+        "executionUser": "1654:1654",
+        "capabilities": ["run", "jit-asm"],
+        "promotionState": "blocked",
+        "blockedReason": "Run and method-level JIT work in the audit image, but the shared product Wine image has not passed release preflight."
+      }
+    },
+    {
+      "id": "dotnet-8",
+      "channel": "8.0",
+      "version": "8.0.29",
+      "runtimeCommit": "18fd75c847399745c43b5970fec840ba71064e80",
+      "jitCommit": "18fd75c847399745c43b5970fec840ba71064e80",
+      "releaseDate": "2026-07-14",
+      "supportEndDate": "2026-11-10",
+      "supportStatus": "maintenance",
+      "visibility": "visible",
+      "referenceSetId": "net8-ref",
+      "referencePackage": {
+        "id": "Microsoft.NETCore.App.Ref",
+        "version": "8.0.29",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/8.0.29/microsoft.netcore.app.ref.8.0.29.nupkg",
+        "sha512": "33109b3f81325d194acbedeabc42faad5ef51420516948fb48e1f13fd815021682cd7ce4ae4516e3c82388133c7191198f999dd234a889f58a7b9700fead5e77",
+        "packageContentHash": "sha512-MxCbP4EyXRlKy+3qvEL6rV71FCBRaUj7SOHxP9gVAhaCzXzkrkUW48gjiBM8cZEZj5md0jSoifWKe5cA/q1edw=="
+      },
+      "linuxBaseImage": "mcr.microsoft.com/dotnet/runtime-deps:8.0.29-bookworm-slim-amd64@sha256:f7009d0f32920b9cd41aae06887292dfee88c87d5f3e29d9070ac908224d7201",
+      "linux": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.29/dotnet-runtime-8.0.29-linux-x64.tar.gz",
+        "sha512": "2739a48f5ec81738d05376f7bf26b2efc5297639db3f4748b458d54bf795a084c5bd47886449b9996eb1a3371bb8c3900d72049e8f0150d0a5ac8230ef38a65e"
+      },
+      "checkedJit": {
+        "commit": "18fd75c847399745c43b5970fec840ba71064e80",
+        "sourceArchive": {
+          "url": "https://github.com/dotnet/runtime/archive/18fd75c847399745c43b5970fec840ba71064e80.tar.gz",
+          "sha512": "a2a11924bead818618dd42775f3e707ce02f138210cc031313dca76feaa77ac2134d208fe5b3f9c47658c366a0448d75ac4d4f09e1980e726696d07981a5825e"
+        },
+        "builderImage": "mcr.microsoft.com/dotnet-buildtools/prereqs:ubuntu-22.04@sha256:bc0edbd1de4e727c4f0a91dc90058a8229a18c092dbb55c700b8e99242b75b5e",
+        "configuration": "Checked",
+        "targetOs": "linux",
+        "architecture": "x64",
+        "buildComponent": "jit",
+        "pgoMode": "disabled-by-default",
+        "compiler": "gcc",
+        "generator": "make",
+        "sourceMappingKind": "checked-jit-debug-info"
+      },
+      "windows": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.29/dotnet-runtime-8.0.29-win-x64.zip",
+        "sha512": "e3f31d298a2b674b54c7fc89fb3f06d9645fc5879a54f2ebf2ea20e9ee7ae55f1bfe3284c1f90a591d6be2d6bcd251790ddc27771d65303e7a6a56d331df4632"
+      },
+      "linuxCapability": {
+        "capabilities": ["run", "jit-asm"],
+        "promotionState": "blocked",
+        "blockedReason": "The .NET 8 product image must pass the real JIT and source-map promotion preflight."
+      },
+      "wineCapability": {
+        "executionUser": "1654:1654",
+        "capabilities": ["run", "jit-asm"],
+        "promotionState": "blocked",
+        "blockedReason": "Run and method-level JIT work in the audit image, but the shared product Wine image has not passed release preflight."
+      }
+    },
+    {
+      "id": "dotnet-9",
+      "channel": "9.0",
+      "version": "9.0.18",
+      "runtimeCommit": "d839c41c85988aadc213e8e42269ecd7883a1790",
+      "jitCommit": "d839c41c85988aadc213e8e42269ecd7883a1790",
+      "releaseDate": "2026-07-14",
+      "supportEndDate": "2026-11-10",
+      "supportStatus": "maintenance",
+      "visibility": "visible",
+      "referenceSetId": "net9-ref",
+      "referencePackage": {
+        "id": "Microsoft.NETCore.App.Ref",
+        "version": "9.0.18",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/9.0.18/microsoft.netcore.app.ref.9.0.18.nupkg",
+        "sha512": "cae5ec5d03bfd7982d954598cbf353a1981708448126815a1217fae1ad8599978c021d6cf40a5037c1225c25ca5f8b8f35fcc9db980368843e77b8a76564ae01",
+        "packageContentHash": "sha512-yuXsXQO/15gtlUWYy/NToZgXCESBJoFaEhf64a2FmZeMAh1s9ApQN8EiXCXKX4uPNfzJ25gDaIQ+d7inZWSuAQ=="
+      },
+      "linuxBaseImage": "mcr.microsoft.com/dotnet/runtime-deps:9.0.18-bookworm-slim-amd64@sha256:ff52f158f118e80084e7d08d19e7eddd0919930dfb73ce5951bb4cc23e8ae249",
+      "linux": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.18/dotnet-runtime-9.0.18-linux-x64.tar.gz",
+        "sha512": "97eb89a5a3781b9761e2a850996912ae81b96996089c78abcebbc441113457088bfcbd7cf1fa97d3036f7ac8fe22c7d30e043e93ecafc910f07b73317c73bad5"
+      },
+      "checkedJit": {
+        "commit": "d839c41c85988aadc213e8e42269ecd7883a1790",
+        "sourceArchive": {
+          "url": "https://github.com/dotnet/runtime/archive/d839c41c85988aadc213e8e42269ecd7883a1790.tar.gz",
+          "sha512": "17d8331d536e9ed2adc8a60f90c5d551d397df7e00ac07ef67790603e5abced3623f1e4c62b53e8d3d23d2ab1329c5dcd530e9a282083e71274763fb80913f91"
+        },
+        "builderImage": "mcr.microsoft.com/dotnet-buildtools/prereqs:ubuntu-22.04@sha256:bc0edbd1de4e727c4f0a91dc90058a8229a18c092dbb55c700b8e99242b75b5e",
+        "configuration": "Checked",
+        "targetOs": "linux",
+        "architecture": "x64",
+        "buildComponent": "jit",
+        "pgoMode": "disabled-by-default",
+        "compiler": "gcc",
+        "generator": "make",
+        "sourceMappingKind": "checked-jit-debug-info"
+      },
+      "windows": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.18/dotnet-runtime-9.0.18-win-x64.zip",
+        "sha512": "38dd0b646bcf8e593d86456b97f75566a902358c437f84ab8b2b21c8f54cc0272910a91330936f02c8eec6e45c1157b716b21d15b91d55187daf19831c32b8a8"
+      },
+      "linuxCapability": {
+        "capabilities": ["run", "jit-asm"],
+        "promotionState": "blocked",
+        "blockedReason": "The .NET 9 product image must pass the real JIT and source-map promotion preflight."
+      },
+      "wineCapability": {
+        "executionUser": "1654:1654",
+        "capabilities": ["run", "jit-asm"],
+        "promotionState": "blocked",
+        "blockedReason": "Run and method-level JIT work in the audit image, but the shared product Wine image has not passed release preflight."
+      }
+    },
+    {
+      "id": "dotnet-10",
+      "channel": "10.0",
+      "version": "10.0.10",
+      "runtimeCommit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+      "jitCommit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+      "releaseDate": "2026-07-14",
+      "supportEndDate": "2028-11-14",
+      "supportStatus": "active",
+      "visibility": "visible",
+      "referenceSetId": "net10-ref",
+      "referencePackage": {
+        "id": "Microsoft.NETCore.App.Ref",
+        "version": "10.0.10",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/10.0.10/microsoft.netcore.app.ref.10.0.10.nupkg",
+        "sha512": "3c76ab1e3966c13ff6dc7cb16fd0570e0172364e3e0eee2992d99608c71d1d98ae2031eac5498131e0444decaa1931b577571a5fe1b59b4eddc2cc9fa7bc528b",
+        "packageContentHash": "sha512-PHarHjlmwT/23Hyxb9BXDgFyNk4+Du4pktmWCMcdHZiuIDHqxUmBMeBETeyqGTG1d1caX+G1m07dwsyfp7xSiw=="
+      },
+      "linuxBaseImage": "mcr.microsoft.com/dotnet/runtime-deps:10.0.9-noble-amd64@sha256:2785f3f766217c9af963efa7cc299b01cd5c6c55ca97d41d5e914303e43b7878",
+      "linux": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-linux-x64.tar.gz",
+        "sha512": "74b2b41ee177fe72da02741d5ba30e8a3c5ead44151d7a72a04ed81a0a933e827f5f8cfcc048ba4e8de5aeb7651953761b7586277d0bcce2e01323ca29ccb813"
+      },
+      "profilerProvider": {
+        "id": "sharplabnext-linux-profiler-v1",
+        "builderImage": "mcr.microsoft.com/dotnet-buildtools/prereqs:ubuntu-22.04@sha256:bc0edbd1de4e727c4f0a91dc90058a8229a18c092dbb55c700b8e99242b75b5e",
+        "scaffold": {
+          "commit": "5f9a631ecb4f558b7d5e1d17af7d4d93ea836cbc",
+          "sourceUri": "https://github.com/microsoft/clr-samples/tree/5f9a631ecb4f558b7d5e1d17af7d4d93ea836cbc/ProfilingAPI/ELTProfiler"
+        },
+        "runtimeHeaders": {
+          "commit": "7ee91972e27c086d92b7d223f905cf391578b256",
+          "sourceUri": "https://github.com/dotnet/runtime/tree/7ee91972e27c086d92b7d223f905cf391578b256"
+        },
+        "sourceMappingKind": "linux-profiler"
+      },
+      "windows": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-win-x64.zip",
+        "sha512": "2161dfa1cf027cdc074de7195b5f206b17ebd829ae415b9e7c9ee5f06d3952b6583030022dbe0d6e9221b5c577c411d7cd5322241f6d2299d9c886641215699b"
+      },
+      "linuxCapability": {
+        "capabilities": ["run", "jit-asm", "inspection", "execution-flow"],
+        "promotionState": "blocked",
+        "blockedReason": "The current product image is 10.0.9; 10.0.10 requires the normal candidate build and JIT source-map promotion gate."
+      },
+      "wineCapability": {
+        "executionUser": "1654:1654",
+        "capabilities": ["run", "jit-asm"],
+        "promotionState": "blocked",
+        "blockedReason": "Run and method-level JIT work in the audit image, but the shared product Wine image has not passed release preflight."
+      }
+    },
+    {
+      "id": "dotnet-11-preview",
+      "channel": "11.0",
+      "version": "11.0.0-preview.6.26359.118",
+      "runtimeCommit": "ba53d0ed335bed4ab7bfd01988c8e3953ee5ffbe",
+      "jitCommit": "ba53d0ed335bed4ab7bfd01988c8e3953ee5ffbe",
+      "releaseDate": "2026-07-14",
+      "supportStatus": "preview",
+      "visibility": "visible",
+      "referenceSetId": "net11-preview-ref",
+      "referencePackage": {
+        "id": "Microsoft.NETCore.App.Ref",
+        "version": "11.0.0-preview.6.26359.118",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/11.0.0-preview.6.26359.118/microsoft.netcore.app.ref.11.0.0-preview.6.26359.118.nupkg",
+        "sha512": "d0ae40598865088a3995b93e938f146aefa1c9dd2aa9fb2ce86d932a58f7847a39b1aceb215ad2ebc62bc2fa7bae4d55507811d5b56ad1aaceacd0fa6dc8adc4",
+        "packageContentHash": "sha512-0K5AWYhlCIo5lbk+k48Uau+hyd0qqfss6G2TKlj3hHo5sazrIVrS68Yrwvp7rk1VUHgR1bVq0arOrND6bcitxA=="
+      },
+      "linuxBaseImage": "mcr.microsoft.com/dotnet/runtime-deps:10.0.9-noble-amd64@sha256:2785f3f766217c9af963efa7cc299b01cd5c6c55ca97d41d5e914303e43b7878",
+      "linux": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/11.0.0-preview.6.26359.118/dotnet-runtime-11.0.0-preview.6.26359.118-linux-x64.tar.gz",
+        "sha512": "ce5530c0314dd38d6f1b8348fbddf65341cee31e05ebddfd7906937c785d799c0d2b95f920d0457f5de5371bd0ede98df9fd8c9588ee58029864d599dd6e1565"
+      },
+      "profilerProvider": {
+        "id": "sharplabnext-linux-profiler-v1",
+        "builderImage": "mcr.microsoft.com/dotnet-buildtools/prereqs:ubuntu-22.04@sha256:bc0edbd1de4e727c4f0a91dc90058a8229a18c092dbb55c700b8e99242b75b5e",
+        "scaffold": {
+          "commit": "5f9a631ecb4f558b7d5e1d17af7d4d93ea836cbc",
+          "sourceUri": "https://github.com/microsoft/clr-samples/tree/5f9a631ecb4f558b7d5e1d17af7d4d93ea836cbc/ProfilingAPI/ELTProfiler"
+        },
+        "runtimeHeaders": {
+          "commit": "7ee91972e27c086d92b7d223f905cf391578b256",
+          "sourceUri": "https://github.com/dotnet/runtime/tree/7ee91972e27c086d92b7d223f905cf391578b256"
+        },
+        "sourceMappingKind": "linux-profiler"
+      },
+      "windows": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/11.0.0-preview.6.26359.118/dotnet-runtime-11.0.0-preview.6.26359.118-win-x64.zip",
+        "sha512": "31f6c1c9dcf70e575a9c532d1064a99ecffab7e90eef24eab7336c9ed04137fef9058aa45dd06aa04c592d17244c6d20678d350d6291f36b088fdf04ecc9160f"
+      },
+      "linuxCapability": {
+        "capabilities": ["run", "jit-asm", "inspection", "execution-flow"],
+        "promotionState": "blocked",
+        "blockedReason": "The current product image is preview 5; preview 6 requires the normal candidate build and JIT source-map promotion gate."
+      },
+      "wineCapability": {
+        "executionUser": "1654:1654",
+        "capabilities": ["run", "jit-asm"],
+        "promotionState": "blocked",
+        "blockedReason": "Run and method-level JIT work in the audit image, but the shared product Wine image has not passed release preflight."
+      }
+    }
+  ],
+  "mono": {
+    "id": "mono-6.12-linux-x64",
+    "version": "6.12.0.182",
+    "image": "mono:6.12@sha256:d2ae1881a608fb6401bcebbf0d444fc2fcadf0db27f07c87153a79e7b14e861a",
+    "referenceSetId": "netfx48-managed-ref",
+    "supportStatus": "legacy",
+    "visibility": "hidden",
+    "capability": {
+      "capabilities": ["run", "jit-asm"],
+      "promotionState": "blocked",
+      "blockedReason": "Mono 6.12.0.182 passed restricted Run and bounded x64 JIT ASM probes, but the shared product candidate has not passed Supervisor capability, performance, and immutable-registry preflight."
+    }
+  },
+  "framework": {
+    "wineVersion": "9.0",
+    "operatorImageEnvironment": "SHARPLABNEXT_WINE_FRAMEWORK_OPERATOR_IMAGE",
+    "targets": [
+      {
+        "id": "netfx20",
+        "version": "2.0",
+        "supportStatus": "legacy",
+        "supportEndDate": "2011-07-12",
+        "visibility": "hidden",
+        "targetFramework": "net20",
+        "clrGeneration": "clr2",
+        "prefix": "/opt/wine-netfx-clr2",
+        "referenceSetId": "netfx20-managed-ref",
+        "referencePackage": {
+          "id": "Microsoft.NETFramework.ReferenceAssemblies.net20",
+          "version": "1.0.3",
+          "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net20/1.0.3/microsoft.netframework.referenceassemblies.net20.1.0.3.nupkg",
+          "sha512": "335bc1db148c258d05757352507e248e3d38693a9620e3d429e5147da0a8540e49570df45c63bd203ee652e068fa29d25cb8262efa0c9126f777df18110c1fc8",
+          "packageContentHash": "sha512-M1vB2xSMJY0FdXNSUH4kjj04aTqWIOPUKeUUfaCoVA5JVw30XGO9ID7mUuBo+inSXLgmLvoMkSb3d98YEQwfyA=="
+        },
+        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "The proprietary CLR2 prefix is operator-supplied and has not passed the product release gate." }
+      },
+      {
+        "id": "netfx30",
+        "version": "3.0",
+        "supportStatus": "legacy",
+        "supportEndDate": "2011-07-12",
+        "visibility": "hidden",
+        "targetFramework": "net30",
+        "clrGeneration": "clr2",
+        "prefix": "/opt/wine-netfx-clr2",
+        "referenceSetId": "netfx30-managed-ref",
+        "referenceComposition": {
+          "kind": "nuget-package-composition",
+          "resolvedVersion": "net30-union-v1",
+          "sourceIdentityDigest": "sha256:d61880a865bf41757cd61d1006f72aade7fcf574a369a7c7189aea0d60579b96",
+          "sources": [
+            {
+              "role": "base",
+              "targetId": "netfx20",
+              "selection": "all"
+            },
+            {
+              "role": "extension",
+              "targetId": "netfx35",
+              "selection": "assembly-version:3.0.0.0"
+            }
+          ]
+        },
+        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "The deterministic net20 plus net35-v3.0 reference composition is locked, but the exact proprietary CLR2 runtime has not passed the product release gate." }
+      },
+      {
+        "id": "netfx35",
+        "version": "3.5",
+        "supportStatus": "maintenance",
+        "supportEndDate": "2029-01-09",
+        "visibility": "visible",
+        "targetFramework": "net35",
+        "clrGeneration": "clr2",
+        "prefix": "/opt/wine-netfx-clr2",
+        "referenceSetId": "netfx35-managed-ref",
+        "referencePackage": {
+          "id": "Microsoft.NETFramework.ReferenceAssemblies.net35",
+          "version": "1.0.3",
+          "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net35/1.0.3/microsoft.netframework.referenceassemblies.net35.1.0.3.nupkg",
+          "sha512": "974538a5f8e787cd2af679cc4b2ea1f4e69a2edf76f3d428da53b361aa0d5f0cf8041520c7515e400fc16f3de1735f8252f0e9ce21bbecef22d4367a6d720af8",
+          "packageContentHash": "sha512-l0U4pfjnh80q9nnMSy6h9OaaLt9289Qo2lOzYaoNXwz4BBUgx1FeQA/Bbz3hc1+CUvDpziG77O8i1DZ6bXIK+A=="
+        },
+        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "The proprietary CLR2 prefix is operator-supplied and has not passed the product release gate." }
+      },
+      {
+        "id": "netfx40",
+        "version": "4.0",
+        "supportStatus": "legacy",
+        "supportEndDate": "2016-01-12",
+        "visibility": "hidden",
+        "targetFramework": "net40",
+        "clrGeneration": "clr4",
+        "prefix": "/opt/wine-netfx-clr4",
+        "referenceSetId": "netfx40-managed-ref",
+        "referencePackage": {
+          "id": "Microsoft.NETFramework.ReferenceAssemblies.net40",
+          "version": "1.0.3",
+          "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net40/1.0.3/microsoft.netframework.referenceassemblies.net40.1.0.3.nupkg",
+          "sha512": "bd45e6c0fc62ee56350c49b19eb9ef7bf6b826037f6755c4e916a8cdc9a5aab7f6399c6cf6c99705bdd0f72d9d6769423ed54cc990513388d03c15f3d38227a5",
+          "packageContentHash": "sha512-vUXmwPxi7lY1DEmxnrnve/a4JgN/Z1XE6Raozcmlqrf2OZxs9smXBb3Q9y2dZ2lCPtVMyZBRM4jQPBXz04InpQ=="
+        },
+        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.0 operator image and registry preflight have not passed the product release gate." }
+      },
+      {
+        "id": "netfx45",
+        "version": "4.5",
+        "supportStatus": "legacy",
+        "supportEndDate": "2016-01-12",
+        "visibility": "hidden",
+        "targetFramework": "net45",
+        "clrGeneration": "clr4",
+        "prefix": "/opt/wine-netfx-clr4",
+        "referenceSetId": "netfx45-managed-ref",
+        "referencePackage": {
+          "id": "Microsoft.NETFramework.ReferenceAssemblies.net45",
+          "version": "1.0.3",
+          "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net45/1.0.3/microsoft.netframework.referenceassemblies.net45.1.0.3.nupkg",
+          "sha512": "ccf2793ea73af9c060e22af7dc05abc80f025312498faf02b3509fa3ca6566dd471f743407f12a5689fa2d15f0f5bf1d7d0c8b60ca9324993699a5e02e118923",
+          "packageContentHash": "sha512-zPJ5Pqc6+cBg4ir33AWryA8CUxJJj68Cs1Cfo8plZt1HH3Q0B/EqVon6LRXw9b8dfQyLYMqTJJk2maXgLhGJIw=="
+        },
+        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.5 operator image and registry preflight have not passed the product release gate." }
+      },
+      {
+        "id": "netfx451",
+        "version": "4.5.1",
+        "supportStatus": "legacy",
+        "supportEndDate": "2016-01-12",
+        "visibility": "hidden",
+        "targetFramework": "net451",
+        "clrGeneration": "clr4",
+        "prefix": "/opt/wine-netfx-clr4",
+        "referenceSetId": "netfx451-managed-ref",
+        "referencePackage": {
+          "id": "Microsoft.NETFramework.ReferenceAssemblies.net451",
+          "version": "1.0.3",
+          "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net451/1.0.3/microsoft.netframework.referenceassemblies.net451.1.0.3.nupkg",
+          "sha512": "7d2d90c31c7725ba09d9a50292730674cd7749a60bb20bab5de86ff8ba799676e5fe52b0b47e794bfb88dcaeca4411f90aa1b12ea05f59626f033fde952f4008",
+          "packageContentHash": "sha512-fS2Qwxx3JboJ2aUCknMGdM13SaYLsgurXehv+Lp5lnbl/lKwtH55S/uI3K7KRBH5CqGxLqBfWWJvAz/elS9ACA=="
+        },
+        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.5.1 operator image and registry preflight have not passed the product release gate." }
+      },
+      {
+        "id": "netfx452",
+        "version": "4.5.2",
+        "supportStatus": "legacy",
+        "supportEndDate": "2022-04-26",
+        "visibility": "hidden",
+        "targetFramework": "net452",
+        "clrGeneration": "clr4",
+        "prefix": "/opt/wine-netfx-clr4",
+        "referenceSetId": "netfx452-managed-ref",
+        "referencePackage": {
+          "id": "Microsoft.NETFramework.ReferenceAssemblies.net452",
+          "version": "1.0.3",
+          "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net452/1.0.3/microsoft.netframework.referenceassemblies.net452.1.0.3.nupkg",
+          "sha512": "125b35cb0b1b2c3fd7a44810595d3232900e1e4d0b79ccf88d698e78bc33192149dca15707ee7bc0a8d7e2b109c6a25ff7b08816752670efa9bc8cfc2df4d7bf",
+          "packageContentHash": "sha512-Els1ywsbLD/XpEgQWV0yMpAOHk0Lecz4jWmOeLwzGSFJ3KFXB+57wKjX4rEJxqJf97CIFnUmcO+pvIz8LfTXvw=="
+        },
+        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.5.2 operator image and registry preflight have not passed the product release gate." }
+      },
+      {
+        "id": "netfx46",
+        "version": "4.6",
+        "supportStatus": "legacy",
+        "supportEndDate": "2022-04-26",
+        "visibility": "hidden",
+        "targetFramework": "net46",
+        "clrGeneration": "clr4",
+        "prefix": "/opt/wine-netfx-clr4",
+        "referenceSetId": "netfx46-managed-ref",
+        "referencePackage": {
+          "id": "Microsoft.NETFramework.ReferenceAssemblies.net46",
+          "version": "1.0.3",
+          "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net46/1.0.3/microsoft.netframework.referenceassemblies.net46.1.0.3.nupkg",
+          "sha512": "d8351799a723a8d4d79f9144f79a9613a6cbdb669ed26ff4acbfd280adda5ac5baa82943cd7566a3490e2f270287a255ea2ddd414fca32e4f6c2dad3f047d988",
+          "packageContentHash": "sha512-2DUXmacjqNTXn5FE95qWE6bL22ae0m/0rL/SgK3aWsW6qClDzXVmo0kOLycCh6JV6i3dQU/KMuT2wtrT8EfZiA=="
+        },
+        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.6 operator image and registry preflight have not passed the product release gate." }
+      },
+      {
+        "id": "netfx461",
+        "version": "4.6.1",
+        "supportStatus": "legacy",
+        "supportEndDate": "2022-04-26",
+        "visibility": "hidden",
+        "targetFramework": "net461",
+        "clrGeneration": "clr4",
+        "prefix": "/opt/wine-netfx-clr4",
+        "referenceSetId": "netfx461-managed-ref",
+        "referencePackage": {
+          "id": "Microsoft.NETFramework.ReferenceAssemblies.net461",
+          "version": "1.0.3",
+          "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net461/1.0.3/microsoft.netframework.referenceassemblies.net461.1.0.3.nupkg",
+          "sha512": "b717dcc15dab52be03c6bd2bda353adfb0ecc785bd5a8d4fc47239a1324f46c4ac187595d902d2ef90c69bbbc9d9eeec97d04c6599f5ef8feba374833bfa01c6",
+          "packageContentHash": "sha512-txfcwV2rUr4Dxr0r2jU637Dsx4W9Wo1PxHI5oTJPRsSsGHWV2QLS75DGm7vJ2e7sl9BMZZn174/ro3SDO/oBxg=="
+        },
+        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.6.1 operator image and registry preflight have not passed the product release gate." }
+      },
+      {
+        "id": "netfx462",
+        "version": "4.6.2",
+        "supportStatus": "maintenance",
+        "visibility": "visible",
+        "targetFramework": "net462",
+        "clrGeneration": "clr4",
+        "prefix": "/opt/wine-netfx-clr4",
+        "referenceSetId": "netfx462-managed-ref",
+        "referencePackage": {
+          "id": "Microsoft.NETFramework.ReferenceAssemblies.net462",
+          "version": "1.0.3",
+          "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net462/1.0.3/microsoft.netframework.referenceassemblies.net462.1.0.3.nupkg",
+          "sha512": "1cc9f441098f61c26c56e29eb7d580f0841b070799bdced44bcf0ddfd8ad491a9c9ffd57393fca6a8d508a2ca4c54fafc7c93bff38a6d7571598ab6e9e3bb830",
+          "packageContentHash": "sha512-HMn0QQmPYcJsVuKet9WA8IQbBweZvc7US88N39itSRqcn/1XOT/Kao1QiiykxU+vx8k7/zim11cVmKtunju4MA=="
+        },
+        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.6.2 operator image and registry preflight have not passed the product release gate." }
+      },
+      {
+        "id": "netfx47",
+        "version": "4.7",
+        "supportStatus": "maintenance",
+        "visibility": "visible",
+        "targetFramework": "net47",
+        "clrGeneration": "clr4",
+        "prefix": "/opt/wine-netfx-clr4",
+        "referenceSetId": "netfx47-managed-ref",
+        "referencePackage": {
+          "id": "Microsoft.NETFramework.ReferenceAssemblies.net47",
+          "version": "1.0.3",
+          "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net47/1.0.3/microsoft.netframework.referenceassemblies.net47.1.0.3.nupkg",
+          "sha512": "c7610db70f82c80395f443b5579a2478c90f911f0b1965bc17ac46fa7771c04ab718c94d983a34083059b48ebdd0f3ffd233074f094fc32413bd80615291a264",
+          "packageContentHash": "sha512-x2ENtw+CyAOV9EO1V5okeMkPkR8LGWW8F6xG+ndxwEq3GMlNmDo0CDBZtI690PP/0jMHTwlPwyQTvYBhUpGiZA=="
+        },
+        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.7 operator image and registry preflight have not passed the product release gate." }
+      },
+      {
+        "id": "netfx471",
+        "version": "4.7.1",
+        "supportStatus": "maintenance",
+        "visibility": "visible",
+        "targetFramework": "net471",
+        "clrGeneration": "clr4",
+        "prefix": "/opt/wine-netfx-clr4",
+        "referenceSetId": "netfx471-managed-ref",
+        "referencePackage": {
+          "id": "Microsoft.NETFramework.ReferenceAssemblies.net471",
+          "version": "1.0.3",
+          "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net471/1.0.3/microsoft.netframework.referenceassemblies.net471.1.0.3.nupkg",
+          "sha512": "57199cd45c492d4e210346f699c10b9f83b94ba3f701fc6d9451e38351b0ea831a04f2fc80c46df574fe20e0e4cc359e27d6d7ff260de043e224ccfd661ff685",
+          "packageContentHash": "sha512-Vxmc1FxJLU4hA0b2mcELn4O5S6P3AfxtlFHjg1Gw6oMaBPL8gMRt9XT+IODkzDWeJ9bX/yYN4EPiJMz9Zh/2hQ=="
+        },
+        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.7.1 operator image and registry preflight have not passed the product release gate." }
+      },
+      {
+        "id": "netfx472",
+        "version": "4.7.2",
+        "supportStatus": "maintenance",
+        "visibility": "visible",
+        "targetFramework": "net472",
+        "clrGeneration": "clr4",
+        "prefix": "/opt/wine-netfx-clr4",
+        "referenceSetId": "netfx472-managed-ref",
+        "referencePackage": {
+          "id": "Microsoft.NETFramework.ReferenceAssemblies.net472",
+          "version": "1.0.3",
+          "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net472/1.0.3/microsoft.netframework.referenceassemblies.net472.1.0.3.nupkg",
+          "sha512": "3ef64aa456edb31b49062ea1272cedfe268aef5a8676ef66355a494f8dfe8b55a9db7ca6e7b615b9023e0449ceffdf4ada9c4f304818b73eb69fbc99144822d8",
+          "packageContentHash": "sha512-PvZKpFbtsxtJBi6hJyzt/iaK71qGdu9mNVpJT43+i1Wp23ym57YVuQI+BEnO/99K2pxPMEgYtz62n7yZFEgi2A=="
+        },
+        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.7.2 operator image and registry preflight have not passed the product release gate." }
+      },
+      {
+        "id": "netfx48",
+        "version": "4.8",
+        "supportStatus": "maintenance",
+        "visibility": "visible",
+        "targetFramework": "net48",
+        "clrGeneration": "clr4",
+        "prefix": "/opt/wine-netfx-clr4",
+        "referenceSetId": "netfx48-managed-ref",
+        "referencePackage": {
+          "id": "Microsoft.NETFramework.ReferenceAssemblies.net48",
+          "version": "1.0.3",
+          "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net48/1.0.3/microsoft.netframework.referenceassemblies.net48.1.0.3.nupkg",
+          "sha512": "5d62a0c9e35a74d71341a215bd007c06b74236b11aafa7e8fdd7b539d41167d1c5cb48dc05268cf08579abae196a6a6c4a70bc0254ec002686654ba8170e3544",
+          "packageContentHash": "sha512-XWKgyeNadNcTQaIVvQB8BrdCNrEar6fo/de1OdQRZ9HFy0jcBSaM8IV5q64ZampsSnC8AlTsACaGZUuoFw41RA=="
+        },
+        "capability": {
+          "capabilities": ["run"],
+          "promotionState": "blocked",
+          "blockedReason": "The active .NET Framework 4.8 runtime remains available, but this matrix candidate has no immutable image-bound promotion receipt."
+        }
+      }
+    ]
+  }
+}

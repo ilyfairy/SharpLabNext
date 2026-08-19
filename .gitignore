@@ -6,6 +6,10 @@
 # dotenv files
 .env
 
+# Local development secrets
+deploy/secrets/*
+!deploy/secrets/README.md
+
 # User-specific files
 *.rsuser
 *.suo

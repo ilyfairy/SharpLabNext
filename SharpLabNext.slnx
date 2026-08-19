@@ -1,0 +1,144 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/ArtifactStore/">
+    <Project Path="src/ArtifactStore/SharpLabNext.ArtifactStore.Client/SharpLabNext.ArtifactStore.Client.csproj" />
+    <Project Path="src/ArtifactStore/SharpLabNext.ArtifactStore/SharpLabNext.ArtifactStore.csproj" />
+  </Folder>
+  <Folder Name="/src/Contracts/">
+    <Project Path="src/Contracts/SharpLabNext.Artifacts.Contracts/SharpLabNext.Artifacts.Contracts.csproj" />
+    <Project Path="src/Contracts/SharpLabNext.Contracts.Grpc/SharpLabNext.Contracts.Grpc.csproj" />
+    <Project Path="src/Contracts/SharpLabNext.Contracts/SharpLabNext.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/src/Gateway/">
+    <Project Path="src/Gateway/SharpLabNext.Catalog/SharpLabNext.Catalog.csproj" />
+    <Project Path="src/Gateway/SharpLabNext.Gateway/SharpLabNext.Gateway.csproj" />
+    <Project Path="src/Gateway/SharpLabNext.Operations/SharpLabNext.Operations.csproj" />
+    <Project Path="src/Gateway/SharpLabNext.PipelineResolver/SharpLabNext.PipelineResolver.csproj" />
+  </Folder>
+  <Folder Name="/src/RuntimeApi/">
+    <Project Path="src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj" />
+  </Folder>
+  <Folder Name="/src/RuntimeJobs/">
+    <Project Path="src/RuntimeJobs/SharpLabNext.CheckedJitBridge/SharpLabNext.CheckedJitBridge.csproj" />
+    <Project Path="src/RuntimeJobs/SharpLabNext.JitInspector/SharpLabNext.JitInspector.csproj" />
+    <Project Path="src/RuntimeJobs/SharpLabNext.LegacyJitInspector/SharpLabNext.LegacyJitInspector.csproj" />
+    <Project Path="src/RuntimeJobs/SharpLabNext.MonoJitInspector/SharpLabNext.MonoJitInspector.csproj" />
+    <Project Path="src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj" />
+    <Project Path="src/RuntimeJobs/SharpLabNext.RuntimeProtocol/SharpLabNext.RuntimeProtocol.csproj" />
+    <Project Path="src/RuntimeJobs/SharpLabNext.TargetRuntimeRunner/SharpLabNext.TargetRuntimeRunner.csproj" />
+    <Project Path="src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj" />
+  </Folder>
+  <Folder Name="/src/Supervisor/">
+    <Project Path="src/Supervisor/SharpLabNext.RuntimeSupervisor.Client/SharpLabNext.RuntimeSupervisor.Client.csproj" />
+    <Project Path="src/Supervisor/SharpLabNext.RuntimeSupervisor/SharpLabNext.RuntimeSupervisor.csproj" />
+  </Folder>
+  <Folder Name="/src/Tools/">
+    <Project Path="src/Tools/SharpLabNext.BundleBuilder/SharpLabNext.BundleBuilder.csproj" />
+    <Project Path="src/Tools/SharpLabNext.CompatibilityCli/SharpLabNext.CompatibilityCli.csproj" />
+    <Project Path="src/Tools/SharpLabNext.ProfileUpdater/SharpLabNext.ProfileUpdater.csproj" />
+  </Folder>
+  <Folder Name="/src/Infrastructure/">
+    <Project Path="src/Infrastructure/SharpLabNext.Observability/SharpLabNext.Observability.csproj" />
+  </Folder>
+  <Folder Name="/src/WorkerHost/">
+    <Project Path="src/WorkerHost/SharpLabNext.ArtifactWorker.Sdk/SharpLabNext.ArtifactWorker.Sdk.csproj" />
+    <Project Path="src/WorkerHost/SharpLabNext.LanguageWorker.Conformance/SharpLabNext.LanguageWorker.Conformance.csproj" />
+    <Project Path="src/WorkerHost/SharpLabNext.LanguageWorker.Sdk/SharpLabNext.LanguageWorker.Sdk.csproj" />
+    <Project Path="src/WorkerHost/SharpLabNext.RuntimeProfile.Sdk/SharpLabNext.RuntimeProfile.Sdk.csproj" />
+    <Project Path="src/WorkerHost/SharpLabNext.Worker.Client/SharpLabNext.Worker.Client.csproj" />
+    <Project Path="src/WorkerHost/SharpLabNext.WorkerHost/SharpLabNext.WorkerHost.csproj" />
+  </Folder>
+  <Folder Name="/src/Workers/" />
+  <Folder Name="/src/Workers/Artifacts.ConstGenerics/">
+    <Project Path="src/Workers/Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics.Processor/SharpLabNext.Worker.Artifacts.ConstGenerics.Processor.csproj" />
+    <Project Path="src/Workers/Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics.Protocol/SharpLabNext.Worker.Artifacts.ConstGenerics.Protocol.csproj" />
+    <Project Path="src/Workers/Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics.Tests/SharpLabNext.Worker.Artifacts.ConstGenerics.Tests.csproj" />
+    <Project Path="src/Workers/Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics.csproj" />
+  </Folder>
+  <Folder Name="/src/Workers/Artifacts.Default/">
+    <Project Path="src/Workers/Artifacts.Default/SharpLabNext.Worker.Artifacts.Default.Fixture/SharpLabNext.Worker.Artifacts.Default.Fixture.csproj" />
+    <Project Path="src/Workers/Artifacts.Default/SharpLabNext.Worker.Artifacts.Default.Processor/SharpLabNext.Worker.Artifacts.Default.Processor.csproj" />
+    <Project Path="src/Workers/Artifacts.Default/SharpLabNext.Worker.Artifacts.Default.Protocol/SharpLabNext.Worker.Artifacts.Default.Protocol.csproj" />
+    <Project Path="src/Workers/Artifacts.Default/SharpLabNext.Worker.Artifacts.Default.Tests/SharpLabNext.Worker.Artifacts.Default.Tests.csproj" />
+    <Project Path="src/Workers/Artifacts.Default/SharpLabNext.Worker.Artifacts.Default/SharpLabNext.Worker.Artifacts.Default.csproj" />
+  </Folder>
+  <Folder Name="/src/Workers/Artifacts.ILAssembler/">
+    <Project Path="src/Workers/Artifacts.ILAssembler/SharpLabNext.Worker.Artifacts.ILAssembler.Tests/SharpLabNext.Worker.Artifacts.ILAssembler.Tests.csproj" />
+    <Project Path="src/Workers/Artifacts.ILAssembler/SharpLabNext.Worker.Artifacts.ILAssembler/SharpLabNext.Worker.Artifacts.ILAssembler.csproj" />
+  </Folder>
+  <Folder Name="/src/Workers/Artifacts.JSIL/">
+    <Project Path="src/Workers/Artifacts.JSIL/SharpLabNext.Worker.Artifacts.JSIL.Fixture/SharpLabNext.Worker.Artifacts.JSIL.Fixture.csproj" />
+    <Project Path="src/Workers/Artifacts.JSIL/SharpLabNext.Worker.Artifacts.JSIL.Tests/SharpLabNext.Worker.Artifacts.JSIL.Tests.csproj" />
+    <Project Path="src/Workers/Artifacts.JSIL/SharpLabNext.Worker.Artifacts.JSIL/SharpLabNext.Worker.Artifacts.JSIL.csproj" />
+  </Folder>
+  <Folder Name="/src/Workers/CppCli/">
+    <Project Path="src/Workers/CppCli/SharpLabNext.Worker.CppCli.Tests/SharpLabNext.Worker.CppCli.Tests.csproj" />
+    <Project Path="src/Workers/CppCli/SharpLabNext.Worker.CppCli/SharpLabNext.Worker.CppCli.csproj" />
+  </Folder>
+  <Folder Name="/src/Workers/FSharp/">
+    <Project Path="src/Workers/FSharp/SharpLabNext.Worker.FSharp.Compiler/SharpLabNext.Worker.FSharp.Compiler.fsproj" />
+    <Project Path="src/Workers/FSharp/SharpLabNext.Worker.FSharp.Tests/SharpLabNext.Worker.FSharp.Tests.csproj" />
+    <Project Path="src/Workers/FSharp/SharpLabNext.Worker.FSharp/SharpLabNext.Worker.FSharp.csproj" />
+  </Folder>
+  <Folder Name="/src/Workers/GSharp/">
+    <Project Path="src/Workers/GSharp/SharpLabNext.Worker.GSharp.Tests/SharpLabNext.Worker.GSharp.Tests.csproj" />
+    <Project Path="src/Workers/GSharp/SharpLabNext.Worker.GSharp/SharpLabNext.Worker.GSharp.csproj" />
+  </Folder>
+  <Folder Name="/src/Workers/IL/">
+    <Project Path="src/Workers/IL/SharpLabNext.Worker.IL.Compiler/SharpLabNext.Worker.IL.Compiler.csproj" />
+    <Project Path="src/Workers/IL/SharpLabNext.Worker.IL.Tests/SharpLabNext.Worker.IL.Tests.csproj" />
+    <Project Path="src/Workers/IL/SharpLabNext.Worker.IL/SharpLabNext.Worker.IL.csproj" />
+  </Folder>
+  <Folder Name="/src/Workers/JSharp/">
+    <Project Path="src/Workers/JSharp/SharpLabNext.Worker.JSharp.TestCompiler/SharpLabNext.Worker.JSharp.TestCompiler.csproj" />
+    <Project Path="src/Workers/JSharp/SharpLabNext.Worker.JSharp.Tests/SharpLabNext.Worker.JSharp.Tests.csproj" />
+    <Project Path="src/Workers/JSharp/SharpLabNext.Worker.JSharp/SharpLabNext.Worker.JSharp.csproj" />
+  </Folder>
+  <Folder Name="/src/Workers/PeachPie/">
+    <Project Path="src/Workers/PeachPie/SharpLabNext.Worker.PeachPie.Tests/SharpLabNext.Worker.PeachPie.Tests.csproj" />
+    <Project Path="src/Workers/PeachPie/SharpLabNext.Worker.PeachPie/SharpLabNext.Worker.PeachPie.csproj" />
+  </Folder>
+  <Folder Name="/src/Workers/Roslyn.ConstGenerics/">
+    <Project Path="src/Workers/Roslyn.ConstGenerics/SharpLabNext.Worker.Roslyn.ConstGenerics.Tests/SharpLabNext.Worker.Roslyn.ConstGenerics.Tests.csproj" />
+    <Project Path="src/Workers/Roslyn.ConstGenerics/SharpLabNext.Worker.Roslyn.ConstGenerics/SharpLabNext.Worker.Roslyn.ConstGenerics.csproj" />
+  </Folder>
+  <Folder Name="/src/Workers/Roslyn.Main/">
+    <Project Path="src/Workers/Roslyn.Main/SharpLabNext.Worker.Roslyn.Main.Tests/SharpLabNext.Worker.Roslyn.Main.Tests.csproj" />
+    <Project Path="src/Workers/Roslyn.Main/SharpLabNext.Worker.Roslyn.Main/SharpLabNext.Worker.Roslyn.Main.csproj" />
+  </Folder>
+  <Folder Name="/src/Workers/Roslyn.Stable/">
+    <Project Path="src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable.Tests/SharpLabNext.Worker.Roslyn.Stable.Tests.csproj" />
+    <Project Path="src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable.csproj" />
+  </Folder>
+  <Folder Name="/third_party/ILSense/">
+    <Project Path="third_party/ILSense/src/EleCho.ILSense/EleCho.ILSense.csproj" />
+  </Folder>
+  <Folder Name="/samples/" />
+  <Folder Name="/samples/Languages/">
+    <Project Path="samples/Languages/SharpLabNext.SampleLanguage.Worker.Tests/SharpLabNext.SampleLanguage.Worker.Tests.csproj" />
+    <Project Path="samples/Languages/SharpLabNext.SampleLanguage.Worker/SharpLabNext.SampleLanguage.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/Compatibility/">
+    <Project Path="tests/Compatibility/SharpLabNext.CompatibilityTests/SharpLabNext.CompatibilityTests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Contracts/">
+    <Project Path="tests/Contracts/SharpLabNext.ContractTests/SharpLabNext.ContractTests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Fixtures/">
+    <Project Path="tests/Fixtures/SharpLabNext.LegacyJitFixture/SharpLabNext.LegacyJitFixture.csproj" />
+    <Project Path="tests/Fixtures/SharpLabNext.LegacyRunFixture/SharpLabNext.LegacyRunFixture.csproj" />
+    <Project Path="tests/Fixtures/SharpLabNext.RuntimeCapabilityProbe/SharpLabNext.RuntimeCapabilityProbe.csproj" />
+    <Project Path="tests/Fixtures/SharpLabNext.RunnerFixture/SharpLabNext.RunnerFixture.csproj" />
+  </Folder>
+  <Folder Name="/tests/Integration/">
+    <Project Path="tests/Integration/SharpLabNext.IntegrationTests/SharpLabNext.IntegrationTests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Security/">
+    <Project Path="tests/Security/SharpLabNext.SecurityTests/SharpLabNext.SecurityTests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Unit/">
+    <Project Path="tests/Unit/SharpLabNext.Observability.Tests/SharpLabNext.Observability.Tests.csproj" />
+    <Project Path="tests/Unit/SharpLabNext.UnitTests/SharpLabNext.UnitTests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/supply-chain/v1/license-policy.schema.json",
+  "title": "SharpLabNext Dependency License Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "allowedLicenses", "licenseAliases", "overrides", "deniedPrefixes"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "allowedLicenses": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/nonEmpty" }
+    },
+    "licenseAliases": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/nonEmpty" }
+    },
+    "overrides": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/nonEmpty" }
+    },
+    "deniedPrefixes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/nonEmpty" }
+    }
+  },
+  "$defs": {
+    "nonEmpty": { "type": "string", "minLength": 1, "maxLength": 512 }
+  }
+}

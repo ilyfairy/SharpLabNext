@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/runtime/v1/runtime-framework-installers.schema.json",
+  "title": "SharpLabNext Operator .NET Framework Installer Recipes",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "winetricksVersion",
+    "companionPrefixes",
+    "targets"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "winetricksVersion": { "type": "string", "pattern": "^[0-9]{8}$" },
+    "companionPrefixes": { "$ref": "#/$defs/companionPrefixes" },
+    "targets": {
+      "type": "array",
+      "minItems": 14,
+      "maxItems": 14,
+      "items": { "$ref": "#/$defs/target" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^netfx[0-9]+$"
+    },
+    "version": {
+      "enum": [
+        "2.0",
+        "3.0",
+        "3.5",
+        "4.0",
+        "4.5",
+        "4.5.1",
+        "4.5.2",
+        "4.6",
+        "4.6.1",
+        "4.6.2",
+        "4.7",
+        "4.7.1",
+        "4.7.2",
+        "4.8"
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "winetricksVerb": {
+      "type": "string",
+      "pattern": "^dotnet[0-9]+(?:sp[0-9]+)?$"
+    },
+    "prefix": {
+      "enum": [
+        "/opt/wine-netfx-clr2",
+        "/opt/wine-netfx-clr4"
+      ]
+    },
+    "companionPrefix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prefix", "winetricksVerb"],
+      "properties": {
+        "prefix": { "$ref": "#/$defs/prefix" },
+        "winetricksVerb": { "$ref": "#/$defs/winetricksVerb" }
+      }
+    },
+    "companionPrefixes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clr2", "clr4"],
+      "properties": {
+        "clr2": { "$ref": "#/$defs/companionPrefix" },
+        "clr4": { "$ref": "#/$defs/companionPrefix" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "clrGeneration", "prefix", "recipe"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "version": { "$ref": "#/$defs/version" },
+        "clrGeneration": { "enum": ["clr2", "clr4"] },
+        "prefix": { "$ref": "#/$defs/prefix" },
+        "recipe": {
+          "anyOf": [
+            { "$ref": "#/$defs/winetricksRecipe" },
+            { "$ref": "#/$defs/operatorInstallerRecipe" }
+          ]
+        }
+      }
+    },
+    "winetricksRecipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "verb"],
+      "properties": {
+        "kind": { "const": "winetricks" },
+        "verb": { "$ref": "#/$defs/winetricksVerb" },
+        "sharedClr2FeaturePack": { "type": "boolean" }
+      }
+    },
+    "operatorInstallerRecipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "fileName",
+        "sha256",
+        "prerequisiteVerb",
+        "arguments"
+      ],
+      "properties": {
+        "kind": { "const": "operator-installer" },
+        "fileName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.exe$"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "prerequisiteVerb": { "$ref": "#/$defs/winetricksVerb" },
+        "arguments": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64,
+            "pattern": "^/[A-Za-z0-9:._=-]+$"
+          }
+        }
+      }
+    }
+  }
+}

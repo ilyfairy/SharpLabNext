@@ -1,0 +1,6 @@
+@SharpLabNext.RuntimeSupervisor_HostAddress = http://localhost:5207
+
+GET {{SharpLabNext.RuntimeSupervisor_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

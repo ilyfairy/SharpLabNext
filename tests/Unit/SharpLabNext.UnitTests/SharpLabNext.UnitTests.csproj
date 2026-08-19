@@ -1,0 +1,51 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Contracts\SharpLabNext.Contracts\SharpLabNext.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\src\Gateway\SharpLabNext.Catalog\SharpLabNext.Catalog.csproj" />
+    <ProjectReference Include="..\..\..\src\Gateway\SharpLabNext.PipelineResolver\SharpLabNext.PipelineResolver.csproj" />
+    <ProjectReference Include="..\..\..\src\Gateway\SharpLabNext.Operations\SharpLabNext.Operations.csproj" />
+    <ProjectReference Include="..\..\..\src\RuntimeJobs\SharpLabNext.RuntimeProtocol\SharpLabNext.RuntimeProtocol.csproj" />
+    <ProjectReference Include="..\..\..\src\RuntimeJobs\SharpLabNext.CheckedJitBridge\SharpLabNext.CheckedJitBridge.csproj" />
+    <ProjectReference Include="..\..\..\src\RuntimeJobs\SharpLabNext.LegacyJitInspector\SharpLabNext.LegacyJitInspector.csproj" />
+    <ProjectReference Include="..\..\..\src\RuntimeJobs\SharpLabNext.MonoJitInspector\SharpLabNext.MonoJitInspector.csproj" />
+    <ProjectReference Include="..\..\..\src\RuntimeJobs\SharpLabNext.WineRunner\SharpLabNext.WineRunner.csproj" Aliases="SharpLabNextWineRunner" />
+    <ProjectReference Include="..\..\Fixtures\SharpLabNext.RunnerFixture\SharpLabNext.RunnerFixture.csproj" />
+    <ProjectReference Include="..\..\Fixtures\SharpLabNext.RuntimeCapabilityProbe\SharpLabNext.RuntimeCapabilityProbe.csproj"
+                      ReferenceOutputAssembly="false"
+                      AdditionalProperties="TargetFramework=netcoreapp2.0" />
+    <ProjectReference Include="..\..\..\src\Supervisor\SharpLabNext.RuntimeSupervisor\SharpLabNext.RuntimeSupervisor.csproj" />
+    <ProjectReference Include="..\..\..\src\Tools\SharpLabNext.BundleBuilder\SharpLabNext.BundleBuilder.csproj" />
+    <ProjectReference Include="..\..\..\src\Tools\SharpLabNext.CompatibilityCli\SharpLabNext.CompatibilityCli.csproj" />
+    <ProjectReference Include="..\..\..\src\Tools\SharpLabNext.ProfileUpdater\SharpLabNext.ProfileUpdater.csproj" />
+    <ProjectReference Include="..\..\..\src\WorkerHost\SharpLabNext.RuntimeProfile.Sdk\SharpLabNext.RuntimeProfile.Sdk.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\..\profiles\catalog\catalog.json" Link="Fixtures\catalog.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\profiles\lock.json" Link="Fixtures\lock.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

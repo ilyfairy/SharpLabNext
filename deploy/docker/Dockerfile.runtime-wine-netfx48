@@ -1,0 +1,73 @@
+# syntax=docker/dockerfile:1.7
+
+ARG SDK_IMAGE
+ARG ASPNET_IMAGE
+# Wine executes user code through the shared control-plane bridge.  The
+# bridge project multi-targets for local/test consumers, but the runtime image
+# must contain exactly one framework-compatible publish output.  Keep this
+# configurable for a future net8 base image; net10 matches the current ASP.NET
+# base image and avoids requiring an additional runtime in the final layer.
+ARG CONTROL_TFM
+
+FROM ${SDK_IMAGE} AS publish
+ARG SOURCE_REVISION
+ARG CONTROL_TFM
+WORKDIR /source
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+RUN dotnet restore \
+      src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj \
+      --locked-mode
+RUN dotnet publish \
+      src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj \
+      --configuration Release \
+      --framework ${CONTROL_TFM} \
+      --no-restore \
+      --output /runner \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION}
+
+FROM cppcli-prepared-base-context AS wine-source
+
+FROM wine-source AS wine-runtime-files
+# The .NET Framework installer keeps repair payloads in SetupCache after the
+# prefix is initialized. Wine execution does not use them, so exclude them
+# from the runtime image without touching the GAC or native-image caches.
+RUN rm -rf \
+      /usr/share/dotnet \
+      /usr/local/bin/sharplabnext-service \
+      /opt/wine-dotnet/drive_c/windows/Microsoft.NET/Framework/v4.0.30319/SetupCache \
+      /opt/wine-dotnet/drive_c/windows/Microsoft.NET/Framework64/v4.0.30319/SetupCache
+
+FROM ${ASPNET_IMAGE} AS final
+ARG VERSION
+ARG SOURCE_REVISION
+ARG NETFX_RUNTIME_VERSION
+RUN test -n "${NETFX_RUNTIME_VERSION}" \
+    && mkdir -p /opt/sharplabnext/control-dotnet /opt/wine-dotnet /workspace \
+    && test -x /usr/share/dotnet/dotnet \
+    && ln -s /usr/share/dotnet/dotnet /opt/sharplabnext/control-dotnet/dotnet
+LABEL org.opencontainers.image.title="SharpLabNext Wine .NET Framework 4.8 Runtime" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      io.sharplabnext.runtime.framework=".NETFramework,Version=v4.8" \
+      io.sharplabnext.runtime.framework-version="${NETFX_RUNTIME_VERSION}"
+# Copy only Wine's Linux userspace and the initialized Framework prefix. The
+# proprietary MSVC compiler tree under /opt/msvc is intentionally excluded.
+COPY --from=wine-runtime-files /usr/ /usr/
+COPY --from=wine-runtime-files /etc/fonts/ /etc/fonts/
+COPY --from=wine-runtime-files /opt/wine-dotnet/ /opt/wine-dotnet/
+RUN test -x /usr/bin/wine-stable
+COPY --from=publish /runner/ /opt/sharplabnext/
+COPY --chmod=0555 deploy/docker/runtime-entrypoint.sh /usr/local/bin/sharplabnext-runtime
+ENV DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    WINEPREFIX=/opt/wine-dotnet \
+    WINEARCH=win64 \
+    WINEDEBUG=-all
+WORKDIR /workspace
+USER 0:0
+ENTRYPOINT ["/usr/local/bin/sharplabnext-runtime"]

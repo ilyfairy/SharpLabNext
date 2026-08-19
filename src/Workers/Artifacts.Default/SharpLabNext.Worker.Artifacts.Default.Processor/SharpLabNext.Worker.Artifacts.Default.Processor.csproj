@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SharpLabNext.Worker.Artifacts.Default.Processor</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ICSharpCode.Decompiler" />
+    <PackageReference Include="Microsoft.ILVerification" />
+    <PackageReference Include="Mono.Cecil" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The processor is launched as an isolated executable. Keep the shared
+         wire serializer as a direct runtime dependency so its deps file
+         carries the Contracts assembly into the child process. -->
+    <ProjectReference Include="..\..\..\Contracts\SharpLabNext.Contracts\SharpLabNext.Contracts.csproj" />
+    <ProjectReference Include="..\SharpLabNext.Worker.Artifacts.Default.Protocol\SharpLabNext.Worker.Artifacts.Default.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpLabNext.Worker.Artifacts.Default.Tests" />
+  </ItemGroup>
+
+</Project>

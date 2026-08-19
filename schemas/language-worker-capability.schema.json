@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sharplabnext.dev/workers/v2/language-worker-capability.schema.json",
+  "title": "SharpLabNext Language Worker Capability Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "workerId", "languageId", "toolchainIds", "protocolVersion", "capabilities", "producedArtifactFormats", "supportedReferenceSetIds", "limits"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "workerId": { "$ref": "#/$defs/id" },
+    "languageId": { "$ref": "#/$defs/id" },
+    "toolchainIds": { "$ref": "#/$defs/ids" },
+    "protocolVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+    "capabilities": { "$ref": "#/$defs/ids" },
+    "producedArtifactFormats": { "$ref": "#/$defs/ids" },
+    "supportedReferenceSetIds": { "$ref": "#/$defs/ids" },
+    "limits": { "$ref": "#/$defs/limits" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "positive": { "type": "integer", "minimum": 1 },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximumFiles", "maximumSourceUtf8Bytes", "maximumArtifactBytes", "maximumConcurrentBuilds", "maximumBuildMilliseconds", "maximumLspMessageBytes"],
+      "properties": {
+        "maximumFiles": { "$ref": "#/$defs/positive" },
+        "maximumSourceUtf8Bytes": { "$ref": "#/$defs/positive" },
+        "maximumArtifactBytes": { "$ref": "#/$defs/positive" },
+        "maximumConcurrentBuilds": { "$ref": "#/$defs/positive" },
+        "maximumBuildMilliseconds": { "$ref": "#/$defs/positive" },
+        "maximumLspMessageBytes": { "$ref": "#/$defs/positive" }
+      }
+    }
+  }
+}

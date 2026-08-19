@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "components": [
+    {
+      "id": "moby-default-seccomp-profile",
+      "packageManager": "github",
+      "name": "moby/profiles",
+      "version": "seccomp/v0.1.0",
+      "commit": "c936cc7b4074219137bc0bee45670f5e4618d462",
+      "sourceUri": "https://github.com/moby/profiles/blob/c936cc7b4074219137bc0bee45670f5e4618d462/seccomp/default.json",
+      "sourcePath": "src/Supervisor/SharpLabNext.RuntimeSupervisor/security/runtime-job-seccomp.v1.json",
+      "sha256": "01536f1d1df938ae611eba20d6349e0de7a99b6ecdee1549427a0b01b8301e28",
+      "license": "Apache-2.0",
+      "licensePath": "deploy/security/licenses/moby-profiles-Apache-2.0.txt",
+      "selectedBy": {
+        "name": "moby/moby",
+        "version": "v28.5.2",
+        "commit": "89c5e8fd66634b6128fc4c0e6f1236e2540e46e0"
+      }
+    }
+  ]
+}

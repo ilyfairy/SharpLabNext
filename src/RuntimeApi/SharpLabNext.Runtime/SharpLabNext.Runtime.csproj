@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.1;net10.0</TargetFrameworks>
+    <AssemblyName>SharpLab.Runtime</AssemblyName>
+    <RootNamespace>SharpLab.Runtime</RootNamespace>
+    <NoWarn>$(NoWarn);CA1050;CA1510;CA1720</NoWarn>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsSharpLabNextPublicPackage>true</IsSharpLabNextPublicPackage>
+    <PackageId>SharpLab.Runtime</PackageId>
+    <Description>SharpLab-compatible runtime inspection, flow, Dump, and Inspect APIs for managed-language snippets.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

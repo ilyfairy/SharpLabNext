@@ -1,0 +1,159 @@
+# syntax=docker/dockerfile:1.7
+
+ARG SDK_IMAGE
+ARG ASPNET_IMAGE
+ARG PEACHPIE_CODEANALYSIS_VERSION
+ARG PEACHPIE_CODEANALYSIS_URL
+ARG PEACHPIE_CODEANALYSIS_SHA512
+ARG PEACHPIE_CODEANALYSIS_PACKAGE_CONTENT_HASH
+ARG PEACHPIE_RUNTIME_VERSION
+ARG PEACHPIE_RUNTIME_URL
+ARG PEACHPIE_RUNTIME_SHA512
+ARG PEACHPIE_RUNTIME_PACKAGE_CONTENT_HASH
+ARG PEACHPIE_LIBRARY_VERSION
+ARG PEACHPIE_LIBRARY_URL
+ARG PEACHPIE_LIBRARY_SHA512
+ARG PEACHPIE_LIBRARY_PACKAGE_CONTENT_HASH
+ARG PEACHPIE_COMMIT
+ARG PEACHPIE_LICENSE_URL
+ARG NET10_REFERENCE_PACK_VERSION
+ARG NET10_REFERENCE_URL
+ARG NET10_REFERENCE_SHA512
+ARG NET10_REFERENCE_PACKAGE_CONTENT_HASH
+
+FROM ${SDK_IMAGE} AS publish
+ARG PEACHPIE_CODEANALYSIS_VERSION
+ARG PEACHPIE_CODEANALYSIS_URL
+ARG PEACHPIE_CODEANALYSIS_SHA512
+ARG PEACHPIE_RUNTIME_VERSION
+ARG PEACHPIE_RUNTIME_URL
+ARG PEACHPIE_RUNTIME_SHA512
+ARG PEACHPIE_LIBRARY_VERSION
+ARG PEACHPIE_LIBRARY_URL
+ARG PEACHPIE_LIBRARY_SHA512
+ARG PEACHPIE_COMMIT
+ARG PEACHPIE_LICENSE_URL
+ARG NET10_REFERENCE_PACK_VERSION
+ARG NET10_REFERENCE_URL
+ARG NET10_REFERENCE_SHA512
+ARG NET10_REFERENCE_PACKAGE_CONTENT_HASH
+WORKDIR /source
+COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
+COPY profiles/versions.props ./profiles/versions.props
+COPY src/ ./src/
+COPY eng/extract-zip.cs /tools/extract-zip.cs
+COPY eng/create-reference-set-attestation.cs /tools/create-reference-set-attestation.cs
+COPY eng/copy-locked-package-files.cs /tools/copy-locked-package-files.cs
+COPY --chmod=0555 deploy/docker/fetch-verified-reference-package.sh /tools/fetch-verified-reference-package
+COPY deploy/security/licenses/peachpie-componentace-BSD-3-Clause.txt /licenses/Peachpie.ComponentAce-BSD-3-Clause.txt
+COPY deploy/security/licenses/CC-BY-4.0.txt /licenses/CC-BY-4.0.txt
+COPY THIRD-PARTY-NOTICES.md /licenses/SharpLabNext-THIRD-PARTY-NOTICES.md
+RUN mkdir -p /tmp/peachpie-packages /licenses \
+    && curl --fail --location --retry 3 --retry-all-errors --output "/tmp/peachpie-packages/peachpie.codeanalysis.${PEACHPIE_CODEANALYSIS_VERSION}.nupkg" "${PEACHPIE_CODEANALYSIS_URL}" \
+    && echo "${PEACHPIE_CODEANALYSIS_SHA512}  /tmp/peachpie-packages/peachpie.codeanalysis.${PEACHPIE_CODEANALYSIS_VERSION}.nupkg" | sha512sum --check --strict \
+    && curl --fail --location --retry 3 --retry-all-errors --output "/tmp/peachpie-packages/peachpie.runtime.${PEACHPIE_RUNTIME_VERSION}.nupkg" "${PEACHPIE_RUNTIME_URL}" \
+    && echo "${PEACHPIE_RUNTIME_SHA512}  /tmp/peachpie-packages/peachpie.runtime.${PEACHPIE_RUNTIME_VERSION}.nupkg" | sha512sum --check --strict \
+    && curl --fail --location --retry 3 --retry-all-errors --output "/tmp/peachpie-packages/peachpie.library.${PEACHPIE_LIBRARY_VERSION}.nupkg" "${PEACHPIE_LIBRARY_URL}" \
+    && echo "${PEACHPIE_LIBRARY_SHA512}  /tmp/peachpie-packages/peachpie.library.${PEACHPIE_LIBRARY_VERSION}.nupkg" | sha512sum --check --strict \
+    && curl --fail --location --retry 3 --retry-all-errors --output /licenses/PeachPie-LICENSE.txt "${PEACHPIE_LICENSE_URL}" \
+    && test "$(wc -c < /licenses/PeachPie-LICENSE.txt)" -eq 9131 \
+    && grep -q "Apache License" /licenses/PeachPie-LICENSE.txt \
+    && grep -q "Version 2.0, January 2004" /licenses/PeachPie-LICENSE.txt \
+    && test -n "${PEACHPIE_COMMIT}"
+RUN --mount=type=cache,id=sharplabnext-peachpie-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore \
+      src/Workers/PeachPie/SharpLabNext.Worker.PeachPie/SharpLabNext.Worker.PeachPie.csproj \
+      --locked-mode \
+      --source /tmp/peachpie-packages \
+      --source https://api.nuget.org/v3/index.json
+RUN --mount=type=cache,id=sharplabnext-peachpie-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore \
+      src/Workers/PeachPie/SharpLabNext.Worker.PeachPie/SharpLabNext.Worker.PeachPie.csproj \
+      --locked-mode \
+      --source /tmp/peachpie-packages \
+      --source https://api.nuget.org/v3/index.json \
+    && dotnet publish \
+      src/Workers/PeachPie/SharpLabNext.Worker.PeachPie/SharpLabNext.Worker.PeachPie.csproj \
+      --configuration Release \
+      --no-restore \
+      --output /app/publish \
+      /p:UseAppHost=false \
+    && dotnet run /tools/copy-locked-package-files.cs -- \
+      src/Workers/PeachPie/SharpLabNext.Worker.PeachPie/packages.lock.json \
+      /root/.nuget/packages \
+      Peachpie.Microsoft.CodeAnalysis ThirdPartyNotices.rtf /licenses/Peachpie.Microsoft.CodeAnalysis-ThirdPartyNotices.rtf \
+      Isopoh.Cryptography.Argon2 LICENSE /licenses/Isopoh.Cryptography.Argon2-LICENSE.txt \
+      Isopoh.Cryptography.Blake2b LICENSE /licenses/Isopoh.Cryptography.Blake2b-LICENSE.txt \
+      Isopoh.Cryptography.SecureArray LICENSE /licenses/Isopoh.Cryptography.SecureArray-LICENSE.txt \
+    && test -s /licenses/Peachpie.ComponentAce-BSD-3-Clause.txt \
+    && test -s /licenses/Peachpie.Microsoft.CodeAnalysis-ThirdPartyNotices.rtf \
+    && test -s /licenses/CC-BY-4.0.txt \
+    && test -s /licenses/SharpLabNext-THIRD-PARTY-NOTICES.md \
+    && test -s /licenses/Isopoh.Cryptography.Argon2-LICENSE.txt \
+    && test -s /licenses/Isopoh.Cryptography.Blake2b-LICENSE.txt \
+    && test -s /licenses/Isopoh.Cryptography.SecureArray-LICENSE.txt
+RUN --mount=type=cache,id=sharplabnext-reference-archives,target=/reference-archives,sharing=locked \
+    mkdir -p /reference-sets/net10-ref \
+    && /tools/fetch-verified-reference-package \
+      "${NET10_REFERENCE_URL}" \
+      "${NET10_REFERENCE_SHA512}" \
+      "/reference-archives/microsoft.netcore.app.ref.${NET10_REFERENCE_PACK_VERSION}.nupkg" \
+    && cd /tools \
+    && NUGET_PACKAGES=/tmp/reference-nuget dotnet run extract-zip.cs -- \
+      "/reference-archives/microsoft.netcore.app.ref.${NET10_REFERENCE_PACK_VERSION}.nupkg" /tmp/net10-ref \
+    && cd /source \
+    && cp -a "/tmp/net10-ref/ref/net10.0/." /reference-sets/net10-ref/ \
+    && if [ -f /app/publish/SharpLab.Runtime.dll ]; then \
+         cp /app/publish/SharpLab.Runtime.dll /reference-sets/net10-ref/SharpLab.Runtime.dll; \
+       fi \
+    && test -f /reference-sets/net10-ref/System.Runtime.dll
+RUN dotnet run /tools/create-reference-set-attestation.cs -- \
+      --root /reference-sets/net10-ref \
+      --id net10-ref \
+      --target-framework net10.0 \
+      --digest "${NET10_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --provenance-kind nuget-package \
+      --resolved-version "${NET10_REFERENCE_PACK_VERSION}" \
+      --package Microsoft.NETCore.App.Ref \
+      --source-uri "${NET10_REFERENCE_URL}" \
+      --source-archive-digest "sha512:${NET10_REFERENCE_SHA512}"
+
+FROM ${ASPNET_IMAGE} AS final
+ARG VERSION
+ARG SOURCE_REVISION
+ARG PEACHPIE_CODEANALYSIS_VERSION
+ARG PEACHPIE_CODEANALYSIS_PACKAGE_CONTENT_HASH
+ARG PEACHPIE_RUNTIME_VERSION
+ARG PEACHPIE_RUNTIME_PACKAGE_CONTENT_HASH
+ARG PEACHPIE_LIBRARY_VERSION
+ARG PEACHPIE_LIBRARY_PACKAGE_CONTENT_HASH
+ARG PEACHPIE_COMMIT
+ARG NET10_REFERENCE_PACKAGE_CONTENT_HASH
+LABEL org.opencontainers.image.title="SharpLabNext PeachPie Worker" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      org.opencontainers.image.licenses="BSD-2-Clause" \
+      io.sharplabnext.peachpie.commit="${PEACHPIE_COMMIT}" \
+      io.sharplabnext.peachpie.codeanalysis.version="${PEACHPIE_CODEANALYSIS_VERSION}" \
+      io.sharplabnext.peachpie.codeanalysis.package-content-hash="${PEACHPIE_CODEANALYSIS_PACKAGE_CONTENT_HASH}" \
+      io.sharplabnext.peachpie.runtime.version="${PEACHPIE_RUNTIME_VERSION}" \
+      io.sharplabnext.peachpie.runtime.package-content-hash="${PEACHPIE_RUNTIME_PACKAGE_CONTENT_HASH}" \
+      io.sharplabnext.peachpie.library.version="${PEACHPIE_LIBRARY_VERSION}" \
+      io.sharplabnext.peachpie.library.package-content-hash="${PEACHPIE_LIBRARY_PACKAGE_CONTENT_HASH}" \
+      io.sharplabnext.reference-set.net10-ref="${NET10_REFERENCE_PACKAGE_CONTENT_HASH}"
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:8080 \
+    DOTNET_EnableDiagnostics=0 \
+    COMPlus_EnableDiagnostics=0 \
+    HOME=/tmp \
+    SHARPLABNEXT_ASSEMBLY=SharpLabNext.Worker.PeachPie.dll \
+    PeachPie__CompilerVersion=${PEACHPIE_CODEANALYSIS_VERSION} \
+    PeachPie__CompilerCommit=${PEACHPIE_COMMIT}
+COPY --from=publish --chown=1654:1654 /app/publish/ ./
+COPY --from=publish --chown=1654:1654 /reference-sets/ /reference-sets/
+COPY --from=publish --chown=1654:1654 /licenses/ /licenses/
+COPY --chmod=0555 deploy/docker/service-entrypoint.sh /usr/local/bin/sharplabnext-service
+USER 1654:1654
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/sharplabnext-service"]

@@ -1,0 +1,406 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            command: ./eng/test.ps1 -SkipFrontend
+          - name: Linux
+            os: ubuntu-latest
+            command: bash ./eng/test.sh --skip-frontend
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Install locked .NET SDK
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/packages.*.lock.json
+
+      - name: Build and test backend
+        run: ${{ matrix.command }}
+
+      - name: Test performance gate logic
+        run: dotnet run eng/performance/gateway-performance.cs -- --self-test
+
+      - name: Test runtime-image performance producer logic
+        run: dotnet run eng/performance/runtime-performance-preflight.cs -- --self-test
+
+      - name: Test runtime capability evidence and receipt finalizer logic
+        run: dotnet run eng/runtime-capability-preflight.cs -- --self-test
+
+  sdk-pack:
+    name: Public SDK packages (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            command: ./eng/pack.ps1
+          - name: Linux
+            os: ubuntu-latest
+            command: bash ./eng/pack.sh
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Install locked .NET SDK
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/packages.*.lock.json
+
+      - name: Pack and verify public SDKs
+        run: ${{ matrix.command }}
+
+      - name: Upload public SDK packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: public-sdk-packages-${{ matrix.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 7
+          path: artifacts/packages/
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install locked Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Restore frontend dependencies
+        run: npm --prefix frontend ci --no-audit --no-fund
+
+      - name: Lint frontend
+        run: npm --prefix frontend run lint
+
+      - name: Test frontend
+        run: npm --prefix frontend run test --if-present
+
+      - name: Build frontend
+        run: npm --prefix frontend run build
+
+  schema:
+    name: Schema and deployment contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install locked Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.18.0
+
+      - name: Validate strict JSON schemas
+        run: |
+          node --test eng/runtime-profile-channel-validation.test.mjs
+          node eng/validate-schemas.mjs
+
+      - name: Validate Compose security boundaries
+        run: node eng/validate-compose.mjs
+
+      - name: Validate Buildx Bake graph
+        run: docker buildx bake --file eng/bake.hcl --print > /dev/null
+
+  compose-e2e:
+    name: Production Compose and browser E2E
+    needs:
+      - backend
+      - frontend
+      - schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      COMPOSE_PROJECT_NAME: sharplabnext-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      SHARPLABNEXT_BIND_ADDRESS: 127.0.0.1
+      SHARPLABNEXT_HTTP_PORT: 8080
+      SHARPLABNEXT_E2E_BASE_URL: http://127.0.0.1:8080
+      SHARPLABNEXT_CI_BUNDLE: ${{ github.workspace }}/artifacts/ci-bundle
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Install locked .NET SDK
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            **/packages.*.lock.json
+
+      - name: Install locked Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Reclaim hosted runner disk space
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h /
+          sudo rm -rf \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/local/.ghcup \
+            /usr/local/lib/android \
+            /usr/share/swift
+          docker system prune --all --force --volumes
+          df -h /
+
+      - name: Configure Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Read approved release inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_id="$(jq -er '.releaseId' profiles/lock.json)"
+          {
+            echo "RELEASE_ID=$release_id"
+            echo "SHARPLABNEXT_RELEASE_ID=$release_id"
+            echo "IMAGE_PREFIX=sharplabnext"
+            echo "SOURCE_REVISION=$GITHUB_SHA"
+            echo "DOTNET10_RUNTIME_VERSION=$(jq -er '.components[\"dotnet-10-linux-x64\"].resolvedVersion' profiles/lock.json)"
+            echo "DOTNET10_RUNTIME_URL=$(jq -er '.components[\"dotnet-10-linux-x64\"].sourceUri' profiles/lock.json)"
+            echo "DOTNET10_RUNTIME_SHA512=$(jq -er '.components[\"dotnet-10-linux-x64\"].sha512' profiles/lock.json)"
+            echo "DOTNET11_RUNTIME_VERSION=$(jq -er '.components[\"dotnet-11-preview-linux-x64\"].resolvedVersion' profiles/lock.json)"
+            echo "DOTNET11_RUNTIME_URL=$(jq -er '.components[\"dotnet-11-preview-linux-x64\"].sourceUri' profiles/lock.json)"
+            echo "DOTNET11_RUNTIME_SHA512=$(jq -er '.components[\"dotnet-11-preview-linux-x64\"].sha512' profiles/lock.json)"
+          } >> "$GITHUB_ENV"
+
+      - name: Build and load locked Linux images
+        shell: bash
+        timeout-minutes: 150
+        run: |
+          set -euo pipefail
+          bake=(
+            dotnet run eng/run-with-bake-environment.cs --
+            --lock profiles/lock.json
+            --base-images profiles/base-images.json
+            --source-revision "$SOURCE_REVISION"
+            --repository-root "$GITHUB_WORKSPACE"
+            --image-prefix "$IMAGE_PREFIX"
+            --allow-uncommitted-source-for-development
+            --
+            docker buildx bake --file eng/bake.hcl
+          )
+          bake_plan="$("${bake[@]}" --print)"
+          mapfile -t targets < <(jq -r '.target | keys[]' <<< "$bake_plan")
+          cache_args=()
+          for target in "${targets[@]}"; do
+            cache_args+=(
+              --set "$target.cache-from=type=gha,scope=compose-e2e-$target,timeout=10m"
+              --set "$target.cache-to=type=gha,scope=compose-e2e-$target,mode=min,timeout=20m,ignore-error=true"
+            )
+          done
+          "${bake[@]}" "${cache_args[@]}"
+
+      - name: Generate immutable local deployment metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./eng/bundle.sh \
+            --output "$SHARPLABNEXT_CI_BUNDLE" \
+            --metadata-only \
+            --skip-build \
+            --skip-restore
+          runtime_image="$(
+            jq -er '.images[] | select(.id == "dotnet-10-linux-x64") | .imageId' \
+              "$SHARPLABNEXT_CI_BUNDLE/bundle.json"
+          )"
+          echo "SHARPLABNEXT_E2E_RUNTIME_IMAGE=$runtime_image" >> "$GITHUB_ENV"
+          docker compose \
+            --project-name "$COMPOSE_PROJECT_NAME" \
+            --file "$SHARPLABNEXT_CI_BUNDLE/compose.prod.yaml" \
+            --file "$SHARPLABNEXT_CI_BUNDLE/compose.generated.yaml" \
+            config --quiet
+
+      - name: Reclaim BuildKit cache space
+        run: docker buildx prune --all --force
+
+      - name: Start production Compose without pulls
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/compose-e2e
+          compose=(
+            docker compose
+            --project-name "$COMPOSE_PROJECT_NAME"
+            --file "$SHARPLABNEXT_CI_BUNDLE/compose.prod.yaml"
+            --file "$SHARPLABNEXT_CI_BUNDLE/compose.generated.yaml"
+          )
+          "${compose[@]}" config > artifacts/compose-e2e/compose.resolved.yaml
+          "${compose[@]}" up \
+            --detach \
+            --pull never \
+            --no-build \
+            --remove-orphans \
+            --wait \
+            --wait-timeout 300
+
+          ready=false
+          for _ in {1..120}; do
+            status="$(
+              curl --silent --show-error \
+                --output artifacts/compose-e2e/readiness.json \
+                --write-out '%{http_code}' \
+                "$SHARPLABNEXT_E2E_BASE_URL/health/ready" || true
+            )"
+            if [[ "$status" == "200" ]]; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [[ "$ready" != "true" ]]; then
+            "${compose[@]}" ps --all
+            exit 1
+          fi
+
+      - name: Run full Compose smoke matrix
+        timeout-minutes: 20
+        run: dotnet run eng/smoke/gateway-compose.cs -- "$SHARPLABNEXT_E2E_BASE_URL" --full
+
+      - name: Run performance release gate
+        timeout-minutes: 45
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run eng/performance/gateway-performance.cs -- \
+            --base-address "$SHARPLABNEXT_E2E_BASE_URL" \
+            --thresholds eng/performance/thresholds.v1.json \
+            --output artifacts/compose-e2e/performance-report.json
+
+      - name: Run Compose security smoke matrix
+        timeout-minutes: 20
+        run: dotnet run eng/smoke/gateway-compose.cs -- "$SHARPLABNEXT_E2E_BASE_URL" --security
+
+      - name: Run runtime failure and cleanup smoke
+        timeout-minutes: 15
+        run: dotnet run eng/smoke/runtime-failures.cs -- "$SHARPLABNEXT_E2E_BASE_URL"
+
+      - name: Restore frontend dependencies
+        run: npm --prefix frontend ci --no-audit --no-fund
+
+      - name: Install Playwright Chromium
+        run: npx --prefix frontend playwright install --with-deps chromium
+
+      - name: Run desktop and mobile Playwright E2E
+        timeout-minutes: 20
+        run: npm --prefix frontend run test:e2e -- --project desktop-chromium --project mobile-chromium
+
+      - name: Capture Compose diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p artifacts/compose-e2e
+          if [[ -f "$SHARPLABNEXT_CI_BUNDLE/compose.prod.yaml" && \
+                -f "$SHARPLABNEXT_CI_BUNDLE/compose.generated.yaml" ]]; then
+            compose=(
+              docker compose
+              --project-name "$COMPOSE_PROJECT_NAME"
+              --file "$SHARPLABNEXT_CI_BUNDLE/compose.prod.yaml"
+              --file "$SHARPLABNEXT_CI_BUNDLE/compose.generated.yaml"
+            )
+            "${compose[@]}" ps --all > artifacts/compose-e2e/compose.ps.txt 2>&1
+            "${compose[@]}" logs --no-color --timestamps > artifacts/compose-e2e/compose.log 2>&1
+          fi
+          docker container ls --all --no-trunc > artifacts/compose-e2e/docker-containers.txt 2>&1
+          docker image ls --digests --no-trunc > artifacts/compose-e2e/docker-images.txt 2>&1
+          docker volume ls > artifacts/compose-e2e/docker-volumes.txt 2>&1
+          docker system df > artifacts/compose-e2e/docker-system-df.txt 2>&1
+          mkdir -p artifacts/compose-e2e/runtime-containers
+          docker container ls --all --quiet \
+            --filter label=com.sharplabnext.runtime-job=true \
+            > artifacts/compose-e2e/runtime-container-ids.txt
+          while IFS= read -r container_id; do
+            [[ -n "$container_id" ]] || continue
+            docker container inspect "$container_id" \
+              > "artifacts/compose-e2e/runtime-containers/$container_id.inspect.json" 2>&1
+            docker container logs --timestamps "$container_id" \
+              > "artifacts/compose-e2e/runtime-containers/$container_id.log" 2>&1
+          done < artifacts/compose-e2e/runtime-container-ids.txt
+
+      - name: Upload Compose and browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: compose-browser-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            artifacts/ci-bundle/
+            artifacts/compose-e2e/
+            artifacts/playwright/
+            artifacts/playwright-report/
+
+      - name: Stop Compose and remove runtime resources
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [[ -f "$SHARPLABNEXT_CI_BUNDLE/compose.prod.yaml" && \
+                -f "$SHARPLABNEXT_CI_BUNDLE/compose.generated.yaml" ]]; then
+            docker compose \
+              --project-name "$COMPOSE_PROJECT_NAME" \
+              --file "$SHARPLABNEXT_CI_BUNDLE/compose.prod.yaml" \
+              --file "$SHARPLABNEXT_CI_BUNDLE/compose.generated.yaml" \
+              down --volumes --remove-orphans --timeout 15
+          fi
+          docker container ls --all --quiet \
+            --filter label=com.sharplabnext.runtime-job=true \
+            | xargs --no-run-if-empty docker container rm --force
+          docker volume ls --quiet \
+            --filter label=com.sharplabnext.runtime-job=workspace \
+            | xargs --no-run-if-empty docker volume rm --force
