@@ -14,11 +14,16 @@ public sealed record CandidateReleaseMaterial(
     string CatalogPath,
     string VersionsPath,
     IReadOnlyList<CandidateRuntimeProfileMaterial> RuntimeProfiles,
+    IReadOnlyList<CandidateReferenceSetConfigurationMaterial> ReferenceSetConfigurations,
     string ValidationComposePath,
     string ValidationEndpointsPath);
 
 public sealed record CandidateRuntimeProfileMaterial(
     string Id,
+    string RelativePath,
+    string Path);
+
+public sealed record CandidateReferenceSetConfigurationMaterial(
     string RelativePath,
     string Path);
 
@@ -58,6 +63,17 @@ public static class CandidateReleaseMaterializer
                 Encoding.UTF8.GetBytes(CreateRuntimeProfile(template, runtimeProfile.Id, candidate)),
                 cancellationToken);
         }
+        foreach (var configuration in material.ReferenceSetConfigurations)
+        {
+            var template = await File.ReadAllTextAsync(configuration.Path, cancellationToken);
+            await AtomicFile.WriteAllBytesAsync(
+                configuration.Path,
+                Encoding.UTF8.GetBytes(CreateReferenceSetConfiguration(
+                    template,
+                    configuration.RelativePath,
+                    candidate)),
+                cancellationToken);
+        }
         var validation = CreateValidationEndpoints(candidateDigest);
         await AtomicFile.WriteAllBytesAsync(
             material.ValidationComposePath,
@@ -80,6 +96,7 @@ public static class CandidateReleaseMaterializer
             Path.Combine(root, "profiles", "catalog", "catalog.json"),
             Path.Combine(root, "profiles", "versions.props"),
             DiscoverRuntimeProfiles(root),
+            DiscoverReferenceSetConfigurations(root),
             Path.Combine(root, "artifacts", "profile-candidate", "compose.validation.yaml"),
             Path.Combine(root, "artifacts", "profile-candidate", "endpoints.json"));
     }
@@ -357,6 +374,49 @@ public static class CandidateReleaseMaterializer
         return profile.ToJsonString(JsonOptions) + "\n";
     }
 
+    private static string CreateReferenceSetConfiguration(
+        string templateJson,
+        string relativePath,
+        ReleaseLockDocument candidate)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(templateJson);
+        ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
+        ArgumentNullException.ThrowIfNull(candidate);
+        var document = JsonNode.Parse(templateJson) as JsonObject
+            ?? throw new ProfileUpdateValidationException(
+                $"Reference-set configuration '{relativePath}' must be a JSON object.");
+        var referenceSets = document["ReferenceSets"] as JsonObject
+            ?? throw new ProfileUpdateValidationException(
+                $"Reference-set configuration '{relativePath}' must contain a ReferenceSets object.");
+
+        foreach (var (referenceSetId, value) in referenceSets)
+        {
+            if (value is not JsonObject definition)
+            {
+                throw new ProfileUpdateValidationException(
+                    $"Reference-set configuration '{relativePath}' entry '{referenceSetId}' must be an object.");
+            }
+
+            var component = Component(candidate, referenceSetId);
+            if (!string.Equals(component.Kind, "reference-set", StringComparison.Ordinal))
+            {
+                throw new ProfileUpdateValidationException(
+                    $"Candidate lock component '{referenceSetId}' must have kind 'reference-set', actual '{component.Kind}'.");
+            }
+            definition["FrameworkVersion"] = Required(
+                component.ResolvedVersion,
+                $"{referenceSetId}.resolvedVersion");
+            if (definition.ContainsKey("Digest"))
+            {
+                definition["Digest"] = ReferenceSetIdentityResolver.ResolveLockedDigest(
+                    component,
+                    referenceSetId);
+            }
+        }
+
+        return document.ToJsonString(JsonOptions) + "\n";
+    }
+
     private static List<CandidateRuntimeProfileMaterial> DiscoverRuntimeProfiles(string workspaceRoot)
     {
         var runtimeDirectory = Path.Combine(workspaceRoot, "profiles", "runtimes");
@@ -402,6 +462,69 @@ public static class CandidateReleaseMaterializer
         if (profiles.Count == 0)
             throw new ProfileUpdateValidationException("No active runtime profiles were found.");
         return profiles;
+    }
+
+    private static List<CandidateReferenceSetConfigurationMaterial> DiscoverReferenceSetConfigurations(
+        string workspaceRoot)
+    {
+        var configurations = new List<CandidateReferenceSetConfigurationMaterial>();
+        foreach (var relativeRoot in new[] { Path.Combine("src", "Workers"), "samples" })
+        {
+            var searchRoot = Path.Combine(workspaceRoot, relativeRoot);
+            if (!Directory.Exists(searchRoot))
+                continue;
+
+            foreach (var path in Directory.EnumerateFiles(
+                         searchRoot,
+                         "appsettings.json",
+                         SearchOption.AllDirectories))
+            {
+                var relativePath = Path.GetRelativePath(workspaceRoot, path);
+                if (IsGeneratedPath(relativePath))
+                    continue;
+
+                JsonObject document;
+                try
+                {
+                    document = JsonNode.Parse(File.ReadAllText(path)) as JsonObject
+                        ?? throw new JsonException("The root value is not an object.");
+                }
+                catch (JsonException exception)
+                {
+                    throw new ProfileUpdateValidationException(
+                        $"Worker configuration '{relativePath}' is invalid JSON: {exception.Message}");
+                }
+
+                if (document["ReferenceSets"] is null)
+                    continue;
+                if (document["ReferenceSets"] is not JsonObject)
+                {
+                    throw new ProfileUpdateValidationException(
+                        $"Worker configuration '{relativePath}' must contain a ReferenceSets object.");
+                }
+                configurations.Add(new CandidateReferenceSetConfigurationMaterial(
+                    relativePath,
+                    Path.GetFullPath(path)));
+            }
+        }
+
+        return configurations
+            .OrderBy(static configuration => configuration.RelativePath, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static bool IsGeneratedPath(string relativePath)
+    {
+        var segments = relativePath.Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries);
+        return segments.Any(static segment =>
+            segment.Equals("bin", StringComparison.OrdinalIgnoreCase) ||
+            segment.Equals("obj", StringComparison.OrdinalIgnoreCase) ||
+            segment.Equals(".tmp", StringComparison.OrdinalIgnoreCase) ||
+            segment.Equals("_tmp", StringComparison.OrdinalIgnoreCase) ||
+            segment.Equals("artifacts", StringComparison.OrdinalIgnoreCase) ||
+            segment.Equals("generated", StringComparison.OrdinalIgnoreCase));
     }
 
     private static void UpdateCoreClrFrameworkVersion(JsonObject profile, string runtimeVersion)

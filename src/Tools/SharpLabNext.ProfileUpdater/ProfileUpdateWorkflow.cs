@@ -717,6 +717,9 @@ public sealed class ProfileUpdateWorkflow
         RequireMatchingRuntimeProfileSet(
             CandidateReleaseMaterializer.Locate(repositoryRoot).RuntimeProfiles,
             material.RuntimeProfiles);
+        RequireMatchingReferenceSetConfigurationSet(
+            CandidateReleaseMaterializer.Locate(repositoryRoot).ReferenceSetConfigurations,
+            material.ReferenceSetConfigurations);
         var workspaceLockBytes = await File.ReadAllBytesAsync(material.LockPath, cancellationToken);
         if (!string.Equals(ComputeDigest(workspaceLockBytes), actualDigest, StringComparison.Ordinal))
         {
@@ -747,6 +750,23 @@ public sealed class ProfileUpdateWorkflow
         {
             throw new ProfileUpdateValidationException(
                 "Candidate active runtime profile set does not match the approved repository profile set.");
+        }
+    }
+
+    private static void RequireMatchingReferenceSetConfigurationSet(
+        IReadOnlyList<CandidateReferenceSetConfigurationMaterial> active,
+        IReadOnlyList<CandidateReferenceSetConfigurationMaterial> candidate)
+    {
+        var activePaths = active.Select(static configuration => configuration.RelativePath)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var candidatePaths = candidate.Select(static configuration => configuration.RelativePath)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (!activePaths.SequenceEqual(candidatePaths, StringComparer.Ordinal))
+        {
+            throw new ProfileUpdateValidationException(
+                "Candidate reference-set configuration set does not match the approved repository configuration set.");
         }
     }
 
@@ -965,6 +985,7 @@ public sealed class ProfileUpdateWorkflow
             material.VersionsPath
         };
         files.AddRange(material.RuntimeProfiles.Select(static profile => profile.Path));
+        files.AddRange(material.ReferenceSetConfigurations.Select(static configuration => configuration.Path));
         if (includePackageLocks)
         {
             files.AddRange(EnumeratePackageLocks(material.WorkspaceRoot));
@@ -1016,6 +1037,12 @@ public sealed class ProfileUpdateWorkflow
                 Path.Combine(repositoryRoot, runtimeProfile.RelativePath),
                 await File.ReadAllBytesAsync(runtimeProfile.Path, cancellationToken)));
         }
+        foreach (var configuration in candidate.Material.ReferenceSetConfigurations)
+        {
+            replacements.Add((
+                Path.Combine(repositoryRoot, configuration.RelativePath),
+                await File.ReadAllBytesAsync(configuration.Path, cancellationToken)));
+        }
         foreach (var packageLock in EnumeratePackageLocks(candidate.WorkspaceRoot))
         {
             var relative = Path.GetRelativePath(candidate.WorkspaceRoot, packageLock);
@@ -1051,6 +1078,16 @@ public sealed class ProfileUpdateWorkflow
                 await File.ReadAllBytesAsync(runtimeProfile.Path, cancellationToken),
                 cancellationToken);
         }
+        foreach (var configuration in CandidateReleaseMaterializer.Locate(repositoryRoot).ReferenceSetConfigurations)
+        {
+            await AtomicFile.WriteAllBytesAsync(
+                Path.Combine(
+                    destinationRoot,
+                    "reference-set-configurations",
+                    configuration.RelativePath),
+                await File.ReadAllBytesAsync(configuration.Path, cancellationToken),
+                cancellationToken);
+        }
         foreach (var packageLock in EnumeratePackageLocks(repositoryRoot))
         {
             var relative = Path.GetRelativePath(repositoryRoot, packageLock);
@@ -1083,6 +1120,16 @@ public sealed class ProfileUpdateWorkflow
             await AtomicFile.WriteAllBytesAsync(
                 Path.Combine(destinationRoot, "runtimes", Path.GetFileName(runtimeProfile.Path)),
                 await File.ReadAllBytesAsync(runtimeProfile.Path, cancellationToken),
+                cancellationToken);
+        }
+        foreach (var configuration in candidate.Material.ReferenceSetConfigurations)
+        {
+            await AtomicFile.WriteAllBytesAsync(
+                Path.Combine(
+                    destinationRoot,
+                    "reference-set-configurations",
+                    configuration.RelativePath),
+                await File.ReadAllBytesAsync(configuration.Path, cancellationToken),
                 cancellationToken);
         }
         foreach (var packageLock in EnumeratePackageLocks(candidate.WorkspaceRoot))

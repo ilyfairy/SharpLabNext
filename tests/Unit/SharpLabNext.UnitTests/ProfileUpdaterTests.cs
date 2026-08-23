@@ -749,11 +749,15 @@ public sealed class ProfileUpdaterTests
             "profiles",
             "versions.props")));
         var workspaceRoot = Path.Combine(Path.GetDirectoryName(result.CandidatePath)!, "workspace");
+        var candidateReferenceSetConfigurationPath = Path.Combine(
+            workspaceRoot,
+            Path.GetRelativePath(repository.Root, repository.ReferenceSetConfigurationPath));
         var generatedJsonPaths = new List<string>
         {
             result.CandidatePath,
             Path.Combine(Path.GetDirectoryName(result.CandidatePath)!, "receipt.json"),
             Path.Combine(workspaceRoot, "profiles", "catalog", "catalog.json"),
+            candidateReferenceSetConfigurationPath,
             Path.Combine(repository.StateRoot, "state.json"),
             repository.PublicStatusPath
         };
@@ -766,6 +770,26 @@ public sealed class ProfileUpdaterTests
         var resolvedLock = await CatalogLoader.LoadReleaseLockAsync(
             result.CandidatePath,
             TestContext.Current.CancellationToken);
+        using var referenceSetConfiguration = JsonDocument.Parse(
+            await File.ReadAllBytesAsync(
+                candidateReferenceSetConfigurationPath,
+                TestContext.Current.CancellationToken));
+        var configuredReferenceSets = referenceSetConfiguration.RootElement.GetProperty("ReferenceSets");
+        var configuredNet10 = configuredReferenceSets.GetProperty("net10-ref");
+        Assert.Equal(
+            resolvedLock.Components["net10-ref"].ResolvedVersion,
+            configuredNet10.GetProperty("FrameworkVersion").GetString());
+        Assert.Equal(
+            ReferenceSetIdentityResolver.ResolveLockedDigest(
+                resolvedLock.Components["net10-ref"],
+                "net10-ref"),
+            configuredNet10.GetProperty("Digest").GetString());
+        var configuredNet11 = configuredReferenceSets.GetProperty("net11-preview-ref");
+        Assert.Equal(
+            resolvedLock.Components["net11-preview-ref"].ResolvedVersion,
+            configuredNet11.GetProperty("FrameworkVersion").GetString());
+        Assert.False(configuredNet11.TryGetProperty("Digest", out _));
+        Assert.Equal("preserved", referenceSetConfiguration.RootElement.GetProperty("Unrelated").GetString());
         var materializedCatalog = await CatalogLoader.LoadCatalogAsync(
             Path.Combine(workspaceRoot, "profiles", "catalog", "catalog.json"),
             TestContext.Current.CancellationToken);
@@ -2342,6 +2366,7 @@ public sealed class ProfileUpdaterTests
     [Theory]
     [InlineData("versions")]
     [InlineData("runtime-profile")]
+    [InlineData("reference-set-configuration")]
     [InlineData("package-lock")]
     public async Task TestRejectsCandidateWhenBuiltMaterialWasTampered(string material)
     {
@@ -2364,11 +2389,16 @@ public sealed class ProfileUpdaterTests
                 "profiles",
                 "runtimes",
                 "dotnet-10-linux-x64.json"),
+            "reference-set-configuration" => Path.Combine(
+                workspace,
+                Path.GetRelativePath(repository.Root, repository.ReferenceSetConfigurationPath)),
             _ => Path.Combine(workspace, "packages.lock.json")
         };
         await File.AppendAllTextAsync(
             path,
-            material == "runtime-profile" ? " \n" : "\n<!-- tampered -->\n",
+            material is "runtime-profile" or "reference-set-configuration"
+                ? " \n"
+                : "\n<!-- tampered -->\n",
             TestContext.Current.CancellationToken);
 
         var exception = await Assert.ThrowsAsync<ProfileUpdateValidationException>(() => workflow.TestAsync(
@@ -2410,6 +2440,12 @@ public sealed class ProfileUpdaterTests
     public async Task PromoteRequiresFullTestsAndPreservesHistoryBeforeReplacingLock()
     {
         using var repository = new TempRepository();
+        var referenceSetConfigurationRelativePath = Path.GetRelativePath(
+            repository.Root,
+            repository.ReferenceSetConfigurationPath);
+        var previousReferenceSetConfiguration = await File.ReadAllBytesAsync(
+            repository.ReferenceSetConfigurationPath,
+            TestContext.Current.CancellationToken);
         var previousRuntimeProfiles = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         foreach (var runtimeProfileId in ActiveRuntimeProfileIds)
         {
@@ -2425,6 +2461,9 @@ public sealed class ProfileUpdaterTests
         var candidateWorkspace = Path.Combine(repository.Root, candidate.Receipt.WorkspacePath);
         var candidateCatalogPath = Path.Combine(candidateWorkspace, "profiles", "catalog", "catalog.json");
         var candidateVersionsPath = Path.Combine(candidateWorkspace, "profiles", "versions.props");
+        var candidateReferenceSetConfigurationPath = Path.Combine(
+            candidateWorkspace,
+            referenceSetConfigurationRelativePath);
         var candidateRuntimeProfilePaths = ActiveRuntimeProfileIds.ToDictionary(
             static id => id,
             id => Path.Combine(candidateWorkspace, "profiles", "runtimes", $"{id}.json"),
@@ -2508,6 +2547,44 @@ public sealed class ProfileUpdaterTests
             await File.ReadAllBytesAsync(candidateVersionsPath, TestContext.Current.CancellationToken),
             await File.ReadAllBytesAsync(
                 Path.Combine(repository.Root, "profiles", "versions.props"),
+                TestContext.Current.CancellationToken));
+        var candidateReferenceSetConfiguration = await File.ReadAllBytesAsync(
+            candidateReferenceSetConfigurationPath,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(
+            candidateReferenceSetConfiguration,
+            await File.ReadAllBytesAsync(
+                repository.ReferenceSetConfigurationPath,
+                TestContext.Current.CancellationToken));
+        Assert.Equal(
+            previousReferenceSetConfiguration,
+            await File.ReadAllBytesAsync(
+                Path.Combine(
+                    repository.StateRoot,
+                    "history",
+                    repository.ActiveDigest[7..],
+                    "reference-set-configurations",
+                    referenceSetConfigurationRelativePath),
+                TestContext.Current.CancellationToken));
+        Assert.Equal(
+            candidateReferenceSetConfiguration,
+            await File.ReadAllBytesAsync(
+                Path.Combine(
+                    repository.StateRoot,
+                    "history",
+                    candidate.CandidateDigest[7..],
+                    "reference-set-configurations",
+                    referenceSetConfigurationRelativePath),
+                TestContext.Current.CancellationToken));
+        Assert.Equal(
+            candidateReferenceSetConfiguration,
+            await File.ReadAllBytesAsync(
+                Path.Combine(
+                    repository.StateRoot,
+                    "last-known-good",
+                    "material",
+                    "reference-set-configurations",
+                    referenceSetConfigurationRelativePath),
                 TestContext.Current.CancellationToken));
         foreach (var runtimeProfileId in ActiveRuntimeProfileIds)
         {
@@ -2744,6 +2821,34 @@ public sealed class ProfileUpdaterTests
                 NormalizeDevelopmentRuntimeProfileImage(runtimeProfilePath, runtimeProfileId);
             }
             File.WriteAllText(Path.Combine(Root, "packages.lock.json"), "{}\n");
+            ReferenceSetConfigurationPath = Path.Combine(
+                Root,
+                "src",
+                "Workers",
+                "Test",
+                "SharpLabNext.Worker.Test",
+                "appsettings.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(ReferenceSetConfigurationPath)!);
+            File.WriteAllText(
+                ReferenceSetConfigurationPath,
+                """
+                {
+                  "ReferenceSets": {
+                    "net10-ref": {
+                      "Path": "/reference-sets/net10-ref",
+                      "TargetFramework": "net10.0",
+                      "FrameworkVersion": "stale-net10",
+                      "Digest": "stale-net10-digest"
+                    },
+                    "net11-preview-ref": {
+                      "Path": "/reference-sets/net11-preview-ref",
+                      "TargetFramework": "net11.0",
+                      "FrameworkVersion": "stale-net11"
+                    }
+                  },
+                  "Unrelated": "preserved"
+                }
+                """);
             var sourceLock = JsonSerializer.Deserialize<ReleaseLockDocument>(
                 File.ReadAllText(Path.Combine(sourceRepository, "profiles", "lock.json")),
                 WebJsonOptions)
@@ -2915,6 +3020,7 @@ public sealed class ProfileUpdaterTests
 
         public string Root { get; }
         public string LockPath { get; }
+        public string ReferenceSetConfigurationPath { get; }
         public string ActiveDigest { get; }
         public string StateRoot => Path.Combine(Root, "artifacts", "profile-updater");
         public string PublicStatusPath => Path.Combine(StateRoot, "status.public.json");
