@@ -19,6 +19,23 @@
   "$defs": {
     "nonEmpty": { "type": "string", "minLength": 1, "maxLength": 512 },
     "id": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "sourceUri": {
+      "type": "string",
+      "maxLength": 2048,
+      "oneOf": [
+        {
+          "allOf": [
+            { "format": "uri" },
+            {
+              "pattern": "^https://(?![^/?#\\s]*@)[^/?#\\s]+(?:[/?][^#\\s]*)?$"
+            }
+          ]
+        },
+        {
+          "pattern": "^docker://(?:(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]+)?)/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?@sha256:[0-9a-f]{64}$"
+        }
+      ]
+    },
     "component": {
       "type": "object",
       "additionalProperties": false,
@@ -35,7 +52,7 @@
           "type": "string",
           "pattern": "^sha256:[0-9a-f]{64}$"
         },
-        "sourceUri": { "type": "string", "format": "uri", "maxLength": 2048 },
+        "sourceUri": { "$ref": "#/$defs/sourceUri" },
         "sha512": { "type": "string", "pattern": "^[0-9a-f]{128}$" },
         "package": { "$ref": "#/$defs/nonEmpty" },
         "packageContentHash": { "type": "string", "minLength": 16, "maxLength": 256 },

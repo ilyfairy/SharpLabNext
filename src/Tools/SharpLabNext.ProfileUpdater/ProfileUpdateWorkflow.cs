@@ -1151,13 +1151,14 @@ public sealed class ProfileUpdateWorkflow
     }
 
     private static byte[] SerializeJson<T>(T value) =>
-        Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value, JsonOptions) + Environment.NewLine);
+        Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value, JsonOptions) + "\n");
 
     private static JsonSerializerOptions CreateJsonOptions()
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
             WriteIndented = true,
+            NewLine = "\n",
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             PropertyNameCaseInsensitive = false,
             UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
@@ -1270,6 +1271,31 @@ public sealed class ProfileUpdateWorkflow
 public static class BakeEnvironmentResolver
 {
     private const string BaseImageDigestMarker = "@sha256:";
+    // ProfileUpdater builds the default Bake group, not the standalone Wine
+    // userspace operator.  Its candidate workspace is not a formal operator
+    // source binding, so it must never supply release-looking operator labels.
+    // The dedicated operator wrapper replaces this complete tuple only after
+    // it has bound the build to a clean committed Git context.
+    private const string DevelopmentOperatorSourceContext = "working-tree-development";
+    private const string DevelopmentOperatorPromotionEligible = "false";
+    private const string DevelopmentOperatorDevelopmentOnly = "true";
+    private static readonly CoreClrReferenceSetDescriptor[] CoreClrReferenceSets =
+    [
+        new("netcoreapp2.0-ref", "NETCOREAPP20", "NETCOREAPP20_REFERENCE_VERSION", null),
+        new("netcoreapp2.1-ref", "NETCOREAPP21", "NETCOREAPP21_REFERENCE_VERSION", null),
+        new("netcoreapp2.2-ref", "NETCOREAPP22", "NETCOREAPP22_REFERENCE_VERSION", null),
+        new("netcoreapp3.0-ref", "NETCOREAPP30", "NETCOREAPP30_REFERENCE_VERSION", null),
+        new("netcoreapp3.1-ref", "NETCOREAPP31", "NETCOREAPP31_REFERENCE_VERSION", null),
+        new("net5-ref", "NET5", "NET5_REFERENCE_VERSION", null),
+        new("net6-ref", "NET6", "NET6_REFERENCE_VERSION", null),
+        new("net7-ref", "NET7", "NET7_REFERENCE_VERSION", null),
+        new("net8-ref", "NET8", "NET8_REFERENCE_VERSION", null),
+        new("net9-ref", "NET9", "NET9_REFERENCE_VERSION", null),
+        // Preserve the existing Docker argument spelling for the candidate
+        // consistency check while keeping the descriptor identity centralized.
+        new("net10-ref", "NET10", "NET10_REFERENCE_PACK_VERSION", "NET10_REFERENCE_URL"),
+        new("net11-preview-ref", "NET11", "NET11_REFERENCE_VERSION", "NET11_REFERENCE_URL")
+    ];
     private static readonly JsonSerializerOptions BaseImageJsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = false,
@@ -1328,7 +1354,10 @@ public static class BakeEnvironmentResolver
             // environment rather than in a Dockerfile ARG default so a
             // release cannot silently switch frameworks.
             ["WINE_CONTROL_TFM"] = ValidateControlRuntimeTargetFramework(
-                controlRuntimeTargetFramework ?? "net10.0")
+                controlRuntimeTargetFramework ?? "net10.0"),
+            ["OPERATOR_SOURCE_CONTEXT"] = DevelopmentOperatorSourceContext,
+            ["OPERATOR_PROMOTION_ELIGIBLE"] = DevelopmentOperatorPromotionEligible,
+            ["OPERATOR_DEVELOPMENT_ONLY"] = DevelopmentOperatorDevelopmentOnly
         };
 
         var roslynStable = RequiredComponent(releaseLock, "roslyn-stable");
@@ -1393,8 +1422,7 @@ public static class BakeEnvironmentResolver
             RequiredComponent(releaseLock, "il-assembler"),
             "il-assembler");
 
-        AddReferenceSet(environment, releaseLock, "net10-ref", "NET10_REFERENCE_PACK_VERSION", "NET10");
-        AddReferenceSet(environment, releaseLock, "net11-preview-ref", "NET11_REFERENCE_VERSION", "NET11");
+        AddCoreClrReferenceSets(environment, releaseLock);
         AddReferenceSet(
             environment,
             releaseLock,
@@ -1408,8 +1436,37 @@ public static class BakeEnvironmentResolver
         AddConstGenerics(environment, releaseLock);
         AddCppCli(environment, releaseLock);
         AddJSharp(environment, releaseLock);
+        AddWineCoreClrUserspace(environment, releaseLock);
         AddBaseImages(environment, baseImageManifestPath);
         return environment;
+    }
+
+    private static void AddWineCoreClrUserspace(
+        Dictionary<string, string> environment,
+        ReleaseLockDocument releaseLock)
+    {
+        const string componentId = "wine-coreclr-userspace";
+        const string sourceUri =
+            "https://snapshot.ubuntu.com/ubuntu/20260810T000000Z/";
+        var component = RequiredComponent(releaseLock, componentId);
+        if (!string.Equals(component.Kind, "runtime-dependency", StringComparison.Ordinal))
+        {
+            throw new BakeEnvironmentValidationException(
+                $"{componentId}.kind must be runtime-dependency.");
+        }
+
+        var componentSourceUri = RequiredValue(component.SourceUri, $"{componentId}.sourceUri");
+        if (!string.Equals(componentSourceUri, sourceUri, StringComparison.Ordinal))
+        {
+            throw new BakeEnvironmentValidationException(
+                $"{componentId}.sourceUri must identify the immutable Ubuntu installation snapshot.");
+        }
+
+        environment["WINE_CORECLR_USERSPACE_VERSION"] = RequiredVersion(component, componentId);
+        environment["WINE_CORECLR_USERSPACE_DIGEST"] = RequiredDigest(
+            component.Digest,
+            $"{componentId}.digest");
+        environment["WINE_CORECLR_USERSPACE_SOURCE_URI"] = componentSourceUri;
     }
 
     private static void AddJitProfilerProvenance(
@@ -1637,6 +1694,27 @@ public static class BakeEnvironmentResolver
         environment["ILSENSE_ARCHIVE_URL"] = RequiredValue(source.SourceUri, "ilsense-source.sourceUri");
         environment["ILSENSE_ARCHIVE_SHA256"] = DigestHex(source.Digest, "ilsense-source.digest");
         environment["ILSENSE_SOURCE_URI"] = RequiredValue(component.SourceUri, "ilsense.sourceUri");
+    }
+
+    private static void AddCoreClrReferenceSets(
+        Dictionary<string, string> environment,
+        ReleaseLockDocument releaseLock)
+    {
+        foreach (var descriptor in CoreClrReferenceSets)
+        {
+            var component = RequiredComponent(releaseLock, descriptor.Id);
+            var sourceUri = RequiredValue(component.SourceUri, $"{descriptor.Id}.sourceUri");
+            environment[descriptor.VersionVariable] = RequiredVersion(component, descriptor.Id);
+            environment[$"{descriptor.EnvironmentPrefix}_REFERENCE_SOURCE_URI"] = sourceUri;
+            if (descriptor.CandidateUrlVariable is not null)
+                environment[descriptor.CandidateUrlVariable] = sourceUri;
+            environment[$"{descriptor.EnvironmentPrefix}_REFERENCE_SHA512"] = RequiredValue(
+                component.Sha512,
+                $"{descriptor.Id}.sha512");
+            environment[$"{descriptor.EnvironmentPrefix}_REFERENCE_PACKAGE_CONTENT_HASH"] = RequiredValue(
+                component.PackageContentHash,
+                $"{descriptor.Id}.packageContentHash");
+        }
     }
 
     private static void AddReferenceSet(
@@ -2051,6 +2129,12 @@ public static class BakeEnvironmentResolver
         public required string BakeVariable { get; init; }
         public required string Reference { get; init; }
     }
+
+    private sealed record CoreClrReferenceSetDescriptor(
+        string Id,
+        string EnvironmentPrefix,
+        string VersionVariable,
+        string? CandidateUrlVariable);
 }
 
 public sealed class BakeEnvironmentValidationException : Exception

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using SharpLabNext.Artifacts.Contracts;
@@ -9,6 +10,22 @@ namespace SharpLabNext.ContractTests;
 public sealed class SerializationContractTests
 {
     private static readonly JsonSerializerOptions JsonOptions = ContractJson.CreateSerializerOptions();
+
+    [Fact]
+    public void RuntimeCapabilityOptionsDigestMatchesCanonicalTransformOptions()
+    {
+        var options = new TransformArtifactOptions(
+            RewriterProfileId: RuntimeCapabilityProbeContract.ExecutionFlowProfileId);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(
+            options,
+            ContractJson.CreateCanonicalSerializerOptions());
+        var digest = $"sha256:{Convert.ToHexStringLower(SHA256.HashData(bytes))}";
+
+        Assert.Equal(
+            "sha256:5a459984587b8b65eea31d51e935dc7efa05c25a0150c88984c81328a4ac5051",
+            digest);
+        Assert.Equal(RuntimeCapabilityProbeContract.ExecutionFlowOptionsDigest, digest);
+    }
 
     [Fact]
     public void AutomaticBuildOutputKindUsesStableWireValue()

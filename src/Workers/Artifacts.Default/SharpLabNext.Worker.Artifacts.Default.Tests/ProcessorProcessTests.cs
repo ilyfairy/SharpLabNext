@@ -118,6 +118,90 @@ public sealed class ProcessorProcessTests
     }
 
     [Fact]
+    public async Task RuntimeInstrumentationRunsCanonicalCapabilityProbeExecutionFlow()
+    {
+        var root = TestSettings.CreateRoot();
+        try
+        {
+            var artifact = PrepareArtifact(root, RuntimeCapabilityProbePath());
+            var runner = new ArtifactProcessorProcessRunner(TestSettings.Create(root));
+            var result = await runner.RunAsync(
+                artifact,
+                ProcessorOperation.RuntimeInstrumentationV1,
+                includeSequencePoints: true,
+                includeCompilerGeneratedMembers: true,
+                includeMetadataTokens: false,
+                maxCharacters: 1_000_000,
+                maxFindings: 1_000,
+                DateTimeOffset.UtcNow.AddSeconds(15),
+                TestContext.Current.CancellationToken,
+                ProcessorProtocol.RuntimeInstrumentationProfileId);
+
+            Assert.Equal(ProcessorOutcome.Succeeded, result.Response.Outcome);
+            Assert.True(result.Response.RewriteApplied);
+            Assert.True(result.Response.InstrumentationPointCount > 0);
+            AssertInstrumentationBodyShape(artifact.AssemblyPath, result.OutputPath);
+
+            var runnerPath = Path.Combine(AppContext.BaseDirectory, "SharpLabNext.Runner.dll");
+            var startInfo = new ProcessStartInfo("dotnet")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+            startInfo.ArgumentList.Add(runnerPath);
+            startInfo.ArgumentList.Add(result.OutputPath);
+            startInfo.ArgumentList.Add("execution-flow");
+            startInfo.Environment["SHARPLABNEXT_INSTRUMENTATION"] = "execution-flow";
+            using var process = Process.Start(startInfo)
+                ?? throw new InvalidOperationException("Failed to start the runtime Runner.");
+            var stderr = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+            var frames = new List<RuntimeFrame>();
+            var frameReader = new RuntimeFrameLogReader(process.StandardOutput.BaseStream);
+            while (await frameReader.ReadAsync(
+                       cancellationToken: TestContext.Current.CancellationToken) is { } frame)
+            {
+                frames.Add(frame);
+            }
+            await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+
+            var stderrText = await stderr;
+            var structuredErrors = frames
+                .Where(static frame => frame.Kind is RuntimeFrameKind.Exception or RuntimeFrameKind.ProtocolError)
+                .Select(static frame => Encoding.UTF8.GetString(frame.Payload.Span))
+                .ToArray();
+            Assert.True(
+                process.ExitCode == 0,
+                $"Runner exited {process.ExitCode}. stderr: {stderrText}; structured: " +
+                string.Join(" | ", structuredErrors));
+            Assert.Empty(stderrText);
+            var flow = frames
+                .Where(static frame => frame.Kind == RuntimeFrameKind.Flow)
+                .Select(static frame => RuntimeStructuredPayloadCodec.DeserializeFlow(frame.Payload.Span))
+                .ToArray();
+            Assert.Contains(flow, static payload => payload.EventKind == "sequence-point");
+            Assert.Contains(flow, static payload => payload.EventKind == "branch");
+            var sourceRanges = flow
+                .Where(static payload =>
+                    payload.Range is not null &&
+                    !string.IsNullOrWhiteSpace(payload.DocumentPath))
+                .Select(static payload =>
+                    $"{payload.DocumentPath}\0{payload.Range!.StartLine}\0{payload.Range.StartColumn}\0" +
+                    $"{payload.Range.EndLine}\0{payload.Range.EndColumn}")
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            Assert.True(
+                sourceRanges.Length >= 2,
+                $"Observed only {sourceRanges.Length} distinct source ranges.");
+            Assert.Single(frames, static frame => frame.Kind == RuntimeFrameKind.Exit);
+        }
+        finally
+        {
+            TestSettings.DeleteRoot(root);
+        }
+    }
+
+    [Fact]
     public async Task IlRenderUsesIsolatedIlSpyAndProducesPdbLinkedRanges()
     {
         var root = TestSettings.CreateRoot();
@@ -507,12 +591,38 @@ public sealed class ProcessorProcessTests
         Assert.DoesNotContain("_IMAGE_NT_HEADERS64", text, StringComparison.Ordinal);
     }
 
-    private static MaterializedArtifact PrepareArtifact(string root)
+    private static void AssertInstrumentationBodyShape(string sourcePath, string rewrittenPath)
+    {
+        using var source = Mono.Cecil.AssemblyDefinition.ReadAssembly(sourcePath);
+        using var rewritten = Mono.Cecil.AssemblyDefinition.ReadAssembly(rewrittenPath);
+        var sourceMain = source.MainModule.Types
+            .Single(static type => type.FullName == "SharpLabNext.RuntimeCapabilityProbe.Program")
+            .Methods.Single(static method => method.Name == "Main");
+        var rewrittenMain = rewritten.MainModule.Types
+            .Single(static type => type.FullName == "SharpLabNext.RuntimeCapabilityProbe.Program")
+            .Methods.Single(static method => method.Name == "Main");
+
+        Assert.Contains(
+            sourceMain.Body.Instructions,
+            static instruction =>
+                instruction.OpCode.OperandType == Mono.Cecil.Cil.OperandType.ShortInlineBrTarget);
+        Assert.Equal(sourceMain.Body.MaxStackSize + 5, rewrittenMain.Body.MaxStackSize);
+        Assert.DoesNotContain(
+            rewrittenMain.Body.Instructions,
+            static instruction =>
+                instruction.OpCode.OperandType == Mono.Cecil.Cil.OperandType.ShortInlineBrTarget);
+    }
+
+    private static MaterializedArtifact PrepareArtifact(string root) =>
+        PrepareArtifact(
+            root,
+            typeof(SharpLabNext.ArtifactProcessing.Fixture.Program).Assembly.Location);
+
+    private static MaterializedArtifact PrepareArtifact(string root, string sourceAssembly)
     {
         Directory.CreateDirectory(root);
         var input = Path.Combine(root, "input");
         Directory.CreateDirectory(input);
-        var sourceAssembly = typeof(SharpLabNext.ArtifactProcessing.Fixture.Program).Assembly.Location;
         var assembly = Path.Combine(input, Path.GetFileName(sourceAssembly));
         File.Copy(sourceAssembly, assembly, overwrite: true);
         var sourcePdb = Path.ChangeExtension(sourceAssembly, ".pdb");
@@ -529,6 +639,33 @@ public sealed class ProcessorProcessTests
                 "System.Private.CoreLib"),
             "lease_test",
             TestSettings.CreateUnusedStoreClient());
+    }
+
+    private static string RuntimeCapabilityProbePath()
+    {
+        var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent?.Name
+            ?? throw new InvalidOperationException("Test build configuration could not be resolved.");
+        return Path.Combine(
+            FindRepositoryRoot(),
+            "tests",
+            "Fixtures",
+            "SharpLabNext.RuntimeCapabilityProbe",
+            "bin",
+            configuration,
+            "netcoreapp2.0",
+            "SharpLabNext.RuntimeCapabilityProbe.dll");
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "SharpLabNext.slnx")))
+                return directory.FullName;
+            directory = directory.Parent;
+        }
+        throw new DirectoryNotFoundException("SharpLabNext.slnx was not found above the test output directory.");
     }
 
     private static int CountOccurrences(string text, string value)
@@ -674,6 +811,15 @@ public sealed class ProcessorProcessTests
 
     private static string FindNet10ReferencePath()
     {
+        var materializedRoot = Environment.GetEnvironmentVariable(
+            "SHARPLABNEXT_TEST_CORECLR_REFERENCE_SETS");
+        if (!string.IsNullOrWhiteSpace(materializedRoot))
+        {
+            var materialized = Path.Combine(materializedRoot, "net10-ref");
+            if (Directory.Exists(materialized))
+                return materialized;
+        }
+
         var roots = new[]
         {
             Environment.GetEnvironmentVariable("DOTNET_ROOT"),

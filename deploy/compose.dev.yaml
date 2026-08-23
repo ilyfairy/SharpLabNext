@@ -166,13 +166,7 @@ services:
   worker-roslyn-stable:
     <<: *service-defaults
     image: sharplabnext/worker-roslyn-stable:dev
-    build:
-      <<: *worker-build
-      args:
-        PROJECT_PATH: src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable.csproj
-        ASSEMBLY_NAME: SharpLabNext.Worker.Roslyn.Stable.dll
-        SERVICE_TITLE: SharpLabNext Roslyn Stable Worker
-        VERSION: development
+    pull_policy: never
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
@@ -181,7 +175,6 @@ services:
       RoslynWorker__BuildProcess__MaximumConcurrentProcesses: "8"
       RoslynWorker__DevelopmentArtifactEnvelope__Enabled: "true"
       RoslynWorker__DevelopmentArtifactEnvelope__MaxBytes: "33554432"
-      ReferenceSets__net10-ref__Path: /reference-sets/net10-ref
 
   worker-roslyn-netfx48:
     <<: *service-defaults
@@ -198,12 +191,7 @@ services:
   worker-roslyn-main:
     <<: *service-defaults
     image: sharplabnext/worker-roslyn-main:dev
-    build:
-      context: ..
-      dockerfile: deploy/docker/Dockerfile.worker-roslyn-main
-      args:
-        VERSION: development
-        SOURCE_REVISION: development
+    pull_policy: never
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
@@ -212,8 +200,6 @@ services:
       RoslynWorker__BuildProcess__MaximumConcurrentProcesses: "8"
       RoslynWorker__DevelopmentArtifactEnvelope__Enabled: "true"
       RoslynWorker__DevelopmentArtifactEnvelope__MaxBytes: "33554432"
-      ReferenceSets__net10-ref__Path: /reference-sets/net10-ref
-      ReferenceSets__net11-preview-ref__Path: /reference-sets/net11-preview-ref
 
   worker-roslyn-const-generics:
     <<: *service-defaults

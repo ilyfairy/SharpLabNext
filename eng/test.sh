@@ -62,6 +62,26 @@ if [[ "$skip_build" == false ]]; then
     ./eng/build.sh "${build_args[@]}"
 fi
 
+test_reference_set_root="$root/.tmp/test-coreclr-reference-sets"
+test_reference_archive_cache="$root/.tmp/reference-package-cache"
+test_reference_appsettings="$root/.tmp/test-coreclr-reference-sets.appsettings.json"
+runtime_assembly="$root/src/RuntimeApi/SharpLabNext.Runtime/bin/$configuration/netstandard2.1/SharpLab.Runtime.dll"
+if [[ ! -f "$runtime_assembly" ]]; then
+    echo "The test reference-set materializer requires '$runtime_assembly'." >&2
+    exit 1
+fi
+dotnet run eng/materialize-coreclr-reference-sets.cs -- \
+    --matrix profiles/runtime-matrix.json \
+    --lock profiles/lock.json \
+    --output "$test_reference_set_root" \
+    --archive-cache "$test_reference_archive_cache" \
+    --appsettings-template src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable/appsettings.json \
+    --appsettings-output "$test_reference_appsettings" \
+    --runtime-assembly "$runtime_assembly"
+export SHARPLABNEXT_TEST_CORECLR_REFERENCE_SETS="$test_reference_set_root"
+export SHARPLABNEXT_NET10_REF_PATH="$test_reference_set_root/net10-ref"
+export SHARPLABNEXT_NET11_REF_PATH="$test_reference_set_root/net11-preview-ref"
+
 dotnet test SharpLabNext.slnx \
     --configuration "$configuration" \
     --no-build \
@@ -92,10 +112,27 @@ fi
 if [[ "$skip_build" == true && "$skip_schemas" == false ]]; then
     node --test \
         eng/runtime-profile-channel-validation.test.mjs \
+        eng/runtime-wine-packages.test.mjs \
+        eng/runtime-functional-matrix.test.mjs \
+        eng/runtime-functional-smoke.test.mjs \
+        eng/runtime-jit-smoke.test.mjs \
+        eng/runtime-mono-smoke.test.mjs \
+        eng/runtime-wine-coreclr-smoke.test.mjs \
+        eng/runtime-wine-framework-smoke.test.mjs \
+        eng/runtime-artifact-smoke.test.mjs \
+        eng/runtime-framework-artifact-smoke.test.mjs \
+        eng/runtime-framework-supervisor-smoke.test.mjs \
+        eng/runtime-framework-deployment-bridge.test.mjs \
+        eng/runtime-matrix-deployment-bridge.test.mjs \
+        eng/runtime-framework-gateway-smoke.test.mjs \
+        eng/build-wine-coreclr-operator.test.mjs \
         eng/runtime-candidate-input-validation.test.mjs \
         eng/runtime-framework-installers.test.mjs \
         eng/build-framework-matrix-context.test.mjs \
         eng/build-framework-matrix-parent.test.mjs \
+        eng/committed-source-context.test.mjs \
+        eng/rebuild-runtime-candidate.test.mjs \
+        eng/create-runtime-framework-candidate-input.test.mjs \
         eng/framework-prefix-matrix.test.mjs \
         eng/runtime-promotion-image-binding.test.mjs \
         eng/runtime-matrix-generator.test.mjs \

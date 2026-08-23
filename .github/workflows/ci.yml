@@ -138,7 +138,15 @@ jobs:
 
       - name: Validate strict JSON schemas
         run: |
-          node --test eng/runtime-profile-channel-validation.test.mjs
+          node --test \
+            eng/runtime-profile-channel-validation.test.mjs \
+            eng/runtime-wine-packages.test.mjs \
+            eng/runtime-wine-coreclr-smoke.test.mjs \
+            eng/runtime-wine-framework-smoke.test.mjs \
+            eng/runtime-framework-supervisor-smoke.test.mjs \
+            eng/runtime-framework-deployment-bridge.test.mjs \
+            eng/runtime-matrix-deployment-bridge.test.mjs \
+            eng/runtime-framework-gateway-smoke.test.mjs
           node eng/validate-schemas.mjs
 
       - name: Validate Compose security boundaries
@@ -324,6 +332,10 @@ jobs:
       - name: Run Compose security smoke matrix
         timeout-minutes: 20
         run: dotnet run eng/smoke/gateway-compose.cs -- "$SHARPLABNEXT_E2E_BASE_URL" --security
+
+      - name: Run Docker pre-start attach transport smoke
+        timeout-minutes: 5
+        run: dotnet run eng/smoke/runtime-docker-attach/runtime-docker-attach.cs -- "$SHARPLABNEXT_E2E_RUNTIME_IMAGE"
 
       - name: Run runtime failure and cleanup smoke
         timeout-minutes: 15

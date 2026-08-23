@@ -9,6 +9,7 @@ trusted_public_key_sha256=''
 expected_signing_key_id=''
 allow_unsigned=false
 skip_artifact_backup=false
+current_only=false
 ready_timeout_seconds=180
 smoke_base_address=''
 while [ "$#" -gt 0 ]; do
@@ -19,6 +20,7 @@ while [ "$#" -gt 0 ]; do
     --expected-signing-key-id) expected_signing_key_id=$2; shift 2 ;;
     --allow-unsigned) allow_unsigned=true; shift ;;
     --skip-artifact-backup) skip_artifact_backup=true; shift ;;
+    --current-only) current_only=true; shift ;;
     --ready-timeout-seconds) ready_timeout_seconds=$2; shift 2 ;;
     --smoke-base-address) smoke_base_address=$2; shift 2 ;;
     *) echo "Unknown install option: $1" >&2; exit 64 ;;
@@ -41,6 +43,7 @@ validate_release_id "$candidate_release_id"
 mkdir -p "$install_root"
 install_root=$(CDPATH= cd -- "$install_root" && pwd)
 current_release_id=$(release_pointer "$install_root/current-release")
+previous_release_id=$(release_pointer "$install_root/previous-release")
 verify_release "$bundle_root" true incoming
 candidate_release_root=$(install_release_assets "$bundle_root" "$install_root" "$candidate_release_id")
 test_installed_deployment "$candidate_release_root"
@@ -58,8 +61,37 @@ fi
 
 if compose_up_release "$candidate_release_root" "$candidate_release_id" &&
    smoke_release "$candidate_release_root" "$candidate_release_id" "$ready_timeout_seconds" "$smoke_base_address"; then
-  if [ -n "$current_release_id" ] && [ "$current_release_id" != "$candidate_release_id" ]; then atomic_pointer "$install_root/previous-release" "$current_release_id"; fi
-  atomic_pointer "$install_root/current-release" "$candidate_release_id"
+  if [ "$current_only" = true ]; then
+    retained_previous_release_id=''
+    if [ -n "$current_release_id" ] && [ "$current_release_id" != "$candidate_release_id" ]; then
+      retained_previous_release_id=$current_release_id
+    else
+      retained_previous_release_id=$previous_release_id
+    fi
+    assert_current_only_retention_sources \
+      "$install_root" \
+      "$candidate_release_id" \
+      "$retained_previous_release_id" \
+      "$previous_release_id" \
+      "$current_release_id" \
+      "$previous_release_id"
+    set_release_pointer_pair \
+      "$install_root" \
+      "$candidate_release_id" \
+      "$current_release_id" \
+      "$previous_release_id"
+    remove_current_only_previous_release \
+      "$install_root" \
+      "$candidate_release_id" \
+      "$retained_previous_release_id" \
+      "$previous_release_id"
+  else
+    set_release_pointer_pair \
+      "$install_root" \
+      "$candidate_release_id" \
+      "$current_release_id" \
+      "$previous_release_id"
+  fi
   echo "Installed SharpLabNext release $candidate_release_id at $candidate_release_root"
   exit 0
 fi

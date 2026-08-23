@@ -147,6 +147,14 @@ function labelFailure(labels, name, expected) {
   return `${name} must equal ${JSON.stringify(expected)}; observed ${observed}`
 }
 
+function sameStringMap(left, right) {
+  const leftEntries = Object.entries(left ?? {}).sort(([leftName], [rightName]) =>
+    leftName.localeCompare(rightName, 'en'))
+  const rightEntries = Object.entries(right ?? {}).sort(([leftName], [rightName]) =>
+    leftName.localeCompare(rightName, 'en'))
+  return JSON.stringify(leftEntries) === JSON.stringify(rightEntries)
+}
+
 /** Validate properties that are intrinsic to a promotable runtime image. */
 export function validateRuntimeImageInspection(inspection, options) {
   const {
@@ -234,6 +242,19 @@ export function bindRuntimeCandidateImage(options) {
         `but candidate '${candidateReference}' reports Size ${candidate.sizeBytes}`,
       )
     }
+    if (candidate.operatingSystem !== pinned.operatingSystem ||
+        candidate.architecture !== pinned.architecture) {
+      failures.push(
+        `pinned image reference '${pinnedReference}' reports platform ` +
+        `${pinned.operatingSystem}/${pinned.architecture}, but candidate ` +
+        `'${candidateReference}' reports ${candidate.operatingSystem}/${candidate.architecture}`,
+      )
+    }
+    if (!sameStringMap(candidate.labels, pinned.labels)) {
+      failures.push(
+        `pinned image reference '${pinnedReference}' does not retain the candidate's complete label map`,
+      )
+    }
   }
 
   if (failures.length > 0) {
@@ -271,7 +292,7 @@ export function inspectGitSourceState(options = {}) {
   const status = runChecked(
     spawn,
     'git',
-    ['status', '--porcelain=v1', '-z', '--untracked-files=normal'],
+    ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
     { cwd, env },
     'Could not inspect Git worktree state',
   )

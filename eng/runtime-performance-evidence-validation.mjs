@@ -8,6 +8,12 @@ const evidenceDirectory = 'profiles/runtime-promotion-evidence'
 const policyDirectory = 'profiles/runtime-performance-policies'
 const maximumMaterialBytes = 1024 * 1024
 const digestPattern = /^sha256:[0-9a-f]{64}$/
+const immutableReferencePattern = /^[^@\s]+@sha256:[0-9a-f]{64}$/
+const sourceRevisionPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+const measurementHelperImplementation = 'sharplabnext-runtime-cgroup-sidecar-v1'
+const measurementHelperEntrypoint = '/usr/local/bin/sharplabnext-runtime-measurement'
+const measurementHelperContentSha256 =
+  'sha256:f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c'
 
 const absoluteLimits = Object.freeze({
   minimumColdSamples: 3,
@@ -231,6 +237,7 @@ function validateEvidence(
       'planSha256',
       'profileId',
       'image',
+      'measurementHelper',
       'sourceRevision',
       'policy',
       'capabilities',
@@ -270,6 +277,7 @@ function validateEvidence(
       )
     }
   }
+  validateMeasurementHelper(evidence.measurementHelper, evidence, receipt, prefix, failures)
   if (expectObject(evidence.policy, ['id', 'sha256'], `${prefix} evidence policy`, failures)) {
     if (evidence.policy.id !== performance.policyId ||
         evidence.policy.sha256 !== performance.policySha256) {
@@ -296,7 +304,9 @@ function validateEvidence(
     `${prefix} evidence environment`,
     failures,
   )) {
-    if (!isId(evidence.environment.runnerId)) failures.push(`${prefix} evidence runnerId is not canonical`)
+    if (evidence.environment.runnerId !== 'runtime-preflight-linux-x64-v2') {
+      failures.push(`${prefix} evidence runnerId must equal "runtime-preflight-linux-x64-v2"`)
+    }
     if (evidence.environment.operatingSystem !== 'linux' ||
         evidence.environment.architecture !== 'x64') {
       failures.push(`${prefix} evidence environment must be Linux x64`)
@@ -326,6 +336,54 @@ function validateEvidence(
       failures,
     )
   }
+}
+
+function validateMeasurementHelper(helper, evidence, receipt, prefix, failures) {
+  const label = `${prefix} evidence measurementHelper`
+  if (!expectObject(
+    helper,
+    ['implementation', 'image', 'entrypoint', 'sourceRevision', 'contentSha256'],
+    label,
+    failures,
+  )) return
+  if (helper.implementation !== measurementHelperImplementation) {
+    failures.push(`${label} implementation must equal ${JSON.stringify(measurementHelperImplementation)}`)
+  }
+  if (helper.entrypoint !== measurementHelperEntrypoint) {
+    failures.push(`${label} entrypoint must equal ${JSON.stringify(measurementHelperEntrypoint)}`)
+  }
+  if (helper.contentSha256 !== measurementHelperContentSha256) {
+    failures.push(`${label} contentSha256 must equal the pinned helper script digest`)
+  }
+  if (!sourceRevisionPattern.test(helper.sourceRevision ?? '') ||
+      helper.sourceRevision !== evidence.sourceRevision ||
+      helper.sourceRevision !== receipt.sourceRevision) {
+    failures.push(`${label} sourceRevision must equal the evidence sourceRevision`)
+  }
+  if (!expectObject(helper.image, ['reference', 'imageId', 'sizeBytes'], `${label} image`, failures)) {
+    return
+  }
+  if (!immutableReferencePattern.test(helper.image.reference ?? '') ||
+      imageRepositoryName(helper.image.reference) !== 'runtime-supervisor') {
+    failures.push(`${label} image reference must be an immutable runtime-supervisor repository reference`)
+  }
+  if (!digestPattern.test(helper.image.imageId ?? '')) {
+    failures.push(`${label} imageId is not canonical`)
+  }
+  if (!isIntegerInRange(helper.image.sizeBytes, 1, absoluteLimits.maximumImageSizeBytes)) {
+    failures.push(`${label} image size must be a positive bounded integer`)
+  }
+  if (helper.image.reference === evidence.image?.reference ||
+      helper.image.imageId === evidence.image?.imageId) {
+    failures.push(`${label} image must be distinct from the candidate runtime image`)
+  }
+}
+
+function imageRepositoryName(reference) {
+  const digest = reference.lastIndexOf('@sha256:')
+  if (digest <= 0) return undefined
+  const repository = reference.slice(0, digest)
+  return repository.slice(repository.lastIndexOf('/') + 1)
 }
 
 function validateScenario(name, scenario, policy, memoryLimitBytes, operationIds, prefix, failures) {
@@ -368,7 +426,15 @@ function validateSamples(
     const sampleLabel = `${label}[${index}]`
     if (!expectObject(
       sample,
-      ['latencyMilliseconds', 'peakMemoryBytes', 'operationId', 'resourceSampleCount', 'completedAtUtc'],
+      [
+        'latencyMilliseconds',
+        'peakMemoryBytes',
+        'completionPeakMemoryBytes',
+        'operationId',
+        'resourceSampleCount',
+        'postCompletionResourceSampleCount',
+        'completedAtUtc',
+      ],
       sampleLabel,
       failures,
     )) return
@@ -381,6 +447,18 @@ function validateSamples(
     }
     if (!isIntegerInRange(sample.resourceSampleCount, 1, 1_000_000)) {
       failures.push(`${sampleLabel} resourceSampleCount must be a positive bounded integer`)
+    }
+    if (!isIntegerInRange(sample.postCompletionResourceSampleCount, 1, 1_000_000)) {
+      failures.push(
+        `${sampleLabel} postCompletionResourceSampleCount must be a positive bounded integer`,
+      )
+    }
+    if (isPositiveInteger(sample.resourceSampleCount) &&
+        isPositiveInteger(sample.postCompletionResourceSampleCount) &&
+        sample.resourceSampleCount < sample.postCompletionResourceSampleCount) {
+      failures.push(
+        `${sampleLabel} resourceSampleCount cannot be less than postCompletionResourceSampleCount`,
+      )
     }
     if (typeof sample.completedAtUtc !== 'string' ||
         !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?Z$/.test(sample.completedAtUtc) ||
@@ -404,6 +482,12 @@ function validateSamples(
       if (!isPositiveInteger(memoryLimitBytes) || sample.peakMemoryBytes > memoryLimitBytes) {
         failures.push(`${sampleLabel} peak memory exceeds the measured container limit`)
       }
+    }
+    if (!isPositiveInteger(sample.completionPeakMemoryBytes)) {
+      failures.push(`${sampleLabel} completionPeakMemoryBytes must be a positive integer`)
+    } else if (isPositiveInteger(sample.peakMemoryBytes) &&
+        sample.peakMemoryBytes < sample.completionPeakMemoryBytes) {
+      failures.push(`${sampleLabel} peakMemoryBytes cannot be less than completionPeakMemoryBytes`)
     }
   })
   if (latencies.length === expectedCount) {

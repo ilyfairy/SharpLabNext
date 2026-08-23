@@ -30,6 +30,13 @@ public sealed record RuntimePerformanceImageIdentity(
     string ImageId,
     long SizeBytes);
 
+public sealed record RuntimePerformanceMeasurementHelperIdentity(
+    string Implementation,
+    RuntimePerformanceImageIdentity Image,
+    string Entrypoint,
+    string SourceRevision,
+    string ContentSha256);
+
 public sealed record RuntimePerformanceSampleEnvironment(
     string RunnerId,
     string OperatingSystem,
@@ -39,18 +46,21 @@ public sealed record RuntimePerformanceSampleEnvironment(
 
 public sealed record RuntimePerformanceSampleValue(
     double LatencyMilliseconds,
-    long PeakMemoryBytes);
+    long PeakMemoryBytes,
+    long CompletionPeakMemoryBytes);
 
 public sealed record RuntimePerformanceSampleResponse(
     string ProfileId,
     string Scenario,
     string OperationId,
     RuntimePerformanceImageIdentity Image,
+    RuntimePerformanceMeasurementHelperIdentity MeasurementHelper,
     IReadOnlyList<string> Capabilities,
     string SourceMappingKind,
     RuntimePerformanceSampleEnvironment Environment,
     RuntimePerformanceSampleValue Sample,
     int ResourceSampleCount,
+    int PostCompletionResourceSampleCount,
     int DistinctSequencePointRangeCount,
     DateTimeOffset CompletedAtUtc);
 
@@ -107,7 +117,11 @@ internal sealed record RuntimeJobAudit(
     bool ContainerRemoved,
     bool ProcessTreeRemoved);
 
-internal sealed class RuntimeJobMeasurementRegistration(bool collectResources = true)
+internal sealed record RuntimeJobMeasurementContext(
+    string RuntimeEntrypoint,
+    RuntimePerformanceMeasurementHelperIdentity MeasurementHelper);
+
+internal sealed class RuntimeJobMeasurementRegistration
 {
     private readonly Lock _gate = new();
     private readonly long _startedTimestamp = Stopwatch.GetTimestamp();
@@ -115,15 +129,32 @@ internal sealed class RuntimeJobMeasurementRegistration(bool collectResources = 
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _containerStarted =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _probeReady =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
     private CancellationTokenRegistration _cancellationRegistration;
     private bool _executionStarted;
     private bool _completed;
+
+    public RuntimeJobMeasurementRegistration(bool collectResources = true)
+    {
+        CollectResources = collectResources;
+    }
+
+    public RuntimeJobMeasurementRegistration(RuntimeJobMeasurementContext context)
+    {
+        Context = context ?? throw new ArgumentNullException(nameof(context));
+        CollectResources = true;
+    }
 
     public Task<RuntimeJobMeasurementCompletion> Completion => _completion.Task;
 
     public Task ContainerStarted => _containerStarted.Task;
 
-    public bool CollectResources { get; } = collectResources;
+    public Task ProbeReady => _probeReady.Task;
+
+    public bool CollectResources { get; }
+
+    public RuntimeJobMeasurementContext? Context { get; }
 
     public void BindCancellation(CancellationToken cancellationToken)
     {
@@ -151,6 +182,8 @@ internal sealed class RuntimeJobMeasurementRegistration(bool collectResources = 
     }
 
     public void MarkContainerStarted() => _containerStarted.TrySetResult();
+
+    public void MarkProbeReady() => _probeReady.TrySetResult();
 
     public void Reject(string code, string message) =>
         CompleteCore(code, message, resourceUsage: null, result: null, cleanupSucceeded: false, audit: null);
@@ -207,6 +240,7 @@ internal sealed class RuntimeJobMeasurementRegistration(bool collectResources = 
         }
 
         _containerStarted.TrySetCanceled();
+        _probeReady.TrySetCanceled();
         _cancellationRegistration.Dispose();
         _completion.TrySetResult(completion);
     }
@@ -218,7 +252,15 @@ public sealed class RuntimePerformancePreflightCoordinator(
     IDockerEngineClient docker,
     IOptions<RuntimeSupervisorOptions> configuredOptions)
 {
-    public const string RunnerId = "runtime-preflight-linux-x64-v1";
+    public const string RunnerId = "runtime-preflight-linux-x64-v2";
+    public const string MeasurementHelperImplementation = RuntimeMeasurementHelperContract.Implementation;
+    public const string MeasurementHelperEntrypoint = RuntimeMeasurementHelperContract.Entrypoint;
+    public const string MeasurementHelperContentSha256 = RuntimeMeasurementHelperContract.ContentSha256;
+    private static readonly HashSet<string> AllowedRuntimeEntrypoints =
+    [
+        "/opt/sharplabnext/runtime-entrypoint.sh",
+        "/usr/local/bin/sharplabnext-runtime"
+    ];
     private readonly RuntimeSupervisorOptions _options = configuredOptions.Value;
 
     public async Task<RuntimePerformanceSampleResponse> MeasureAsync(
@@ -257,7 +299,26 @@ public sealed class RuntimePerformancePreflightCoordinator(
         var profile = GetProfile(request.RuntimeProfileId);
         var policy = GetPolicy(request.SecurityPolicyId);
         ValidateSelection(profile, policy, request);
-        var inspection = await InspectImageAsync(profile, cancellationToken).ConfigureAwait(false);
+        var (inspection, runtimeEntrypoint) = await InspectRuntimeImageAsync(
+            profile,
+            cancellationToken).ConfigureAwait(false);
+        var helperInspection = await InspectMeasurementHelperImageAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (StringComparer.Ordinal.Equals(helperInspection.ImageId, inspection.ImageId))
+        {
+            throw Failed(
+                "performance-helper-image-not-distinct",
+                "The measurement helper and measured runtime must use distinct immutable images.");
+        }
+        var helperIdentity = new RuntimePerformanceMeasurementHelperIdentity(
+            MeasurementHelperImplementation,
+            new RuntimePerformanceImageIdentity(
+                helperInspection.ImmutableReference,
+                helperInspection.ImageId,
+            helperInspection.SizeBytes),
+            MeasurementHelperEntrypoint,
+            _options.PromotionPreflightSourceRevision!,
+            MeasurementHelperContentSha256);
 
         var nonce = Guid.NewGuid().ToString("N");
         var requestId = $"perf_{nonce}";
@@ -271,7 +332,9 @@ public sealed class RuntimePerformancePreflightCoordinator(
             operationKind,
             requestId,
             DateTimeOffset.UtcNow);
-        var measurement = new RuntimeJobMeasurementRegistration();
+        var measurement = new RuntimeJobMeasurementRegistration(new RuntimeJobMeasurementContext(
+            runtimeEntrypoint,
+            helperIdentity));
         var queued = request.Scenario == RuntimePerformanceScenarios.Run
             ? executor.QueueRunForMeasurement(
                 operation,
@@ -344,6 +407,7 @@ public sealed class RuntimePerformancePreflightCoordinator(
                 inspection.ImmutableReference,
                 inspection.ImageId,
                 inspection.SizeBytes),
+            helperIdentity,
             profile.Capabilities.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(),
             mappingKind,
             new RuntimePerformanceSampleEnvironment(
@@ -354,40 +418,149 @@ public sealed class RuntimePerformancePreflightCoordinator(
                 policy.MemoryBytes),
             new RuntimePerformanceSampleValue(
                 completion.Latency.TotalMilliseconds,
-                completion.ResourceUsage!.PeakMemoryBytes),
+                completion.ResourceUsage!.PeakMemoryBytes,
+                completion.ResourceUsage.CompletionPeakMemoryBytes),
             completion.ResourceUsage.SampleCount,
+            completion.ResourceUsage.PostCompletionSampleCount,
             distinctSequencePoints,
             DateTimeOffset.UtcNow);
     }
 
-    private async Task<RuntimeImageInspection> InspectImageAsync(
+    private async Task<(RuntimeImageInspection Inspection, string Entrypoint)> InspectRuntimeImageAsync(
         RuntimeProfileOptions profile,
         CancellationToken cancellationToken)
     {
-        RuntimeImageInspection inspection;
-        try
-        {
-            inspection = await docker.InspectImageAsync(profile.Image, cancellationToken).ConfigureAwait(false);
-        }
-        catch (ArgumentException exception)
-        {
-            throw Failed("performance-image-not-immutable", exception.Message);
-        }
-        catch (DockerEngineException exception)
-        {
-            throw Unavailable("performance-image-inspection-failed", exception.Message);
-        }
+        var inspection = await InspectImageCoreAsync(
+            profile.Image,
+            "performance-image-not-immutable",
+            "performance-image-inspection-failed",
+            cancellationToken).ConfigureAwait(false);
 
         if (!string.Equals(profile.RuntimeImageId, inspection.ImageId, StringComparison.Ordinal) ||
             !string.Equals(inspection.OperatingSystem, "linux", StringComparison.Ordinal) ||
-            !string.Equals(inspection.Architecture, "amd64", StringComparison.Ordinal))
+            !string.Equals(inspection.Architecture, "amd64", StringComparison.Ordinal) ||
+            !HasExpectedSourceRevision(inspection))
         {
             throw Failed(
                 "performance-image-identity-mismatch",
-                "The inspected Linux x64 image identity does not match the selected Runtime Profile.");
+                "The inspected Linux x64 image identity or source revision does not match the selected Runtime Profile.");
+        }
+        if (inspection.Entrypoint is not { Count: 1 } ||
+            !AllowedRuntimeEntrypoints.Contains(inspection.Entrypoint[0]))
+        {
+            throw Failed(
+                "performance-image-entrypoint-not-trusted",
+                "The measured runtime image must declare exactly one approved shell entrypoint.");
+        }
+        return (inspection, inspection.Entrypoint[0]);
+    }
+
+    private async Task<RuntimeImageInspection> InspectMeasurementHelperImageAsync(
+        CancellationToken cancellationToken)
+    {
+        var reference = _options.MeasurementHelperImage
+            ?? throw Failed(
+                "performance-helper-not-configured",
+                "The runtime measurement helper image is not configured.");
+        var inspection = await InspectImageCoreAsync(
+            reference,
+            "performance-helper-image-not-immutable",
+            "performance-helper-image-inspection-failed",
+            cancellationToken).ConfigureAwait(false);
+        // The helper path is a fixed sidecar override; this shared image's default
+        // entrypoint remains the Runtime Supervisor service and the probe verifies the helper file.
+        if (!IsRuntimeSupervisorRepository(inspection.ImmutableReference) ||
+            !StringComparer.Ordinal.Equals(_options.MeasurementHelperImageId, inspection.ImageId) ||
+            !StringComparer.Ordinal.Equals(inspection.OperatingSystem, "linux") ||
+            !StringComparer.Ordinal.Equals(inspection.Architecture, "amd64") ||
+            !HasExpectedSourceRevision(inspection))
+        {
+            throw Failed(
+                "performance-helper-image-identity-mismatch",
+                "The inspected Linux x64 measurement helper identity or source revision is not trusted.");
+        }
+
+        IReadOnlyList<RuntimeImageFileInspection> files;
+        try
+        {
+            files = await docker.InspectImageFilesAsync(
+                inspection.ImageId,
+                [
+                    new RuntimeImageFileRequest("helper", MeasurementHelperEntrypoint),
+                    // The Supervisor image must retain its own service entrypoint;
+                    // requesting it also prevents a helper-only lookalike image.
+                    new RuntimeImageFileRequest("control-host", "/usr/local/bin/sharplabnext-service")
+                ],
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (DockerEngineException exception)
+        {
+            throw Failed("performance-helper-content-inspection-failed", exception.Message);
+        }
+        catch (NotSupportedException exception)
+        {
+            throw Unavailable("performance-helper-content-inspection-unavailable", exception.Message);
+        }
+        catch (ArgumentException exception)
+        {
+            throw Failed("performance-helper-content-inspection-invalid", exception.Message);
+        }
+
+        var helperFile = files?.FirstOrDefault(static file => file.Role == "helper");
+        var controlHostFile = files?.FirstOrDefault(static file => file.Role == "control-host");
+        if (files is null || files.Count != 2 || helperFile is null || controlHostFile is null ||
+            !StringComparer.Ordinal.Equals(helperFile.Path, MeasurementHelperEntrypoint) ||
+            !StringComparer.Ordinal.Equals(helperFile.Sha256, MeasurementHelperContentSha256) ||
+            helperFile.SizeBytes <= 0 ||
+            !StringComparer.Ordinal.Equals(controlHostFile.Path, "/usr/local/bin/sharplabnext-service") ||
+            controlHostFile.SizeBytes <= 0)
+        {
+            throw Failed(
+                "performance-helper-content-mismatch",
+                "The inspected measurement helper entrypoint bytes do not match the pinned helper contract.");
         }
         return inspection;
     }
+
+    private static bool IsRuntimeSupervisorRepository(string reference)
+    {
+        const string marker = "@sha256:";
+        var separator = reference.LastIndexOf(marker, StringComparison.Ordinal);
+        if (separator <= 0)
+            return false;
+        var repository = reference[..separator];
+        var slash = repository.LastIndexOf('/');
+        var name = slash < 0 ? repository : repository[(slash + 1)..];
+        return StringComparer.Ordinal.Equals(name, "runtime-supervisor");
+    }
+
+    private async Task<RuntimeImageInspection> InspectImageCoreAsync(
+        string reference,
+        string immutableFailureCode,
+        string inspectionFailureCode,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await docker.InspectImageAsync(reference, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ArgumentException exception)
+        {
+            throw Failed(immutableFailureCode, exception.Message);
+        }
+        catch (DockerEngineException exception)
+        {
+            throw Unavailable(inspectionFailureCode, exception.Message);
+        }
+    }
+
+    private bool HasExpectedSourceRevision(RuntimeImageInspection inspection) =>
+        _options.PromotionPreflightSourceRevision is { } expected &&
+        inspection.Labels is { } labels &&
+        labels.TryGetValue("org.opencontainers.image.revision", out var observed) &&
+        labels.TryGetValue("io.sharplabnext.source.revision", out var sourceObserved) &&
+        StringComparer.Ordinal.Equals(observed, expected) &&
+        StringComparer.Ordinal.Equals(sourceObserved, expected);
 
     private static void ValidateSelection(
         RuntimeProfileOptions profile,
@@ -453,8 +626,20 @@ public sealed class RuntimePerformancePreflightCoordinator(
         }
         if (!completion.CleanupSucceeded)
             throw Failed("performance-cleanup-failed", "The one-shot runtime resources were not fully cleaned up.");
-        if (completion.ResourceUsage is not { PeakMemoryBytes: > 0, SampleCount: > 0 })
-            throw Failed("performance-resource-sample-missing", "Docker returned no usable memory sample.");
+        if (completion.ResourceUsage is not
+            {
+                PeakMemoryBytes: > 0,
+                SampleCount: > 0,
+                CompletionPeakMemoryBytes: > 0,
+                PostCompletionSampleCount: > 0
+            } ||
+            completion.ResourceUsage.PeakMemoryBytes < completion.ResourceUsage.CompletionPeakMemoryBytes ||
+            completion.ResourceUsage.SampleCount < completion.ResourceUsage.PostCompletionSampleCount)
+        {
+            throw Failed(
+                "performance-resource-sample-missing",
+                "The runtime did not produce complete streamed and post-execution cgroup memory evidence.");
+        }
         if (completion.ResourceUsage.PeakMemoryBytes > policy.MemoryBytes)
             throw Failed("performance-memory-limit-exceeded", "Peak memory exceeded the selected container limit.");
         if (!(completion.Latency > TimeSpan.Zero) || completion.Latency > TimeSpan.FromSeconds(120))

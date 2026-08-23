@@ -5,7 +5,20 @@ import { fileURLToPath } from 'node:url'
 
 import { validateRuntimePerformanceEvidence } from './runtime-performance-evidence-validation.mjs'
 import { validateRuntimeCapabilityEvidence } from './runtime-capability-evidence-validation.mjs'
+import { validateJsonSchemaInstance } from './json-schema-instance-validation.mjs'
 import { parseOwnedJson } from './strict-owned-json.mjs'
+import {
+  runtimePromotionPlanExpectedKeyId,
+  runtimePromotionPlanSignaturePath,
+  serializeRuntimePromotionPlan,
+  sha256 as planSignatureSha256,
+  verifyRuntimePromotionPlanSignature,
+} from './runtime-promotion-plan-signature.mjs'
+import {
+  isWinePromotionFamily,
+  loadOwnedWineOperatorBinding,
+  validateWineOperatorBinding,
+} from './runtime-wine-operator-binding.mjs'
 
 const receiptDirectory = 'profiles/runtime-promotion-receipts'
 const evidenceDirectory = 'profiles/runtime-promotion-evidence'
@@ -15,8 +28,10 @@ const maximumProfileBytes = 1024 * 1024
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const imageReferencePattern = /^[^@\s]+@sha256:[0-9a-f]{64}$/
 const capabilityNames = new Set(['run', 'jit-asm', 'inspection', 'execution-flow'])
+const promotionReceiptSchemaName = 'runtime-promotion-receipt.schema.json'
+const promotionPlanSchemaName = 'runtime-promotion-plan.schema.json'
 
-export function validateRuntimePromotionReceipts(matrix, repositoryRoot, readFile = fs.readFileSync) {
+export function validateRuntimePromotionReceipts(matrix, repositoryRoot, readFile = fs.readFileSync, options = {}) {
   const failures = []
   for (const binding of capabilityBindings(matrix)) {
     const capability = binding.capability
@@ -88,7 +103,15 @@ export function validateRuntimePromotionReceipts(matrix, repositoryRoot, readFil
       failures,
     )
     if (receipt === undefined) continue
-    failures.push(...validateReceiptBinding(binding, receipt, repositoryRoot, readFile))
+    validatePromotionSchemaInstance(
+      receipt,
+      repositoryRoot,
+      promotionReceiptSchemaName,
+      `${binding.profileId}: promotion receipt`,
+      failures,
+    )
+    validatePromotionReceiptContract(receipt, `${binding.profileId}: promotion receipt`, failures)
+    failures.push(...validateReceiptBinding(binding, receipt, repositoryRoot, readFile, options))
   }
   return failures
 }
@@ -136,58 +159,47 @@ function capabilityBindings(matrix) {
   return bindings
 }
 
-function loadRuntimeProfile(binding, receipt, repositoryRoot, readFile, failures, prefix) {
-  const runtimeProfilesRoot = path.resolve(repositoryRoot, 'profiles', 'runtimes')
+function loadRuntimeProfile(binding, receipt, repositoryRoot, readFile, failures, prefix, options) {
   const relativePaths = [
     `profiles/runtimes/${binding.profileId}.json`,
     `profiles/runtimes/candidates/${binding.profileId}.json`,
   ]
-  const loaded = []
-  for (const relativePath of relativePaths) {
-    const absolutePath = path.resolve(repositoryRoot, ...relativePath.split('/'))
-    if (!fs.existsSync(absolutePath)) continue
-    try {
-      const rootStat = fs.lstatSync(runtimeProfilesRoot)
-      const fileStat = fs.lstatSync(absolutePath)
-      if (!rootStat.isDirectory() || rootStat.isSymbolicLink() ||
-          !fileStat.isFile() || fileStat.isSymbolicLink() || fileStat.size > maximumProfileBytes) {
-        failures.push(`${prefix} Runtime Profile '${relativePath}' is not a bounded regular non-link file`)
-        continue
-      }
-      const realRoot = fs.realpathSync.native(runtimeProfilesRoot)
-      const realFile = fs.realpathSync.native(absolutePath)
-      if (!isPathInside(realRoot, realFile)) {
-        failures.push(`${prefix} Runtime Profile '${relativePath}' resolves outside profiles/runtimes`)
-        continue
-      }
-      const bytes = readFile(absolutePath)
-      if (bytes.length > maximumProfileBytes) {
-        failures.push(`${prefix} Runtime Profile '${relativePath}' exceeds the 1 MiB size limit`)
-        continue
-      }
-      const profile = parseOwnedJson(
-        bytes,
-        `${prefix} Runtime Profile '${relativePath}'`,
-        failures,
-      )
-      if (profile !== undefined) loaded.push({ relativePath, profile })
-    } catch (error) {
-      failures.push(`${prefix} cannot read Runtime Profile '${relativePath}' (${error.message})`)
-    }
-  }
+  const loaded = relativePaths
+    .map(relativePath => loadOwnedDocument(
+      repositoryRoot,
+      relativePath,
+      'profiles/runtimes',
+      maximumProfileBytes,
+      readFile,
+      failures,
+      `${prefix} Runtime Profile`,
+    ))
+    .filter(document => document !== null && document !== undefined)
 
   const receiptReference = binding.capability?.promotionReceipt
   const active = loaded.find(item => item.relativePath === relativePaths[0] &&
-    item.profile?.promotionReceipt?.path === receiptReference?.path &&
-    item.profile?.promotionReceipt?.sha256 === receiptReference?.sha256)
+    item.value?.promotionReceipt?.path === receiptReference?.path &&
+    item.value?.promotionReceipt?.sha256 === receiptReference?.sha256)
   const candidate = loaded.find(item => item.relativePath === relativePaths[1])
-  const selected = active ?? candidate
-  if (selected === undefined || !isObject(selected.profile)) {
-    failures.push(`${prefix} has no active or candidate Runtime Profile for exact evidence validation`)
+  const planBoundPreflight = loadPlanBoundPreflightProfile(
+    binding,
+    receipt,
+    candidate,
+    repositoryRoot,
+    readFile,
+    failures,
+    prefix,
+    options,
+  )
+  const selected = active ?? planBoundPreflight
+  if (selected === null || selected === undefined || !isObject(selected.value)) {
+    failures.push(
+      `${prefix} has no active or plan-bound preflight Runtime Profile for exact evidence validation`,
+    )
     return undefined
   }
 
-  const profile = selected.profile
+  const profile = selected.value
   expectEqual(failures, profile.id, binding.profileId, `${prefix} Runtime Profile id`)
   expectEqual(failures, profile.family, binding.family, `${prefix} Runtime Profile family`)
   expectEqual(
@@ -211,6 +223,279 @@ function loadRuntimeProfile(binding, receipt, repositoryRoot, readFile, failures
   return profile
 }
 
+function loadPlanBoundPreflightProfile(
+  binding,
+  receipt,
+  candidate,
+  repositoryRoot,
+  readFile,
+  failures,
+  prefix,
+  options,
+) {
+  const planRelativePath = `profiles/runtime-promotion-plans/${binding.profileId}.json`
+  const preflightRelativePath =
+    `profiles/runtime-promotion-plans/${binding.profileId}.profile.json`
+  const plan = loadOwnedDocument(
+    repositoryRoot,
+    planRelativePath,
+    'profiles/runtime-promotion-plans',
+    maximumProfileBytes,
+    readFile,
+    failures,
+    `${prefix} promotion plan`,
+  )
+  const preflight = loadOwnedDocument(
+    repositoryRoot,
+    preflightRelativePath,
+    'profiles/runtime-promotion-plans',
+    maximumProfileBytes,
+    readFile,
+    failures,
+    `${prefix} preflight Runtime Profile`,
+  )
+  const signatureRelativePath = runtimePromotionPlanSignaturePath(binding.profileId)
+  const signature = loadOwnedBytes(
+    repositoryRoot, signatureRelativePath, 'profiles/runtime-promotion-plans', 4096, readFile, failures,
+    `${prefix} promotion plan signature`,
+  )
+  if (plan === null && preflight === null) {
+    failures.push(`${prefix} plan and preflight Runtime Profile are required`)
+    return undefined
+  }
+  if (plan === null || preflight === null || signature === null ||
+      plan === undefined || preflight === undefined || signature === undefined) {
+    failures.push(`${prefix} plan and preflight Runtime Profile must both be present`)
+    return undefined
+  }
+
+  const failureCount = failures.length
+  validatePromotionSchemaInstance(
+    plan.value,
+    repositoryRoot,
+    promotionPlanSchemaName,
+    `${prefix} promotion plan`,
+    failures,
+  )
+  validatePromotionPlanContract(plan.value, `${prefix} promotion plan`, failures)
+  if (candidate === undefined) {
+    failures.push(`${prefix} plan has no canonical candidate Runtime Profile to bind`)
+  }
+  const planDigest = `sha256:${crypto.createHash('sha256').update(plan.bytes).digest('hex')}`
+  if (!constantTimeEqual(receipt.planSha256, planDigest)) {
+    failures.push(
+      `${prefix} plan digest mismatch; expected ${receipt.planSha256}, observed ${planDigest}`,
+    )
+  }
+  const planSignature = receipt.planSignature
+  const expectedPlanKeyId = options.planSignatureKeyId ?? runtimePromotionPlanExpectedKeyId()
+  if (!isObject(planSignature) || planSignature.path !== signatureRelativePath ||
+      !digestPattern.test(planSignature.sha256 ?? '') || planSignature.keyId !== expectedPlanKeyId) {
+    failures.push(`${prefix} planSignature must bind the canonical signature path, SHA-256, and fixed key ID`)
+  } else {
+    const signatureDigest = planSignatureSha256(signature.bytes)
+    if (!constantTimeEqual(planSignature.sha256, signatureDigest)) {
+      failures.push(`${prefix} plan signature digest mismatch`)
+    }
+    try {
+      verifyRuntimePromotionPlanSignature(plan.bytes, signature.bytes,
+        options.planSignaturePublicKey === undefined
+          ? {}
+          : {
+              publicKey: options.planSignaturePublicKey,
+              keyId: options.planSignatureKeyId,
+            })
+    } catch (error) {
+      failures.push(`${prefix} plan signature is invalid: ${error.message}`)
+    }
+  }
+  if (!Buffer.from(plan.bytes).equals(serializeRuntimePromotionPlan(plan.value))) {
+    failures.push(`${prefix} promotion plan is not canonical`)
+  }
+  expectEqual(failures, plan.value.schemaVersion, 1, `${prefix} plan schemaVersion`)
+  expectEqual(failures, plan.value.matrixTargetId, binding.targetId, `${prefix} plan matrixTargetId`)
+  expectEqual(failures, plan.value.platform, binding.platform, `${prefix} plan platform`)
+  expectEqual(failures, plan.value.family, binding.family, `${prefix} plan family`)
+  expectEqual(failures, plan.value.resolvedVersion, receipt.resolvedVersion, `${prefix} plan resolvedVersion`)
+  expectEqual(failures, plan.value.profileId, binding.profileId, `${prefix} plan profileId`)
+  const candidateDigest = candidate === undefined
+    ? undefined
+    : `sha256:${crypto.createHash('sha256').update(candidate.bytes).digest('hex')}`
+  expectEqual(
+    failures,
+    plan.value.profileSha256,
+    candidateDigest,
+    `${prefix} plan profileSha256`,
+  )
+  expectEqual(
+    failures,
+    plan.value.sourceRevision,
+    receipt.sourceRevision,
+    `${prefix} plan sourceRevision`,
+  )
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(plan.value.sourceTree ?? '')) {
+    failures.push(`${prefix} plan sourceTree must be a full lowercase Git commit`)
+  }
+  if (!constantTimeEqual(
+    plan.value.buildInputsSha256 ?? '',
+    planSignatureSha256(serializeRuntimePromotionPlan(plan.value.buildInputs)),
+  )) {
+    failures.push(`${prefix} plan buildInputsSha256 does not bind canonical buildInputs`)
+  }
+  expectEqual(failures, plan.value.producer?.id, 'sharplabnext-runtime-preflight-v1', `${prefix} plan producer.id`)
+  expectEqual(failures, plan.value.producer?.sourceRevision, receipt.sourceRevision, `${prefix} plan producer.sourceRevision`)
+  if (!sameJson(plan.value.componentIdentity, receipt.componentIdentity)) {
+    failures.push(`${prefix} plan componentIdentity does not exactly match the receipt`)
+  }
+  if (!sameJson(plan.value.runtimeIdentity, receipt.runtimeIdentity)) {
+    failures.push(`${prefix} plan runtimeIdentity does not exactly match the receipt`)
+  }
+  if (!sameJson(plan.value.wineOperator, receipt.wineOperator)) {
+    failures.push(`${prefix} plan wineOperator does not exactly match the receipt`)
+  }
+  const expectedPlanCapabilities = [...new Set(binding.capability?.capabilities ?? [])].sort()
+  const observedPlanCapabilities = Array.isArray(plan.value.capabilities)
+    ? [...plan.value.capabilities].sort()
+    : []
+  if (!arraysEqual(observedPlanCapabilities, expectedPlanCapabilities)) {
+    failures.push(`${prefix} plan capabilities do not exactly match the promoted capability set`)
+  }
+  expectEqual(
+    failures,
+    plan.value.image?.reference,
+    receipt.image?.reference,
+    `${prefix} plan image.reference`,
+  )
+  expectEqual(
+    failures,
+    plan.value.image?.imageId,
+    receipt.image?.imageId,
+    `${prefix} plan image.imageId`,
+  )
+  expectEqual(
+    failures,
+    plan.value.image?.sizeBytes,
+    receipt.image?.sizeBytes,
+    `${prefix} plan image.sizeBytes`,
+  )
+  expectEqual(
+    failures,
+    plan.value.preflightProfile?.path,
+    preflightRelativePath,
+    `${prefix} plan preflightProfile.path`,
+  )
+  const preflightDigest =
+    `sha256:${crypto.createHash('sha256').update(preflight.bytes).digest('hex')}`
+  expectEqual(
+    failures,
+    plan.value.preflightProfile?.sha256,
+    preflightDigest,
+    `${prefix} plan preflightProfile.sha256`,
+  )
+  expectEqual(
+    failures,
+    preflight.value.image,
+    receipt.image?.reference,
+    `${prefix} preflight Runtime Profile image`,
+  )
+  expectEqual(
+    failures,
+    preflight.value.runtimeImageId,
+    receipt.image?.imageId,
+    `${prefix} preflight Runtime Profile image ID`,
+  )
+  if (preflight.value.promotionReceipt !== undefined) {
+    failures.push(`${prefix} preflight Runtime Profile cannot contain a promotion receipt`)
+  }
+  return failures.length === failureCount ? preflight : undefined
+}
+
+function loadOwnedBytes(repositoryRoot, relativePath, allowedRelativeRoot, maximumBytes, readFile, failures, label) {
+  const absolutePath = path.resolve(repositoryRoot, ...relativePath.split('/'))
+  const allowedRoot = path.resolve(repositoryRoot, ...allowedRelativeRoot.split('/'))
+  try {
+    const rootStat = fs.lstatSync(allowedRoot)
+    const stat = fs.lstatSync(absolutePath)
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink() || !stat.isFile() || stat.isSymbolicLink() ||
+        stat.size < 1 || stat.size > maximumBytes) {
+      failures.push(`${label} '${relativePath}' is not a bounded regular non-link file`)
+      return undefined
+    }
+    const realRoot = fs.realpathSync.native(allowedRoot)
+    const realFile = fs.realpathSync.native(absolutePath)
+    if (!isPathInside(realRoot, realFile)) {
+      failures.push(`${label} '${relativePath}' resolves outside ${allowedRelativeRoot}`)
+      return undefined
+    }
+    const bytes = readFile(absolutePath)
+    if (bytes.length < 1 || bytes.length > maximumBytes) {
+      failures.push(`${label} '${relativePath}' exceeds its size limit`)
+      return undefined
+    }
+    return { relativePath, bytes }
+  } catch (error) {
+    failures.push(`${label} '${relativePath}' cannot be read (${error.message})`)
+    return undefined
+  }
+}
+
+function validatePromotionSchemaInstance(value, repositoryRoot, schemaName, label, failures) {
+  const schemaPath = path.join(repositoryRoot, 'schemas', schemaName)
+  let schema
+  try {
+    schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'))
+  } catch (error) {
+    failures.push(`${label}: cannot load ${schemaName} (${error.message})`)
+    return
+  }
+  try {
+    for (const error of validateJsonSchemaInstance(value, schema)) {
+      failures.push(`${label}${error}`)
+    }
+  } catch (error) {
+    failures.push(`${label}: cannot validate ${schemaName} (${error.message})`)
+  }
+}
+
+function loadOwnedDocument(
+  repositoryRoot,
+  relativePath,
+  allowedRelativeRoot,
+  maximumBytes,
+  readFile,
+  failures,
+  label,
+) {
+  const absolutePath = path.resolve(repositoryRoot, ...relativePath.split('/'))
+  if (!fs.existsSync(absolutePath)) return null
+  const allowedRoot = path.resolve(repositoryRoot, ...allowedRelativeRoot.split('/'))
+  try {
+    const rootStat = fs.lstatSync(allowedRoot)
+    const fileStat = fs.lstatSync(absolutePath)
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink() ||
+        !fileStat.isFile() || fileStat.isSymbolicLink() || fileStat.size > maximumBytes) {
+      failures.push(`${label} '${relativePath}' is not a bounded regular non-link file`)
+      return undefined
+    }
+    const realRoot = fs.realpathSync.native(allowedRoot)
+    const realFile = fs.realpathSync.native(absolutePath)
+    if (!isPathInside(realRoot, realFile)) {
+      failures.push(`${label} '${relativePath}' resolves outside ${allowedRelativeRoot}`)
+      return undefined
+    }
+    const bytes = readFile(absolutePath)
+    if (bytes.length > maximumBytes) {
+      failures.push(`${label} '${relativePath}' exceeds the 1 MiB size limit`)
+      return undefined
+    }
+    const value = parseOwnedJson(bytes, `${label} '${relativePath}'`, failures)
+    return value === undefined ? undefined : { relativePath, value, bytes }
+  } catch (error) {
+    failures.push(`${label} '${relativePath}' cannot be read (${error.message})`)
+    return undefined
+  }
+}
+
 function isCanonicalReceiptPath(value, profileId) {
   return typeof value === 'string' &&
     value === `${receiptDirectory}/${profileId}.json` &&
@@ -224,12 +509,151 @@ function isPathInside(root, candidate) {
     !path.isAbsolute(relative)
 }
 
+// The schema validator is deliberately not the only line of defence here.
+// Promotion also consumes retained JSON directly, including in isolated staging
+// directories. Keep the owned plan/receipt contract strict at that boundary so
+// a signed, canonical document cannot smuggle fields that a later consumer
+// might interpret differently.
+function validatePromotionReceiptContract(receipt, label, failures) {
+  strictObject(receipt, label, failures, [
+    'schemaVersion', 'planSha256', 'planSignature', 'profileId', 'matrixTargetId',
+    'platform', 'family', 'resolvedVersion', 'image', 'componentIdentity',
+    'runtimeIdentity', 'operations', 'performance', 'sourceRevision', 'checks',
+  ], ['wineOperator'])
+  strictPlanSignature(receipt?.planSignature, `${label}.planSignature`, failures)
+  strictImage(receipt?.image, `${label}.image`, failures)
+  strictComponentIdentity(receipt?.componentIdentity, `${label}.componentIdentity`, failures)
+  strictRuntimeIdentity(receipt?.runtimeIdentity, `${label}.runtimeIdentity`, failures)
+  strictOperations(receipt?.operations, `${label}.operations`, failures)
+  strictReceiptPerformance(receipt?.performance, `${label}.performance`, failures)
+  if (receipt?.wineOperator !== undefined) strictWineOperator(receipt.wineOperator, `${label}.wineOperator`, failures)
+  if (!Array.isArray(receipt?.checks)) {
+    failures.push(`${label}.checks must be an array`)
+  } else {
+    receipt.checks.forEach((check, index) => strictCapabilityCheck(check, `${label}.checks[${index}]`, failures))
+  }
+}
+
+function validatePromotionPlanContract(plan, label, failures) {
+  strictObject(plan, label, failures, [
+    'schemaVersion', 'candidateTarget', 'profileId', 'profileSha256', 'matrixTargetId',
+    'platform', 'family', 'resolvedVersion', 'image', 'componentIdentity',
+    'runtimeIdentity', 'sourceRevision', 'sourceTree', 'buildInputs', 'buildInputsSha256',
+    'producer', 'securityPolicyId', 'capabilities', 'sourceMappingKind', 'operations',
+    'preflightProfile', 'performance',
+  ], ['wineOperator', 'jitLibraryPath'])
+  strictImage(plan?.image, `${label}.image`, failures)
+  strictComponentIdentity(plan?.componentIdentity, `${label}.componentIdentity`, failures)
+  strictRuntimeIdentity(plan?.runtimeIdentity, `${label}.runtimeIdentity`, failures)
+  strictProducer(plan?.producer, `${label}.producer`, failures)
+  strictBuildInputs(plan?.buildInputs, `${label}.buildInputs`, failures)
+  strictOperations(plan?.operations, `${label}.operations`, failures)
+  strictPreflightProfile(plan?.preflightProfile, `${label}.preflightProfile`, failures)
+  strictPlanPerformance(plan?.performance, `${label}.performance`, failures)
+  if (plan?.wineOperator !== undefined) strictWineOperator(plan.wineOperator, `${label}.wineOperator`, failures)
+  if (!Array.isArray(plan?.capabilities)) failures.push(`${label}.capabilities must be an array`)
+}
+
+function strictObject(value, label, failures, required, optional = []) {
+  if (!isObject(value)) {
+    failures.push(`${label} must be an object`)
+    return false
+  }
+  const allowed = new Set([...required, ...optional])
+  for (const name of required) {
+    if (!(name in value)) failures.push(`${label} is missing required property '${name}'`)
+  }
+  for (const name of Object.keys(value)) {
+    if (!allowed.has(name)) failures.push(`${label} has unknown property '${name}'`)
+  }
+  return true
+}
+
+function strictImage(value, label, failures) {
+  strictObject(value, label, failures, ['reference', 'imageId', 'sizeBytes'])
+}
+
+function strictComponentIdentity(value, label, failures) {
+  strictObject(value, label, failures, ['sourceUri', 'sourceDigest'])
+}
+
+function strictRuntimeIdentity(value, label, failures) {
+  strictObject(value, label, failures, ['runtimeCommit', 'jitVersion', 'jitCommit'])
+}
+
+function strictPlanSignature(value, label, failures) {
+  strictObject(value, label, failures, ['path', 'sha256', 'keyId'])
+}
+
+function strictProducer(value, label, failures) {
+  strictObject(value, label, failures, ['id', 'sourceRevision'])
+}
+
+function strictBuildInputs(value, label, failures) {
+  if (!isObject(value)) {
+    failures.push(`${label} must be an object`)
+    return
+  }
+  const entries = Object.entries(value)
+  if (entries.length < 1 || entries.length > 64) {
+    failures.push(`${label} must contain between 1 and 64 properties`)
+  }
+  for (const [name, item] of entries) {
+    if (typeof item !== 'string' || item.length === 0) {
+      failures.push(`${label}.${name} must be a non-empty string`)
+    }
+  }
+}
+
+function strictOperations(value, label, failures) {
+  if (!strictObject(value, label, failures, ['run'], ['jit'])) return
+  for (const [name, helper] of Object.entries(value)) {
+    strictOperationHelper(helper, `${label}.${name}`, failures)
+  }
+}
+
+function strictOperationHelper(value, label, failures) {
+  if (!strictObject(value, label, failures,
+    ['implementation', 'assemblyPath', 'assemblySha256'], ['profilerPath', 'profilerSha256'])) return
+  if ((value.profilerPath === undefined) !== (value.profilerSha256 === undefined)) {
+    failures.push(`${label} must provide profilerPath and profilerSha256 together`)
+  }
+}
+
+function strictWineOperator(value, label, failures) {
+  strictObject(value, label, failures, [
+    'receiptPath', 'receiptSha256', 'signaturePath', 'signatureSha256', 'keyId',
+    'reference', 'imageId', 'sizeBytes', 'sourceRevision', 'sourceTree', 'lineageKind',
+  ], ['intermediaryReference', 'intermediaryImageId', 'intermediarySizeBytes'])
+}
+
+function strictPreflightProfile(value, label, failures) {
+  strictObject(value, label, failures, ['path', 'sha256'])
+}
+
+function strictPlanPerformance(value, label, failures) {
+  strictObject(value, label, failures, ['policyId', 'policyPath', 'policySha256', 'evidencePath'])
+}
+
+function strictReceiptPerformance(value, label, failures) {
+  strictObject(value, label, failures, [
+    'result', 'policyId', 'policyPath', 'policySha256', 'evidencePath', 'evidenceSha256',
+  ])
+}
+
+function strictCapabilityCheck(value, label, failures) {
+  strictObject(value, label, failures, [
+    'capability', 'result', 'networkDisabled', 'supervisorSandbox', 'outputLimitValidated',
+    'sourceMappingKind', 'mappingSource', 'evidencePath', 'evidenceSha256',
+  ])
+}
+
 function constantTimeEqual(left, right) {
   if (typeof left !== 'string' || left.length !== right.length) return false
   return crypto.timingSafeEqual(Buffer.from(left, 'ascii'), Buffer.from(right, 'ascii'))
 }
 
-function validateReceiptBinding(binding, receipt, repositoryRoot, readFile) {
+function validateReceiptBinding(binding, receipt, repositoryRoot, readFile, options) {
   const failures = []
   const prefix = `${binding.profileId}: promotion receipt`
   expectEqual(failures, receipt.schemaVersion, 2, `${prefix} schemaVersion`)
@@ -256,6 +680,7 @@ function validateReceiptBinding(binding, receipt, repositoryRoot, readFile) {
   }
 
   validateComponentIdentity(binding, receipt.componentIdentity, failures, prefix)
+  validateWineOperatorReceipt(binding, receipt, repositoryRoot, failures, prefix, options)
 
   const runtimeIdentity = receipt.runtimeIdentity
   if (runtimeIdentity === null || typeof runtimeIdentity !== 'object' || Array.isArray(runtimeIdentity)) {
@@ -300,7 +725,7 @@ function validateReceiptBinding(binding, receipt, repositoryRoot, readFile) {
   if (!declared.includes('run')) {
     failures.push(`${prefix} verified capabilities must include a passing run preflight`)
   }
-  const profile = loadRuntimeProfile(binding, receipt, repositoryRoot, readFile, failures, prefix)
+  const profile = loadRuntimeProfile(binding, receipt, repositoryRoot, readFile, failures, prefix, options)
   const checks = Array.isArray(receipt.checks) ? receipt.checks : []
   const observed = checks.map(check => check?.capability).sort()
   if (JSON.stringify(observed) !== JSON.stringify(declared)) {
@@ -346,6 +771,36 @@ function validateReceiptBinding(binding, receipt, repositoryRoot, readFile) {
     readFile,
   }))
   return failures
+}
+
+function validateWineOperatorReceipt(binding, receipt, repositoryRoot, failures, prefix, options) {
+  try {
+    validateWineOperatorBinding(receipt.wineOperator, binding.family, receipt.sourceRevision)
+    if (!isWinePromotionFamily(binding.family)) return
+    const loaded = loadOwnedWineOperatorBinding(repositoryRoot, receipt.sourceRevision, {
+      publicKey: options.operatorReceiptPublicKey,
+      gitShow: options.gitShow,
+      spawn: options.spawn,
+    })
+    const expected = receipt.wineOperator
+    const observed = {
+      receiptPath: loaded.paths.receiptPath,
+      receiptSha256: `sha256:${crypto.createHash('sha256').update(loaded.receiptBytes).digest('hex')}`,
+      signaturePath: loaded.paths.signaturePath,
+      signatureSha256: `sha256:${crypto.createHash('sha256').update(loaded.signatureBytes).digest('hex')}`,
+      keyId: loaded.receipt.keyId,
+      reference: loaded.receipt.operator.reference,
+      imageId: loaded.receipt.operator.imageId,
+      sizeBytes: loaded.receipt.operator.sizeBytes,
+      sourceRevision: loaded.receipt.source.revision,
+      sourceTree: loaded.receipt.source.tree,
+    }
+    for (const [field, value] of Object.entries(observed)) {
+      expectEqual(failures, expected[field], value, `${prefix} wineOperator.${field}`)
+    }
+  } catch (error) {
+    failures.push(`${prefix} Wine operator receipt is invalid: ${error.message}`)
+  }
 }
 
 function validateCapabilityEvidence(
@@ -451,6 +906,10 @@ function isObject(value) {
 
 function arraysEqual(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
+function sameJson(left, right) {
+  return serializeRuntimePromotionPlan(left).equals(serializeRuntimePromotionPlan(right))
 }
 
 function validateJitMapping(binding, check, failures, prefix) {

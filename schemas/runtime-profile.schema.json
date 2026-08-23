@@ -247,7 +247,8 @@
             "sharplabnext-jit-inspector-v1",
             "sharplabnext-legacy-jit-inspector-v1",
             "sharplabnext-checked-jit-bridge-v1",
-            "sharplabnext-mono-jit-inspector-v1"
+            "sharplabnext-mono-jit-inspector-v1",
+            "sharplabnext-desktop-clr-jit-inspector-v1"
           ]
         },
         "pathStyle": { "enum": ["unix", "wine-z"] },
@@ -334,7 +335,8 @@
           "pattern": "^(?:[A-Za-z0-9._-]+|/[^\\\\\\u0000]+)$"
         },
         "winePrefixPath": { "$ref": "#/$defs/linuxAbsolutePath" },
-        "runnerAssemblyPath": { "$ref": "#/$defs/linuxAbsolutePath" }
+        "runnerAssemblyPath": { "$ref": "#/$defs/linuxAbsolutePath" },
+        "jitInspectorAssemblyPath": { "$ref": "#/$defs/linuxAbsolutePath" }
       }
     },
     "securityPolicy": {

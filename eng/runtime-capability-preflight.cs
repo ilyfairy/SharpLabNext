@@ -17,6 +17,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using SharpLabNext.Artifacts.Contracts;
 using SharpLabNext.BundleBuilder;
 using SharpLabNext.Contracts;
 
@@ -26,6 +27,7 @@ static class RuntimeCapabilityPreflightApplication
 {
     private const long MaximumPromotionDocumentBytes = 1024L * 1024;
     private const long MaximumResponseBytes = 64L * 1024 * 1024;
+    private static readonly TimeSpan PromotionPlanVerificationTimeout = TimeSpan.FromMinutes(10);
     private static readonly JsonSerializerOptions PascalJson = new(ContractJson.CreateSerializerOptions())
     {
         PropertyNameCaseInsensitive = false,
@@ -40,6 +42,7 @@ static class RuntimeCapabilityPreflightApplication
         WriteIndented = true,
         TypeInfoResolver = new DefaultJsonTypeInfoResolver()
     };
+    private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
     public static async Task<int> RunAsync(string[] args)
     {
@@ -64,7 +67,7 @@ static class RuntimeCapabilityPreflightApplication
         try
         {
             if (options.SelfTest)
-                return RunSelfTest();
+                return await RunSelfTestAsync().ConfigureAwait(false);
             await RunLiveAsync(options).ConfigureAwait(false);
             return 0;
         }
@@ -191,7 +194,11 @@ static class RuntimeCapabilityPreflightApplication
             options.ReceiptOutputPath!,
             context.ProfileId);
         ValidateCapabilityInputs(context, options);
-        VerifyPromotionPlanObservations(repositoryRoot, context, options.CandidateTarget!);
+        await VerifyPromotionPlanObservationsAsync(
+            repositoryRoot,
+            context,
+            options.CandidateTarget!,
+            timeout.Token).ConfigureAwait(false);
 
         var token = ReadToken(options.TokenFile);
         using var client = new HttpClient(new HttpClientHandler
@@ -279,11 +286,12 @@ static class RuntimeCapabilityPreflightApplication
                 "The finalized promotion receipt exceeds the downstream trust-boundary size limit.");
         }
 
+        var receiptBytes = NormalizeJsonUtf8Lf(finalization.ReceiptBytes, "finalized promotion receipt");
         var outputs = new Dictionary<string, byte[]>(capabilities.Outputs, PathComparer)
         {
-            [receiptOutputPath] = finalization.ReceiptBytes
+            [receiptOutputPath] = receiptBytes
         };
-        void VerifyInputs()
+        async Task VerifyInputsAsync()
         {
             VerifyUnchangedInputs(
                 repositoryRoot,
@@ -303,16 +311,21 @@ static class RuntimeCapabilityPreflightApplication
                         "runtime performance evidence",
                         performanceEvidenceBytes)
                 ]);
-            VerifyPromotionPlanObservations(repositoryRoot, context, options.CandidateTarget!);
+            await VerifyPromotionPlanObservationsAsync(
+                repositoryRoot,
+                context,
+                options.CandidateTarget!,
+                timeout.Token).ConfigureAwait(false);
         }
-        WriteAtomicPromotionSet(
+        await WriteAtomicPromotionSetAsync(
             repositoryRoot,
             outputRoot,
             receiptOutputPath,
             context.ProfileId,
             context.Capabilities,
             outputs,
-            VerifyInputs);
+            VerifyInputsAsync,
+            timeout.Token).ConfigureAwait(false);
         VerifyWrittenOutputs(outputs);
         Console.WriteLine(
             $"Runtime capability evidence and promotion receipt written for {context.ProfileId}: " +
@@ -338,7 +351,7 @@ static class RuntimeCapabilityPreflightApplication
         var retainedImageFiles = new Dictionary<string, RuntimeCapabilityEvidenceImageFile>(StringComparer.Ordinal);
         foreach (var document in envelope.Documents.Select(static document => document!))
         {
-            var bytes = Encoding.UTF8.GetBytes(document.ToJsonString(EvidenceJson) + "\n");
+            var bytes = SerializeJsonUtf8Lf(document);
             if (bytes.LongLength is < 1 or > MaximumPromotionDocumentBytes)
             {
                 throw new CapabilityGateException(
@@ -626,10 +639,11 @@ static class RuntimeCapabilityPreflightApplication
         return new Uri(uri.AbsoluteUri.TrimEnd('/') + '/', UriKind.Absolute);
     }
 
-    private static void VerifyPromotionPlanObservations(
+    private static async Task VerifyPromotionPlanObservationsAsync(
         string repositoryRoot,
         RuntimePromotionPlanContext context,
-        string candidateTarget)
+        string candidateTarget,
+        CancellationToken cancellationToken)
     {
         var start = new ProcessStartInfo
         {
@@ -652,17 +666,7 @@ static class RuntimeCapabilityPreflightApplication
 
         using var process = Process.Start(start)
             ?? throw new InvalidOperationException("Could not start the runtime promotion plan verifier.");
-        if (!process.WaitForExit(10 * 60 * 1000))
-        {
-            try
-            {
-                process.Kill(entireProcessTree: true);
-            }
-            catch (InvalidOperationException)
-            {
-            }
-            throw new CapabilityGateException("Runtime promotion plan verification timed out.");
-        }
+        await WaitForPromotionPlanVerifierExitAsync(process, cancellationToken).ConfigureAwait(false);
         if (process.ExitCode != 0)
         {
             throw new CapabilityGateException(
@@ -670,14 +674,75 @@ static class RuntimeCapabilityPreflightApplication
         }
     }
 
-    private static void WriteAtomicPromotionSet(
+    private static async Task WaitForPromotionPlanVerifierExitAsync(
+        Process process,
+        CancellationToken cancellationToken)
+    {
+        using var localTimeout = new CancellationTokenSource(PromotionPlanVerificationTimeout);
+        using var linkedTimeout = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            localTimeout.Token);
+        try
+        {
+            await process.WaitForExitAsync(linkedTimeout.Token).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        catch (OperationCanceledException)
+        {
+            await TerminateProcessTreeAsync(process).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new CapabilityGateException("Runtime promotion plan verification timed out.");
+        }
+    }
+
+    private static async Task TerminateProcessTreeAsync(Process process)
+    {
+        Exception? terminationFailure = null;
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (System.ComponentModel.Win32Exception exception)
+        {
+            terminationFailure = exception;
+        }
+        OperationCanceledException? cleanupTimeoutFailure = null;
+        try
+        {
+            using var cleanupTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await process.WaitForExitAsync(cleanupTimeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException exception)
+        {
+            cleanupTimeoutFailure = exception;
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        if (!process.HasExited)
+        {
+            const string message =
+                "Runtime promotion plan verifier could not be terminated within 30 seconds.";
+            var failure = terminationFailure ?? cleanupTimeoutFailure;
+            throw failure is null
+                ? new CapabilityGateException(message)
+                : new CapabilityGateException(message, failure);
+        }
+    }
+
+    private static async Task WriteAtomicPromotionSetAsync(
         string repositoryRoot,
         string evidenceRoot,
         string receiptTarget,
         string profileId,
         IReadOnlyList<string> capabilities,
         IReadOnlyDictionary<string, byte[]> outputs,
-        Action verifyInputs)
+        Func<Task> verifyInputs,
+        CancellationToken cancellationToken)
     {
         ValidatePromotionTargets(
             repositoryRoot,
@@ -730,7 +795,8 @@ static class RuntimeCapabilityPreflightApplication
                 temporaryFiles.Add(target, temporary);
             }
 
-            verifyInputs();
+            await verifyInputs().ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             foreach (var target in outputs.Keys)
                 RequireUnchangedTarget(repositoryRoot, target, snapshots[target]);
 
@@ -740,6 +806,7 @@ static class RuntimeCapabilityPreflightApplication
                 .Append(receiptTarget);
             foreach (var target in commitOrder)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 RequireUnchangedTarget(repositoryRoot, target, snapshots[target]);
                 var temporary = temporaryFiles[target];
                 var directory = Path.GetDirectoryName(target)!;
@@ -763,7 +830,8 @@ static class RuntimeCapabilityPreflightApplication
                     "committed promotion output",
                     MaximumPromotionDocumentBytes);
             }
-            verifyInputs();
+            await verifyInputs().ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             committed = true;
         }
         catch (Exception commitException)
@@ -936,6 +1004,7 @@ static class RuntimeCapabilityPreflightApplication
                 path,
                 "written promotion output",
                 MaximumPromotionDocumentBytes);
+            AssertUtf8NoBomLf(actual, "written promotion output");
             if (!CryptographicOperations.FixedTimeEquals(
                     SHA256.HashData(actual),
                     SHA256.HashData(expected)))
@@ -945,8 +1014,43 @@ static class RuntimeCapabilityPreflightApplication
         }
     }
 
-    private static int RunSelfTest()
+    private static byte[] SerializeJsonUtf8Lf(JsonObject document)
     {
+        var bytes = Utf8NoBom.GetBytes(document.ToJsonString(EvidenceJson).ReplaceLineEndings("\n") + "\n");
+        AssertUtf8NoBomLf(bytes, "serialized capability evidence");
+        return bytes;
+    }
+
+    private static byte[] NormalizeJsonUtf8Lf(ReadOnlySpan<byte> bytes, string description)
+    {
+        var text = Utf8NoBom.GetString(bytes);
+        if (text.Length > 0 && text[0] == '\uFEFF')
+            text = text[1..];
+        if (!text.EndsWith('\n'))
+            text += "\n";
+        var normalized = Utf8NoBom.GetBytes(text.ReplaceLineEndings("\n"));
+        AssertUtf8NoBomLf(normalized, description);
+        return normalized;
+    }
+
+    private static void AssertUtf8NoBomLf(ReadOnlySpan<byte> bytes, string description)
+    {
+        var text = Utf8NoBom.GetString(bytes);
+        if (text.Length == 0 || text[0] == '\uFEFF' || text[^1] != '\n' ||
+            bytes.IndexOf((byte)'\r') >= 0)
+        {
+            throw new InvalidOperationException($"{description} must be UTF-8 without a BOM and use LF line endings.");
+        }
+    }
+
+    private static async Task<int> RunSelfTestAsync()
+    {
+        if (!CapabilityPreflightOptions.IsSha256(
+                RuntimeCapabilityProbeContract.ExecutionFlowOptionsDigest))
+        {
+            throw new InvalidOperationException(
+                "Runtime capability execution-flow options digest self-test failed.");
+        }
         var valid = CapabilityPreflightOptions.Parse(
         [
             "--supervisor-base-address", "http://127.0.0.1:8082",
@@ -982,12 +1086,42 @@ static class RuntimeCapabilityPreflightApplication
         catch (BundleValidationException)
         {
         }
-        RunFileSystemSelfTest();
+        await RunProcessCancellationSelfTestAsync().ConfigureAwait(false);
+        await RunFileSystemSelfTestAsync().ConfigureAwait(false);
         Console.WriteLine("Runtime capability preflight self-test passed.");
         return 0;
     }
 
-    private static void RunFileSystemSelfTest()
+    private static async Task RunProcessCancellationSelfTestAsync()
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "node",
+                UseShellExecute = false
+            }
+        };
+        process.StartInfo.ArgumentList.Add("-e");
+        process.StartInfo.ArgumentList.Add("setTimeout(() => {}, 30000)");
+        if (!process.Start())
+            throw new InvalidOperationException("Could not start timeout cancellation self-test child.");
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        try
+        {
+            await WaitForPromotionPlanVerifierExitAsync(
+                process,
+                cancellation.Token).ConfigureAwait(false);
+            throw new InvalidOperationException("Process cancellation self-test did not cancel.");
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        if (!process.HasExited)
+            throw new InvalidOperationException("Process cancellation self-test left its child running.");
+    }
+
+    private static async Task RunFileSystemSelfTestAsync()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sharplabnext-capability-cli-{Guid.NewGuid():N}");
         try
@@ -1008,20 +1142,25 @@ static class RuntimeCapabilityPreflightApplication
             var capabilities = new[] { "inspection", "run" };
             var outputs = new Dictionary<string, byte[]>(PathComparer)
             {
-                [first] = "{\"pass\":1}\n"u8.ToArray(),
-                [second] = "{\"pass\":2}\n"u8.ToArray(),
-                [receipt] = "{\"receipt\":1}\n"u8.ToArray()
+                [first] = SerializeJsonUtf8Lf(new JsonObject { ["pass"] = 1 }),
+                [second] = SerializeJsonUtf8Lf(new JsonObject { ["pass"] = 2 }),
+                [receipt] = SerializeJsonUtf8Lf(new JsonObject { ["receipt"] = 1 })
             };
 
             var verifierCalls = 0;
-            WriteAtomicPromotionSet(
+            await WriteAtomicPromotionSetAsync(
                 resolvedRoot,
                 outputRoot,
                 receipt,
                 "self-test",
                 capabilities,
                 outputs,
-                () => verifierCalls++);
+                () =>
+                {
+                    verifierCalls++;
+                    return Task.CompletedTask;
+                },
+                CancellationToken.None).ConfigureAwait(false);
             if (verifierCalls != 2)
                 throw new InvalidOperationException("Promotion inputs were not verified around commit.");
             VerifyWrittenOutputs(outputs);
@@ -1036,7 +1175,7 @@ static class RuntimeCapabilityPreflightApplication
             oversizedOutputs[first] = new byte[checked((int)MaximumPromotionDocumentBytes + 1)];
             try
             {
-                WriteAtomicPromotionSet(
+                await WriteAtomicPromotionSetAsync(
                     resolvedRoot,
                     outputRoot,
                     receipt,
@@ -1044,7 +1183,8 @@ static class RuntimeCapabilityPreflightApplication
                     capabilities,
                     oversizedOutputs,
                     () => throw new InvalidOperationException(
-                        "Oversized output reached the input verifier."));
+                        "Oversized output reached the input verifier."),
+                    CancellationToken.None).ConfigureAwait(false);
                 throw new InvalidOperationException(
                     "Oversized promotion output self-test did not fail.");
             }
@@ -1053,13 +1193,41 @@ static class RuntimeCapabilityPreflightApplication
             {
             }
             VerifyWrittenOutputs(committedOutputs);
-            outputs[first] = "{\"pass\":3}\n"u8.ToArray();
-            outputs[second] = "{\"pass\":4}\n"u8.ToArray();
-            outputs[receipt] = "{\"receipt\":2}\n"u8.ToArray();
+            outputs[first] = SerializeJsonUtf8Lf(new JsonObject { ["pass"] = 3 });
+            outputs[second] = SerializeJsonUtf8Lf(new JsonObject { ["pass"] = 4 });
+            outputs[receipt] = SerializeJsonUtf8Lf(new JsonObject { ["receipt"] = 2 });
+            var cancellationVerifierCalls = 0;
+            using (var cancellation = new CancellationTokenSource())
+            {
+                try
+                {
+                    await WriteAtomicPromotionSetAsync(
+                        resolvedRoot,
+                        outputRoot,
+                        receipt,
+                        "self-test",
+                        capabilities,
+                        outputs,
+                        () =>
+                        {
+                            cancellationVerifierCalls++;
+                            if (cancellationVerifierCalls == 2)
+                                cancellation.Cancel();
+                            return Task.CompletedTask;
+                        },
+                        cancellation.Token).ConfigureAwait(false);
+                    throw new InvalidOperationException(
+                        "Atomic promotion cancellation self-test did not fail.");
+                }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+                {
+                }
+            }
+            VerifyWrittenOutputs(committedOutputs);
             var rollbackVerifierCalls = 0;
             try
             {
-                WriteAtomicPromotionSet(
+                await WriteAtomicPromotionSetAsync(
                     resolvedRoot,
                     outputRoot,
                     receipt,
@@ -1071,7 +1239,9 @@ static class RuntimeCapabilityPreflightApplication
                         rollbackVerifierCalls++;
                         if (rollbackVerifierCalls == 2)
                             throw new IOException("Simulated input drift after installation.");
-                    });
+                        return Task.CompletedTask;
+                    },
+                    CancellationToken.None).ConfigureAwait(false);
                 throw new InvalidOperationException("Atomic promotion rollback self-test did not fail.");
             }
             catch (IOException exception) when (
@@ -1274,7 +1444,7 @@ sealed class CapabilityPreflightOptions
             char.IsAsciiLetterLower(character) || char.IsAsciiDigit(character) ||
             character is '-' or '_' or '.');
 
-    private static bool IsSha256(string value)
+    internal static bool IsSha256(string value)
     {
         if (value.Length != 71 || !value.StartsWith("sha256:", StringComparison.Ordinal))
             return false;

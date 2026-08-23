@@ -118,6 +118,40 @@ public sealed class RoslynMainWorkerTests
             diagnostic.Severity == DiagnosticSeverity.Error);
     }
 
+    [Fact]
+    public async Task CompileCheckAllowsUnsafeCSharp()
+    {
+        await using var factory = new RoslynMainWorkerFactory("Development");
+        using var client = factory.CreateClient();
+        var request = CreateBuildRequest(
+            "csharp",
+            "net10-ref",
+            "Program.cs",
+            "unsafe class Program { static void Main() { int value = 42; int* pointer = &value; System.Console.WriteLine(*pointer); } }");
+        var options = request.EffectiveOptions with { AllowUnsafe = true };
+        request = request with
+        {
+            Options = options,
+            Workspace = request.Workspace with { BuildOptions = options }
+        };
+
+        using var response = await client.PostAsJsonAsync(
+            "/api/v1/build",
+            request,
+            ContractJson.CreateSerializerOptions(),
+            TestContext.Current.CancellationToken);
+
+        var responseBody = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.True(response.IsSuccessStatusCode, responseBody);
+        var body = await response.Content.ReadFromJsonAsync<WorkerBuildHttpResponse>(
+            ContractJson.CreateSerializerOptions(),
+            TestContext.Current.CancellationToken);
+        var result = Assert.IsType<CompilationCheckResult>(body!.Result);
+        Assert.True(result.CompilationSucceeded);
+        Assert.DoesNotContain(result.Diagnostics, static diagnostic =>
+            diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
     [Theory]
     [InlineData("csharp", "Program.cs", "System.Console.WriteLine(42);")]
     [InlineData("visual-basic", "Program.vb", "Imports System\nModule Program\n Sub Main()\n  Console.WriteLine(42)\n End Sub\nEnd Module")]
@@ -333,14 +367,14 @@ public sealed class RoslynMainWorkerFactory(
                 [
                     new ReferenceSetDefinition(
                         "net10-ref",
-                        RoslynMainTestSettings.GetReferencePath("10.0.9", "net10.0"),
+                        RoslynMainTestSettings.Net10ReferenceSet.Path,
                         "net10.0",
-                        "10.0.9"),
+                        RoslynMainTestSettings.Net10ReferenceSet.Version),
                     new ReferenceSetDefinition(
                         "net11-preview-ref",
-                        RoslynMainTestSettings.GetReferencePath("11.0.0-preview.5.26302.115", "net11.0"),
+                        RoslynMainTestSettings.Net11ReferenceSet.Path,
                         "net11.0",
-                        "11.0.0-preview.5.26302.115")
+                        RoslynMainTestSettings.Net11ReferenceSet.Version)
                 ]));
 
                 // TestServer runs under testhost, so its entry assembly cannot serve as the compiler child.
@@ -350,18 +384,20 @@ public sealed class RoslynMainWorkerFactory(
         }
         builder.UseSetting(
             "ReferenceSets:net10-ref:Path",
-            RoslynMainTestSettings.GetReferencePath("10.0.9", "net10.0"));
+            RoslynMainTestSettings.Net10ReferenceSet.Path);
         builder.UseSetting(
             "ReferenceSets:net11-preview-ref:Path",
-            RoslynMainTestSettings.GetReferencePath("11.0.0-preview.5.26302.115", "net11.0"));
+            RoslynMainTestSettings.Net11ReferenceSet.Path);
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
             var settings = new Dictionary<string, string?>
             {
-                ["ReferenceSets:net10-ref:Path"] = RoslynMainTestSettings.GetReferencePath("10.0.9", "net10.0"),
-                ["ReferenceSets:net11-preview-ref:Path"] = RoslynMainTestSettings.GetReferencePath(
-                    "11.0.0-preview.5.26302.115",
-                    "net11.0")
+                ["ReferenceSets:net10-ref:Path"] = RoslynMainTestSettings.Net10ReferenceSet.Path,
+                ["ReferenceSets:net10-ref:FrameworkVersion"] = RoslynMainTestSettings.Net10ReferenceSet.Version,
+                ["ReferenceSets:net10-ref:Digest"] = RoslynMainTestSettings.Net10ReferenceSet.Digest,
+                ["ReferenceSets:net11-preview-ref:Path"] = RoslynMainTestSettings.Net11ReferenceSet.Path,
+                ["ReferenceSets:net11-preview-ref:FrameworkVersion"] = RoslynMainTestSettings.Net11ReferenceSet.Version,
+                ["ReferenceSets:net11-preview-ref:Digest"] = RoslynMainTestSettings.Net11ReferenceSet.Digest
             };
             if (maxCompletionItems is not null)
             {

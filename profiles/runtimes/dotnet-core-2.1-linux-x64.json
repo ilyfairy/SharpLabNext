@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "id": "dotnet-core-2.1-linux-x64",
+  "image": "sharplabnext/runtime-dotnet-core-2.1-linux-x64:development",
+  "family": "coreclr",
+  "acceptedRuntimeFamilies": [
+    "coreclr"
+  ],
+  "acceptedFrameworks": [
+    {
+      "name": "Microsoft.NETCore.App",
+      "exactVersion": "2.1.30"
+    }
+  ],
+  "runtimeVersion": "2.1.30",
+  "runtimeCommit": "5e17f34de8b34fce04f665640e046d89e8991d00",
+  "jitVersion": "2.1.30",
+  "jitCommit": "5e17f34de8b34fce04f665640e046d89e8991d00",
+  "runtimeImageId": "sha256:95998dc8bf943e7648f1982a285b32319c822a17ba4185d43cf17298f18adf1b",
+  "rid": "linux-x64",
+  "architecture": "x64",
+  "cpuFeatureProfile": "x64-v2",
+  "acceptedArtifactFormats": [
+    "dotnet-managed-pe-v1"
+  ],
+  "capabilities": [
+    "run"
+  ],
+  "providedRuntimeFeatureTags": [],
+  "providedMetadataFeatureTags": [],
+  "allowedSecurityPolicyIds": [
+    "runtime-job-default"
+  ],
+  "container": {
+    "isolationKind": "standard",
+    "environmentKind": "coreclr",
+    "executionUser": "1654:1654"
+  },
+  "operations": {
+    "run": {
+      "implementationId": "sharplabnext-legacy-jit-inspector-v1",
+      "pathStyle": "unix",
+      "command": {
+        "executable": "/opt/sharplabnext/target-dotnet/dotnet",
+        "argv": [
+          "exec",
+          "--fx-version",
+          "2.1.30",
+          "/opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll",
+          "--runtime-version",
+          "2.1.30",
+          "run",
+          "{entryAssembly}",
+          "--",
+          "{arguments}"
+        ]
+      }
+    }
+  },
+  "layout": {
+    "runnerKind": "dotnet",
+    "dotNetHostPath": "/opt/sharplabnext/target-dotnet/dotnet",
+    "runnerAssemblyPath": "/opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll"
+  },
+  "securityPolicies": [
+    {
+      "id": "runtime-job-default",
+      "memoryBytes": 268435456,
+      "nanoCpus": 1000000000,
+      "pidsLimit": 64,
+      "maximumDurationSeconds": 10,
+      "maximumArtifactBytes": 67108864,
+      "maximumOutputBytes": 1048576,
+      "tmpfsBytes": 33554432
+    }
+  ]
+}

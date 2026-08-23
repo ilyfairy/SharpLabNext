@@ -6,7 +6,7 @@ using SharpLabNext.Contracts;
 
 namespace SharpLabNext.WorkerHost;
 
-public static class ReferenceSetAttestationReader
+public static partial class ReferenceSetAttestationReader
 {
     public const string ManifestFileName = "reference-set.attestation.json";
     private const int MaximumAttestedFiles = 2048;
@@ -14,12 +14,6 @@ public static class ReferenceSetAttestationReader
     private const string NetFx30ReferenceSetId = "netfx30-managed-ref";
     private const string NetFx30TargetFramework = "net30";
     private const string NetFx30ResolvedVersion = "net30-union-v1";
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        PropertyNameCaseInsensitive = false,
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
-    };
-
     public static ReferenceSetAttestation LoadAndVerify(
         string rootPath,
         string referenceSetId,
@@ -56,7 +50,9 @@ public static class ReferenceSetAttestationReader
         try
         {
             using var stream = File.OpenRead(path);
-            document = JsonSerializer.Deserialize<ReferenceSetAttestationDocument>(stream, JsonOptions)
+            document = JsonSerializer.Deserialize(
+                    stream,
+                    ReferenceSetAttestationJsonContext.Default.ReferenceSetAttestationDocument)
                 ?? throw new InvalidDataException("The reference-set attestation manifest is empty.");
         }
         catch (JsonException exception)
@@ -353,4 +349,11 @@ public static class ReferenceSetAttestationReader
         string Path,
         long Size,
         string Digest);
+
+    [JsonSourceGenerationOptions(
+        JsonSerializerDefaults.Web,
+        PropertyNameCaseInsensitive = false,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow)]
+    [JsonSerializable(typeof(ReferenceSetAttestationDocument))]
+    private sealed partial class ReferenceSetAttestationJsonContext : JsonSerializerContext;
 }

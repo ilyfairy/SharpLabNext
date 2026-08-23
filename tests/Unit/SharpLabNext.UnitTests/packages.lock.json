@@ -2,6 +2,12 @@
   "version": 2,
   "dependencies": {
     "net10.0": {
+      "BouncyCastle.Cryptography": {
+        "type": "Direct",
+        "requested": "[2.7.0, )",
+        "resolved": "2.7.0",
+        "contentHash": "U+12df8UEWHgBi04YVf/Lgi2dy3SItlIYvHjjEVa/BngCQIzDCDRBk50DDByCfDvSbe5pRNFr3b7UrVK2kMcLw=="
+      },
       "coverlet.collector": {
         "type": "Direct",
         "requested": "[10.0.1, )",
@@ -209,6 +215,7 @@
       "sharplabnext.bundlebuilder": {
         "type": "Project",
         "dependencies": {
+          "BouncyCastle.Cryptography": "[2.7.0, )",
           "SharpLabNext.Artifacts.Contracts": "[0.1.0, )",
           "SharpLabNext.Catalog": "[1.0.0, )",
           "SharpLabNext.Contracts": "[0.1.0, )",
@@ -311,8 +318,15 @@
       "sharplabnext.winerunner": {
         "type": "Project",
         "dependencies": {
+          "Iced": "[1.21.0, )",
           "SharpLabNext.RuntimeProtocol": "[1.0.0, )"
         }
+      },
+      "Iced": {
+        "type": "CentralTransitive",
+        "requested": "[1.21.0, )",
+        "resolved": "1.21.0",
+        "contentHash": "dv5+81Q1TBQvVMSOOOmRcjJmvWcX3BZPZsIq31+RLc5cNft0IHAyNlkdb7ZarOWG913PyBoFDsDXoCIlKmLclg=="
       },
       "OpenTelemetry.Exporter.OpenTelemetryProtocol": {
         "type": "CentralTransitive",

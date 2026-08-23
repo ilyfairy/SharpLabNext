@@ -607,6 +607,9 @@
           "OpenTelemetry.Instrumentation.Runtime": "[1.16.0, )"
         }
       },
+      "sharplabnext.testing": {
+        "type": "Project"
+      },
       "sharplabnext.worker.peachpie": {
         "type": "Project",
         "dependencies": {

@@ -758,6 +758,9 @@
           "OpenTelemetry.Instrumentation.Runtime": "[1.16.0, )"
         }
       },
+      "sharplabnext.testing": {
+        "type": "Project"
+      },
       "sharplabnext.worker.roslyn.stable": {
         "type": "Project",
         "dependencies": {

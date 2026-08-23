@@ -1,0 +1,172 @@
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+
+# The Wine CoreCLR operator is deliberately built from the same digest-pinned
+# runtime-deps root as the Linux runtime fleet. It must not inherit a previous
+# Wine image: all Wine/Xvfb inputs below are source-controlled and checked.
+ARG RUNTIME_DEPS_IMAGE
+FROM ${RUNTIME_DEPS_IMAGE} AS final
+
+ARG RUNTIME_DEPS_IMAGE
+ARG VERSION
+ARG SOURCE_REVISION
+ARG WINE_CORECLR_USERSPACE_VERSION
+ARG WINE_CORECLR_USERSPACE_DIGEST
+ARG WINE_CORECLR_USERSPACE_SOURCE_URI
+ARG OPERATOR_SOURCE_CONTEXT
+ARG OPERATOR_PROMOTION_ELIGIBLE
+ARG OPERATOR_DEVELOPMENT_ONLY
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+COPY profiles/runtime-wine-packages.json /usr/local/share/sharplabnext/runtime-wine-packages.json
+
+RUN set -euo pipefail; \
+    [[ "${RUNTIME_DEPS_IMAGE}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; \
+    [[ "${WINE_CORECLR_USERSPACE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; \
+    test -n "${VERSION}"; \
+    test -n "${SOURCE_REVISION}"; \
+    test -n "${WINE_CORECLR_USERSPACE_VERSION}"; \
+    test -n "${WINE_CORECLR_USERSPACE_SOURCE_URI}"; \
+    { test "${OPERATOR_SOURCE_CONTEXT}:${OPERATOR_PROMOTION_ELIGIBLE}:${OPERATOR_DEVELOPMENT_ONLY}" = "committed:true:false" \
+      || test "${OPERATOR_SOURCE_CONTEXT}:${OPERATOR_PROMOTION_ELIGIBLE}:${OPERATOR_DEVELOPMENT_ONLY}" = "working-tree-development:false:true"; }; \
+    manifest=/usr/local/share/sharplabnext/runtime-wine-packages.json; \
+    test "$(sha256sum "${manifest}" | awk '{print "sha256:" $1}')" = "${WINE_CORECLR_USERSPACE_DIGEST}"; \
+    grep -F '"id": "wine-coreclr-userspace"' "${manifest}" >/dev/null; \
+    grep -F '"kind": "runtime-dependency"' "${manifest}" >/dev/null; \
+    grep -F "\"resolvedVersion\": \"${WINE_CORECLR_USERSPACE_VERSION}\"" "${manifest}" >/dev/null; \
+    grep -F '"id": "20260810T000000Z"' "${manifest}" >/dev/null; \
+    grep -F '"uri": "https://snapshot.ubuntu.com/ubuntu/20260810T000000Z/"' "${manifest}" >/dev/null; \
+    grep -F '"inReleaseSha256": "cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0"' "${manifest}" >/dev/null; \
+    grep -F '"inReleaseSha256": "ef81441269d3a8bdd8cdfe9095de7deb7f1af70d42191f61f1af3c8fb72cfb32"' "${manifest}" >/dev/null; \
+    grep -F '"inReleaseSha256": "3cfb1c8d7499c0bac1bfbe1e32675d200f0ca74b18afc4248c45325a073d0fd0"' "${manifest}" >/dev/null; \
+    find /etc/apt \( -name '*.list' -o -name '*.sources' \) -delete; \
+    test -z "$(find /etc/apt \( -name '*.list' -o -name '*.sources' \) -print -quit)"; \
+    printf '%s\n' \
+      'Types: deb' \
+      'URIs: https://snapshot.ubuntu.com/ubuntu/20260810T000000Z/' \
+      'Suites: noble noble-updates noble-security' \
+      'Components: main universe restricted multiverse' \
+      'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' \
+      > /etc/apt/sources.list.d/sharplabnext-snapshot.sources; \
+    test "$(find /etc/apt \( -name '*.list' -o -name '*.sources' \) -print)" = '/etc/apt/sources.list.d/sharplabnext-snapshot.sources'; \
+    rm -rf /var/lib/apt/lists/*; \
+    apt-get update; \
+    test -z "$(find /var/lib/apt/lists -maxdepth 1 -type f \( -name '*archive.ubuntu.com*' -o -name '*security.ubuntu.com*' \) -print -quit)"; \
+    snapshot_indexes=/tmp/sharplabnext-wine-snapshot-indexes; \
+    printf '%s  %s\n' \
+      'cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0' '/var/lib/apt/lists/snapshot.ubuntu.com_ubuntu_20260810T000000Z_dists_noble_InRelease' \
+      'ef81441269d3a8bdd8cdfe9095de7deb7f1af70d42191f61f1af3c8fb72cfb32' '/var/lib/apt/lists/snapshot.ubuntu.com_ubuntu_20260810T000000Z_dists_noble-updates_InRelease' \
+      '3cfb1c8d7499c0bac1bfbe1e32675d200f0ca74b18afc4248c45325a073d0fd0' '/var/lib/apt/lists/snapshot.ubuntu.com_ubuntu_20260810T000000Z_dists_noble-security_InRelease' \
+      > "${snapshot_indexes}"; \
+    sha256sum --check --strict "${snapshot_indexes}"; \
+    mkdir -p /tmp/sharplabnext-wine-packages; \
+    cd /tmp/sharplabnext-wine-packages; \
+    apt-get download \
+      wine=9.0~repack-4build3 \
+      wine64=9.0~repack-4build3 \
+      fonts-wine=9.0~repack-4build3 \
+      xvfb=2:21.1.12-1ubuntu1.6; \
+    mv xvfb_2%3a21.1.12-1ubuntu1.6_amd64.deb xvfb_21.1.12-1ubuntu1.6_amd64.deb; \
+    printf '%s  %s\n' \
+      '5606f0f5677ac0fb882e3fdc8ce03a60232cdf2930e912ed3e42db2b9e0d5f7f' 'wine_9.0~repack-4build3_all.deb' \
+      '7f4f912b21917f28c281c99e3244ee801be2e20f0a23cd9f6d37acc97f5041ff' 'wine64_9.0~repack-4build3_amd64.deb' \
+      '7dcb227d236eed96c707f532dd498ef227da27b2950ee49bbea37efc309e2bcc' 'fonts-wine_9.0~repack-4build3_all.deb' \
+      '9188c2ab6394dfe6aa53f782f6bfa22b7eb6febfe51a48e0e36af35cd2f64307' 'xvfb_21.1.12-1ubuntu1.6_amd64.deb' \
+      | sha256sum --check --strict; \
+    apt-get install --yes --no-install-recommends \
+      ./wine_9.0~repack-4build3_all.deb \
+      ./wine64_9.0~repack-4build3_amd64.deb \
+      ./fonts-wine_9.0~repack-4build3_all.deb \
+      ./xvfb_21.1.12-1ubuntu1.6_amd64.deb; \
+    expected=/tmp/sharplabnext-wine-expected-packages; \
+    awk '/"resolvedPackages": \[/ { in_packages = 1; next } in_packages && /^  \],$/ { exit } in_packages && /"name":/ { name = $0; sub(/^[[:space:]]*"name": "/, "", name); sub(/",?$/, "", name); next } in_packages && /"version":/ { version = $0; sub(/^[[:space:]]*"version": "/, "", version); sub(/",?$/, "", version); print name "=" version; name = "" }' "${manifest}" > "${expected}"; \
+    test "$(wc -l < "${expected}")" -eq 228; \
+    test "$(sha256sum "${expected}" | awk '{print "sha256:" $1}')" = 'sha256:fa83c245764fc09102029b249f5149a48baeda53a40c0432de973ebe09e39dee'; \
+    actual=/tmp/sharplabnext-wine-actual-packages; \
+    dpkg-query -W -f='${binary:Package}\t${Version}\n' \
+      | LC_ALL=C sort -t $'\t' -k1,1 \
+      | awk -F '\t' '{ print $1 "=" $2 }' > "${actual}"; \
+    cmp --silent "${expected}" "${actual}" || { echo 'Wine package closure differs from the locked 228 package list.' >&2; diff -u "${expected}" "${actual}" >&2 || true; exit 1; }; \
+    test -z "$(dpkg --print-foreign-architectures)" || { echo 'Wine userspace configured an unexpected foreign dpkg architecture.' >&2; exit 1; }; \
+    test -z "$(dpkg-query -W -f='${binary:Package}\n' | grep ':i386$' || true)" || { echo 'Wine userspace installed an i386 binary package.' >&2; exit 1; }; \
+    test -x /usr/bin/wine-stable || { echo 'Wine userspace is missing /usr/bin/wine-stable.' >&2; exit 1; }; \
+    test -x /usr/lib/wine/wine64 || { echo 'Wine userspace is missing the wine64 loader.' >&2; exit 1; }; \
+    test -x /usr/lib/wine/wineserver64 || { echo 'Wine userspace is missing wineserver64.' >&2; exit 1; }; \
+    test -x /usr/bin/xvfb-run || { echo 'Wine userspace is missing xvfb-run.' >&2; exit 1; }; \
+    test -f /usr/share/doc/wine/copyright || { echo 'Wine userspace is missing the Wine copyright notice.' >&2; exit 1; }; \
+    test -f /usr/share/doc/xvfb/copyright || { echo 'Wine userspace is missing the Xvfb copyright notice.' >&2; exit 1; }; \
+    openssl_notice=/usr/share/doc/openssl/copyright; \
+    test -L "${openssl_notice}"; \
+    test "$(readlink "${openssl_notice}")" = '../libssl3/copyright'; \
+    test -f /usr/share/doc/libssl3t64/copyright; \
+    test "$(sha256sum /usr/share/doc/libssl3t64/copyright | awk '{print $1}')" = '6a7da622fe0637a334d2a8fc470852d2ffb77d9a2b2f930f854e32a41ad6ef35'; \
+    test "$(stat -Lc '%s' /usr/share/doc/libssl3t64/copyright)" -eq 2543; \
+    ln -sfn ../libssl3t64/copyright "${openssl_notice}"; \
+    test "$(readlink "${openssl_notice}")" = '../libssl3t64/copyright'; \
+    copyright_evidence=/tmp/sharplabnext-wine-copyrights.tsv; \
+    awk '/"resolvedPackages": \[/ { in_packages = 1; next } /"sourcePackages": \[/ { in_packages = 0 } in_packages && /"copyrightPath":/ { path = $0; sub(/^[[:space:]]*"copyrightPath": "/, "", path); sub(/",?$/, "", path); next } in_packages && /"copyrightSha256":/ { digest = $0; sub(/^[[:space:]]*"copyrightSha256": "/, "", digest); sub(/",?$/, "", digest); next } in_packages && /"copyrightSizeBytes":/ { size = $0; sub(/^[[:space:]]*"copyrightSizeBytes": /, "", size); sub(/,?$/, "", size); print digest "\t" size "\t" path; path = digest = size = "" }' "${manifest}" > "${copyright_evidence}"; \
+    test "$(wc -l < "${copyright_evidence}")" -eq 228; \
+    while IFS=$'\t' read -r digest copyright_size copyright_path; do \
+      [[ "${digest}" =~ ^[0-9a-f]{64}$ ]]; \
+      [[ "${copyright_size}" =~ ^[1-9][0-9]*$ ]]; \
+      [[ "${copyright_path}" =~ ^/usr/share/doc/[A-Za-z0-9][A-Za-z0-9.+_-]*/copyright$ ]]; \
+      test "$(stat -Lc '%s' "${copyright_path}")" -eq "${copyright_size}"; \
+    done < "${copyright_evidence}"; \
+    copyright_checks=/tmp/sharplabnext-wine-copyrights.sha256; \
+    awk -F '\t' '{ print $1 "  " $3 }' "${copyright_evidence}" > "${copyright_checks}"; \
+    sha256sum --check --strict "${copyright_checks}" >/dev/null; \
+    copyright_paths=/tmp/sharplabnext-wine-copyrights.list; \
+    awk -F '\t' '{ print substr($3, 2) }' "${copyright_evidence}" | LC_ALL=C sort -u > "${copyright_paths}"; \
+    test "$(wc -l < "${copyright_paths}")" -eq 225; \
+    notice_archive=/usr/local/share/sharplabnext/wine-coreclr-copyright-notices.tar; \
+    mkdir -p "$(dirname "${notice_archive}")"; \
+    LC_ALL=C tar --format=ustar --mtime=@0 --owner=0 --group=0 --numeric-owner --mode=0644 \
+      --dereference --hard-dereference -C / -cf "${notice_archive}" -T "${copyright_paths}"; \
+    tar -tf "${notice_archive}" > /tmp/sharplabnext-wine-copyrights-actual.list; \
+    cmp --silent "${copyright_paths}" /tmp/sharplabnext-wine-copyrights-actual.list; \
+    tar -tvf "${notice_archive}" | awk 'substr($0, 1, 1) != "-" { exit 1 }'; \
+    notice_sha256="$(awk '/"noticeArchive": \{/ { in_notice = 1; next } in_notice && /"sha256":/ { value = $0; sub(/^[[:space:]]*"sha256": "/, "", value); sub(/",?$/, "", value); print value; exit }' "${manifest}")"; \
+    notice_size="$(awk '/"noticeArchive": \{/ { in_notice = 1; next } in_notice && /"sizeBytes":/ { value = $0; sub(/^[[:space:]]*"sizeBytes": /, "", value); sub(/,?$/, "", value); print value; exit }' "${manifest}")"; \
+    test "$(sha256sum "${notice_archive}" | awk '{print $1}')" = "${notice_sha256}"; \
+    test "$(stat -c '%s' "${notice_archive}")" -eq "${notice_size}"; \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /tmp/sharplabnext-wine-packages "${snapshot_indexes}" "${expected}" "${actual}" \
+      "${copyright_evidence}" "${copyright_checks}" "${copyright_paths}" /tmp/sharplabnext-wine-copyrights-actual.list
+
+ENV WINEPREFIX=/opt/wine-dotnet \
+    WINEARCH=win64 \
+    WINEDEBUG=-all \
+    WINELOADER=/usr/lib/wine/wine64 \
+    WINESERVER=/usr/lib/wine/wineserver64
+
+RUN set -euo pipefail; \
+    mkdir -p "${WINEPREFIX}"; \
+    xvfb-run -a /usr/bin/wineboot-stable --init; \
+    "${WINESERVER}" -w; \
+    test -r "${WINEPREFIX}/system.reg" || { echo 'Wine prefix is missing system.reg.' >&2; exit 1; }; \
+    test "$(awk 'index($0, "#arch=") == 1 { value=substr($0, 7); sub(/\r$/, "", value); print value; exit }' "${WINEPREFIX}/system.reg")" = win64 || { echo 'Wine prefix system.reg does not declare win64.' >&2; exit 1; }; \
+    test -d "${WINEPREFIX}/drive_c/windows/system32" || { echo 'Wine prefix is missing system32.' >&2; exit 1; }; \
+    test "$(od -An -t x1 -j 4 -N 1 /usr/lib/wine/wine64 | tr -d '[:space:]')" = 02 || { echo 'Wine loader is not an ELF64 executable.' >&2; exit 1; }; \
+    rm -rf "${WINEPREFIX}/drive_c/users/root/Temp"/* "${WINEPREFIX}/drive_c/windows/temp"/* /tmp/.wine-* /tmp/.X*-lock /tmp/.X11-unix
+
+LABEL org.opencontainers.image.title="SharpLabNext Wine CoreCLR Operator" \
+      org.opencontainers.image.version="wine-9.0-noble-amd64" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      io.sharplabnext.source.revision="${SOURCE_REVISION}" \
+      io.sharplabnext.source.context="${OPERATOR_SOURCE_CONTEXT}" \
+      io.sharplabnext.development-only="${OPERATOR_DEVELOPMENT_ONLY}" \
+      com.sharplabnext.operator.promotion-eligible="${OPERATOR_PROMOTION_ELIGIBLE}" \
+      io.sharplabnext.operator-only="true" \
+      io.sharplabnext.operator.contract="wine-coreclr-v1" \
+      io.sharplabnext.operator.platform="linux-amd64" \
+      io.sharplabnext.operator.wine-version="9.0" \
+      io.sharplabnext.operator.root="${RUNTIME_DEPS_IMAGE}" \
+      io.sharplabnext.operator.prefix="/opt/wine-dotnet" \
+      io.sharplabnext.operator.prefix-architecture="win64" \
+      io.sharplabnext.component.wine-coreclr-userspace.version="${WINE_CORECLR_USERSPACE_VERSION}" \
+      io.sharplabnext.component.wine-coreclr-userspace.digest="${WINE_CORECLR_USERSPACE_DIGEST}" \
+      io.sharplabnext.component.wine-coreclr-userspace.source-uri="${WINE_CORECLR_USERSPACE_SOURCE_URI}"
+
+WORKDIR /opt
+USER 0:0
+CMD ["/usr/bin/wine-stable", "--version"]

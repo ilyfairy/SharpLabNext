@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
 # Exact Framework candidate derived from one shared operator parent.  The
 # parent contains every row once; this image adds only directory whiteouts for
@@ -10,10 +10,12 @@ ARG PARENT_IMAGE
 ARG CONTROL_IMAGE
 ARG CONTROL_TFM
 ARG WINE_IMAGE
+ARG FRAMEWORK_SOURCE_REVISION
 ARG FRAMEWORK_MATRIX_INPUT_SHA256
 ARG FRAMEWORK_MATRIX_SOURCE_URI
 ARG FRAMEWORK_ROW_OPERATOR_IMAGE
 ARG FRAMEWORK_ROW_DIGEST
+ARG HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT
 
 FROM ${SDK_IMAGE} AS publish
 ARG SDK_IMAGE
@@ -33,6 +35,12 @@ COPY profiles/versions.props ./profiles/versions.props
 COPY src/ ./src/
 RUN dotnet restore \
       src/RuntimeJobs/SharpLabNext.TargetRuntimeRunner/SharpLabNext.TargetRuntimeRunner.csproj \
+      --locked-mode \
+    && dotnet restore \
+      src/RuntimeJobs/SharpLabNext.DesktopClrJitInspector/SharpLabNext.DesktopClrJitInspector.csproj \
+      --locked-mode \
+    && dotnet restore \
+      src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj \
       --locked-mode
 RUN dotnet publish \
       src/RuntimeJobs/SharpLabNext.TargetRuntimeRunner/SharpLabNext.TargetRuntimeRunner.csproj \
@@ -40,6 +48,24 @@ RUN dotnet publish \
       --framework net20 \
       --no-restore \
       --output /target-runtime-runner \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION}
+RUN dotnet publish \
+      src/RuntimeJobs/SharpLabNext.DesktopClrJitInspector/SharpLabNext.DesktopClrJitInspector.csproj \
+      --configuration Release \
+      --framework net20 \
+      --no-restore \
+      --output /desktop-clr-jit-inspector \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION} \
+    && dotnet publish \
+      src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj \
+      --configuration Release \
+      --framework ${CONTROL_TFM} \
+      --no-restore \
+      --output /wine-runner \
       /p:UseAppHost=false \
       /p:ContinuousIntegrationBuild=true \
       /p:SourceRevisionId=${SOURCE_REVISION}
@@ -53,6 +79,8 @@ RUN test -x /usr/share/dotnet/dotnet \
 FROM matrix-parent AS runtime-base
 ARG VERSION
 ARG SOURCE_REVISION
+ARG CANDIDATE_SOURCE_CONTEXT
+ARG CANDIDATE_PROMOTION_ELIGIBLE
 ARG PROFILE_ID
 ARG FRAMEWORK_TARGET_ID
 ARG FRAMEWORK_RUNTIME_VERSION
@@ -62,14 +90,23 @@ ARG RUNTIME_COMPONENT_SOURCE_URI
 ARG CONTROL_IMAGE
 ARG PARENT_IMAGE
 ARG WINE_IMAGE
+ARG FRAMEWORK_SOURCE_REVISION
 ARG FRAMEWORK_MATRIX_INPUT_SHA256
 ARG FRAMEWORK_MATRIX_SOURCE_URI
 ARG FRAMEWORK_ROW_OPERATOR_IMAGE
 ARG FRAMEWORK_ROW_DIGEST
+ARG HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT
 
 RUN set -euo pipefail; \
     test -n "${VERSION}"; \
     test -n "${SOURCE_REVISION}"; \
+    [[ "${FRAMEWORK_SOURCE_REVISION}" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; \
+    test "${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = true || test "${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = false; \
+    if test "${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = true; then \
+      test "${FRAMEWORK_SOURCE_REVISION}" != "${SOURCE_REVISION}"; \
+    else \
+      test "${FRAMEWORK_SOURCE_REVISION}" = "${SOURCE_REVISION}"; \
+    fi; \
     test -n "${PROFILE_ID}"; \
     [[ "${FRAMEWORK_TARGET_ID}" =~ ^[a-z0-9][a-z0-9._-]{0,127}$ ]]; \
     [[ "${FRAMEWORK_RUNTIME_VERSION}" =~ ^[0-9]+(\.[0-9]+){1,2}$ ]]; \
@@ -113,6 +150,8 @@ RUN set -euo pipefail; \
 
 COPY --from=control-image /usr/share/dotnet/ /usr/share/dotnet/
 COPY --from=publish /target-runtime-runner/ /opt/sharplabnext/
+COPY --from=publish /desktop-clr-jit-inspector/ /opt/sharplabnext/
+COPY --from=publish /wine-runner/ /opt/sharplabnext/
 COPY --chmod=0555 deploy/docker/runtime-entrypoint.sh /opt/sharplabnext/runtime-entrypoint.sh
 
 ENV DOTNET_EnableDiagnostics=0 \
@@ -136,11 +175,26 @@ RUN set -eu; \
     frames="$(WINEPREFIX="${prefix}" /usr/lib/wine/wine64 \
       'Z:\\opt\\sharplabnext\\SharpLabNext.TargetRuntimeRunner.exe' self-test)"; \
     test "$(printf '%s\n' "${frames}" | grep --count .)" -eq 1; \
-    printf 'wine-framework-shared-candidate-preflight-v1\n' > /runtime-image-preflight
+    install -d -m 0755 /workspace; \
+    cp /opt/sharplabnext/SharpLabNext.DesktopClrJitInspector.exe* /workspace/; \
+    jit_frames="$(WINEPREFIX="${prefix}" /usr/share/dotnet/dotnet \
+      /opt/sharplabnext/SharpLabNext.WineRunner.dll \
+      desktop-jit \
+      /workspace/SharpLabNext.DesktopClrJitInspector.exe \
+      WindowsAbi)"; \
+    test "$(printf '%s\n' "${jit_frames}" | grep --count .)" -eq 3; \
+    printf '%s\n' "${jit_frames}" | sed -n '1p' | base64 -d | grep -aq 'rcx'; \
+    printf '%s\n' "${jit_frames}" | sed -n '1p' | base64 -d | grep -aq 'rdx'; \
+    printf '%s\n' "${jit_frames}" | sed -n '1p' | base64 -d | grep -aq 'rax'; \
+    printf '%s\n' "${jit_frames}" | sed -n '2p' | base64 -d | grep -aq 'RuntimeVersion'; \
+    rm -f /workspace/SharpLabNext.DesktopClrJitInspector.exe*; \
+    printf 'wine-framework-desktop-clr-jit-preflight-v1\n' > /runtime-image-preflight
 
 FROM runtime-base AS final
 ARG VERSION
 ARG SOURCE_REVISION
+ARG CANDIDATE_SOURCE_CONTEXT
+ARG CANDIDATE_PROMOTION_ELIGIBLE
 ARG PROFILE_ID
 ARG FRAMEWORK_TARGET_ID
 ARG FRAMEWORK_RUNTIME_VERSION
@@ -149,21 +203,31 @@ ARG RUNTIME_COMPONENT_SOURCE_URI
 ARG CONTROL_IMAGE
 ARG PARENT_IMAGE
 ARG WINE_IMAGE
+ARG FRAMEWORK_SOURCE_REVISION
 ARG FRAMEWORK_MATRIX_INPUT_SHA256
 ARG FRAMEWORK_MATRIX_SOURCE_URI
 ARG FRAMEWORK_ROW_OPERATOR_IMAGE
 ARG FRAMEWORK_ROW_DIGEST
+ARG HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT
 COPY --from=preflight /runtime-image-preflight /opt/sharplabnext/.image-preflight
+
+RUN test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}:${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = "committed:true:false" \
+    || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}:${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = "working-tree-development:false:false" \
+    || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}:${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = "committed-historical-framework-input-development:false:true" \
+    || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}:${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = "working-tree-historical-framework-input-development:false:true"
 
 LABEL org.opencontainers.image.title="SharpLabNext shared Wine .NET Framework runtime candidate" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      io.sharplabnext.source.context="${CANDIDATE_SOURCE_CONTEXT}" \
+      com.sharplabnext.runtime-candidate.promotion-eligible="${CANDIDATE_PROMOTION_ELIGIBLE}" \
       com.sharplabnext.runtime-candidate="true" \
       com.sharplabnext.runtime-profile="${PROFILE_ID}" \
       io.sharplabnext.runtime.environment="wine-netfx" \
       io.sharplabnext.runtime.framework-version="${FRAMEWORK_RUNTIME_VERSION}" \
       io.sharplabnext.framework.target-id="${FRAMEWORK_TARGET_ID}" \
       io.sharplabnext.framework.matrix-parent="${PARENT_IMAGE}" \
+      io.sharplabnext.framework.source-revision="${FRAMEWORK_SOURCE_REVISION}" \
       io.sharplabnext.operator-image.wine="${WINE_IMAGE}" \
       io.sharplabnext.framework.matrix-input-sha256="${FRAMEWORK_MATRIX_INPUT_SHA256}" \
       io.sharplabnext.framework.matrix-source-uri="${FRAMEWORK_MATRIX_SOURCE_URI}" \

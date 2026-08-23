@@ -972,6 +972,33 @@ public static class RuntimeProfileValidation
                         $"JIT implementation '{RuntimeOperationImplementationIds.MonoJitInspector}' supports only source mapping kind '{RuntimeJitSourceMappingKinds.None}' and cannot declare a profiler.");
                 }
                 break;
+            case RuntimeOperationImplementationIds.DesktopClrJitInspector:
+                if (!StringComparer.Ordinal.Equals(operation.PathStyle, RuntimeOperationPathStyles.Unix) ||
+                    !StringComparer.Ordinal.Equals(operation.Command.Executable, "/usr/share/dotnet/dotnet"))
+                {
+                    failures.Add(
+                        $"JIT implementation '{RuntimeOperationImplementationIds.DesktopClrJitInspector}' requires Unix paths and executable '/usr/share/dotnet/dotnet'.");
+                }
+                RequireExactInvocation(
+                    operation.Command,
+                    [
+                        WineRunnerAssemblyPath,
+                        "desktop-jit",
+                        RuntimeOperationPlaceholders.EntryAssembly,
+                        RuntimeOperationPlaceholders.MethodFilter
+                    ],
+                    "JIT",
+                    WineRunnerAssemblyPath,
+                    failures);
+                if (!StringComparer.Ordinal.Equals(
+                        operation.SourceMappingKind,
+                        RuntimeJitSourceMappingKinds.None) ||
+                    operation.ProfilerPath is not null)
+                {
+                    failures.Add(
+                        $"JIT implementation '{RuntimeOperationImplementationIds.DesktopClrJitInspector}' supports only source mapping kind '{RuntimeJitSourceMappingKinds.None}' and cannot declare a profiler.");
+                }
+                break;
             default:
                 failures.Add($"JIT operation implementation '{operation.ImplementationId}' is not supported.");
                 break;
@@ -1364,10 +1391,31 @@ public static class RuntimeProfileValidation
             failures.Add(
                 "The wine-netfx runner requires managed .NET Framework PE; mixed PE is restricted to the audited wine-netfx48 profile.");
         }
-        if (profile.Capabilities.Count != 1 ||
-            !StringComparer.Ordinal.Equals(profile.Capabilities[0], "run"))
+        var capabilities = new HashSet<string>(profile.Capabilities, StringComparer.Ordinal);
+        var desktopClrJit = profile.Operations?.Jit;
+        var allowsDesktopClrJit = desktopClrJit is { } &&
+            StringComparer.Ordinal.Equals(
+                desktopClrJit.ImplementationId,
+                RuntimeOperationImplementationIds.DesktopClrJitInspector);
+        if (allowsDesktopClrJit)
         {
-            failures.Add("The wine-netfx runner exposes only the run capability.");
+            if (!capabilities.SetEquals(["run", "jit-asm"]))
+            {
+                failures.Add(
+                    "The wine-netfx Desktop CLR JIT provider requires exactly the run and jit-asm capabilities.");
+            }
+            if (!StringComparer.Ordinal.Equals(
+                    profile.Layout.JitInspectorAssemblyPath,
+                    WineRunnerAssemblyPath))
+            {
+                failures.Add(
+                    $"The wine-netfx Desktop CLR JIT provider requires helper '{WineRunnerAssemblyPath}'.");
+            }
+        }
+        else if (profile.Capabilities.Count != 1 ||
+                 !StringComparer.Ordinal.Equals(profile.Capabilities[0], "run"))
+        {
+            failures.Add("The wine-netfx runner exposes only the run capability unless it uses the Desktop CLR JIT provider.");
         }
         if (profile.Operations?.Run is { ImplementationId: not (
                 RuntimeOperationImplementationIds.TargetRuntimeRunner or

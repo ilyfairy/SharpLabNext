@@ -9,6 +9,7 @@ import {
   normalizeSelectionIntent,
   outputOptionsFor,
   referenceSetById,
+  referenceSetDisplayName,
   referenceSetOptionsFor,
   runtimeById,
   runtimeOptionsFor,
@@ -20,18 +21,28 @@ describe('catalog selector filtering', () => {
     const catalog = JSON.parse(
       readFileSync(resolve(process.cwd(), '..', 'profiles/catalog/catalog.json'), 'utf8'),
     ) as CatalogDocument
+    const runtimeMatrix = JSON.parse(
+      readFileSync(resolve(process.cwd(), '..', 'profiles/runtime-matrix.json'), 'utf8'),
+    ) as { coreClr: Array<{ id: string; version: string }> }
     const csharp = languageById(catalog, 'csharp')
     const roslynMain = catalog.toolchains.find((toolchain) => toolchain.id === 'roslyn-main')
     const mainPreset = catalog.presets.find((preset) => preset.id === 'csharp-main-net11-preview')
+    const requiredRuntimeTarget = (id: string) => {
+      const target = runtimeMatrix.coreClr.find((candidate) => candidate.id === id)
+      if (!target) throw new Error(`Runtime matrix target '${id}' is missing.`)
+      return target
+    }
+    const net10 = requiredRuntimeTarget('dotnet-10')
+    const net11Preview = requiredRuntimeTarget('dotnet-11-preview')
 
     expect(fallbackLanguage.defaultToolchainId).toBe('roslyn-main')
     expect(csharp?.defaultToolchainId).toBe('roslyn-main')
     expect(roslynMain?.defaultReferenceSetId).toBe('net11-preview-ref')
     expect(catalog.referenceSets.find((item) => item.id === 'net10-ref')?.displayName).toBe(
-      '.NET 10',
+      net10.version,
     )
     expect(catalog.referenceSets.find((item) => item.id === 'net11-preview-ref')?.displayName).toBe(
-      '.NET Main',
+      net11Preview.version,
     )
     expect(
       catalog.referenceSets.find((item) => item.id === 'const-generics-ref')?.displayName,
@@ -40,11 +51,11 @@ describe('catalog selector filtering', () => {
       '.NET Framework 4.8',
     )
     expect(catalog.runtimes.find((item) => item.id === 'dotnet-10-linux-x64')?.displayName).toBe(
-      '.NET 10',
+      `.NET ${net10.version} / Linux x64`,
     )
     expect(
       catalog.runtimes.find((item) => item.id === 'dotnet-11-preview-linux-x64')?.displayName,
-    ).toBe('.NET Main')
+    ).toBe(`.NET ${net11Preview.version} / Linux x64`)
     expect(mainPreset).toMatchObject({
       languageId: 'csharp',
       toolchainId: 'roslyn-main',
@@ -52,6 +63,122 @@ describe('catalog selector filtering', () => {
       defaultOutputId: 'decompiled-csharp',
       defaultRuntimeId: 'dotnet-11-preview-linux-x64',
     })
+  })
+
+  it('offers the complete runtime matrix in descending version order', () => {
+    const catalog = JSON.parse(
+      readFileSync(resolve(process.cwd(), '..', 'profiles/catalog/catalog.json'), 'utf8'),
+    ) as CatalogDocument
+
+    expect(referenceSetOptionsFor(catalog, 'roslyn-stable').map((item) => item.id)).toEqual([
+      'net11-preview-ref',
+      'net10-ref',
+      'net9-ref',
+      'net8-ref',
+      'net7-ref',
+      'net6-ref',
+      'net5-ref',
+      'netcoreapp3.1-ref',
+      'netcoreapp3.0-ref',
+      'netcoreapp2.2-ref',
+      'netcoreapp2.1-ref',
+      'netcoreapp2.0-ref',
+    ])
+    expect(referenceSetOptionsFor(catalog, 'roslyn-stable-netfx48').map((item) => item.id)).toEqual(
+      [
+        'netfx48-managed-ref',
+        'netfx472-managed-ref',
+        'netfx471-managed-ref',
+        'netfx47-managed-ref',
+        'netfx462-managed-ref',
+        'netfx461-managed-ref',
+        'netfx46-managed-ref',
+        'netfx452-managed-ref',
+        'netfx451-managed-ref',
+        'netfx45-managed-ref',
+        'netfx40-managed-ref',
+        'netfx35-managed-ref',
+        'netfx30-managed-ref',
+        'netfx20-managed-ref',
+      ],
+    )
+    expect(referenceSetOptionsFor(catalog, 'fsharp-stable').map((item) => item.id)).toEqual([
+      'net11-preview-ref',
+      'net10-ref',
+    ])
+    expect(referenceSetOptionsFor(catalog, 'gsharp-stable').map((item) => item.id)).toEqual([
+      'net10-ref',
+    ])
+    expect(referenceSetOptionsFor(catalog, 'gsharp-legacy-0.3.8').map((item) => item.id)).toEqual([
+      'net10-ref',
+    ])
+    expect(
+      catalog.toolchains.find((item) => item.id === 'roslyn-stable-netfx48')?.displayName,
+    ).toBe('Roslyn Stable 5.6.0 / .NET Framework')
+    expect(catalog.toolchains.find((item) => item.id === 'gsharp-stable')?.displayName).toBe(
+      '0.3.33',
+    )
+    expect(catalog.toolchains.find((item) => item.id === 'gsharp-legacy-0.3.8')?.displayName).toBe(
+      '0.3.8',
+    )
+  })
+
+  it('presents reference-set versions with their complete framework names', () => {
+    const catalog = JSON.parse(
+      readFileSync(resolve(process.cwd(), '..', 'profiles/catalog/catalog.json'), 'utf8'),
+    ) as CatalogDocument
+    const label = (id: string) => {
+      const referenceSet = catalog.referenceSets.find((item) => item.id === id)
+      if (!referenceSet) throw new Error(`Reference set '${id}' is missing.`)
+      return referenceSetDisplayName(referenceSet)
+    }
+
+    expect(label('netfx472-managed-ref')).toBe('.NET Framework v4.7.2')
+    expect(label('netfx48-ref')).toBe('.NET Framework v4.8')
+    expect(label('netcoreapp3.1-ref')).toBe('.NET Core 3.1.32')
+    expect(label('net5-ref')).toBe('.NET 5.0.17')
+    expect(label('net11-preview-ref')).toBe('.NET 11.0.0-preview.6.26359.118')
+    expect(label('const-generics-ref')).toBe('Const Generics')
+  })
+
+  it('offers only runtimes whose framework contract accepts the selected reference set', () => {
+    const catalog = JSON.parse(
+      readFileSync(resolve(process.cwd(), '..', 'profiles/catalog/catalog.json'), 'utf8'),
+    ) as CatalogDocument
+    const ids = (toolchainId: string, referenceSetId: string, outputId: string) =>
+      runtimeOptionsFor(catalog, toolchainId, referenceSetId, outputId).map((item) => item.id)
+
+    expect(ids('roslyn-stable-netfx48', 'netfx47-managed-ref', 'run')).toEqual([
+      'wine-netfx47-linux-x64',
+      'wine-netfx472-linux-x64',
+      'wine-netfx471-linux-x64',
+    ])
+    expect(ids('roslyn-stable-netfx48', 'netfx48-managed-ref', 'run')).toEqual([
+      'wine-netfx48-linux-x64',
+      'mono-6.12-linux-x64',
+    ])
+    expect(ids('roslyn-stable', 'net10-ref', 'jit-asm')).toEqual([
+      'dotnet-10-linux-x64',
+      'wine-dotnet-10-linux-x64',
+      'dotnet-11-preview-linux-x64',
+      'wine-dotnet-11-preview-linux-x64',
+    ])
+    expect(ids('roslyn-stable', 'net5-ref', 'run')).toEqual([
+      'dotnet-5-linux-x64',
+      'wine-dotnet-5-linux-x64',
+      'dotnet-11-preview-linux-x64',
+      'dotnet-10-linux-x64',
+      'dotnet-9-linux-x64',
+      'dotnet-8-linux-x64',
+      'dotnet-7-linux-x64',
+      'dotnet-6-linux-x64',
+      'wine-dotnet-11-preview-linux-x64',
+      'wine-dotnet-10-linux-x64',
+      'wine-dotnet-9-linux-x64',
+      'wine-dotnet-8-linux-x64',
+      'wine-dotnet-7-linux-x64',
+      'wine-dotnet-6-linux-x64',
+    ])
   })
 
   it('filters toolchains by language and outputs by effective capabilities', () => {
@@ -80,6 +207,69 @@ describe('catalog selector filtering', () => {
     ])
     expect(runtimeOptionsFor(catalog, 'roslyn-stable', 'net11-ref').map((item) => item.id)).toEqual(
       ['dotnet-11-linux-x64'],
+    )
+  })
+
+  it('sorts compatible runtimes by numeric version descending instead of catalog insertion order', () => {
+    const catalog = createCatalogFixture()
+    const net11Runtime = catalog.runtimes.find((item) => item.id === 'dotnet-11-linux-x64')
+    if (!net11Runtime) throw new Error('Fixture is missing the .NET 11 runtime.')
+
+    const runtime20 = {
+      ...net11Runtime,
+      id: 'wine-netfx20-linux-x64',
+      displayName: '.NET Framework 2.0 / Wine x64',
+    }
+    const runtime472 = {
+      ...net11Runtime,
+      id: 'wine-netfx472-linux-x64',
+      displayName: '.NET Framework 4.7.2 / Wine x64',
+    }
+    const runtime47 = {
+      ...net11Runtime,
+      id: 'wine-netfx47-linux-x64',
+      displayName: '.NET Framework 4.7 / Wine x64',
+    }
+    net11Runtime.id = 'wine-netfx48-linux-x64'
+    net11Runtime.displayName = '.NET Framework 4.8 / Wine x64'
+    catalog.runtimes = [runtime20, runtime47, net11Runtime, runtime472]
+    catalog.compatibility.push(
+      {
+        id: 'managed-netfx20',
+        kind: 'artifact-runtime',
+        fromId: 'dotnet-managed-pe-v1',
+        toId: runtime20.id,
+        allowed: true,
+        requiredMetadataFeatureTags: [],
+      },
+      {
+        id: 'managed-netfx472',
+        kind: 'artifact-runtime',
+        fromId: 'dotnet-managed-pe-v1',
+        toId: runtime472.id,
+        allowed: true,
+        requiredMetadataFeatureTags: [],
+      },
+      {
+        id: 'managed-netfx47',
+        kind: 'artifact-runtime',
+        fromId: 'dotnet-managed-pe-v1',
+        toId: runtime47.id,
+        allowed: true,
+        requiredMetadataFeatureTags: [],
+      },
+    )
+    const existingEdge = catalog.compatibility.find((item) => item.id === 'managed-net11')
+    if (!existingEdge) throw new Error('Fixture is missing the .NET 11 runtime edge.')
+    existingEdge.toId = net11Runtime.id
+
+    expect(runtimeOptionsFor(catalog, 'roslyn-stable', 'net11-ref').map((item) => item.id)).toEqual(
+      [
+        'wine-netfx48-linux-x64',
+        'wine-netfx472-linux-x64',
+        'wine-netfx47-linux-x64',
+        'wine-netfx20-linux-x64',
+      ],
     )
   })
 

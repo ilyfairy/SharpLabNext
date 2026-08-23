@@ -26,6 +26,12 @@ internal static class CheckedJitSourceMapping
     private static readonly Regex InstructionGroupLabel = new(
         @"^\s*G_M[0-9A-Za-z]+_IG\d+:\s*",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex NativeOffsetLabel = new(
+        @"^\s*G_M[0-9A-Za-z]+_IG\d+:\s*;;\s*offset=0x(?<offset>[0-9A-Fa-f]+)\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex CodeBytesInstruction = new(
+        @"^(?<indent>\s*)(?<bytes>(?:[0-9A-Fa-f]{2})+)(?<spacing>\s{2,})(?<instruction>\S.*)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     public static IReadOnlyDictionary<int, CheckedMethodSourceMap> LoadForDeclaredKind(
         string assemblyPath,
@@ -159,6 +165,11 @@ internal static class CheckedJitSourceMapping
         CheckedSourcePoint? currentPoint = null;
         var firstInstructionLine = -1;
         var lastInstructionLine = -1;
+        var nativeOffset = 0u;
+        var nativeStart = 0u;
+        var nativeEnd = 0u;
+        var hasNativeRange = false;
+        var nativeRangeComplete = true;
         var sawRootMarker = false;
         var invalid = false;
 
@@ -177,15 +188,44 @@ internal static class CheckedJitSourceMapping
                         0,
                         lastInstructionLine,
                         lines[lastInstructionLine].Length),
-                    "sequence-point"));
+                    "sequence-point",
+                    hasNativeRange && nativeRangeComplete && nativeEnd > nativeStart
+                        ? new JitEvidenceRange(
+                            currentPoint.IlOffset,
+                            checked((int)nativeStart),
+                            checked((int)nativeEnd),
+                            currentPoint.DocumentPath,
+                            checked(currentPoint.SourceRange.StartLine + 1),
+                            checked(currentPoint.SourceRange.StartCharacter + 1),
+                            checked(currentPoint.SourceRange.EndLine + 1),
+                            checked(currentPoint.SourceRange.EndCharacter + 1))
+                        : null));
             }
             firstInstructionLine = -1;
             lastInstructionLine = -1;
+            nativeStart = 0;
+            nativeEnd = 0;
+            hasNativeRange = false;
+            nativeRangeComplete = true;
         }
 
         for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
         {
             var line = lines[lineIndex];
+            var nativeLabel = NativeOffsetLabel.Match(line);
+            if (nativeLabel.Success &&
+                uint.TryParse(
+                    nativeLabel.Groups["offset"].Value,
+                    NumberStyles.AllowHexSpecifier,
+                    CultureInfo.InvariantCulture,
+                    out var labelOffset))
+            {
+                CompleteRange();
+                currentPoint = null;
+                nativeOffset = labelOffset;
+                continue;
+            }
+
             var rootMarker = RootOffsetMarker.Match(line);
             if (rootMarker.Success)
             {
@@ -236,11 +276,36 @@ internal static class CheckedJitSourceMapping
                 continue;
             }
 
-            if (currentPoint is not null && IsInstructionLine(line))
+            var isInstruction = IsInstructionLine(line);
+            var instruction = CodeBytesInstruction.Match(line);
+            var hasCodeBytes = instruction.Success &&
+                instruction.Groups["bytes"].Length + instruction.Groups["spacing"].Length >= 16;
+            var instructionStart = nativeOffset;
+            if (hasCodeBytes)
+            {
+                var byteCount = checked((uint)(instruction.Groups["bytes"].Length / 2));
+                nativeOffset = checked(nativeOffset + byteCount);
+            }
+
+            if (currentPoint is not null && isInstruction)
             {
                 if (firstInstructionLine < 0)
                     firstInstructionLine = lineIndex;
                 lastInstructionLine = lineIndex;
+
+                if (hasCodeBytes)
+                {
+                    if (!hasNativeRange)
+                    {
+                        nativeStart = instructionStart;
+                        hasNativeRange = true;
+                    }
+                    nativeEnd = nativeOffset;
+                }
+                else
+                {
+                    nativeRangeComplete = false;
+                }
             }
         }
 

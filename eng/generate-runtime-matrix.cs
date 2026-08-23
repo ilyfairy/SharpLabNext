@@ -6,6 +6,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Diagnostics;
 using System.Security.Cryptography;
 
@@ -45,7 +46,10 @@ try
     var presets = RequiredArray(catalog, "presets");
     var generatedProfiles = new List<string>();
 
-    foreach (var target in RequiredArray(matrix, "coreClr").Select(static item => item!.AsObject()))
+    var coreClrTargets = RequiredArray(matrix, "coreClr")
+        .Select(static item => item!.AsObject())
+        .ToArray();
+    foreach (var target in coreClrTargets)
     {
         var targetId = RequiredString(target, "id");
         var referenceSetId = RequiredString(target, "referenceSetId");
@@ -94,6 +98,7 @@ try
         AddRuntimeEdge(compatibility, "dotnet-managed-pe-v1", wineId, IsVerified(wineCapability),
             "Wine CoreCLR candidate has not passed product-image preflight");
     }
+    SetCoreClrReferenceSetAllowLists(toolchains, coreClrTargets);
 
     var mono = RequiredObject(matrix, "mono");
     var monoCapability = RequiredObject(mono, "capability");
@@ -206,8 +211,14 @@ try
     }
 
     EnsureUniqueCompatibilityRules(compatibility);
-    var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
-    await File.WriteAllTextAsync(catalogPath, catalog.ToJsonString(jsonOptions) + "\n");
+    var jsonOptions = new JsonSerializerOptions
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        NewLine = "\n"
+    };
+    var catalogBytes = SerializeJsonWithLf(catalog, jsonOptions);
+    await File.WriteAllBytesAsync(catalogPath, catalogBytes);
     Console.WriteLine($"Updated {catalogPath}; generated/verified {generatedProfiles.Count} runtime profiles.");
     return 0;
 }
@@ -326,6 +337,33 @@ static ReferenceIdentity ResolveReferenceIdentity(
             $"Target '{targetId}' reference composition source identity does not match its locked digest.");
     }
     return new(resolvedVersion, lockedDigest);
+}
+
+static void SetCoreClrReferenceSetAllowLists(JsonArray toolchains, IReadOnlyList<JsonObject> coreClrTargets)
+{
+    var allowedIds = coreClrTargets
+        .Select(target => RequiredString(target, "referenceSetId"))
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
+    if (allowedIds.Length != coreClrTargets.Count)
+        throw new InvalidDataException("The CoreCLR reference-set allow-list is duplicated.");
+
+    foreach (var toolchainId in new[] { "roslyn-stable", "roslyn-main" })
+    {
+        var toolchain = toolchains
+            .Select(static value => value?.AsObject()
+                ?? throw new InvalidDataException("Catalog toolchain entry is not an object."))
+            .SingleOrDefault(candidate =>
+                string.Equals(candidate["id"]?.GetValue<string>(), toolchainId, StringComparison.Ordinal))
+            ?? throw new InvalidDataException($"Catalog does not contain toolchain '{toolchainId}'.");
+        if (!allowedIds.Contains(toolchain["defaultReferenceSetId"]?.GetValue<string>(), StringComparer.Ordinal))
+        {
+            throw new InvalidDataException(
+                $"The CoreCLR reference-set allow-list does not contain the default for '{toolchainId}'.");
+        }
+        toolchain["allowedReferenceSetIds"] = new JsonArray(
+            allowedIds.Select(static id => JsonValue.Create(id)).ToArray());
+    }
 }
 
 static void SetFrameworkReferenceSetAllowList(JsonArray toolchains, IReadOnlyList<JsonObject> frameworkTargets)
@@ -449,6 +487,8 @@ static void AddRuntime(
         runtime["jitSourceMappingKind"] = sourceMappingKind ?? "none";
     }
     ApplyLifecycle(runtime, target);
+    if (platform == "wine" && effective.Count == 0)
+        runtime["visibility"] = "hidden";
     UpsertCandidate(runtimes, runtimeId, runtime);
 }
 
@@ -555,8 +595,22 @@ static void UpsertCandidate(JsonArray values, string id, JsonObject candidate)
     // A healthy installed entry is the last-known-good release identity. It
     // remains authoritative while a newer matrix candidate is staged.
     if (values[index]?.AsObject() is { } existing && IsSelectable(existing))
+    {
+        CopyLifecycle(candidate, existing);
         return;
+    }
     values[index] = candidate;
+}
+
+static void CopyLifecycle(JsonObject source, JsonObject target)
+{
+    foreach (var key in new[] { "supportStatus", "supportEndDate", "visibility" })
+    {
+        if (source[key] is { } value)
+            target[key] = value.DeepClone();
+        else
+            target.Remove(key);
+    }
 }
 
 static void UpsertCandidateRule(JsonArray values, string id, JsonObject candidate, bool allowed)
@@ -937,6 +991,35 @@ static JsonObject CreateFrameworkProfile(
     {
         ["run"] = Operation(implementation, "wine-z", WineX64Host(), command)
     };
+    string? jitInspector = null;
+    if (effectiveCapabilities.Contains("jit-asm", StringComparer.Ordinal))
+    {
+        var jitImplementation = promotion?.JitImplementation ??
+            RuntimeOperationImplementations.DesktopClrJitInspector;
+        jitInspector = promotion?.JitAssemblyPath ?? RuntimeHelperPaths.WineRunner;
+        var mappingKind = promotion?.JitSourceMappingKind ?? "none";
+        if (!string.Equals(
+                jitImplementation,
+                RuntimeOperationImplementations.DesktopClrJitInspector,
+                StringComparison.Ordinal) ||
+            !string.Equals(jitInspector, RuntimeHelperPaths.WineRunner, StringComparison.Ordinal) ||
+            !string.Equals(mappingKind, "none", StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                $"Framework runtime '{runtimeId}' requires the bounded Desktop CLR JIT provider with sourceMappingKind=none.");
+        }
+        operations["jit"] = Operation(
+            jitImplementation,
+            "unix",
+            "/usr/share/dotnet/dotnet",
+            new JsonArray(
+                RuntimeHelperPaths.WineRunner,
+                "desktop-jit",
+                "{entryAssembly}",
+                "{methodFilter}"),
+            jit: true,
+            sourceMappingKind: mappingKind);
+    }
     var formats = string.Equals(RequiredString(target, "id"), "netfx48", StringComparison.Ordinal)
         ? new[] { "dotnet-framework-managed-pe-v1", "dotnet-framework-mixed-pe-v1" }
         : new[] { "dotnet-framework-managed-pe-v1" };
@@ -944,7 +1027,7 @@ static JsonObject CreateFrameworkProfile(
         formats, operations,
         effectiveCapabilities,
         WineContainer(prefix, "0:0"),
-        WineLayout(WineX64Host(), runner, prefix, "wine-netfx"),
+        WineLayout(WineX64Host(), runner, prefix, "wine-netfx", jitInspector),
         acceptedFrameworkName: ".NETFramework",
         acceptedFrameworkVersion: version,
         acceptedRuntimeFamilies: AcceptedRuntimeFamilies("netfx-clr-wine"),
@@ -1160,14 +1243,25 @@ static JsonObject DotnetLayout(string host, string helper, string? jitInspector 
     return layout;
 }
 
-static JsonObject WineLayout(string host, string runner, string prefix, string runnerKind) => new()
+static JsonObject WineLayout(
+    string host,
+    string runner,
+    string prefix,
+    string runnerKind,
+    string? jitInspector = null)
 {
-    ["runnerKind"] = runnerKind,
-    ["dotNetHostPath"] = host,
-    ["wineHostPath"] = WineX64Host(),
-    ["winePrefixPath"] = prefix,
-    ["runnerAssemblyPath"] = runner
-};
+    var layout = new JsonObject
+    {
+        ["runnerKind"] = runnerKind,
+        ["dotNetHostPath"] = host,
+        ["wineHostPath"] = WineX64Host(),
+        ["winePrefixPath"] = prefix,
+        ["runnerAssemblyPath"] = runner
+    };
+    if (jitInspector is not null)
+        layout["jitInspectorAssemblyPath"] = jitInspector;
+    return layout;
+}
 
 static JsonObject SecurityPolicy(string id) => id switch
 {
@@ -1184,7 +1278,20 @@ static JsonObject SecurityPolicy(string id) => id switch
         ["maximumOutputBytes"] = 1048576,
         ["tmpfsBytes"] = 33554432
     },
-    "runtime-job-wine-netfx" or "runtime-job-wine-jsharp20" => new JsonObject
+    "runtime-job-wine-netfx" => new JsonObject
+    {
+        ["id"] = id,
+        ["memoryBytes"] = 1073741824,
+        ["nanoCpus"] = 1000000000,
+        // Wine + the outer .NET control process + Desktop CLR JIT exceed 64
+        // Linux tasks because the pids cgroup also counts managed threads.
+        ["pidsLimit"] = 128,
+        ["maximumDurationSeconds"] = 30,
+        ["maximumArtifactBytes"] = 67108864,
+        ["maximumOutputBytes"] = 1048576,
+        ["tmpfsBytes"] = 33554432
+    },
+    "runtime-job-wine-jsharp20" => new JsonObject
     {
         ["id"] = id,
         ["memoryBytes"] = 1073741824,
@@ -1593,7 +1700,24 @@ static void WriteProfile(
     }
     if (File.Exists(path) && !options.OverwriteProfiles)
         return;
-    File.WriteAllText(path, profile.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
+    var profileJsonOptions = new JsonSerializerOptions
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        NewLine = "\n"
+    };
+    File.WriteAllBytes(path, SerializeJsonWithLf(profile, profileJsonOptions));
+}
+
+static byte[] SerializeJsonWithLf(JsonNode node, JsonSerializerOptions options)
+{
+    var json = node.ToJsonString(options)
+        .Replace("\r\n", "\n", StringComparison.Ordinal)
+        .Replace('\r', '\n');
+    if (!json.EndsWith('\n'))
+        json += "\n";
+    return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
+        .GetBytes(json);
 }
 
 static HashSet<string> ReadTopLevelProfileIds(string directory)
@@ -1693,6 +1817,7 @@ static class RuntimeOperationImplementations
     public const string LegacyJitInspector = "sharplabnext-legacy-jit-inspector-v1";
     public const string CheckedJitBridge = "sharplabnext-checked-jit-bridge-v1";
     public const string MonoJitInspector = "sharplabnext-mono-jit-inspector-v1";
+    public const string DesktopClrJitInspector = "sharplabnext-desktop-clr-jit-inspector-v1";
     public const string WineRunner = "sharplabnext-wine-runner-v1";
     public const string TargetRuntimeRunner = "sharplabnext-target-runtime-runner-v1";
 }
@@ -1704,6 +1829,7 @@ static class RuntimeHelperPaths
     public const string LegacyJitInspector = "/opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll";
     public const string CheckedJitBridge = "/opt/sharplabnext/SharpLabNext.CheckedJitBridge.dll";
     public const string MonoJitInspector = "/opt/sharplabnext/SharpLabNext.MonoJitInspector.dll";
+    public const string WineRunner = "/opt/sharplabnext/SharpLabNext.WineRunner.dll";
     public const string TargetRuntimeRunner = "/opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe";
     public const string JitProfiler = "/opt/sharplabnext/SharpLabNext.JitProfiler.so";
 }

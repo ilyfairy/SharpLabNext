@@ -319,38 +319,81 @@ internal static class RuntimePromotionSourceClosure
                 $"Runtime promotion build revision '{buildRevision}' is not an ancestor of release revision '{releaseRevision}'.");
         }
 
-        var files = new Dictionary<string, RuntimePromotionFileSnapshot>(StringComparer.Ordinal);
+        var transactionFiles = new Dictionary<string, TransactionFile>(StringComparer.Ordinal);
+        var capturedInputs = new Dictionary<string, TransactionFile>(StringComparer.Ordinal);
         foreach (var trust in promotionTrust.OrderBy(static item => item.RuntimeId, StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Add(files, trust.Receipt);
-            foreach (var evidence in trust.Evidence)
-                Add(files, evidence);
-            foreach (var planFile in await ValidatePlanBindingAsync(
-                         repositoryRoot,
-                         trust,
-                         cancellationToken))
+            await AddVerifiedAsync(transactionFiles, repositoryRoot, trust.Receipt, cancellationToken);
+            if (trust.WineOperatorReceipt is { } wineOperatorReceipt)
             {
-                Add(files, planFile);
+                await AddVerifiedAsync(transactionFiles, repositoryRoot, wineOperatorReceipt.Receipt, cancellationToken);
+                await AddVerifiedAsync(transactionFiles, repositoryRoot, wineOperatorReceipt.Signature, cancellationToken);
+                await AddVerifiedAsync(
+                    capturedInputs,
+                    repositoryRoot,
+                    wineOperatorReceipt.PublicKey,
+                    cancellationToken);
             }
-            Add(files, (await ReadFileAsync(
+            foreach (var evidence in trust.Evidence)
+                await AddVerifiedAsync(transactionFiles, repositoryRoot, evidence, cancellationToken);
+            await AddVerifiedAsync(capturedInputs, repositoryRoot, trust.PerformancePolicy, cancellationToken);
+            var signedPlan = trust.SignedPlan
+                ?? throw new BundleValidationException(
+                    $"Runtime '{trust.RuntimeId}' has no captured signed promotion plan.");
+            Add(capturedInputs, new TransactionFile(signedPlan.PublicKey, signedPlan.PublicKeyBytes));
+            var planBinding = await ValidatePlanBindingAsync(
+                repositoryRoot,
+                trust,
+                capturedInputs[trust.PerformancePolicy.RelativePath],
+                cancellationToken);
+            Add(capturedInputs, planBinding.Candidate);
+            foreach (var planFile in planBinding.TransactionFiles)
+            {
+                Add(transactionFiles, planFile);
+            }
+            Add(transactionFiles, await ReadFileAsync(
                 repositoryRoot,
                 $"profiles/runtimes/{trust.RuntimeId}.json",
-                cancellationToken)).Snapshot);
+                cancellationToken));
         }
         foreach (var relativePath in SharedMaterialPaths)
-            Add(files, (await ReadFileAsync(repositoryRoot, relativePath, cancellationToken)).Snapshot);
+            Add(transactionFiles, await ReadFileAsync(repositoryRoot, relativePath, cancellationToken));
 
         var changes = await inspector.DiffAsync(
             repositoryRoot,
             buildRevision,
             releaseRevision,
             cancellationToken);
-        ValidateExactDiff(files.Keys, changes);
+        ValidateExactDiff(transactionFiles.Keys, changes);
+        var overlap = transactionFiles.Keys.Intersect(capturedInputs.Keys, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (overlap.Length > 0)
+        {
+            throw new BundleValidationException(
+                "Runtime promotion baseline inputs overlap transaction outputs: " +
+                string.Join(", ", overlap));
+        }
+        var capturedFiles = new Dictionary<string, TransactionFile>(StringComparer.Ordinal);
+        foreach (var file in transactionFiles.Values)
+            Add(capturedFiles, file);
+        foreach (var file in capturedInputs.Values)
+            Add(capturedFiles, file);
         return new RuntimePromotionSourceClosureSnapshot(
             buildRevision,
             releaseRevision,
-            files.Values.OrderBy(static item => item.RelativePath, StringComparer.Ordinal).ToArray());
+            transactionFiles.Values
+                .Select(static item => item.Snapshot)
+                .OrderBy(static item => item.RelativePath, StringComparer.Ordinal)
+                .ToArray(),
+            capturedFiles.Values
+                .Select(static item => new RuntimePromotionCapturedFile(
+                    item.RelativePath,
+                    item.Sha256,
+                    item.Bytes))
+                .OrderBy(static item => item.RelativePath, StringComparer.Ordinal)
+                .ToArray());
     }
 
     public static async Task RevalidateAsync(
@@ -376,29 +419,35 @@ internal static class RuntimePromotionSourceClosure
                 snapshot.BuildSourceRevision,
                 snapshot.ReleaseSourceRevision,
                 cancellationToken));
-        foreach (var expected in snapshot.Files)
+        foreach (var expected in snapshot.CapturedFiles)
         {
             var observed = await ReadFileAsync(
                 repositoryRoot,
                 expected.RelativePath,
                 cancellationToken);
-            if (!StringComparer.Ordinal.Equals(expected.Sha256, observed.Sha256))
+            var capturedDigest =
+                $"sha256:{Convert.ToHexStringLower(SHA256.HashData(expected.Bytes))}";
+            if (!StringComparer.Ordinal.Equals(expected.Sha256, capturedDigest) ||
+                !StringComparer.Ordinal.Equals(expected.Sha256, observed.Sha256) ||
+                !expected.Bytes.AsSpan().SequenceEqual(observed.Bytes))
             {
                 throw new BundleValidationException(
-                    $"Runtime promotion transaction file '{expected.RelativePath}' changed before release finalization.");
+                    $"Runtime promotion captured file '{expected.RelativePath}' changed before release finalization.");
             }
         }
     }
 
-    private static async Task<IReadOnlyList<RuntimePromotionFileSnapshot>> ValidatePlanBindingAsync(
+    private static async Task<PlanBindingFiles> ValidatePlanBindingAsync(
         string repositoryRoot,
         RuntimePromotionTrustSnapshot trust,
+        TransactionFile performancePolicy,
         CancellationToken cancellationToken)
     {
-        var plan = await ReadFileAsync(
-            repositoryRoot,
-            $"profiles/runtime-promotion-plans/{trust.RuntimeId}.json",
-            cancellationToken);
+        var signedPlan = trust.SignedPlan
+            ?? throw new BundleValidationException(
+                $"Runtime '{trust.RuntimeId}' has no captured signed promotion plan.");
+        var plan = new TransactionFile(signedPlan.Plan, signedPlan.PlanBytes);
+        var signature = new TransactionFile(signedPlan.Signature, signedPlan.SignatureBytes);
         var preflight = await ReadFileAsync(
             repositoryRoot,
             $"profiles/runtime-promotion-plans/{trust.RuntimeId}.profile.json",
@@ -407,15 +456,11 @@ internal static class RuntimePromotionSourceClosure
             repositoryRoot,
             $"profiles/runtimes/candidates/{trust.RuntimeId}.json",
             cancellationToken);
-        var policy = await ReadFileAsync(
-            repositoryRoot,
-            trust.PerformancePolicy.RelativePath,
-            cancellationToken);
         var context = RuntimePromotionPlanWorkflow.CreateContext(
             candidate.Bytes,
             preflight.Bytes,
-            plan.Bytes,
-            policy.Bytes);
+            signedPlan.PlanBytes,
+            performancePolicy.Bytes);
         if (!StringComparer.Ordinal.Equals(context.ProfileId, trust.RuntimeId) ||
             !StringComparer.Ordinal.Equals(context.PlanSha256, trust.PlanSha256) ||
             !StringComparer.Ordinal.Equals(context.SourceRevision, trust.BuildSourceRevision) ||
@@ -426,7 +471,20 @@ internal static class RuntimePromotionSourceClosure
             throw new BundleValidationException(
                 $"Runtime '{trust.RuntimeId}' promotion plan does not bind its receipt and immutable image.");
         }
-        return [plan.Snapshot, preflight.Snapshot, candidate.Snapshot];
+        if (trust.WineOperatorReceipt is { } wineOperatorReceipt)
+        {
+            if (context.WineOperator != wineOperatorReceipt.Binding)
+            {
+                throw new BundleValidationException(
+                    $"Runtime '{trust.RuntimeId}' promotion plan does not bind its signed Wine operator receipt.");
+            }
+        }
+        else if (context.WineOperator is not null)
+        {
+            throw new BundleValidationException(
+                $"Runtime '{trust.RuntimeId}' promotion plan unexpectedly binds a Wine operator receipt.");
+        }
+        return new PlanBindingFiles([plan, signature, preflight], candidate);
     }
 
     private static void ValidateExactDiff(
@@ -520,11 +578,27 @@ internal static class RuntimePromotionSourceClosure
             bytes);
     }
 
-    private static void Add(
-        Dictionary<string, RuntimePromotionFileSnapshot> files,
-        RuntimePromotionFileSnapshot file)
+    private static async Task AddVerifiedAsync(
+        Dictionary<string, TransactionFile> files,
+        string repositoryRoot,
+        RuntimePromotionFileSnapshot expected,
+        CancellationToken cancellationToken)
     {
-        if (files.TryGetValue(file.RelativePath, out var existing) && existing != file)
+        var observed = await ReadFileAsync(repositoryRoot, expected.RelativePath, cancellationToken);
+        if (!StringComparer.Ordinal.Equals(expected.Sha256, observed.Sha256))
+        {
+            throw new BundleValidationException(
+                $"Runtime promotion transaction file '{expected.RelativePath}' changed after online validation.");
+        }
+        Add(files, observed);
+    }
+
+    private static void Add(
+        Dictionary<string, TransactionFile> files,
+        TransactionFile file)
+    {
+        if (files.TryGetValue(file.RelativePath, out var existing) &&
+            !StringComparer.Ordinal.Equals(existing.Sha256, file.Sha256))
         {
             throw new BundleValidationException(
                 $"Runtime promotions disagree about transaction file '{file.RelativePath}'.");
@@ -547,9 +621,19 @@ internal static class RuntimePromotionSourceClosure
         public string RelativePath => Snapshot.RelativePath;
         public string Sha256 => Snapshot.Sha256;
     }
+
+    private sealed record PlanBindingFiles(
+        IReadOnlyList<TransactionFile> TransactionFiles,
+        TransactionFile Candidate);
 }
 
 internal sealed record RuntimePromotionSourceClosureSnapshot(
     string BuildSourceRevision,
     string ReleaseSourceRevision,
-    IReadOnlyList<RuntimePromotionFileSnapshot> Files);
+    IReadOnlyList<RuntimePromotionFileSnapshot> Files,
+    IReadOnlyList<RuntimePromotionCapturedFile> CapturedFiles);
+
+internal sealed record RuntimePromotionCapturedFile(
+    string RelativePath,
+    string Sha256,
+    byte[] Bytes);

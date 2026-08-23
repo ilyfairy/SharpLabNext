@@ -324,9 +324,15 @@ describe('OperationResults', () => {
     expect(getComputedStyle(document.querySelector('.diagnostics-view') as Element).fontSize).toBe(
       'var(--code-font-size)',
     )
-    expect(
-      getComputedStyle(screen.getByRole('tab', { name: 'Diagnostics (1)' })).fontSize,
-    ).not.toBe('var(--code-font-size)')
+    const diagnosticsTabStyle = getComputedStyle(
+      screen.getByRole('tab', { name: 'Diagnostics (1)' }),
+    )
+    expect(diagnosticsTabStyle.fontSize).not.toBe('var(--code-font-size)')
+    expect(diagnosticsTabStyle.width).toBe('max-content')
+    expect(diagnosticsTabStyle.maxWidth).toBe('none')
+    expect(diagnosticsTabStyle.overflow).toBe('visible')
+    expect(diagnosticsTabStyle.textOverflow).toBe('clip')
+    expect(diagnosticsTabStyle.whiteSpace).toBe('nowrap')
 
     expect(screen.queryByRole('tab', { name: /^Events/ })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Operation events')).not.toBeInTheDocument()

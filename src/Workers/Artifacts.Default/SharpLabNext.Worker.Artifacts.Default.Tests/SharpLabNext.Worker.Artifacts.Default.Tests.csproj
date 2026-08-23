@@ -27,6 +27,7 @@
     <ProjectReference Include="..\SharpLabNext.Worker.Artifacts.Default.Protocol\SharpLabNext.Worker.Artifacts.Default.Protocol.csproj" />
     <ProjectReference Include="..\..\..\RuntimeJobs\SharpLabNext.Runner\SharpLabNext.Runner.csproj" />
     <ProjectReference Include="..\..\..\RuntimeJobs\SharpLabNext.RuntimeProtocol\SharpLabNext.RuntimeProtocol.csproj" />
+    <ProjectReference Include="..\..\..\..\tests\Fixtures\SharpLabNext.RuntimeCapabilityProbe\SharpLabNext.RuntimeCapabilityProbe.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

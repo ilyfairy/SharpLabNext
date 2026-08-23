@@ -86,6 +86,11 @@ const operationImplementations = new Map([
     assembly: '/opt/sharplabnext/SharpLabNext.MonoJitInspector.dll',
     mappingKinds: ['none'],
   }],
+  ['sharplabnext-desktop-clr-jit-inspector-v1', {
+    project: 'src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj',
+    assembly: '/opt/sharplabnext/SharpLabNext.WineRunner.dll',
+    mappingKinds: ['none'],
+  }],
   ['sharplabnext-checked-jit-bridge-v1', {
     project: 'src/RuntimeJobs/SharpLabNext.CheckedJitBridge/SharpLabNext.CheckedJitBridge.csproj',
     assembly: '/opt/sharplabnext/SharpLabNext.CheckedJitBridge.dll',
@@ -323,17 +328,15 @@ test('Catalog runtime IDs are unique', () => {
   assert.equal(new Set(ids).size, ids.length, 'Catalog cannot contain duplicate runtime IDs')
 })
 
-test('EOL rows remain hidden', () => {
-  const resolvedDate = matrix.resolvedAt.slice(0, 10)
+test('the explicitly enabled full runtime matrix remains visible without erasing lifecycle status', () => {
   const lifecycleRows = [...matrix.coreClr, matrix.mono, ...matrix.framework.targets]
 
   for (const row of lifecycleRows) {
-    if (row.supportStatus === 'legacy' || (row.supportEndDate && row.supportEndDate <= resolvedDate)) {
-      assert.equal(row.visibility, 'hidden', `${row.id} is EOL and cannot be visible by default`)
-    }
-    if (row.visibility === 'visible') {
-      assert.notEqual(row.supportStatus, 'legacy', `${row.id} visible row cannot be legacy`)
-    }
+    assert.equal(row.visibility, 'visible', `${row.id} must remain selectable in the full matrix`)
+    assert.ok(
+      ['active', 'maintenance', 'preview', 'legacy', 'experimental'].includes(row.supportStatus),
+      `${row.id} must retain an explicit lifecycle status`,
+    )
   }
 })
 
@@ -359,19 +362,29 @@ test('out-of-scope Wine CoreCLR 2.x and 3.x rows stay explicitly disabled', () =
     const row = coreClrById.get(id)
     assert.deepEqual(row.wineCapability.capabilities, [], `${id} Wine row must not expose a capability`)
     assert.equal(row.wineCapability.promotionState, 'blocked')
-    assert.equal(row.visibility, 'hidden')
+    assert.equal(row.visibility, 'visible', `${id} Linux/reference target must remain selectable`)
+    assert.equal(
+      catalog.runtimes.find(runtime => runtime.id === `wine-${id}-linux-x64`)?.visibility,
+      'hidden',
+      `${id} out-of-scope Wine runtime must remain hidden`,
+    )
     assert.match(row.wineCapability.blockedReason, /outside the requested and tested matrix/i)
   }
 })
 
-test('Wine CoreCLR 5-11 records Run and JIT feasibility separately', () => {
+test('Wine CoreCLR 5-11 records independently verified Run and JIT capabilities', () => {
   for (const id of requiredWineCoreClrIds) {
     const row = coreClrById.get(id)
     const capabilities = row.wineCapability.capabilities
     assert.match(row.runtimeCommit, /^[0-9a-f]{40}$|^[0-9a-f]{64}$/, `${id} must lock its CoreCLR commit`)
     assert.equal(row.jitCommit, row.runtimeCommit, `${id} Wine runtime and JIT commits must match`)
     assert.ok(capabilities.includes('run'), `${id} Wine row must retain the audited Run capability`)
-    assert.equal(row.wineCapability.promotionState, 'blocked', `${id} Wine row has no promotable image receipt`)
+    assert.equal(row.wineCapability.promotionState, 'verified', `${id} Wine row must have an exact promotion receipt`)
+    assert.equal(
+      typeof row.wineCapability.promotionReceipt?.path,
+      'string',
+      `${id} Wine row must bind its immutable receipt`,
+    )
 
     const major = Number.parseInt(row.channel, 10)
     assert.equal(
@@ -466,23 +479,25 @@ for (const [id, expectedMappingKind] of checkedJitExpectations) {
   })
 }
 
-test('Framework 4.0-4.7.2 cannot inherit exact-runtime verification from 4.8', () => {
+test('Framework 4.0-4.7.2 retain independent exact-runtime promotion receipts', () => {
   const compatibilityOnlyVersions = [
     '4.0', '4.5', '4.5.1', '4.5.2', '4.6', '4.6.1', '4.6.2', '4.7', '4.7.1', '4.7.2',
   ]
 
+  const receiptPaths = new Set()
   for (const version of compatibilityOnlyVersions) {
     const row = matrix.framework.targets.find(candidate => candidate.version === version)
     assert.ok(row, `missing Framework ${version}`)
-    assert.equal(row.capability.promotionState, 'blocked', `Framework ${version} is not exact-runtime verified`)
-    assert.equal(row.capability.promotionReceipt, undefined)
-    assert.match(row.capability.blockedReason, /exact|operator image|registry preflight/i)
+    assert.equal(row.capability.promotionState, 'verified', `Framework ${version} must be exact-runtime verified`)
+    assert.equal(typeof row.capability.promotionReceipt?.path, 'string')
+    assert.equal(receiptPaths.has(row.capability.promotionReceipt.path), false)
+    receiptPaths.add(row.capability.promotionReceipt.path)
 
     const exactCatalogRows = catalog.runtimes.filter(runtime =>
       runtime.id === `wine-${row.id}-linux-x64` && runtime.resolvedVersion === version)
     for (const runtime of exactCatalogRows) {
-      assert.equal(runtime.availability?.installed, false)
-      assert.deepEqual(runtime.capabilities, [])
+      assert.equal(runtime.availability?.installed, true)
+      assert.ok(runtime.capabilities.includes('run'))
     }
   }
 })
@@ -508,7 +523,8 @@ test('every installed JIT advertisement resolves to a maintained implementation'
       `${runtime.id} JIT implementation project is missing`,
     )
     assert.ok(
-      operation.command?.argv?.includes(implementation.assembly),
+      operation.command?.argv?.includes(implementation.assembly) ||
+        operation.command?.argv?.includes(`Z:${implementation.assembly.replaceAll('/', '\\')}`),
       `${runtime.id} JIT command does not invoke its maintained implementation`,
     )
     assert.ok(
@@ -518,7 +534,7 @@ test('every installed JIT advertisement resolves to a maintained implementation'
   }
 })
 
-test('released .NET 10 and .NET 11 profiles remain available while newer rows are blocked', () => {
+test('released .NET 10 and .NET 11 profiles agree with their promoted matrix rows', () => {
   for (const id of ['dotnet-10-linux-x64', 'dotnet-11-preview-linux-x64']) {
     const runtime = catalog.runtimes.find(candidate => candidate.id === id)
     assert.ok(runtime, `${id} must remain in the active Catalog`)
@@ -533,14 +549,11 @@ test('released .NET 10 and .NET 11 profiles remain available while newer rows ar
     assert.equal(profile.operations.jit?.sourceMappingKind, 'linux-profiler')
 
     const matrixId = id.replace(/-linux-x64$/, '')
-    const pending = coreClrById.get(matrixId)
-    assert.ok(pending, `${id} must retain a pending matrix row`)
-    assert.equal(pending.linuxCapability.promotionState, 'blocked')
-    assert.notEqual(
-      pending.version,
-      runtime.resolvedVersion,
-      `${id} active and pending versions must not be conflated`,
-    )
+    const promoted = coreClrById.get(matrixId)
+    assert.ok(promoted, `${id} must retain its matrix row`)
+    assert.equal(promoted.linuxCapability.promotionState, 'verified')
+    assert.equal(typeof promoted.linuxCapability.promotionReceipt?.path, 'string')
+    assert.equal(promoted.version, runtime.resolvedVersion)
   }
 })
 

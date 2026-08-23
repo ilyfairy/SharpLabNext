@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using SharpLabNext.Contracts;
 
 namespace SharpLabNext.Artifacts.Contracts;
@@ -19,7 +20,7 @@ public static class RuntimeCapabilityProbeContract
     public const string MetadataPreflightProfileSha256Key = "sharplabnext.preflight-profile-sha256";
 
     public const string ExecutionFlowProcessorId = "artifacts-default";
-    public const string ExecutionFlowProcessorVersion = "1.0.0";
+    public const string ExecutionFlowProcessorVersion = "1.0.1";
     public const string ExecutionFlowTransformId = "runtime-instrumentation-v1";
     public const string ExecutionFlowProfileId = "execution-flow-v1";
     public const string InstrumentationTransformKey = "sharplabnext.instrumentation.transform";
@@ -32,11 +33,16 @@ public static class RuntimeCapabilityProbeContract
 
     private static string ComputeOptionsDigest(TransformArtifactOptions options)
     {
+        var context = new RuntimeCapabilityProbeJsonSerializerContext(
+            ContractJson.CreateCanonicalSerializerOptions());
         var bytes = JsonSerializer.SerializeToUtf8Bytes(
             options,
-            ContractJson.CreateCanonicalSerializerOptions());
+            context.TransformArtifactOptions);
         // Keep the contract binary-compatible with the net8 target. The
         // convenience ToHexStringLower API is only available in newer TFMs.
         return $"sha256:{Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant()}";
     }
 }
+
+[JsonSerializable(typeof(TransformArtifactOptions))]
+internal sealed partial class RuntimeCapabilityProbeJsonSerializerContext : JsonSerializerContext;

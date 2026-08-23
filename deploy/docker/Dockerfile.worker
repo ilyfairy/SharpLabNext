@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
 ARG SDK_IMAGE
 ARG ASPNET_IMAGE
@@ -100,6 +100,130 @@ RUN dotnet run /tools/create-reference-set-attestation.cs -- \
       --source-uri "${NET11_REFERENCE_URL}" \
       --source-archive-digest "sha512:${NET11_REFERENCE_SHA512}"
 
+# This layer belongs only to the Roslyn Stable image. Other workers inherit the
+# two-set target above so they do not carry the complete legacy CoreCLR closure.
+FROM publish AS roslyn-coreclr-reference-sets
+ARG CONFIGURATION=Release
+ARG NETCOREAPP20_REFERENCE_VERSION
+ARG NETCOREAPP20_REFERENCE_SOURCE_URI
+ARG NETCOREAPP20_REFERENCE_SHA512
+ARG NETCOREAPP20_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NETCOREAPP21_REFERENCE_VERSION
+ARG NETCOREAPP21_REFERENCE_SOURCE_URI
+ARG NETCOREAPP21_REFERENCE_SHA512
+ARG NETCOREAPP21_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NETCOREAPP22_REFERENCE_VERSION
+ARG NETCOREAPP22_REFERENCE_SOURCE_URI
+ARG NETCOREAPP22_REFERENCE_SHA512
+ARG NETCOREAPP22_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NETCOREAPP30_REFERENCE_VERSION
+ARG NETCOREAPP30_REFERENCE_SOURCE_URI
+ARG NETCOREAPP30_REFERENCE_SHA512
+ARG NETCOREAPP30_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NETCOREAPP31_REFERENCE_VERSION
+ARG NETCOREAPP31_REFERENCE_SOURCE_URI
+ARG NETCOREAPP31_REFERENCE_SHA512
+ARG NETCOREAPP31_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NET5_REFERENCE_VERSION
+ARG NET5_REFERENCE_SOURCE_URI
+ARG NET5_REFERENCE_SHA512
+ARG NET5_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NET6_REFERENCE_VERSION
+ARG NET6_REFERENCE_SOURCE_URI
+ARG NET6_REFERENCE_SHA512
+ARG NET6_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NET7_REFERENCE_VERSION
+ARG NET7_REFERENCE_SOURCE_URI
+ARG NET7_REFERENCE_SHA512
+ARG NET7_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NET8_REFERENCE_VERSION
+ARG NET8_REFERENCE_SOURCE_URI
+ARG NET8_REFERENCE_SHA512
+ARG NET8_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NET9_REFERENCE_VERSION
+ARG NET9_REFERENCE_SOURCE_URI
+ARG NET9_REFERENCE_SHA512
+ARG NET9_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NET10_REFERENCE_PACK_VERSION
+ARG NET10_REFERENCE_URL
+ARG NET10_REFERENCE_SHA512
+ARG NET10_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NET11_REFERENCE_VERSION
+ARG NET11_REFERENCE_URL
+ARG NET11_REFERENCE_SHA512
+ARG NET11_REFERENCE_PACKAGE_CONTENT_HASH
+COPY profiles/runtime-matrix.json /inputs/runtime-matrix.json
+COPY profiles/lock.json /inputs/lock.json
+COPY eng/materialize-coreclr-reference-sets.cs /tools/materialize-coreclr-reference-sets.cs
+RUN --mount=type=cache,id=sharplabnext-reference-archives,target=/reference-archives,sharing=locked \
+    dotnet build --no-restore \
+      /source/src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj \
+      --configuration "${CONFIGURATION}" \
+      --framework netstandard2.1 \
+      --output /app/sharplab-runtime-netstandard21 \
+    && test -f /app/sharplab-runtime-netstandard21/SharpLab.Runtime.dll \
+    && cd /tools \
+    && NUGET_PACKAGES=/tmp/sharplabnext-nuget dotnet run materialize-coreclr-reference-sets.cs -- \
+      --matrix /inputs/runtime-matrix.json \
+      --lock /inputs/lock.json \
+      --output /reference-sets \
+      --archive-cache /reference-archives \
+      --appsettings-template /source/src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable/appsettings.json \
+      --appsettings-output /generated/appsettings.json \
+      --runtime-assembly /app/sharplab-runtime-netstandard21/SharpLab.Runtime.dll \
+      --netcoreapp20-version "${NETCOREAPP20_REFERENCE_VERSION}" \
+      --netcoreapp20-url "${NETCOREAPP20_REFERENCE_SOURCE_URI}" \
+      --netcoreapp20-sha512 "${NETCOREAPP20_REFERENCE_SHA512}" \
+      --netcoreapp20-content-hash "${NETCOREAPP20_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --netcoreapp21-version "${NETCOREAPP21_REFERENCE_VERSION}" \
+      --netcoreapp21-url "${NETCOREAPP21_REFERENCE_SOURCE_URI}" \
+      --netcoreapp21-sha512 "${NETCOREAPP21_REFERENCE_SHA512}" \
+      --netcoreapp21-content-hash "${NETCOREAPP21_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --netcoreapp22-version "${NETCOREAPP22_REFERENCE_VERSION}" \
+      --netcoreapp22-url "${NETCOREAPP22_REFERENCE_SOURCE_URI}" \
+      --netcoreapp22-sha512 "${NETCOREAPP22_REFERENCE_SHA512}" \
+      --netcoreapp22-content-hash "${NETCOREAPP22_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --netcoreapp30-version "${NETCOREAPP30_REFERENCE_VERSION}" \
+      --netcoreapp30-url "${NETCOREAPP30_REFERENCE_SOURCE_URI}" \
+      --netcoreapp30-sha512 "${NETCOREAPP30_REFERENCE_SHA512}" \
+      --netcoreapp30-content-hash "${NETCOREAPP30_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --netcoreapp31-version "${NETCOREAPP31_REFERENCE_VERSION}" \
+      --netcoreapp31-url "${NETCOREAPP31_REFERENCE_SOURCE_URI}" \
+      --netcoreapp31-sha512 "${NETCOREAPP31_REFERENCE_SHA512}" \
+      --netcoreapp31-content-hash "${NETCOREAPP31_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --net5-version "${NET5_REFERENCE_VERSION}" \
+      --net5-url "${NET5_REFERENCE_SOURCE_URI}" \
+      --net5-sha512 "${NET5_REFERENCE_SHA512}" \
+      --net5-content-hash "${NET5_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --net6-version "${NET6_REFERENCE_VERSION}" \
+      --net6-url "${NET6_REFERENCE_SOURCE_URI}" \
+      --net6-sha512 "${NET6_REFERENCE_SHA512}" \
+      --net6-content-hash "${NET6_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --net7-version "${NET7_REFERENCE_VERSION}" \
+      --net7-url "${NET7_REFERENCE_SOURCE_URI}" \
+      --net7-sha512 "${NET7_REFERENCE_SHA512}" \
+      --net7-content-hash "${NET7_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --net8-version "${NET8_REFERENCE_VERSION}" \
+      --net8-url "${NET8_REFERENCE_SOURCE_URI}" \
+      --net8-sha512 "${NET8_REFERENCE_SHA512}" \
+      --net8-content-hash "${NET8_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --net9-version "${NET9_REFERENCE_VERSION}" \
+      --net9-url "${NET9_REFERENCE_SOURCE_URI}" \
+      --net9-sha512 "${NET9_REFERENCE_SHA512}" \
+      --net9-content-hash "${NET9_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --net10-version "${NET10_REFERENCE_PACK_VERSION}" \
+      --net10-url "${NET10_REFERENCE_URL}" \
+      --net10-sha512 "${NET10_REFERENCE_SHA512}" \
+      --net10-content-hash "${NET10_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      --net11-version "${NET11_REFERENCE_VERSION}" \
+      --net11-url "${NET11_REFERENCE_URL}" \
+      --net11-sha512 "${NET11_REFERENCE_SHA512}" \
+      --net11-content-hash "${NET11_REFERENCE_PACKAGE_CONTENT_HASH}" \
+    && test "$(find /reference-sets -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 12 \
+    && test "$(find /reference-sets -name reference-set.attestation.json -type f | wc -l)" -eq 12 \
+    && test -f /reference-sets/netcoreapp2.0-ref/System.Runtime.dll \
+    && test -f /reference-sets/net11-preview-ref/SharpLab.Runtime.dll
+
 FROM publish AS framework-reference-sets
 COPY profiles/runtime-matrix.json /inputs/runtime-matrix.json
 COPY deploy/docker/roslyn-netfx48-appsettings.json /inputs/appsettings.template.json
@@ -151,6 +275,18 @@ RUN test -n "${ASSEMBLY_NAME}" \
        fi \
     && mkdir -p /var/lib/sharplabnext \
     && chown 1654:1654 /var/lib/sharplabnext
+RUN --mount=type=bind,source=deploy/docker/runtime-measurement-helper.sh,target=/tmp/runtime-measurement-helper.sh \
+    if [ "${ASSEMBLY_NAME}" = "SharpLabNext.RuntimeSupervisor.dll" ]; then \
+      # Keep the image's fixed measurement helper bound to the reviewed source
+      # bytes. Runtime preflight repeats this check against the immutable image.
+      printf '%s  %s\n' \
+        "f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c" \
+        /tmp/runtime-measurement-helper.sh | sha256sum --check --status - \
+      && \
+      install -o root -g root -m 0555 \
+        /tmp/runtime-measurement-helper.sh \
+        /usr/local/bin/sharplabnext-runtime-measurement; \
+    fi
 LABEL org.opencontainers.image.title="${SERVICE_TITLE}" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
@@ -202,6 +338,14 @@ RUN install -d -o 1654 -g 1654 -m 0555 /app/.sharplabnext/licenses
 COPY --from=publish --chown=1654:1654 --chmod=0444 \
     /source/third_party/ILSense/LICENSE /app/.sharplabnext/licenses/ILSense-MIT.txt
 USER 1654:1654
+
+FROM final-base AS final-with-roslyn-coreclr-reference-sets
+ARG NET10_REFERENCE_PACKAGE_CONTENT_HASH
+ARG NET11_REFERENCE_PACKAGE_CONTENT_HASH
+LABEL io.sharplabnext.reference-set.net10-ref="${NET10_REFERENCE_PACKAGE_CONTENT_HASH}" \
+      io.sharplabnext.reference-set.net11-preview-ref="${NET11_REFERENCE_PACKAGE_CONTENT_HASH}"
+COPY --from=roslyn-coreclr-reference-sets --chown=1654:1654 /reference-sets/ /reference-sets/
+COPY --from=roslyn-coreclr-reference-sets --chown=1654:1654 /generated/appsettings.json /app/appsettings.json
 
 FROM final-with-reference-sets AS final-with-framework-reference-sets
 ARG NETFX20_MANAGED_REFERENCE_VERSION

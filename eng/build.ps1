@@ -70,10 +70,16 @@ try {
         Invoke-Checked -FilePath "node" -Arguments @(
             "--test",
             "eng/runtime-profile-channel-validation.test.mjs",
+            "eng/runtime-wine-packages.test.mjs",
+            "eng/build-wine-coreclr-operator.test.mjs",
             "eng/runtime-candidate-input-validation.test.mjs",
             "eng/runtime-framework-installers.test.mjs",
             "eng/build-framework-matrix-context.test.mjs",
             "eng/build-framework-matrix-parent.test.mjs",
+            "eng/committed-source-context.test.mjs",
+            "eng/rebuild-runtime-candidate.test.mjs",
+            "eng/create-runtime-framework-candidate-input.test.mjs",
+            "eng/runtime-matrix-deployment-bridge.test.mjs",
             "eng/runtime-matrix-generator.test.mjs",
             "eng/runtime-promotion-receipt-validation.test.mjs",
             "eng/wine-netfx-framework-preflight.test.mjs"

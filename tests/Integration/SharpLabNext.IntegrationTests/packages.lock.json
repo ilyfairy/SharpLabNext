@@ -604,6 +604,7 @@
       "sharplabnext.winerunner": {
         "type": "Project",
         "dependencies": {
+          "Iced": "[1.21.0, )",
           "SharpLabNext.RuntimeProtocol": "[1.0.0, )"
         }
       },
@@ -619,6 +620,12 @@
         "dependencies": {
           "SharpLabNext.Contracts.Grpc": "[0.1.0, )"
         }
+      },
+      "Iced": {
+        "type": "CentralTransitive",
+        "requested": "[1.21.0, )",
+        "resolved": "1.21.0",
+        "contentHash": "dv5+81Q1TBQvVMSOOOmRcjJmvWcX3BZPZsIq31+RLc5cNft0IHAyNlkdb7ZarOWG913PyBoFDsDXoCIlKmLclg=="
       },
       "OpenTelemetry.Exporter.OpenTelemetryProtocol": {
         "type": "CentralTransitive",

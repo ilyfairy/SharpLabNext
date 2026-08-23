@@ -528,6 +528,9 @@
           "OpenTelemetry.Instrumentation.Runtime": "[1.16.0, )"
         }
       },
+      "sharplabnext.testing": {
+        "type": "Project"
+      },
       "sharplabnext.worker.fsharp": {
         "type": "Project",
         "dependencies": {

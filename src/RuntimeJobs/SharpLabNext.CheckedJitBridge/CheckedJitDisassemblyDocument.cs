@@ -171,7 +171,8 @@ internal static class CheckedJitDisassemblyDocument
                 range.OutputRange.StartCharacter,
                 checked(range.OutputRange.EndLine + lineOffset),
                 range.OutputRange.EndCharacter),
-            range.Precision);
+            range.Precision,
+            range.EvidenceRange);
 
     private static bool TryGetHeaderName(string line, out string name)
     {

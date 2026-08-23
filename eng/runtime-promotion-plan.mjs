@@ -8,6 +8,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import {
@@ -16,6 +17,7 @@ import {
   candidateImageTag,
   candidateMatrixBinding,
   candidateOperationHelpers,
+  candidatePublicBuildInputs,
   validateCandidateBuildInputs,
 } from './build-runtime-candidate.mjs'
 import {
@@ -25,11 +27,35 @@ import {
   inspectGitSourceState,
   validateGitSourceState,
 } from './runtime-promotion-image-binding.mjs'
+import {
+  pullPinnedRuntimeCandidateImage,
+  rebuildRuntimeCandidateFromCommittedSource,
+  requireSameRuntimeCandidateBuild,
+} from './rebuild-runtime-candidate.mjs'
+import {
+  isWinePromotionFamily,
+  loadOwnedWineOperatorBinding,
+  runtimeOperatorReceiptPaths,
+  validateWineOperatorBinding,
+  verifyWineOperatorSourceAtRevision,
+  wineOperatorBinding,
+} from './runtime-wine-operator-binding.mjs'
+import { verifyWineCoreClrOperatorReceipt } from './wine-coreclr-operator-receipt.mjs'
+import {
+  runtimePromotionPlanKeyId,
+  runtimePromotionPlanSignaturePath,
+  serializeRuntimePromotionPlan,
+  sha256 as signatureSha256,
+  signRuntimePromotionPlan,
+  verifyRuntimePromotionPlanSignature,
+} from './runtime-promotion-plan-signature.mjs'
 
 const defaultRepositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const pinnedReferencePattern = /^[^@\s]+@sha256:[0-9a-f]{64}$/
+const digestPattern = /^sha256:[0-9a-f]{64}$/
 const canonicalIdPattern = /^[a-z0-9][a-z0-9._-]{0,127}$/
 const maximumInputBytes = 8 * 1024 * 1024
+const maximumSignatureBytes = 4096
 
 export const runtimePromotionPlanProducerId = 'sharplabnext-runtime-preflight-v1'
 export const runtimePromotionPlanUsage = `Usage:
@@ -47,6 +73,23 @@ export class RuntimePromotionPlanError extends Error {
 
 function sha256(bytes) {
   return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`
+}
+
+function sourceTree(repositoryRoot, revision) {
+  const result = spawnSync('git', ['-C', repositoryRoot, 'rev-parse', `${revision}^{tree}`], {
+    encoding: 'utf8', timeout: 10_000, windowsHide: true, shell: false,
+  })
+  const tree = result.status === 0 ? String(result.stdout).trim() : ''
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(tree)) {
+    throw new RuntimePromotionPlanError('Could not resolve the committed source tree for the promotion plan.')
+  }
+  return tree
+}
+
+function planBuildInputs(target, values) {
+  try { return candidatePublicBuildInputs(target, values) } catch (error) {
+    throw new RuntimePromotionPlanError(error.message, { cause: error })
+  }
 }
 
 function parseJson(bytes, label) {
@@ -240,6 +283,9 @@ function jitLibraryPath(profile, capabilities) {
     return `/opt/wine-dotnet/drive_c/dotnet/shared/Microsoft.NETCore.App/` +
       `${profile.runtimeVersion}/clrjit.dll`
   }
+  if (profile.family === 'mono') {
+    return '/usr/bin/mono-sgen'
+  }
   throw new RuntimePromotionPlanError(
     `Runtime family '${profile.family}' cannot declare a CoreCLR JIT library.`,
   )
@@ -301,15 +347,84 @@ function requireUnchanged(actual, expected, label) {
   }
 }
 
+function wineOperatorLineage(profile, values, inspect) {
+  if (profile.family === 'coreclr-wine') return { kind: 'direct' }
+  if (profile.family !== 'netfx-clr-wine') return undefined
+  const intermediaryReference = values.RUNTIME_MATRIX_FRAMEWORK_PARENT_IMAGE
+  const kind = intermediaryReference === undefined ? 'framework-row' : 'framework-parent'
+  const reference = intermediaryReference ?? values.RUNTIME_MATRIX_WINE_IMAGE
+  if (!pinnedReferencePattern.test(reference ?? '')) {
+    throw new RuntimePromotionPlanError('Wine Framework intermediary lineage must be an immutable image reference.')
+  }
+  const image = inspect(reference)
+  if (!digestPattern.test(image.imageId ?? '') || !Number.isSafeInteger(image.sizeBytes) || image.sizeBytes <= 0) {
+    throw new RuntimePromotionPlanError('Wine Framework intermediary must have an inspected image ID and positive size.')
+  }
+  return { kind, intermediaryReference: reference, intermediaryImageId: image.imageId, intermediarySizeBytes: image.sizeBytes }
+}
+
+function prepareWineOperatorBinding({
+  repositoryRoot, profileId, profile, values, image, inspect, verifyExisting, publicKey, gitShow,
+}) {
+  if (!isWinePromotionFamily(profile.family)) return undefined
+  const lineage = wineOperatorLineage(profile, values, inspect)
+  let loaded
+  try {
+    if (verifyExisting) {
+      loaded = loadOwnedWineOperatorBinding(repositoryRoot, values.SOURCE_REVISION, {
+        publicKey, gitShow,
+      })
+    } else {
+      const receiptPath = values.WINE_CORECLR_OPERATOR_RECEIPT
+      const signaturePath = values.WINE_CORECLR_OPERATOR_RECEIPT_SIG
+      const receiptBytes = readRegularFile(receiptPath, 'Wine operator receipt')
+      const signatureBytes = readRegularFile(signaturePath, 'Wine operator receipt signature')
+      const receipt = verifyWineCoreClrOperatorReceipt(receiptBytes, signatureBytes,
+        publicKey === undefined ? {} : { publicKey })
+      verifyWineOperatorSourceAtRevision(repositoryRoot, receipt, values.SOURCE_REVISION, { gitShow })
+      loaded = { receipt, receiptBytes, signatureBytes, paths: runtimeOperatorReceiptPaths(values.SOURCE_REVISION) }
+    }
+  } catch (error) {
+    throw new RuntimePromotionPlanError(`Wine operator receipt verification failed: ${error.message}`, { cause: error })
+  }
+  const binding = wineOperatorBinding(
+    loaded.receipt, values.SOURCE_REVISION, loaded.receiptBytes, loaded.signatureBytes, lineage,
+  )
+  try { validateWineOperatorBinding(binding, profile.family, values.SOURCE_REVISION) } catch (error) {
+    throw new RuntimePromotionPlanError(error.message, { cause: error })
+  }
+  const labels = image.labels ?? {}
+  if (profile.family === 'coreclr-wine' && labels['io.sharplabnext.operator-image.wine'] !== binding.reference) {
+    throw new RuntimePromotionPlanError('Wine CoreCLR image does not retain the signed clean operator reference.')
+  }
+  if (profile.family === 'netfx-clr-wine') {
+    if (binding.lineageKind === 'framework-parent' &&
+        labels['io.sharplabnext.framework.matrix-parent'] !== binding.intermediaryReference) {
+      throw new RuntimePromotionPlanError('Framework shared-prefix image does not retain its immutable parent lineage.')
+    }
+    if (binding.lineageKind === 'framework-row' &&
+        labels['io.sharplabnext.operator-image.wine'] !== binding.intermediaryReference) {
+      throw new RuntimePromotionPlanError('Framework row image does not retain its immutable row-operator lineage.')
+    }
+    if (binding.lineageKind === 'framework-parent' && labels['io.sharplabnext.operator-image.wine'] !== binding.reference) {
+      throw new RuntimePromotionPlanError('Framework shared-prefix image does not retain the signed clean operator reference.')
+    }
+  }
+  return { binding, ...loaded }
+}
+
 function createAtomicStage(repositoryRoot, relativeOutputPath, bytes) {
   const outputPath = path.join(repositoryRoot, ...relativeOutputPath.split('/'))
   const outputDirectory = path.dirname(outputPath)
   fs.mkdirSync(outputDirectory, { recursive: true })
   const repositoryRealPath = fs.realpathSync(repositoryRoot)
   const directoryRealPath = fs.realpathSync(outputDirectory)
-  const expectedDirectory = path.join(repositoryRealPath, 'profiles', 'runtime-promotion-plans')
-  if (directoryRealPath !== expectedDirectory) {
-    throw new RuntimePromotionPlanError('The runtime promotion plan output directory is not canonical.')
+  const expectedDirectories = new Set([
+    path.join(repositoryRealPath, 'profiles', 'runtime-promotion-plans'),
+    path.join(repositoryRealPath, 'profiles', 'runtime-operator-receipts'),
+  ])
+  if (!expectedDirectories.has(directoryRealPath)) {
+    throw new RuntimePromotionPlanError('The runtime promotion output directory is not canonical.')
   }
   if (fs.existsSync(outputPath)) {
     const existing = fs.lstatSync(outputPath)
@@ -418,15 +533,26 @@ function materializePreflightProfile(profile, image, capabilities) {
   materialized.image = image.reference
   materialized.runtimeImageId = image.imageId
   materialized.capabilities = [...capabilities]
-  return materialized
-}
 
-function canonicalTimestamp(now) {
-  const value = now instanceof Date ? now : new Date(now)
-  if (!Number.isFinite(value.getTime())) {
-    throw new RuntimePromotionPlanError('The promotion plan clock returned an invalid timestamp.')
+  // Candidate profiles may carry a reference-package patch range while the
+  // immutable image has one concrete runtimeVersion.  The supervisor binds
+  // capability-probe artifacts to that concrete framework identity, so the
+  // preflight copy must collapse the range without mutating the candidate.
+  if (Array.isArray(materialized.acceptedFrameworks) &&
+      materialized.acceptedFrameworks.length === 1 &&
+      typeof materialized.runtimeVersion === 'string' &&
+      materialized.runtimeVersion.length > 0) {
+    const [framework] = materialized.acceptedFrameworks
+    if (framework !== null && typeof framework === 'object' &&
+        framework.exactVersion === undefined &&
+        (framework.minimumVersion !== undefined || framework.maximumVersion !== undefined)) {
+      const exactFramework = { ...framework, exactVersion: materialized.runtimeVersion }
+      delete exactFramework.minimumVersion
+      delete exactFramework.maximumVersion
+      materialized.acceptedFrameworks = [exactFramework]
+    }
   }
-  return value.toISOString()
+  return materialized
 }
 
 export function produceRuntimePromotionPlan(input, options = {}) {
@@ -446,9 +572,21 @@ function createOrVerifyRuntimePromotionPlan(input, options, verifyExisting) {
     validateGit = validateGitSourceState,
     inspectImage = inspectDockerImage,
     hashOperations = hashRuntimeOperationHelpers,
-    now = () => new Date(),
+    rebuildCandidate = (candidateTarget, candidateValues, rebuildOptions) =>
+      rebuildRuntimeCandidateFromCommittedSource(candidateTarget, candidateValues, {
+        repositoryRoot,
+        ...rebuildOptions,
+      }),
+    pullPinnedImage = (reference, candidateValues) =>
+      pullPinnedRuntimeCandidateImage(reference, candidateValues, { repositoryRoot }),
+    readSourceTree = sourceTree,
+    signingPrivateKey,
+    planSignaturePublicKey,
+    planSignatureKeyId,
     beforeRecheck,
     beforeStageInstall,
+    operatorReceiptPublicKey,
+    gitShow,
   } = options
   const values = Object.freeze({ ...rawValues })
   const { target, profilePath, pinnedReference, performancePolicyPath } = input
@@ -498,18 +636,24 @@ function createOrVerifyRuntimePromotionPlan(input, options, verifyExisting) {
   const capabilities = selectCapabilities(profile, binding)
   const relativeOutputPath = `profiles/runtime-promotion-plans/${profileId}.json`
   const preflightProfilePath = `profiles/runtime-promotion-plans/${profileId}.profile.json`
+  const signatureRelativePath = runtimePromotionPlanSignaturePath(profileId)
   const performanceEvidencePath =
     `profiles/runtime-promotion-evidence/${profileId}/performance.json`
   const allowedGeneratedPaths = verifyExisting
     ? [
         relativeOutputPath,
         preflightProfilePath,
+        signatureRelativePath,
         performanceEvidencePath,
         `profiles/runtime-promotion-receipts/${profileId}.json`,
         ...capabilities.map(capability =>
           `profiles/runtime-promotion-evidence/${profileId}/${capability}.json`),
       ]
     : []
+  if (isWinePromotionFamily(profile.family)) {
+    const operatorPaths = runtimeOperatorReceiptPaths(values.SOURCE_REVISION)
+    allowedGeneratedPaths.push(operatorPaths.receiptPath, operatorPaths.signaturePath)
+  }
   const existingPlanBytes = verifyExisting
     ? readRegularFile(
         path.join(repositoryRoot, ...relativeOutputPath.split('/')),
@@ -538,6 +682,9 @@ function createOrVerifyRuntimePromotionPlan(input, options, verifyExisting) {
       `${sourceBinding.failures.join('\n- ') || 'the source is development-only'}`,
     )
   }
+  const committedSourceTree = readSourceTree(repositoryRoot, values.SOURCE_REVISION)
+  const buildInputs = planBuildInputs(target, values)
+  const buildInputsBytes = serializeRuntimePromotionPlan(buildInputs)
 
   requireEqual(profile.family, binding.family, 'candidate Runtime Profile family')
   requireEqual(
@@ -565,6 +712,29 @@ function createOrVerifyRuntimePromotionPlan(input, options, verifyExisting) {
   requireEqual(profile.runtimeImageId, candidateReference, 'candidate Runtime Profile image identity')
   const expectedLabels = candidateExpectedImageLabels(target, values)
   const inspect = reference => inspectImage(reference, { cwd: repositoryRoot, env: values })
+  const capturedImage = bindRuntimeCandidateImage({
+    candidateReference,
+    sourceRevision: values.SOURCE_REVISION,
+    expectedLabels,
+    inspect,
+  })
+  let rebuiltImage
+  try {
+    rebuildCandidate(target, values, { allowedDirtyPaths: allowedGeneratedPaths })
+    rebuiltImage = bindRuntimeCandidateImage({
+      candidateReference,
+      sourceRevision: values.SOURCE_REVISION,
+      expectedLabels,
+      inspect,
+    })
+    requireSameRuntimeCandidateBuild(capturedImage, rebuiltImage)
+    pullPinnedImage(pinnedReference, values)
+  } catch (error) {
+    throw new RuntimePromotionPlanError(
+      `Runtime candidate committed-source rebuild failed: ${error.message}`,
+      { cause: error },
+    )
+  }
   const image = bindRuntimeCandidateImage({
     candidateReference,
     pinnedReference,
@@ -572,6 +742,14 @@ function createOrVerifyRuntimePromotionPlan(input, options, verifyExisting) {
     expectedLabels,
     inspect,
   })
+  try {
+    requireSameRuntimeCandidateBuild(rebuiltImage, image)
+  } catch (error) {
+    throw new RuntimePromotionPlanError(
+      `Pinned runtime candidate changed after committed-source rebuild: ${error.message}`,
+      { cause: error },
+    )
+  }
   if (!Number.isSafeInteger(image.sizeBytes) || image.sizeBytes <= 0 ||
       image.sizeBytes > 17_179_869_184) {
     throw new RuntimePromotionPlanError('Docker did not provide a valid positive candidate image Size.')
@@ -583,12 +761,24 @@ function createOrVerifyRuntimePromotionPlan(input, options, verifyExisting) {
   const hashOptions = { cwd: repositoryRoot, env: values }
   const operations = hashOperations(image.imageId, helperSpecifications, hashOptions)
   const componentIdentity = candidateComponentIdentity(target, values)
+  const wineOperator = prepareWineOperatorBinding({
+    repositoryRoot,
+    profileId,
+    profile,
+    values,
+    image,
+    inspect,
+    verifyExisting,
+    publicKey: operatorReceiptPublicKey,
+    gitShow,
+  })
   const sourceMappingKind = profile.operations?.jit?.sourceMappingKind ?? 'not-applicable'
   const jitPath = jitLibraryPath(profile, capabilities)
   const preflightProfile = materializePreflightProfile(profile, image, capabilities)
   const preflightProfileBytes = Buffer.from(`${JSON.stringify(preflightProfile, null, 2)}\n`, 'utf8')
   const plan = {
     schemaVersion: 1,
+    candidateTarget: target,
     profileId,
     profileSha256: sha256(profileBytes),
     matrixTargetId: binding.matrixTargetId,
@@ -601,15 +791,16 @@ function createOrVerifyRuntimePromotionPlan(input, options, verifyExisting) {
       sizeBytes: image.sizeBytes,
     },
     componentIdentity,
+    ...(wineOperator === undefined ? {} : { wineOperator: wineOperator.binding }),
     runtimeIdentity: {
       runtimeCommit: profile.runtimeCommit,
       jitVersion: profile.jitVersion,
       jitCommit: profile.jitCommit,
     },
     sourceRevision: values.SOURCE_REVISION,
-    createdAtUtc: canonicalTimestamp(
-      verifyExisting ? existingPlan?.createdAtUtc : now(),
-    ),
+    sourceTree: committedSourceTree,
+    buildInputs,
+    buildInputsSha256: signatureSha256(buildInputsBytes),
     producer: {
       id: runtimePromotionPlanProducerId,
       sourceRevision: values.SOURCE_REVISION,
@@ -630,7 +821,7 @@ function createOrVerifyRuntimePromotionPlan(input, options, verifyExisting) {
       evidencePath: performanceEvidencePath,
     },
   }
-  const planBytes = Buffer.from(`${JSON.stringify(plan, null, 2)}\n`, 'utf8')
+  const planBytes = serializeRuntimePromotionPlan(plan)
   beforeRecheck?.()
   {
     const repeatedFailures = validateCandidateInputs(target, values)
@@ -678,6 +869,10 @@ function createOrVerifyRuntimePromotionPlan(input, options, verifyExisting) {
     if (!sameJson(repeatedOperations, operations)) {
       throw new RuntimePromotionPlanError('Runtime helper bytes changed before the plan commit.')
     }
+    requireEqual(readSourceTree(repositoryRoot, values.SOURCE_REVISION), committedSourceTree,
+      'The committed source tree')
+    requireUnchanged(serializeRuntimePromotionPlan(planBuildInputs(target, values)), buildInputsBytes,
+      'The formal candidate build inputs')
     if (verifyExisting) {
       requireUnchanged(
         readRegularFile(
@@ -688,6 +883,16 @@ function createOrVerifyRuntimePromotionPlan(input, options, verifyExisting) {
         'The installed runtime promotion plan',
       )
       requireUnchanged(existingPlanBytes, planBytes, 'The installed runtime promotion plan')
+      const signatureBytes = readRegularFile(
+        path.join(repositoryRoot, ...signatureRelativePath.split('/')),
+        'installed runtime promotion plan signature',
+      )
+      try { verifyRuntimePromotionPlanSignature(planBytes, signatureBytes,
+        planSignaturePublicKey === undefined
+          ? {}
+          : { publicKey: planSignaturePublicKey, keyId: planSignatureKeyId }) } catch (error) {
+        throw new RuntimePromotionPlanError(`The installed runtime promotion plan signature is invalid: ${error.message}`, { cause: error })
+      }
       requireUnchanged(
         readRegularFile(
           path.join(repositoryRoot, ...preflightProfilePath.split('/')),
@@ -701,14 +906,75 @@ function createOrVerifyRuntimePromotionPlan(input, options, verifyExisting) {
         preflightProfileBytes,
         'The installed runtime promotion preflight profile',
       )
+      if (wineOperator !== undefined) {
+        const receiptBytes = loadOwnedWineOperatorBinding(
+          repositoryRoot, values.SOURCE_REVISION, {
+            publicKey: operatorReceiptPublicKey, gitShow,
+          },
+        )
+        requireUnchanged(receiptBytes.receiptBytes, wineOperator.receiptBytes, 'The installed Wine operator receipt')
+        requireUnchanged(receiptBytes.signatureBytes, wineOperator.signatureBytes, 'The installed Wine operator signature')
+      }
     } else {
+      const privateKey = signingPrivateKey ?? (() => {
+        const filename = values.RUNTIME_PROMOTION_PLAN_SIGNING_KEY_PATH
+        if (typeof filename !== 'string' || !path.isAbsolute(filename)) {
+          throw new RuntimePromotionPlanError('RUNTIME_PROMOTION_PLAN_SIGNING_KEY_PATH must name an absolute private key file for formal plan production.')
+        }
+        return readRegularFile(filename, 'runtime promotion plan signing key')
+      })()
+      let signature
+      try { signature = signRuntimePromotionPlan(planBytes, privateKey) } catch (error) {
+        throw new RuntimePromotionPlanError(`Could not sign runtime promotion plan: ${error.message}`, { cause: error })
+      }
+      const signatureBytes = Buffer.from(`${signature}\n`, 'utf8')
+      try { verifyRuntimePromotionPlanSignature(planBytes, signatureBytes,
+        planSignaturePublicKey === undefined
+          ? {}
+          : { publicKey: planSignaturePublicKey, keyId: planSignatureKeyId }) } catch (error) {
+        throw new RuntimePromotionPlanError(`Runtime promotion plan signature does not match the fixed public key: ${error.message}`, { cause: error })
+      }
       const preflightProfileStage = createAtomicStage(
         repositoryRoot,
         preflightProfilePath,
         preflightProfileBytes,
       )
       const planStage = createAtomicStage(repositoryRoot, relativeOutputPath, planBytes)
-      installAtomicStages([preflightProfileStage, planStage], beforeStageInstall)
+      const signatureStage = createAtomicStage(repositoryRoot, signatureRelativePath, signatureBytes)
+      const operatorStages = wineOperator === undefined ? [] : [
+        createAtomicStage(repositoryRoot, wineOperator.paths.receiptPath, wineOperator.receiptBytes),
+        createAtomicStage(repositoryRoot, wineOperator.paths.signaturePath, wineOperator.signatureBytes),
+      ]
+      installAtomicStages([preflightProfileStage, planStage, signatureStage, ...operatorStages], beforeStageInstall)
+      try {
+        const reopenedPlan = readRegularFile(
+          path.join(repositoryRoot, ...relativeOutputPath.split('/')),
+          'installed runtime promotion plan',
+        )
+        const reopenedSignature = readRegularFile(
+          path.join(repositoryRoot, ...signatureRelativePath.split('/')),
+          'installed runtime promotion plan signature',
+        )
+        requireUnchanged(reopenedPlan, planBytes, 'The installed runtime promotion plan')
+        requireUnchanged(reopenedSignature, signatureBytes, 'The installed runtime promotion plan signature')
+        verifyRuntimePromotionPlanSignature(reopenedPlan, reopenedSignature,
+          planSignaturePublicKey === undefined
+            ? {}
+            : { publicKey: planSignaturePublicKey, keyId: planSignatureKeyId })
+      } catch (error) {
+        throw new RuntimePromotionPlanError(`Runtime promotion plan reopen verification failed: ${error.message}`, { cause: error })
+      }
+      if (wineOperator !== undefined) {
+        try {
+          const reopened = loadOwnedWineOperatorBinding(repositoryRoot, values.SOURCE_REVISION, {
+            publicKey: operatorReceiptPublicKey, gitShow,
+          })
+          requireUnchanged(reopened.receiptBytes, wineOperator.receiptBytes, 'The installed Wine operator receipt')
+          requireUnchanged(reopened.signatureBytes, wineOperator.signatureBytes, 'The installed Wine operator signature')
+        } catch (error) {
+          throw new RuntimePromotionPlanError(`Wine operator receipt reopen verification failed: ${error.message}`, { cause: error })
+        }
+      }
     }
   }
 

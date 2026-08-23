@@ -7,6 +7,7 @@
   "required": [
     "schemaVersion",
     "planSha256",
+    "planSignature",
     "profileId",
     "matrixTargetId",
     "platform",
@@ -23,6 +24,7 @@
   "properties": {
     "schemaVersion": { "const": 2 },
     "planSha256": { "$ref": "#/$defs/sha256" },
+    "planSignature": { "$ref": "#/$defs/planSignature" },
     "profileId": { "$ref": "#/$defs/id" },
     "matrixTargetId": { "$ref": "#/$defs/id" },
     "platform": { "enum": ["linux", "wine", "mono", "framework"] },
@@ -30,6 +32,7 @@
     "resolvedVersion": { "$ref": "#/$defs/nonEmpty" },
     "image": { "$ref": "#/$defs/image" },
     "componentIdentity": { "$ref": "#/$defs/componentIdentity" },
+    "wineOperator": { "$ref": "#/$defs/wineOperator" },
     "runtimeIdentity": { "$ref": "#/$defs/runtimeIdentity" },
     "operations": { "$ref": "#/$defs/operations" },
     "performance": { "$ref": "#/$defs/performance" },
@@ -45,6 +48,23 @@
     "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
     "nonEmpty": { "type": "string", "minLength": 1, "maxLength": 2048 },
     "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "sourceUri": {
+      "type": "string",
+      "maxLength": 2048,
+      "oneOf": [
+        {
+          "allOf": [
+            { "format": "uri" },
+            {
+              "pattern": "^https://(?![^/?#\\s]*@)[^/?#\\s]+(?:[/?][^#\\s]*)?$"
+            }
+          ]
+        },
+        {
+          "pattern": "^docker://(?:(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]+)?)/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?@sha256:[0-9a-f]{64}$"
+        }
+      ]
+    },
     "sourceDigest": {
       "type": "string",
       "pattern": "^(?:sha256:[0-9a-f]{64}|sha512:[0-9a-f]{128})$"
@@ -74,14 +94,33 @@
       "additionalProperties": false,
       "required": ["sourceUri", "sourceDigest"],
       "properties": {
-        "sourceUri": {
-          "type": "string",
-          "maxLength": 2048,
-          "pattern": "^(?:https://[^\\s]+|docker://[^@\\s]+@sha256:[0-9a-f]{64})$"
-        },
+        "sourceUri": { "$ref": "#/$defs/sourceUri" },
         "sourceDigest": { "$ref": "#/$defs/sourceDigest" }
       }
     },
+    "wineOperator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receiptPath", "receiptSha256", "signaturePath", "signatureSha256", "keyId", "reference", "imageId", "sizeBytes", "sourceRevision", "sourceTree", "lineageKind"],
+      "properties": {
+        "receiptPath": { "$ref": "#/$defs/operatorReceiptPath" },
+        "receiptSha256": { "$ref": "#/$defs/sha256" },
+        "signaturePath": { "$ref": "#/$defs/operatorSignaturePath" },
+        "signatureSha256": { "$ref": "#/$defs/sha256" },
+        "keyId": { "$ref": "#/$defs/sha256" },
+        "reference": { "$ref": "#/$defs/imageReference" },
+        "imageId": { "$ref": "#/$defs/sha256" },
+        "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 17179869184 },
+        "sourceRevision": { "$ref": "#/$defs/gitCommit" },
+        "sourceTree": { "$ref": "#/$defs/gitCommit" },
+        "lineageKind": { "enum": ["direct", "framework-row", "framework-parent"] },
+        "intermediaryReference": { "$ref": "#/$defs/imageReference" },
+        "intermediaryImageId": { "$ref": "#/$defs/sha256" },
+        "intermediarySizeBytes": { "type": "integer", "minimum": 1, "maximum": 17179869184 }
+      }
+    },
+    "operatorReceiptPath": { "type": "string", "pattern": "^profiles/runtime-operator-receipts/wine-coreclr-(?:[0-9a-f]{40}|[0-9a-f]{64})\\.json$" },
+    "operatorSignaturePath": { "type": "string", "pattern": "^profiles/runtime-operator-receipts/wine-coreclr-(?:[0-9a-f]{40}|[0-9a-f]{64})\\.json\\.sig$" },
     "runtimeIdentity": {
       "type": "object",
       "additionalProperties": false,
@@ -90,6 +129,16 @@
         "runtimeCommit": { "$ref": "#/$defs/nonEmpty" },
         "jitVersion": { "$ref": "#/$defs/nonEmpty" },
         "jitCommit": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "planSignature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "keyId"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^profiles/runtime-promotion-plans/[a-z0-9][a-z0-9._-]*\\.json\\.sig$" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "keyId": { "$ref": "#/$defs/sha256" }
       }
     },
     "operationHelper": {
@@ -172,7 +221,7 @@
           "enum": ["not-applicable", "none", "linux-profiler", "checked-jit-debug-info"]
         },
         "mappingSource": {
-          "enum": ["not-applicable", "method", "ordinary", "rich", "checked-jit-debug-info"]
+          "enum": ["not-applicable", "none", "method", "ordinary", "rich", "checked-jit-debug-info"]
         },
         "evidencePath": {
           "type": "string",

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection.Metadata;
+using SharpLabNext.RuntimeProtocol;
 
 namespace SharpLabNext.IntegrationTests;
 
@@ -26,6 +27,10 @@ public sealed class RuntimeCapabilityProbeTests
             "eng",
             "runtime-capability-preflight.cs"));
 
+        Assert.Contains(
+            "RuntimeCapabilityProbeContract.ExecutionFlowOptionsDigest",
+            source,
+            StringComparison.Ordinal);
         Assert.Contains(
             "profiles/runtimes/candidates/{context.ProfileId}.json",
             source,
@@ -87,6 +92,57 @@ public sealed class RuntimeCapabilityProbeTests
             Assert.Contains("outer capability probe failure", text, StringComparison.Ordinal);
             Assert.Contains("inner capability probe failure", text, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public async Task InspectionProbeEmitsValueAndMemoryGraphThroughRunner()
+    {
+        var runnerPath = Path.Combine(AppContext.BaseDirectory, "SharpLabNext.Runner.dll");
+        var startInfo = new ProcessStartInfo("dotnet")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add(runnerPath);
+        startInfo.ArgumentList.Add(CoreClrProbePath());
+        startInfo.ArgumentList.Add("inspection");
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Runtime Runner did not start.");
+        var stderr = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+        var frames = new List<RuntimeFrame>();
+        var reader = new RuntimeFrameLogReader(process.StandardOutput.BaseStream);
+        while (await reader.ReadAsync(
+                   cancellationToken: TestContext.Current.CancellationToken) is { } frame)
+        {
+            frames.Add(frame);
+        }
+
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, process.ExitCode);
+        Assert.Empty(await stderr);
+        var valueFrame = Assert.Single(frames, static frame => frame.Kind == RuntimeFrameKind.Inspection);
+        var value = RuntimeStructuredPayloadCodec.DeserializeInspection(valueFrame.Payload.Span);
+        Assert.Equal("Value", value.Kind);
+        Assert.Equal("Capability Probe Value", value.Title);
+        var graphFrame = Assert.Single(frames, static frame => frame.Kind == RuntimeFrameKind.MemoryGraph);
+        var graph = RuntimeStructuredPayloadCodec.DeserializeInspection(graphFrame.Payload.Span);
+        Assert.Equal("MemoryGraph", graph.Kind);
+        Assert.Single(graph.Graph.Roots);
+        Assert.Single(frames, static frame => frame.Kind == RuntimeFrameKind.Exit);
+    }
+
+    [Fact]
+    public async Task ExecutionFlowProbeModeExecutesTheMultiSequencePointBranch()
+    {
+        using var process = Start(CoreClrProbePath(), "execution-flow");
+        var stderr = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, process.ExitCode);
+        Assert.Empty(await stderr);
     }
 
     [Fact]

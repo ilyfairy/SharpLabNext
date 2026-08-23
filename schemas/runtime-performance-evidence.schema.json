@@ -9,6 +9,7 @@
     "planSha256",
     "profileId",
     "image",
+    "measurementHelper",
     "sourceRevision",
     "policy",
     "capabilities",
@@ -34,6 +35,34 @@
           "minimum": 1,
           "maximum": 17179869184
         }
+      }
+    },
+    "measurementHelper": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation", "image", "entrypoint", "sourceRevision", "contentSha256"],
+      "properties": {
+        "implementation": { "const": "sharplabnext-runtime-cgroup-sidecar-v1" },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reference", "imageId", "sizeBytes"],
+          "properties": {
+            "reference": { "$ref": "#/$defs/runtimeSupervisorImageReference" },
+            "imageId": { "$ref": "#/$defs/sha256" },
+            "sizeBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 17179869184
+            }
+          }
+        },
+        "entrypoint": { "const": "/usr/local/bin/sharplabnext-runtime-measurement" },
+        "sourceRevision": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "contentSha256": { "$ref": "#/$defs/sha256" }
       }
     },
     "sourceRevision": {
@@ -72,7 +101,7 @@
         "memoryLimitBytes"
       ],
       "properties": {
-        "runnerId": { "$ref": "#/$defs/id" },
+        "runnerId": { "const": "runtime-preflight-linux-x64-v2" },
         "operatingSystem": { "const": "linux" },
         "architecture": { "const": "x64" },
         "nanoCpus": {
@@ -113,6 +142,11 @@
       "maxLength": 512,
       "pattern": "^[^@\\s]+@sha256:[0-9a-f]{64}$"
     },
+    "runtimeSupervisorImageReference": {
+      "type": "string",
+      "maxLength": 512,
+      "pattern": "^(?:[^@/\\s]+/)*runtime-supervisor@sha256:[0-9a-f]{64}$"
+    },
     "scenario": {
       "type": "object",
       "additionalProperties": false,
@@ -134,8 +168,10 @@
       "required": [
         "latencyMilliseconds",
         "peakMemoryBytes",
+        "completionPeakMemoryBytes",
         "operationId",
         "resourceSampleCount",
+        "postCompletionResourceSampleCount",
         "completedAtUtc"
       ],
       "properties": {
@@ -149,11 +185,21 @@
           "minimum": 1,
           "maximum": 2147483648
         },
+        "completionPeakMemoryBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483648
+        },
         "operationId": {
           "type": "string",
           "pattern": "^op_[0-9a-f]{32}$"
         },
         "resourceSampleCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "postCompletionResourceSampleCount": {
           "type": "integer",
           "minimum": 1,
           "maximum": 1000000

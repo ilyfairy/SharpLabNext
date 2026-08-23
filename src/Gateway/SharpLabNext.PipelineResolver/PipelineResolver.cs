@@ -299,6 +299,8 @@ public static class PipelineResolver
         if (requestedId is null)
         {
             candidates = catalog.Runtimes.ToArray();
+            Array.Sort(candidates, (left, right) =>
+                CompareRuntimePreference(referenceSet, left, right));
         }
         else
         {
@@ -493,6 +495,7 @@ public static class PipelineResolver
             ContainsAll(runtime.ProvidedMetadataFeatureTags, rule.RequiredMetadataFeatureTags));
         return hasEdge &&
                runtime.AcceptedArtifactFormats.Contains(artifactFormat, StringComparer.Ordinal) &&
+               HasCompatibleRuntimeContract(referenceSet, runtime) &&
                ContainsAll(runtime.ProvidedMetadataFeatureTags, toolchain.MetadataFeatureTags) &&
                ContainsAll(runtime.ProvidedRuntimeFeatureTags, referenceSet.RequiredRuntimeFeatureTags) &&
                ContainsAll(runtime.ProvidedMetadataFeatureTags, referenceSet.MetadataFeatureTags) &&
@@ -500,6 +503,223 @@ public static class PipelineResolver
                    .Where(IsRuntimeCapability)
                    .All(capability => runtime.Capabilities.Contains(capability, StringComparer.Ordinal));
     }
+
+    private static bool HasCompatibleRuntimeContract(
+        ReferenceSetManifest referenceSet,
+        RuntimeManifest runtime)
+    {
+        if (runtime.AcceptedRuntimeFamilies.Count > 0 &&
+            !runtime.AcceptedRuntimeFamilies.Contains(referenceSet.RuntimeFamily, StringComparer.Ordinal))
+        {
+            return false;
+        }
+
+        if (!TryGetReferenceFramework(referenceSet, out var referenceFramework))
+            return runtime.AcceptedFrameworks.Count == 0;
+
+        if (CanRollForwardCoreClr(referenceSet, runtime, referenceFramework))
+            return true;
+
+        if (runtime.AcceptedFrameworks.Count > 0)
+        {
+            return runtime.AcceptedFrameworks.Any(accepted =>
+                AcceptsReferenceFramework(accepted, referenceFramework));
+        }
+
+        // Catalogs published before acceptedFrameworks existed still rely on
+        // artifact-runtime edges and feature tags. CoreCLR is the exception:
+        // its TFM unambiguously prevents a net11 artifact from reaching net10.
+        return !string.Equals(referenceSet.RuntimeFamily, "coreclr", StringComparison.Ordinal) ||
+               !string.Equals(runtime.Family, "coreclr", StringComparison.Ordinal) ||
+               VersionMatchesTargetFramework(runtime.ResolvedVersion, referenceFramework.Version);
+    }
+
+    private static bool CanRollForwardCoreClr(
+        ReferenceSetManifest referenceSet,
+        RuntimeManifest runtime,
+        ReferenceFramework referenceFramework) =>
+        string.Equals(referenceSet.RuntimeFamily, "coreclr", StringComparison.Ordinal) &&
+        string.Equals(referenceFramework.Name, "Microsoft.NETCore.App", StringComparison.Ordinal) &&
+        runtime.Family is "coreclr" or "coreclr-wine" &&
+        TryParseVersion(runtime.ResolvedVersion, out var runtimeVersion) &&
+        CompareAtTargetFrameworkPrecision(referenceFramework.Version, runtimeVersion) <= 0;
+
+    private static int CompareRuntimePreference(
+        ReferenceSetManifest referenceSet,
+        RuntimeManifest left,
+        RuntimeManifest right)
+    {
+        if (!TryGetReferenceFramework(referenceSet, out var referenceFramework))
+            return string.Compare(left.Id, right.Id, StringComparison.Ordinal);
+
+        var specificityOrder = RuntimeVersionSpecificity(left, referenceFramework)
+            .CompareTo(RuntimeVersionSpecificity(right, referenceFramework));
+        if (specificityOrder != 0)
+            return specificityOrder;
+
+        var leftFamilyOrder = string.Equals(left.Family, referenceSet.RuntimeFamily, StringComparison.Ordinal) ? 0 : 1;
+        var rightFamilyOrder = string.Equals(right.Family, referenceSet.RuntimeFamily, StringComparison.Ordinal) ? 0 : 1;
+        var familyOrder = leftFamilyOrder.CompareTo(rightFamilyOrder);
+        if (familyOrder != 0)
+            return familyOrder;
+
+        if (TryParseVersion(left.ResolvedVersion, out var leftVersion) &&
+            TryParseVersion(right.ResolvedVersion, out var rightVersion))
+        {
+            var versionOrder = CompareVersionsDescending(leftVersion, rightVersion);
+            if (versionOrder != 0)
+                return versionOrder;
+        }
+
+        return string.Compare(left.Id, right.Id, StringComparison.Ordinal);
+    }
+
+    private static int RuntimeVersionSpecificity(
+        RuntimeManifest runtime,
+        ReferenceFramework referenceFramework) =>
+        TryParseVersion(runtime.ResolvedVersion, out var runtimeVersion) &&
+        VersionMatchesTargetFramework(runtimeVersion, referenceFramework.Version)
+            ? runtimeVersion.Length - referenceFramework.Version.Length
+            : int.MaxValue;
+
+    private static int CompareVersionsDescending(int[] left, int[] right)
+    {
+        var length = Math.Max(left.Length, right.Length);
+        for (var index = 0; index < length; index++)
+        {
+            var comparison = (index < right.Length ? right[index] : 0)
+                .CompareTo(index < left.Length ? left[index] : 0);
+            if (comparison != 0)
+                return comparison;
+        }
+        return 0;
+    }
+
+    private static bool TryGetReferenceFramework(
+        ReferenceSetManifest referenceSet,
+        out ReferenceFramework referenceFramework)
+    {
+        const string corePrefix = "netcoreapp";
+        const string frameworkPrefix = "netframework";
+        var targetFramework = referenceSet.TargetFramework;
+        string frameworkName;
+        string version;
+
+        if (targetFramework.StartsWith(corePrefix, StringComparison.Ordinal))
+        {
+            frameworkName = "Microsoft.NETCore.App";
+            version = targetFramework[corePrefix.Length..];
+        }
+        else if (targetFramework.StartsWith(frameworkPrefix, StringComparison.Ordinal))
+        {
+            frameworkName = ".NETFramework";
+            version = targetFramework[frameworkPrefix.Length..];
+        }
+        else if (targetFramework.StartsWith("net", StringComparison.Ordinal))
+        {
+            version = targetFramework[3..];
+            if (version.Length == 0)
+            {
+                referenceFramework = default;
+                return false;
+            }
+
+            if (string.Equals(referenceSet.RuntimeFamily, "netfx-clr-wine", StringComparison.Ordinal))
+            {
+                frameworkName = ".NETFramework";
+                if (version.IndexOf('.') < 0)
+                    version = string.Join('.', version.Select(static character => character.ToString()));
+            }
+            else
+            {
+                frameworkName = "Microsoft.NETCore.App";
+            }
+        }
+        else
+        {
+            referenceFramework = default;
+            return false;
+        }
+
+        if (!TryParseVersion(version, out var parsedVersion))
+        {
+            referenceFramework = default;
+            return false;
+        }
+
+        referenceFramework = new ReferenceFramework(frameworkName, parsedVersion);
+        return true;
+    }
+
+    private static bool AcceptsReferenceFramework(
+        RuntimeFrameworkManifest accepted,
+        ReferenceFramework referenceFramework)
+    {
+        if (!string.Equals(accepted.Name, referenceFramework.Name, StringComparison.Ordinal))
+            return false;
+
+        var hasExactVersion = !string.IsNullOrWhiteSpace(accepted.ExactVersion);
+        var hasRange = !string.IsNullOrWhiteSpace(accepted.MinimumVersion) ||
+                       !string.IsNullOrWhiteSpace(accepted.MaximumVersion);
+        if (hasExactVersion == hasRange)
+            return false;
+
+        if (hasExactVersion)
+        {
+            return TryParseVersion(accepted.ExactVersion!, out var exactVersion) &&
+                   VersionMatchesTargetFramework(exactVersion, referenceFramework.Version);
+        }
+
+        return TryParseVersion(accepted.MinimumVersion, out var minimumVersion) &&
+               TryParseVersion(accepted.MaximumVersion, out var maximumVersion) &&
+               CompareAtTargetFrameworkPrecision(referenceFramework.Version, minimumVersion) >= 0 &&
+               CompareAtTargetFrameworkPrecision(referenceFramework.Version, maximumVersion) <= 0;
+    }
+
+    private static bool VersionMatchesTargetFramework(
+        string version,
+        int[] targetFrameworkVersion) =>
+        TryParseVersion(version, out var parsedVersion) &&
+        VersionMatchesTargetFramework(parsedVersion, targetFrameworkVersion);
+
+    private static bool VersionMatchesTargetFramework(
+        int[] version,
+        int[] targetFrameworkVersion) =>
+        version.Length >= targetFrameworkVersion.Length &&
+        version.Take(targetFrameworkVersion.Length).SequenceEqual(targetFrameworkVersion);
+
+    private static int CompareAtTargetFrameworkPrecision(
+        int[] targetFrameworkVersion,
+        int[] boundVersion)
+    {
+        if (boundVersion.Length < targetFrameworkVersion.Length)
+            return -1;
+
+        for (var index = 0; index < targetFrameworkVersion.Length; index++)
+        {
+            var comparison = targetFrameworkVersion[index].CompareTo(boundVersion[index]);
+            if (comparison != 0)
+                return comparison;
+        }
+        return 0;
+    }
+
+    private static bool TryParseVersion(string? value, out int[] version)
+    {
+        version = [];
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var numericPart = value.Split(['-', '+'], 2)[0];
+        var parts = numericPart.Split('.', StringSplitOptions.None);
+        if (parts.Length is < 1 or > 4 || parts.Any(static part => !int.TryParse(part, out _)))
+            return false;
+
+        version = parts.Select(static part => int.Parse(part, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        return true;
+    }
+
+    private readonly record struct ReferenceFramework(string Name, int[] Version);
 
     private static void EnsureOutputSupported(
         LanguageManifest language,

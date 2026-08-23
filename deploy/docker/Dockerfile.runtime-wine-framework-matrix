@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
 # Candidate-only .NET Framework under Wine image.  The operator-supplied Wine
 # image contains initialized x64 CLR 2 and CLR 4 layout paths. Each build still
@@ -29,6 +29,12 @@ COPY profiles/versions.props ./profiles/versions.props
 COPY src/ ./src/
 RUN dotnet restore \
       src/RuntimeJobs/SharpLabNext.TargetRuntimeRunner/SharpLabNext.TargetRuntimeRunner.csproj \
+      --locked-mode \
+    && dotnet restore \
+      src/RuntimeJobs/SharpLabNext.DesktopClrJitInspector/SharpLabNext.DesktopClrJitInspector.csproj \
+      --locked-mode \
+    && dotnet restore \
+      src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj \
       --locked-mode
 RUN dotnet publish \
       src/RuntimeJobs/SharpLabNext.TargetRuntimeRunner/SharpLabNext.TargetRuntimeRunner.csproj \
@@ -36,6 +42,24 @@ RUN dotnet publish \
       --framework net20 \
       --no-restore \
       --output /target-runtime-runner \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION}
+RUN dotnet publish \
+      src/RuntimeJobs/SharpLabNext.DesktopClrJitInspector/SharpLabNext.DesktopClrJitInspector.csproj \
+      --configuration Release \
+      --framework net20 \
+      --no-restore \
+      --output /desktop-clr-jit-inspector \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION} \
+    && dotnet publish \
+      src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj \
+      --configuration Release \
+      --framework ${CONTROL_TFM} \
+      --no-restore \
+      --output /wine-runner \
       /p:UseAppHost=false \
       /p:ContinuousIntegrationBuild=true \
       /p:SourceRevisionId=${SOURCE_REVISION}
@@ -77,6 +101,8 @@ RUN test -x /usr/share/dotnet/dotnet \
 FROM wine-source AS runtime-base
 ARG VERSION
 ARG SOURCE_REVISION
+ARG CANDIDATE_SOURCE_CONTEXT
+ARG CANDIDATE_PROMOTION_ELIGIBLE
 ARG PROFILE_ID
 ARG NETFX_RUNTIME_VERSION
 ARG RUNTIME_COMPONENT_DIGEST
@@ -99,6 +125,8 @@ RUN test -n "${VERSION}" \
 COPY --from=control-image /usr/share/dotnet/ /usr/share/dotnet/
 COPY --chmod=0555 deploy/docker/runtime-entrypoint.sh /opt/sharplabnext/runtime-entrypoint.sh
 COPY --from=publish /target-runtime-runner/ /opt/sharplabnext/
+COPY --from=publish /desktop-clr-jit-inspector/ /opt/sharplabnext/
+COPY --from=publish /wine-runner/ /opt/sharplabnext/
 
 RUN test -x /usr/bin/wine-stable \
     && test -x /usr/lib/wine/wine64 \
@@ -143,11 +171,26 @@ RUN set -eu; \
     frames="$(WINEPREFIX="${prefix}" /usr/lib/wine/wine64 \
       'Z:\\opt\\sharplabnext\\SharpLabNext.TargetRuntimeRunner.exe' self-test)"; \
     test "$(printf '%s\n' "${frames}" | grep --count .)" -eq 1; \
-    printf 'wine-framework-target-runner-preflight-v1\n' > /runtime-image-preflight
+    install -d -m 0755 /workspace; \
+    cp /opt/sharplabnext/SharpLabNext.DesktopClrJitInspector.exe* /workspace/; \
+    jit_frames="$(WINEPREFIX="${prefix}" /usr/share/dotnet/dotnet \
+      /opt/sharplabnext/SharpLabNext.WineRunner.dll \
+      desktop-jit \
+      /workspace/SharpLabNext.DesktopClrJitInspector.exe \
+      WindowsAbi)"; \
+    test "$(printf '%s\n' "${jit_frames}" | grep --count .)" -eq 3; \
+    printf '%s\n' "${jit_frames}" | sed -n '1p' | base64 -d | grep -aq 'rcx'; \
+    printf '%s\n' "${jit_frames}" | sed -n '1p' | base64 -d | grep -aq 'rdx'; \
+    printf '%s\n' "${jit_frames}" | sed -n '1p' | base64 -d | grep -aq 'rax'; \
+    printf '%s\n' "${jit_frames}" | sed -n '2p' | base64 -d | grep -aq 'RuntimeVersion'; \
+    rm -f /workspace/SharpLabNext.DesktopClrJitInspector.exe*; \
+    printf 'wine-framework-desktop-clr-jit-preflight-v1\n' > /runtime-image-preflight
 
 FROM runtime-base AS final
 ARG VERSION
 ARG SOURCE_REVISION
+ARG CANDIDATE_SOURCE_CONTEXT
+ARG CANDIDATE_PROMOTION_ELIGIBLE
 ARG PROFILE_ID
 ARG NETFX_RUNTIME_VERSION
 ARG RUNTIME_COMPONENT_DIGEST
@@ -156,9 +199,14 @@ ARG CONTROL_IMAGE
 ARG WINE_IMAGE
 COPY --from=preflight /runtime-image-preflight /opt/sharplabnext/.image-preflight
 
+RUN test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "committed:true" \
+    || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "working-tree-development:false"
+
 LABEL org.opencontainers.image.title="SharpLabNext Wine .NET Framework Matrix Runtime Candidate" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      io.sharplabnext.source.context="${CANDIDATE_SOURCE_CONTEXT}" \
+      com.sharplabnext.runtime-candidate.promotion-eligible="${CANDIDATE_PROMOTION_ELIGIBLE}" \
       org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
       com.sharplabnext.runtime-candidate="true" \
       com.sharplabnext.runtime-profile="${PROFILE_ID}" \

@@ -9,15 +9,45 @@ import { fileURLToPath } from 'node:url'
 
 import { findRuntimeMatrixBinding } from './promote-runtime-matrix.mjs'
 import {
-  escrowRuntimePromotionProfile,
-  importPromoteRuntimeProfile,
+  escrowRuntimePromotionProfile as escrowRuntimePromotionProfileImpl,
+  importPromoteRuntimeProfile as importPromoteRuntimeProfileImpl,
   initRuntimePromotionBatch,
-  runtimePromotionBatchStatus,
-  verifyRuntimePromotionBatchComplete,
+  runtimePromotionBatchStatus as runtimePromotionBatchStatusImpl,
+  verifyRuntimePromotionBatchComplete as verifyRuntimePromotionBatchCompleteImpl,
 } from './runtime-promotion-batch.mjs'
 import { formalRuntimeCandidateProfileIds } from './runtime-candidate-environment.mjs'
+import {
+  runtimePromotionPlanSignaturePath,
+  serializeRuntimePromotionPlan,
+  signRuntimePromotionPlan,
+} from './runtime-promotion-plan-signature.mjs'
+import { runtimeOperatorReceiptPaths } from './runtime-wine-operator-binding.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const planKeys = crypto.generateKeyPairSync('ed25519')
+const planKeyId = `sha256:${crypto.createHash('sha256').update(
+  planKeys.publicKey.export({ type: 'spki', format: 'der' }),
+).digest('hex')}`
+const planSignatureOptions = Object.freeze({
+  planSignaturePublicKey: planKeys.publicKey,
+  planSignatureKeyId: planKeyId,
+})
+
+function escrowRuntimePromotionProfile(input, options = {}) {
+  return escrowRuntimePromotionProfileImpl(input, { ...planSignatureOptions, ...options })
+}
+
+function importPromoteRuntimeProfile(input, options = {}) {
+  return importPromoteRuntimeProfileImpl(input, { ...planSignatureOptions, ...options })
+}
+
+function runtimePromotionBatchStatus(input, options = {}) {
+  return runtimePromotionBatchStatusImpl(input, { ...planSignatureOptions, ...options })
+}
+
+function verifyRuntimePromotionBatchComplete(input, options = {}) {
+  return verifyRuntimePromotionBatchCompleteImpl(input, { ...planSignatureOptions, ...options })
+}
 
 function jsonBytes(value) {
   return Buffer.from(`${JSON.stringify(value, null, 2)}\n`)
@@ -79,6 +109,23 @@ function initialize(fixture) {
   })
 }
 
+function hideWorkingTreeChange(root, relativePath) {
+  runGit(root, ['update-index', '--assume-unchanged', '--', relativePath])
+}
+
+function ignoreWorkingTreePath(root, relativePath) {
+  fs.appendFileSync(path.join(root, '.git', 'info', 'exclude'), `/${relativePath}\n`)
+}
+
+function assertBatchWasNotCreated(fixture) {
+  assert.equal(fs.existsSync(path.join(
+    fixture.aggregate,
+    '.tmp',
+    'runtime-promotion-batches',
+    fixture.batchId,
+  )), false)
+}
+
 function outputIdentity(profileId) {
   const hash = crypto.createHash('sha256').update(profileId).digest('hex')
   const other = crypto.createHash('sha256').update(`image:${profileId}`).digest('hex')
@@ -89,7 +136,7 @@ function outputIdentity(profileId) {
   }
 }
 
-function writePromotionOutputs(root, profileId, sourceRevision) {
+function writePromotionOutputs(root, profileId, sourceRevision, options = {}) {
   const image = outputIdentity(profileId)
   const preflightPath = `profiles/runtime-promotion-plans/${profileId}.profile.json`
   const planPath = `profiles/runtime-promotion-plans/${profileId}.json`
@@ -97,14 +144,41 @@ function writePromotionOutputs(root, profileId, sourceRevision) {
   const evidencePath = `profiles/runtime-promotion-evidence/${profileId}/run.json`
   const performancePath = `profiles/runtime-promotion-evidence/${profileId}/performance.json`
   const preflightBytes = jsonBytes({ id: profileId, image: image.reference, runtimeImageId: image.imageId })
+  const operatorPaths = options.wineOperator
+    ? runtimeOperatorReceiptPaths(sourceRevision)
+    : undefined
+  const operatorReceiptBytes = operatorPaths === undefined
+    ? undefined
+    : canonicalBytes({ operator: 'shared-test-operator', sourceRevision })
+  const operatorSignatureBytes = operatorPaths === undefined
+    ? undefined
+    : Buffer.from('shared-test-operator-signature\n')
+  const wineOperator = operatorPaths === undefined
+    ? undefined
+    : {
+        receiptPath: operatorPaths.receiptPath,
+        receiptSha256: digest(operatorReceiptBytes),
+        signaturePath: operatorPaths.signaturePath,
+        signatureSha256: digest(operatorSignatureBytes),
+        keyId: `sha256:${'1'.repeat(64)}`,
+        reference: `registry.example/sharplabnext/operator-wine@sha256:${'2'.repeat(64)}`,
+        imageId: `sha256:${'3'.repeat(64)}`,
+        sizeBytes: 4096,
+        sourceRevision,
+        sourceTree: '4'.repeat(40),
+        lineageKind: 'direct',
+      }
   const plan = {
     schemaVersion: 1,
     profileId,
     sourceRevision,
     image,
     preflightProfile: { path: preflightPath, sha256: digest(preflightBytes) },
+    ...(wineOperator === undefined ? {} : { family: 'coreclr-wine', wineOperator }),
   }
-  const planBytes = jsonBytes(plan)
+  const planBytes = serializeRuntimePromotionPlan(plan)
+  const planSignaturePath = runtimePromotionPlanSignaturePath(profileId)
+  const planSignatureBytes = Buffer.from(`${signRuntimePromotionPlan(planBytes, planKeys.privateKey)}\n`)
   const planSha256 = digest(planBytes)
   const evidenceBytes = jsonBytes({
     schemaVersion: 1,
@@ -126,7 +200,13 @@ function writePromotionOutputs(root, profileId, sourceRevision) {
     profileId,
     sourceRevision,
     image,
+    ...(wineOperator === undefined ? {} : { family: 'coreclr-wine', wineOperator }),
     planSha256,
+    planSignature: {
+      path: planSignaturePath,
+      sha256: digest(planSignatureBytes),
+      keyId: planKeyId,
+    },
     checks: [{
       capability: 'run',
       evidencePath,
@@ -141,9 +221,14 @@ function writePromotionOutputs(root, profileId, sourceRevision) {
   const files = new Map([
     [preflightPath, preflightBytes],
     [planPath, planBytes],
+    [planSignaturePath, planSignatureBytes],
     [receiptPath, receiptBytes],
     [evidencePath, evidenceBytes],
     [performancePath, performanceBytes],
+    ...(operatorPaths === undefined ? [] : [
+      [operatorPaths.receiptPath, operatorReceiptBytes],
+      [operatorPaths.signaturePath, operatorSignatureBytes],
+    ]),
   ])
   for (const [relative, bytes] of files) {
     const filename = path.join(root, ...relative.split('/'))
@@ -154,7 +239,7 @@ function writePromotionOutputs(root, profileId, sourceRevision) {
 }
 
 function escrowProfile(fixture, profileId, options = {}) {
-  const material = writePromotionOutputs(fixture.producer, profileId, fixture.sourceRevision)
+  const material = writePromotionOutputs(fixture.producer, profileId, fixture.sourceRevision, options)
   const calls = []
   const result = escrowRuntimePromotionProfile({
     batchId: fixture.batchId,
@@ -162,6 +247,7 @@ function escrowProfile(fixture, profileId, options = {}) {
     producerRoot: fixture.producer,
     aggregateRoot: fixture.aggregate,
   }, {
+    ...planSignatureOptions,
     ...options,
     promotionRunner(input) {
       calls.push(input)
@@ -258,6 +344,100 @@ test('init rejects dirty or mismatched producer source and an active global lock
   fs.rmSync(lockPath)
 })
 
+for (const rootName of ['aggregate', 'producer']) {
+  for (const baselineDefect of [
+    {
+      name: 'a verified formal row',
+      prepare(fixture, root, profileId) {
+        const relativePath = 'profiles/runtime-matrix.json'
+        hideWorkingTreeChange(root, relativePath)
+        const filename = path.join(root, ...relativePath.split('/'))
+        const matrix = JSON.parse(fs.readFileSync(filename, 'utf8'))
+        findRuntimeMatrixBinding(matrix, profileId).capability.promotionState = 'verified'
+        fs.writeFileSync(filename, jsonBytes(matrix))
+      },
+      error: /promotionState 'blocked'/,
+    },
+    {
+      name: 'a promotion receipt property',
+      prepare(fixture, root, profileId) {
+        const relativePath = 'profiles/runtime-matrix.json'
+        hideWorkingTreeChange(root, relativePath)
+        const filename = path.join(root, ...relativePath.split('/'))
+        const matrix = JSON.parse(fs.readFileSync(filename, 'utf8'))
+        findRuntimeMatrixBinding(matrix, profileId).capability.promotionReceipt = null
+        fs.writeFileSync(filename, jsonBytes(matrix))
+      },
+      error: /must not have a promotionReceipt/,
+    },
+    ...[
+      ['a stale receipt', 'profiles/runtime-promotion-receipts/{profileId}.json', 'stale-receipt'],
+      ['a stale promotion plan', 'profiles/runtime-promotion-plans/{profileId}.json', 'stale-plan'],
+      ['a stale promotion plan signature', 'profiles/runtime-promotion-plans/{profileId}.json.sig', 'stale-plan-signature'],
+      ['a stale preflight plan', 'profiles/runtime-promotion-plans/{profileId}.profile.json', 'stale-preflight'],
+    ].map(([name, template, contents]) => ({
+      name,
+      prepare(fixture, root, profileId) {
+        const relativePath = template.replace('{profileId}', profileId)
+        ignoreWorkingTreePath(root, relativePath)
+        const filename = path.join(root, ...relativePath.split('/'))
+        fs.mkdirSync(path.dirname(filename), { recursive: true })
+        fs.writeFileSync(filename, `${contents}\n`)
+      },
+      error: /contains stale promotion output/,
+    })),
+    {
+      name: 'stale promotion evidence',
+      prepare(fixture, root, profileId) {
+        const relativePath = `profiles/runtime-promotion-evidence/${profileId}/stale.json`
+        ignoreWorkingTreePath(root, relativePath)
+        const filename = path.join(root, ...relativePath.split('/'))
+        fs.mkdirSync(path.dirname(filename), { recursive: true })
+        fs.writeFileSync(filename, 'stale-evidence\n')
+      },
+      error: /contains stale promotion evidence/,
+    },
+    {
+      name: 'a stale Wine operator receipt signature',
+      prepare(fixture, root) {
+        const relativePath =
+          `profiles/runtime-operator-receipts/wine-coreclr-${fixture.sourceRevision}.json.sig`
+        ignoreWorkingTreePath(root, relativePath)
+        const filename = path.join(root, ...relativePath.split('/'))
+        fs.mkdirSync(path.dirname(filename), { recursive: true })
+        fs.writeFileSync(filename, 'stale-operator-signature\n')
+      },
+      error: /contains stale promotion output/,
+    },
+  ]) {
+    test(`init rejects ${baselineDefect.name} in the ${rootName} pristine baseline`, t => {
+      const fixture = createRepositories(t)
+      const root = fixture[rootName]
+      const profileId = formalRuntimeCandidateProfileIds(JSON.parse(fs.readFileSync(
+        path.join(root, 'profiles', 'runtime-matrix.json'),
+        'utf8',
+      )))[0]
+      baselineDefect.prepare(fixture, root, profileId)
+      assert.throws(() => initialize(fixture), baselineDefect.error)
+      assertBatchWasNotCreated(fixture)
+    })
+  }
+}
+
+test('init permits empty promotion evidence directories in both clean worktrees', t => {
+  const fixture = createRepositories(t)
+  const profileId = formalRuntimeCandidateProfileIds(JSON.parse(fs.readFileSync(
+    path.join(fixture.aggregate, 'profiles', 'runtime-matrix.json'),
+    'utf8',
+  )))[0]
+  for (const root of [fixture.aggregate, fixture.producer]) {
+    fs.mkdirSync(path.join(root, 'profiles', 'runtime-promotion-evidence', profileId), {
+      recursive: true,
+    })
+  }
+  assert.equal(initialize(fixture).total, 34)
+})
+
 test('escrow runs promotion check, commits exact files, deletes originals and is idempotent', t => {
   const fixture = createRepositories(t)
   const status = initialize(fixture)
@@ -342,6 +522,74 @@ test('escrow recovers after manifest commit and rejects extra files, symlinks an
     batchId: drifted.batchId,
     aggregateRoot: drifted.aggregate,
   }), /changed/)
+
+  const rewritten = createRepositories(t)
+  const rewrittenId = initialize(rewritten).rows[0].profileId
+  escrowProfile(rewritten, rewrittenId)
+  const escrowRoot = path.join(
+    rewritten.aggregate, '.tmp', 'runtime-promotion-batches', rewritten.batchId,
+    'escrow', rewrittenId,
+  )
+  const escrowPlanPath = path.join(
+    escrowRoot, 'files', 'profiles', 'runtime-promotion-plans', `${rewrittenId}.json`,
+  )
+  const escrowReceiptPath = path.join(
+    escrowRoot, 'files', 'profiles', 'runtime-promotion-receipts', `${rewrittenId}.json`,
+  )
+  const rewrittenPlan = JSON.parse(fs.readFileSync(escrowPlanPath, 'utf8'))
+  rewrittenPlan.sourceRevision = 'b'.repeat(40)
+  const rewrittenPlanBytes = serializeRuntimePromotionPlan(rewrittenPlan)
+  fs.writeFileSync(escrowPlanPath, rewrittenPlanBytes)
+  const rewrittenReceipt = JSON.parse(fs.readFileSync(escrowReceiptPath, 'utf8'))
+  rewrittenReceipt.sourceRevision = 'b'.repeat(40)
+  rewrittenReceipt.planSha256 = digest(rewrittenPlanBytes)
+  const rewrittenReceiptBytes = jsonBytes(rewrittenReceipt)
+  fs.writeFileSync(escrowReceiptPath, rewrittenReceiptBytes)
+  const manifestPath = path.join(escrowRoot, 'manifest.json')
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+  for (const file of manifest.files) {
+    if (file.path === `profiles/runtime-promotion-plans/${rewrittenId}.json`) {
+      file.sizeBytes = rewrittenPlanBytes.length
+      file.sha256 = digest(rewrittenPlanBytes)
+    }
+    if (file.path === `profiles/runtime-promotion-receipts/${rewrittenId}.json`) {
+      file.sizeBytes = rewrittenReceiptBytes.length
+      file.sha256 = digest(rewrittenReceiptBytes)
+    }
+  }
+  manifest.receiptSha256 = digest(rewrittenReceiptBytes)
+  fs.writeFileSync(manifestPath, canonicalBytes(manifest))
+  assert.throws(() => runtimePromotionBatchStatus({
+    batchId: rewritten.batchId,
+    aggregateRoot: rewritten.aggregate,
+  }), /promotion plan signature closure|promotion plan signature is invalid/)
+
+  const partial = createRepositories(t)
+  const partialId = initialize(partial).rows[0].profileId
+  escrowProfile(partial, partialId)
+  fs.rmSync(path.join(
+    partial.aggregate, '.tmp', 'runtime-promotion-batches', partial.batchId,
+    'escrow', partialId, 'files', 'profiles', 'runtime-promotion-plans', `${partialId}.json.sig`,
+  ))
+  assert.throws(() => runtimePromotionBatchStatus({
+    batchId: partial.batchId,
+    aggregateRoot: partial.aggregate,
+  }), /changed|extra or unsafe|signature closure|regular non-link file/)
+
+  const wrongKey = createRepositories(t)
+  const wrongKeyProfileId = initialize(wrongKey).rows[0].profileId
+  escrowProfile(wrongKey, wrongKeyProfileId)
+  const wrongKeys = crypto.generateKeyPairSync('ed25519')
+  const wrongKeyId = `sha256:${crypto.createHash('sha256').update(
+    wrongKeys.publicKey.export({ type: 'spki', format: 'der' }),
+  ).digest('hex')}`
+  assert.throws(() => runtimePromotionBatchStatus({
+    batchId: wrongKey.batchId,
+    aggregateRoot: wrongKey.aggregate,
+  }, {
+    planSignaturePublicKey: wrongKeys.publicKey,
+    planSignatureKeyId: wrongKeyId,
+  }), /signature closure is invalid|signature is invalid/)
 })
 
 test('import enforces canonical order and rolls copied trust files back on promotion failure', t => {
@@ -366,6 +614,54 @@ test('import enforces canonical order and rolls copied trust files back on promo
   const after = runtimePromotionBatchStatus({ batchId: fixture.batchId, aggregateRoot: fixture.aggregate })
   assert.equal(after.rows[0].phase, 'escrowed')
   assert.equal(runGit(fixture.aggregate, ['status', '--porcelain=v1']).trim(), '')
+})
+
+test('failed later Wine import preserves shared operator outputs owned by an applied row', t => {
+  const fixture = createRepositories(t)
+  const status = initialize(fixture)
+  const first = status.rows[0].profileId
+  const second = status.rows[1].profileId
+  escrowProfile(fixture, first, { wineOperator: true })
+  escrowProfile(fixture, second, { wineOperator: true })
+
+  const promotion = fakePromotionRunner(fixture)
+  assert.equal(importPromoteRuntimeProfile({
+    batchId: fixture.batchId,
+    profileId: first,
+    aggregateRoot: fixture.aggregate,
+  }, { promotionRunner: promotion.runner }).phase, 'applied')
+
+  const operatorPaths = runtimeOperatorReceiptPaths(fixture.sourceRevision)
+  const sharedBefore = new Map(
+    Object.values(operatorPaths).map(relativePath => [
+      relativePath,
+      fs.readFileSync(path.join(fixture.aggregate, ...relativePath.split('/'))),
+    ]),
+  )
+  assert.throws(() => importPromoteRuntimeProfile({
+    batchId: fixture.batchId,
+    profileId: second,
+    aggregateRoot: fixture.aggregate,
+  }, {
+    promotionRunner(input) {
+      if (input.check) throw new Error('injected later Wine check failure')
+      throw new Error('promotion must not run after a failed check')
+    },
+  }), /injected later Wine check failure/)
+
+  for (const [relativePath, expected] of sharedBefore) {
+    assert.deepEqual(
+      fs.readFileSync(path.join(fixture.aggregate, ...relativePath.split('/'))),
+      expected,
+    )
+  }
+  const after = runtimePromotionBatchStatus({
+    batchId: fixture.batchId,
+    aggregateRoot: fixture.aggregate,
+  })
+  assert.equal(after.nextIndex, 1)
+  assert.equal(after.rows[0].phase, 'applied')
+  assert.equal(after.rows[1].phase, 'escrowed')
 })
 
 for (const crashPhase of ['after-copy', 'after-check', 'after-promote']) {

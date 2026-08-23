@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
   FileCode2,
   FilePlus2,
   GitFork,
@@ -89,6 +90,7 @@ import {
   normalizeSelectionIntent,
   outputById,
   outputOptionsFor,
+  referenceSetDisplayName,
   referenceSetOptionsFor,
   runtimeOptionsFor,
   type SelectionIntent,
@@ -113,6 +115,8 @@ import { UrlCodecWorkerClient } from './workers'
 import './App.css'
 
 type MonacoEditorComponent = typeof import('./editor/MonacoEditor')['MonacoEditor']
+
+const nativeRuntimeOptionEndSpacing = '\u00a0\u00a0'
 
 interface ShareErrorState {
   action: 'restore' | 'create'
@@ -193,6 +197,7 @@ function SelectField({
       >
         {children}
       </select>
+      <ChevronDown className="select-field__chevron" aria-hidden="true" />
     </label>
   )
 }
@@ -816,6 +821,7 @@ function App() {
     const selection = normalizeSelectionIntent(catalog, {
       ...currentIntent(),
       languageId: nextLanguageId,
+      runtimeId: null,
     })
     selectLanguage(nextLanguage, selection)
   }
@@ -878,9 +884,16 @@ function App() {
     if (workflow && workflowTargetReady) setStableWorkflow(workflow)
   }, [workflow, workflowTargetReady])
 
+  const currentWorkflowMatchesSelection = workflow?.selectionRevision === selectionRevision
   const retainedWorkflow =
-    stableWorkflow?.outputId === (workflow?.outputId ?? outputId) ? stableWorkflow : null
-  const presentationWorkflow = workflowTargetReady ? workflow : (retainedWorkflow ?? workflow)
+    stableWorkflow?.selectionRevision === selectionRevision &&
+    stableWorkflow.outputId === (workflow?.outputId ?? outputId)
+      ? stableWorkflow
+      : null
+  const presentationWorkflow =
+    workflowTargetReady && currentWorkflowMatchesSelection
+      ? workflow
+      : (retainedWorkflow ?? (currentWorkflowMatchesSelection ? workflow : null))
   const presentationMatchesCurrentWorkspace = Boolean(
     presentationWorkflow &&
       presentationWorkflow === workflow &&
@@ -1481,7 +1494,7 @@ function App() {
       referenceSetSnapshot: selectedReferenceSet
         ? {
             id: selectedReferenceSet.id,
-            displayName: selectedReferenceSet.displayName,
+            displayName: referenceSetDisplayName(selectedReferenceSet),
             digest: selectedReferenceSet.digest,
           }
         : null,
@@ -1819,99 +1832,35 @@ function App() {
             </div>
           )}
         </div>
-      </header>
 
-      <div className="selector-bar" data-mobile-open={mobileSettingsOpen}>
-        <div className="selector-group selector-group--source">
-          <SelectField
-            label="Language"
-            description="Source language"
-            value={languageId}
-            disabled={!catalog}
-            onChange={updateLanguage}
-          >
-            {catalog ? (
-              catalog.languages.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.displayName}
-                </option>
-              ))
-            ) : (
-              <option value={languageId}>Catalog unavailable</option>
-            )}
-          </SelectField>
-          <SelectField
-            label="Toolchain"
-            description="Compiler toolchain"
-            className="select-field--toolchain"
-            value={toolchainId ?? ''}
-            disabled={!catalog}
-            onChange={(value) => updateSelection({ toolchainId: value })}
-          >
-            {availableToolchains.map((option) => (
-              <option
-                key={option.id}
-                value={option.id}
-                disabled={!option.availability.installed}
-                title={option.availability.reason}
-              >
-                {option.displayName}
-                {availabilityLabel(option.availability.health)}
-              </option>
-            ))}
-          </SelectField>
-          <SelectField
-            label="Reference set"
-            description="Reference set used for compilation"
-            className="select-field--api"
-            value={referenceSetId ?? ''}
-            compact
-            disabled={!catalog}
-            onChange={(value) => updateSelection({ referenceSetId: value })}
-          >
-            {availableReferenceSets.map((option) => (
-              <option
-                key={option.id}
-                value={option.id}
-                disabled={!option.availability.installed}
-                title={option.availability.reason}
-              >
-                {option.displayName}
-                {availabilityLabel(option.availability.health)}
-              </option>
-            ))}
-          </SelectField>
-        </div>
-
-        <div className="selector-divider" aria-hidden="true" />
-
-        <div
-          className={`selector-group selector-group--result${
-            output?.requiresRuntime ? ' selector-group--result-with-runtime' : ''
-          }`}
-        >
-          <SelectField
-            label="Output"
-            description="Output view"
-            value={outputId}
-            disabled={!catalog}
-            onChange={(value) => updateSelection({ outputId: value })}
-          >
-            {availableOutputs.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.displayName}
-              </option>
-            ))}
-          </SelectField>
-          {output?.requiresRuntime && (
+        <div className="selector-bar" data-mobile-open={mobileSettingsOpen}>
+          <div className="selector-group selector-group--source">
             <SelectField
-              label="Runtime"
-              description="Runtime used for Run and JIT"
-              value={runtimeId ?? ''}
+              label="Language"
+              description="Source language"
+              value={languageId}
               disabled={!catalog}
-              onChange={(value) => updateSelection({ runtimeId: value })}
+              onChange={updateLanguage}
             >
-              {availableRuntimes.map((option) => (
+              {catalog ? (
+                catalog.languages.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.displayName}
+                  </option>
+                ))
+              ) : (
+                <option value={languageId}>Catalog unavailable</option>
+              )}
+            </SelectField>
+            <SelectField
+              label="Toolchain"
+              description="Compiler toolchain"
+              className="select-field--toolchain"
+              value={toolchainId ?? ''}
+              disabled={!catalog}
+              onChange={(value) => updateSelection({ toolchainId: value, runtimeId: null })}
+            >
+              {availableToolchains.map((option) => (
                 <option
                   key={option.id}
                   value={option.id}
@@ -1923,38 +1872,105 @@ function App() {
                 </option>
               ))}
             </SelectField>
-          )}
-          <fieldset className="mode-field" disabled={!catalog}>
-            <legend className="visually-hidden">Mode</legend>
-            <div className="segmented-control">
-              {(['debug', 'release'] satisfies BuildConfiguration[]).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  aria-pressed={buildMode === mode}
-                  onClick={() => setBuildMode(mode)}
+            <SelectField
+              label="Reference set"
+              description="Reference set used for compilation"
+              className="select-field--api"
+              value={referenceSetId ?? ''}
+              compact
+              disabled={!catalog}
+              onChange={(value) => updateSelection({ referenceSetId: value, runtimeId: null })}
+            >
+              {availableReferenceSets.map((option) => (
+                <option
+                  key={option.id}
+                  value={option.id}
+                  disabled={!option.availability.installed}
+                  title={option.availability.reason}
                 >
-                  {mode === 'debug' ? 'Debug' : 'Release'}
-                </button>
+                  {referenceSetDisplayName(option)}
+                  {availabilityLabel(option.availability.health)}
+                </option>
               ))}
-            </div>
-          </fieldset>
-          <button
-            className="run-button"
-            type="button"
-            disabled={runDisabled}
-            title={resolutionState.error?.message}
-            onClick={() => runBuild('manual')}
+            </SelectField>
+          </div>
+
+          <div className="selector-divider" aria-hidden="true" />
+
+          <div
+            className={`selector-group selector-group--result${
+              output?.requiresRuntime ? ' selector-group--result-with-runtime' : ''
+            }`}
           >
-            {startOperationMutation.isPending ? (
-              <LoaderCircle className="spin" aria-hidden="true" size={15} />
-            ) : (
-              <Play aria-hidden="true" size={15} fill="currentColor" />
+            <SelectField
+              label="Output"
+              description="Output view"
+              value={outputId}
+              disabled={!catalog}
+              onChange={(value) => updateSelection({ outputId: value })}
+            >
+              {availableOutputs.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.displayName}
+                </option>
+              ))}
+            </SelectField>
+            {output?.requiresRuntime && (
+              <SelectField
+                label="Runtime"
+                description="Runtime used for Run and JIT"
+                className="select-field--runtime"
+                value={runtimeId ?? ''}
+                disabled={!catalog}
+                onChange={(value) => updateSelection({ runtimeId: value })}
+              >
+                {availableRuntimes.map((option) => (
+                  <option
+                    key={option.id}
+                    value={option.id}
+                    disabled={!option.availability.installed}
+                    title={option.availability.reason}
+                  >
+                    {option.displayName}
+                    {availabilityLabel(option.availability.health)}
+                    {nativeRuntimeOptionEndSpacing}
+                  </option>
+                ))}
+              </SelectField>
             )}
-            <span>{actionLabel(output)}</span>
-          </button>
+            <fieldset className="mode-field" disabled={!catalog}>
+              <legend className="visually-hidden">Mode</legend>
+              <button
+                className="mode-toggle"
+                type="button"
+                aria-label={`Build mode: ${buildMode === 'debug' ? 'Debug' : 'Release'}. Click to switch to ${
+                  buildMode === 'debug' ? 'Release' : 'Debug'
+                }`}
+                title={`Build mode: ${buildMode === 'debug' ? 'Debug' : 'Release'}. Click to switch to ${
+                  buildMode === 'debug' ? 'Release' : 'Debug'
+                }`}
+                onClick={() => setBuildMode(buildMode === 'debug' ? 'release' : 'debug')}
+              >
+                {buildMode === 'debug' ? 'Debug' : 'Release'}
+              </button>
+            </fieldset>
+            <button
+              className="run-button"
+              type="button"
+              disabled={runDisabled}
+              title={resolutionState.error?.message}
+              onClick={() => runBuild('manual')}
+            >
+              {startOperationMutation.isPending ? (
+                <LoaderCircle className="spin" aria-hidden="true" size={15} />
+              ) : (
+                <Play aria-hidden="true" size={15} fill="currentColor" />
+              )}
+              <span>{actionLabel(output)}</span>
+            </button>
+          </div>
         </div>
-      </div>
+      </header>
 
       <main
         ref={paneGrid}
@@ -2200,50 +2216,55 @@ function App() {
               }
               toolbarActions={
                 <>
-                  <span
-                    className="result-state-slot"
-                    role="status"
-                    aria-label={`Result ${resultVisualStatus}`}
-                    title={
-                      resultVisualStatus === 'stale'
-                        ? 'Showing the previous result while the current revision updates'
-                        : resultVisualStatus === 'failed'
-                          ? 'The latest operation failed; diagnostics are selected'
-                          : resultPending
-                            ? 'Updating result'
-                            : 'Result is current'
-                    }
-                    data-state={resultVisualStatus}
-                  >
-                    {resultPending ? (
-                      <LoaderCircle className="result-state-spinner" aria-hidden="true" size={14} />
-                    ) : resultVisualStatus === 'stale' ? (
-                      <AlertTriangle aria-hidden="true" size={14} />
-                    ) : resultVisualStatus === 'failed' ? (
-                      <XCircle aria-hidden="true" size={14} />
-                    ) : null}
-                    <span className="operation-state visually-hidden" data-state={operationStatus}>
-                      {operationStatus}
+                  {(resultPending ||
+                    resultVisualStatus === 'stale' ||
+                    resultVisualStatus === 'failed') && (
+                    <span
+                      className="result-state-slot"
+                      role="status"
+                      aria-label={`Result ${resultVisualStatus}`}
+                      title={
+                        resultVisualStatus === 'stale'
+                          ? 'Showing the previous result while the current revision updates'
+                          : resultVisualStatus === 'failed'
+                            ? 'The latest operation failed; diagnostics are selected'
+                            : 'Updating result'
+                      }
+                      data-state={resultVisualStatus}
+                    >
+                      {resultPending ? (
+                        <LoaderCircle
+                          className="result-state-spinner"
+                          aria-hidden="true"
+                          size={14}
+                        />
+                      ) : resultVisualStatus === 'stale' ? (
+                        <AlertTriangle aria-hidden="true" size={14} />
+                      ) : (
+                        <XCircle aria-hidden="true" size={14} />
+                      )}
                     </span>
+                  )}
+                  <span className="operation-state visually-hidden" data-state={operationStatus}>
+                    {operationStatus}
                   </span>
                   {activeOperationId && operationEvents.streamStatus !== 'idle' && (
                     <span className="stream-state visually-hidden">
                       WebSocket {operationEvents.streamStatus}
                     </span>
                   )}
-                  <button
-                    className="icon-button result-stop-button"
-                    type="button"
-                    title="Cancel operation"
-                    aria-label="Cancel operation"
-                    aria-hidden={!activeOperationId || operationIsTerminal}
-                    tabIndex={!activeOperationId || operationIsTerminal ? -1 : 0}
-                    data-active={Boolean(activeOperationId && !operationIsTerminal)}
-                    disabled={!activeOperationId || operationIsTerminal || cancelMutation.isPending}
-                    onClick={() => cancelMutation.mutate()}
-                  >
-                    <Square aria-hidden="true" size={13} fill="currentColor" />
-                  </button>
+                  {activeOperationId && !operationIsTerminal && (
+                    <button
+                      className="icon-button result-stop-button"
+                      type="button"
+                      title="Cancel operation"
+                      aria-label="Cancel operation"
+                      disabled={cancelMutation.isPending}
+                      onClick={() => cancelMutation.mutate()}
+                    >
+                      <Square aria-hidden="true" size={13} fill="currentColor" />
+                    </button>
+                  )}
                 </>
               }
               onNavigateToSource={
@@ -2286,25 +2307,24 @@ function App() {
               <span>{editorPreference.fontSize}px</span>
             </button>
             <div className="status-editor-settings-panel" data-mobile-open={editorSettingsOpen}>
-              <div className="status-editor-switch" role="toolbar" aria-label="Editor">
-                <span className="status-editor-switch-label">Editor</span>
-                <div className="status-editor-options">
-                  <button
-                    type="button"
-                    aria-pressed={editorPreference.editor === 'monaco'}
-                    onClick={() => editorPreference.selectEditor('monaco')}
-                  >
-                    Monaco
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={editorPreference.editor === 'codemirror'}
-                    onClick={() => editorPreference.selectEditor('codemirror')}
-                  >
-                    CodeMirror
-                  </button>
-                </div>
-              </div>
+              <button
+                className="status-editor-switch"
+                type="button"
+                aria-label={`Editor: ${editorPreference.editor === 'monaco' ? 'Monaco' : 'CodeMirror'}. Click to switch to ${
+                  editorPreference.editor === 'monaco' ? 'CodeMirror' : 'Monaco'
+                }`}
+                title={`Editor: ${editorPreference.editor === 'monaco' ? 'Monaco' : 'CodeMirror'}. Click to switch to ${
+                  editorPreference.editor === 'monaco' ? 'CodeMirror' : 'Monaco'
+                }`}
+                onClick={() =>
+                  editorPreference.selectEditor(
+                    editorPreference.editor === 'monaco' ? 'codemirror' : 'monaco',
+                  )
+                }
+              >
+                <span className="status-editor-switch-label">Editor:</span>
+                <span>{editorPreference.editor === 'monaco' ? 'Monaco' : 'CodeMirror'}</span>
+              </button>
               <fieldset className="status-font-size">
                 <legend className="visually-hidden">Code font size</legend>
                 <span aria-hidden="true">Font</span>

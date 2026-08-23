@@ -33,6 +33,7 @@ static class RuntimeCapabilityProbeApplication
         WriteIndented = true,
         PropertyNamingPolicy = null
     };
+    private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
     private static readonly JsonSerializerOptions ContractJsonOptions = ContractJson.CreateSerializerOptions();
 
     public static async Task<int> RunAsync(string[] args)
@@ -893,7 +894,7 @@ static class RuntimeCapabilityProbeApplication
         var directory = Path.GetDirectoryName(path)
             ?? throw new ProbeFailureException("Probe output has no parent directory.");
         Directory.CreateDirectory(directory);
-        var bytes = Encoding.UTF8.GetBytes(document.ToJsonString(OutputJson) + "\n");
+        var bytes = SerializeJsonUtf8Lf(document, OutputJson);
         var temporary = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
@@ -908,6 +909,23 @@ static class RuntimeCapabilityProbeApplication
         {
             if (File.Exists(temporary))
                 File.Delete(temporary);
+        }
+    }
+
+    private static byte[] SerializeJsonUtf8Lf(JsonObject document, JsonSerializerOptions options)
+    {
+        var bytes = Utf8NoBom.GetBytes(document.ToJsonString(options).ReplaceLineEndings("\n") + "\n");
+        AssertUtf8NoBomLf(bytes, "serialized probe JSON");
+        return bytes;
+    }
+
+    private static void AssertUtf8NoBomLf(ReadOnlySpan<byte> bytes, string description)
+    {
+        var text = Utf8NoBom.GetString(bytes);
+        if (text.Length == 0 || text[0] == '\uFEFF' || text[^1] != '\n' ||
+            bytes.IndexOf((byte)'\r') >= 0)
+        {
+            throw new InvalidOperationException($"{description} must be UTF-8 without a BOM and use LF line endings.");
         }
     }
 
@@ -946,6 +964,7 @@ static class RuntimeCapabilityProbeApplication
         var json = JsonSerializer.Serialize(new { Probe = "ok" }, ContractJsonOptions);
         if (!StringComparer.Ordinal.Equals(json, "{\"Probe\":\"ok\"}"))
             throw new InvalidOperationException("Probe JSON serialization self-test failed.");
+        RunJsonOutputSelfTest();
         ExpectArgumentFailure([]);
         ExpectArgumentFailure(["--unknown"]);
         ExpectArgumentFailure(["--timeout-seconds", "4"]);
@@ -954,6 +973,23 @@ static class RuntimeCapabilityProbeApplication
         ExpectEndpointFailure("http://192.0.2.1:8081");
         Console.WriteLine("Runtime capability probe self-test passed.");
         return 0;
+    }
+
+    private static void RunJsonOutputSelfTest()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"sharplabnext-probe-cli-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(directory);
+            var output = Path.Combine(directory, "probe.json");
+            WriteAtomicJson(output, new JsonObject { ["probe"] = "ok" });
+            AssertUtf8NoBomLf(File.ReadAllBytes(output), "written probe JSON");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
     }
 
     private static void ExpectArgumentFailure(string[] args)

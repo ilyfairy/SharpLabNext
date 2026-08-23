@@ -11,6 +11,8 @@ namespace SharpLabNext.BundleBuilder;
 internal static partial class RuntimeCapabilityEvidenceValidation
 {
     private const long MaximumArtifactBytes = 256L * 1024 * 1024;
+    private const string DesktopClrCaptureHelperPath =
+        "/opt/sharplabnext/SharpLabNext.DesktopClrJitInspector.exe";
     // Reviewed Supervisor sandbox identity from the checked-in appsettings and
     // runtime-job-seccomp.v1.json policy. A well-formed but weaker policy is
     // not valid promotion evidence.
@@ -291,6 +293,18 @@ internal static partial class RuntimeCapabilityEvidenceValidation
                 Require(!byRole.ContainsKey("profiler"),
                     $"{prefix} cannot bind a profiler for mapping kind '{check.SourceMappingKind}'.");
             }
+            var requiresDesktopHelper = profileOperation!.ImplementationId ==
+                RuntimeOperationImplementationIds.DesktopClrJitInspector;
+            Require(requiresDesktopHelper == byRole.ContainsKey("desktop-helper"),
+                $"{prefix} Desktop CLR helper presence does not match the JIT provider.");
+            if (requiresDesktopHelper)
+            {
+                var desktopHelper = byRole["desktop-helper"];
+                Require(desktopHelper.Path == DesktopClrCaptureHelperPath &&
+                        desktopHelper.Format == "managed-pe" &&
+                        desktopHelper.Architecture == "anycpu",
+                    $"{prefix} Desktop CLR capture helper is invalid.");
+            }
         }
         else
         {
@@ -338,6 +352,12 @@ internal static partial class RuntimeCapabilityEvidenceValidation
             case RuntimeOperationImplementationIds.MonoJitInspector:
                 innerHostToken = "/usr/bin/mono";
                 innerHostPath = "/usr/bin/mono";
+                break;
+            case RuntimeOperationImplementationIds.DesktopClrJitInspector:
+                innerHostToken = profile.Layout.WineHostPath;
+                innerHostPath = profile.Layout.WineHostPath;
+                Require(innerHostPath == "/usr/lib/wine/wine64",
+                    $"{prefix} Desktop CLR JIT requires the fixed x64 Wine host.");
                 break;
         }
 
@@ -714,7 +734,8 @@ internal static partial class RuntimeCapabilityEvidenceValidation
         !value.Any(static character => character is '\0' or '\r' or '\n');
 
     private static bool IsArtifactRole(string? value) =>
-        value is "helper" or "control-host" or "runtime-host" or "support-assembly" or "jit-library" or "profiler";
+        value is "helper" or "desktop-helper" or "control-host" or "runtime-host" or
+            "support-assembly" or "jit-library" or "profiler";
 
     private static bool IsArtifactFormat(string? format, string? architecture) =>
         (format is "elf" or "pe" or "managed-pe" or "script") &&

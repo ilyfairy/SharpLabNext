@@ -757,7 +757,7 @@ public sealed class RuntimeProfileSdkTests
     }
 
     [Fact]
-    public void WineNetFxProfileBuildsDedicatedRunnerCommandAndRejectsJit()
+    public void WineNetFxProfileBuildsDedicatedRunnerCommandAndRejectsJitWithoutTheDesktopClrProvider()
     {
         var profile = WineProfile();
         profile.Layout.DotNetHostPath = "/runtime/dotnet";
@@ -799,6 +799,45 @@ public sealed class RuntimeProfileSdkTests
         Assert.Contains(failures, static failure => failure.Contains("netfx-clr-wine", StringComparison.Ordinal));
         Assert.Contains(failures, static failure => failure.Contains("only the run capability", StringComparison.Ordinal));
         Assert.Contains(failures, static failure => failure.Contains("requires managed .NET Framework PE", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void WineNetFxProfileAllowsOnlyTheBoundedDesktopClrJitProvider()
+    {
+        var profile = DesktopClrJitWineProfile();
+
+        Assert.Empty(RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false));
+        Assert.Equal(
+            [
+                "/usr/share/dotnet/dotnet",
+                "/opt/sharplabnext/SharpLabNext.WineRunner.dll",
+                "desktop-jit",
+                "/workspace/app/Program.exe",
+                "Example.Program:Main"
+            ],
+            RuntimeProfileCommandBuilder.CreateJitCommand(
+                profile,
+                "app/Program.exe",
+                "Example.Program:Main"));
+
+        profile.Operations!.Jit!.ImplementationId = RuntimeOperationImplementationIds.LegacyJitInspector;
+        var oldProviderFailures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
+        Assert.Contains(oldProviderFailures, static failure =>
+            failure.Contains("Desktop CLR JIT provider", StringComparison.Ordinal));
+
+        profile = DesktopClrJitWineProfile();
+        profile.Operations!.Jit!.SourceMappingKind = RuntimeJitSourceMappingKinds.LinuxProfiler;
+        var mappingFailures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
+        Assert.Contains(mappingFailures, static failure =>
+            failure.Contains("source mapping kind 'none'", StringComparison.Ordinal));
+
+        profile = DesktopClrJitWineProfile();
+        profile.Operations!.Jit = null;
+        var missingOperationFailures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
+        Assert.Contains(missingOperationFailures, static failure =>
+            failure.Contains("capability 'jit-asm' without a JIT operation", StringComparison.Ordinal));
+        Assert.Contains(missingOperationFailures, static failure =>
+            failure.Contains("only the run capability unless", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1073,6 +1112,7 @@ public sealed class RuntimeProfileSdkTests
             var policy = Assert.Single(profile.SecurityPolicies);
             Assert.Equal(expectedPolicyId, policy.Id);
             Assert.Equal(expectedWinePolicy ? 1_073_741_824 : 268_435_456, policy.MemoryBytes);
+            Assert.Equal(expectedWinePolicy ? 128 : 64, policy.PidsLimit);
             Assert.Equal(expectedWinePolicy ? 30 : 10, policy.MaximumDurationSeconds);
         }
     }
@@ -1470,6 +1510,62 @@ public sealed class RuntimeProfileSdkTests
             WinePrefixPath = "/opt/wine-dotnet"
         }
     };
+
+    private static RuntimeProfileDefinition DesktopClrJitWineProfile()
+    {
+        var profile = WineProfile();
+        profile.RuntimeVersion = "4.8";
+        profile.RuntimeCommit = "not-applicable";
+        profile.JitVersion = "not-applicable";
+        profile.JitCommit = "not-applicable";
+        profile.AcceptedFrameworks = [new RuntimeFrameworkCompatibilityDefinition
+        {
+            Name = ".NETFramework",
+            ExactVersion = "4.8"
+        }];
+        profile.Capabilities = ["run", "jit-asm"];
+        profile.Layout.DotNetHostPath = "/usr/lib/wine/wine64";
+        profile.Layout.RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe";
+        profile.Layout.JitInspectorAssemblyPath = "/opt/sharplabnext/SharpLabNext.WineRunner.dll";
+        profile.Operations = new RuntimeProfileOperations
+        {
+            Run = new RuntimeRunOperationDefinition
+            {
+                ImplementationId = RuntimeOperationImplementationIds.TargetRuntimeRunner,
+                PathStyle = RuntimeOperationPathStyles.WineZ,
+                Command = new RuntimeOperationCommandDefinition
+                {
+                    Executable = "/usr/lib/wine/wine64",
+                    Argv =
+                    [
+                        @"Z:\opt\sharplabnext\SharpLabNext.TargetRuntimeRunner.exe",
+                        "run",
+                        RuntimeOperationPlaceholders.EntryAssembly,
+                        "--",
+                        RuntimeOperationPlaceholders.Arguments
+                    ]
+                }
+            },
+            Jit = new RuntimeJitOperationDefinition
+            {
+                ImplementationId = RuntimeOperationImplementationIds.DesktopClrJitInspector,
+                PathStyle = RuntimeOperationPathStyles.Unix,
+                SourceMappingKind = RuntimeJitSourceMappingKinds.None,
+                Command = new RuntimeOperationCommandDefinition
+                {
+                    Executable = "/usr/share/dotnet/dotnet",
+                    Argv =
+                    [
+                        "/opt/sharplabnext/SharpLabNext.WineRunner.dll",
+                        "desktop-jit",
+                        RuntimeOperationPlaceholders.EntryAssembly,
+                        RuntimeOperationPlaceholders.MethodFilter
+                    ]
+                }
+            }
+        };
+        return profile;
+    }
 
     private static RuntimeProfileDefinition JSharpWineProfile() => new()
     {

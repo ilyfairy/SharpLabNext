@@ -1,3 +1,4 @@
+using System.Formats.Tar;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -8,12 +9,53 @@ using SharpLabNext.RuntimeProfile.Sdk;
 
 namespace SharpLabNext.BundleBuilder;
 
-public sealed class ReleaseBundleBuilder(
-    IDockerCli docker,
-    IBundleSigner? signer = null,
-    IRepositorySourceInspector? sourceInspector = null,
-    IRuntimePromotionSourceInspector? runtimePromotionSourceInspector = null)
+public sealed class ReleaseBundleBuilder
 {
+    private readonly IDockerCli docker;
+    private readonly IBundleSigner? signer;
+    private readonly IRepositorySourceInspector? sourceInspector;
+    private readonly IRuntimePromotionSourceInspector? runtimePromotionSourceInspector;
+    private readonly IExternalSourceMaterialFetcher? externalSourceMaterialFetcher;
+    private readonly IWineRuntimePackageManifestSnapshotProvider wineManifestProvider;
+    private readonly RuntimePromotionPlanSignatureVerifier runtimePromotionPlanSignatureVerifier;
+
+    public ReleaseBundleBuilder(
+        IDockerCli docker,
+        IBundleSigner? signer = null,
+        IRepositorySourceInspector? sourceInspector = null,
+        IRuntimePromotionSourceInspector? runtimePromotionSourceInspector = null,
+        IExternalSourceMaterialFetcher? externalSourceMaterialFetcher = null)
+        : this(
+            docker,
+            signer,
+            sourceInspector,
+            runtimePromotionSourceInspector,
+            externalSourceMaterialFetcher,
+            new RepositoryWineRuntimePackageManifestSnapshotProvider(),
+            RuntimePromotionTrust.RuntimePromotionPlanSignatureTrust.ProductionVerifier)
+    {
+    }
+
+    internal ReleaseBundleBuilder(
+        IDockerCli docker,
+        IBundleSigner? signer,
+        IRepositorySourceInspector? sourceInspector,
+        IRuntimePromotionSourceInspector? runtimePromotionSourceInspector,
+        IExternalSourceMaterialFetcher? externalSourceMaterialFetcher,
+        IWineRuntimePackageManifestSnapshotProvider wineManifestProvider,
+        RuntimePromotionPlanSignatureVerifier runtimePromotionPlanSignatureVerifier)
+    {
+        this.docker = docker ?? throw new ArgumentNullException(nameof(docker));
+        this.signer = signer;
+        this.sourceInspector = sourceInspector;
+        this.runtimePromotionSourceInspector = runtimePromotionSourceInspector;
+        this.externalSourceMaterialFetcher = externalSourceMaterialFetcher;
+        this.wineManifestProvider = wineManifestProvider ??
+            throw new ArgumentNullException(nameof(wineManifestProvider));
+        this.runtimePromotionPlanSignatureVerifier = runtimePromotionPlanSignatureVerifier ??
+            throw new ArgumentNullException(nameof(runtimePromotionPlanSignatureVerifier));
+    }
+
     public const string RuntimeCommitLabel = "io.sharplabnext.runtime.commit";
     public const string JitCommitLabel = "io.sharplabnext.jit.commit";
     public const string ReferenceSetLabelPrefix = "io.sharplabnext.reference-set.";
@@ -21,9 +63,19 @@ public sealed class ReleaseBundleBuilder(
     public const string BaseImageLabelPrefix = "io.sharplabnext.base-image.";
     public const string DisabledGitHubOAuthSecretFileName = "github-oauth-client-secret.disabled";
     public const string SecurityAssetsDirectoryName = "security";
+    public const string PromotionEvidenceDirectoryName = "promotion-evidence";
+    public const string WineNoticeArchiveBundleRelativePath =
+        "notices/wine-coreclr-copyright-notices.tar";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
+        NewLine = "\n",
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+    private static readonly JsonSerializerOptions SpdxJsonOptions = new(JsonSerializerDefaults.General)
+    {
+        WriteIndented = true,
+        NewLine = "\n",
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
     private static readonly JsonSerializerOptions RuntimeProfileJsonOptions = new(JsonSerializerDefaults.Web)
@@ -99,29 +151,34 @@ public sealed class ReleaseBundleBuilder(
         var deploymentTask = LoadDeploymentImagesAsync(command.DeploymentImagesPath, cancellationToken);
         var baseImagesTask = LoadBaseImagesAsync(baseImagesPath, cancellationToken);
         var runtimeProfilesTask = LoadRuntimeProfilesAsync(runtimeProfilesPath, cancellationToken);
-        var dependencyTask = DependencyInventory.LoadAsync(
-            command.RepositoryRoot,
-            command.LicensePolicyPath,
-            cancellationToken);
         await Task.WhenAll(
             catalogTask,
             lockTask,
             deploymentTask,
             baseImagesTask,
-            runtimeProfilesTask,
-            dependencyTask);
+            runtimeProfilesTask);
         var catalog = await catalogTask;
         var releaseLock = await lockTask;
         var deployment = await deploymentTask;
         var baseImages = await baseImagesTask;
         var activeRuntimeProfiles = await runtimeProfilesTask;
+        var wineManifestSnapshot = await wineManifestProvider.LoadValidatedAsync(
+            command.RepositoryRoot,
+            releaseLock,
+            cancellationToken);
+        var wineManifest = wineManifestSnapshot.Manifest;
         ValidateBaseImages(baseImages);
+        WineRuntimePackageManifestLoader.ValidateResolvedPackagesForBundle(wineManifest);
+        WineRuntimePackageManifestLoader.ValidateBaseImage(wineManifest, baseImages);
         var maintainedProvenance = await MaintainedProvenanceLoader.LoadAsync(
             command.RepositoryRoot,
             releaseLock,
             baseImages,
             cancellationToken);
-        var dependencies = (await dependencyTask).Components;
+        var dependencies = (await DependencyInventory.LoadAsync(
+            command.RepositoryRoot,
+            command.LicensePolicyPath,
+            cancellationToken)).Components;
         var expectedReferenceSetDigests = ValidateInputs(
             catalog,
             releaseLock,
@@ -183,7 +240,9 @@ public sealed class ReleaseBundleBuilder(
             deployment,
             activeRuntimeProfiles,
             inspectedImages,
-            cancellationToken);
+            docker,
+            cancellationToken,
+            runtimePromotionPlanSignatureVerifier);
         await RuntimePromotionMatrixBinding.ValidateAsync(
             command.RepositoryRoot,
             activeRuntimeProfiles,
@@ -221,6 +280,7 @@ public sealed class ReleaseBundleBuilder(
                 inspectedImages,
                 releaseRuntimeProfiles,
                 dependencies,
+                wineManifestSnapshot,
                 baseImages,
                 baseImagesPath,
                 maintainedProvenance,
@@ -515,6 +575,7 @@ public sealed class ReleaseBundleBuilder(
         IReadOnlyList<InspectedImage> images,
         IReadOnlyList<RuntimeProfileDefinition> runtimeProfiles,
         IReadOnlyList<DependencyComponent> dependencies,
+        WineRuntimePackageManifestSnapshot wineManifestSnapshot,
         BaseImageManifest baseImages,
         string baseImagesPath,
         IReadOnlyList<MaintainedProvenanceInput> maintainedProvenance,
@@ -524,6 +585,7 @@ public sealed class ReleaseBundleBuilder(
         string staging,
         CancellationToken cancellationToken)
     {
+        var wineManifest = wineManifestSnapshot.Manifest;
         Directory.CreateDirectory(Path.Combine(staging, "sbom"));
         Directory.CreateDirectory(Path.Combine(staging, "provenance"));
         Directory.CreateDirectory(Path.Combine(staging, "provenance", "maintained"));
@@ -608,13 +670,18 @@ public sealed class ReleaseBundleBuilder(
             Path.Combine(staging, "sbom", "dependencies.json"),
             new DependencyInventoryDocument(1, DateTimeOffset.UtcNow, dependencies),
             cancellationToken);
+        await File.WriteAllBytesAsync(
+            Path.Combine(staging, "sbom", "runtime-wine-packages.json"),
+            wineManifestSnapshot.ManifestBytes,
+            cancellationToken);
         await WriteJsonAsync(
             Path.Combine(staging, "sbom", "release.spdx.json"),
-            CreateSpdx(catalog.ReleaseId, bundleLock, images, dependencies),
+            CreateSpdx(catalog.ReleaseId, bundleLock, images, dependencies, wineManifest),
+            SpdxJsonOptions,
             cancellationToken);
         await WriteJsonAsync(
             Path.Combine(staging, "sbom", "release.cdx.json"),
-            CreateCycloneDx(catalog.ReleaseId, bundleLock, images, dependencies),
+            CreateCycloneDx(catalog.ReleaseId, bundleLock, images, dependencies, wineManifest),
             cancellationToken);
         await WriteJsonAsync(
             Path.Combine(staging, "provenance", "release.slsa.json"),
@@ -624,6 +691,7 @@ public sealed class ReleaseBundleBuilder(
                 releaseLock,
                 images,
                 dependencies,
+                wineManifestSnapshot,
                 baseImages,
                 maintainedProvenance,
                 source),
@@ -631,11 +699,27 @@ public sealed class ReleaseBundleBuilder(
         await WriteWeakCopyleftSourcesAsync(
             command.RepositoryRoot,
             dependencies,
+            wineManifest,
             staging,
             cancellationToken);
+        await WriteWineNoticeArchiveAsync(
+            wineManifestSnapshot,
+            images,
+            staging,
+            cancellationToken);
+        await WriteRuntimePromotionEvidenceAsync(
+            runtimePromotionTrust,
+            runtimePromotionSourceClosure,
+            staging,
+            cancellationToken);
+        var deploymentScriptBindings = GetDeploymentScriptBindings(runtimePromotionTrust);
         foreach (var scriptName in DeploymentScriptNames)
         {
-            await WriteDeploymentScriptAsync(staging, scriptName, cancellationToken);
+            await WriteDeploymentScriptAsync(
+                staging,
+                scriptName,
+                deploymentScriptBindings,
+                cancellationToken);
         }
         if (command.SigningPublicKeyPath is not null)
         {
@@ -645,7 +729,7 @@ public sealed class ReleaseBundleBuilder(
         if (!command.MetadataOnly)
         {
             await docker.SaveImagesAsync(
-                images.Select(static image => image.SourceReference).ToArray(),
+                images.Select(static image => image.ImageId).ToArray(),
                 Path.Combine(staging, "images.tar"),
                 cancellationToken);
         }
@@ -666,6 +750,235 @@ public sealed class ReleaseBundleBuilder(
                 command.SigningKeyPath,
                 Path.Combine(staging, "signing-public-key.pem"),
                 cancellationToken);
+        }
+    }
+
+    private static async Task WriteRuntimePromotionEvidenceAsync(
+        IReadOnlyList<RuntimePromotionTrustSnapshot> trust,
+        RuntimePromotionSourceClosureSnapshot? sourceClosure,
+        string staging,
+        CancellationToken cancellationToken)
+    {
+        if (trust.Count == 0)
+            return;
+        if (sourceClosure is null)
+        {
+            throw new BundleValidationException(
+                "Promotion-bound release material has no captured source closure for offline evidence.");
+        }
+
+        var snapshotFiles = sourceClosure.Files.ToDictionary(
+            static item => item.RelativePath,
+            StringComparer.Ordinal);
+        var captured = sourceClosure.CapturedFiles.ToDictionary(
+            static item => item.RelativePath,
+            StringComparer.Ordinal);
+        if (snapshotFiles.Count != sourceClosure.Files.Count ||
+            captured.Count != sourceClosure.CapturedFiles.Count ||
+            captured.Count < snapshotFiles.Count)
+        {
+            throw new BundleValidationException(
+                "Promotion source closure has duplicate or incomplete captured files.");
+        }
+
+        foreach (var snapshot in snapshotFiles.Values)
+        {
+            if (!captured.TryGetValue(snapshot.RelativePath, out var bytes) ||
+                !StringComparer.Ordinal.Equals(snapshot.Sha256, bytes.Sha256) ||
+                !StringComparer.Ordinal.Equals(
+                    snapshot.Sha256,
+                    $"sha256:{Convert.ToHexStringLower(SHA256.HashData(bytes.Bytes))}"))
+            {
+                throw new BundleValidationException(
+                    $"Promotion source closure capture is incomplete or corrupted for '{snapshot.RelativePath}'.");
+            }
+        }
+
+        var bindings = new Dictionary<string, PromotionEvidenceBinding>(StringComparer.Ordinal);
+        foreach (var runtime in trust.OrderBy(static item => item.RuntimeId, StringComparer.Ordinal))
+        {
+            AddBinding(bindings, runtime.Receipt.RelativePath, runtime.RuntimeId, "receipt");
+            AddBinding(
+                bindings,
+                $"profiles/runtimes/candidates/{runtime.RuntimeId}.json",
+                runtime.RuntimeId,
+                "candidate-profile");
+            var signedPlan = runtime.SignedPlan
+                ?? throw new BundleValidationException(
+                    $"Runtime '{runtime.RuntimeId}' has no captured signed promotion plan.");
+            AddBinding(bindings, signedPlan.Signature.RelativePath, runtime.RuntimeId, "plan-signature");
+            AddBinding(bindings, signedPlan.PublicKey.RelativePath, runtime.RuntimeId, "plan-signature-public-key");
+            if (runtime.WineOperatorReceipt is { } wineOperatorReceipt)
+            {
+                AddBinding(bindings, wineOperatorReceipt.Receipt.RelativePath, runtime.RuntimeId, "operator-receipt");
+                AddBinding(bindings, wineOperatorReceipt.Signature.RelativePath, runtime.RuntimeId, "operator-receipt-signature");
+                AddBinding(bindings, wineOperatorReceipt.PublicKey.RelativePath, runtime.RuntimeId, "operator-receipt-public-key");
+            }
+            AddBinding(bindings, runtime.PerformancePolicy.RelativePath, runtime.RuntimeId, "performance-policy");
+            foreach (var evidence in runtime.Evidence)
+            {
+                AddBinding(
+                    bindings,
+                    evidence.RelativePath,
+                    runtime.RuntimeId,
+                    evidence.RelativePath.EndsWith("/performance.json", StringComparison.Ordinal)
+                        ? "performance-evidence"
+                        : "capability-evidence");
+            }
+            AddBinding(
+                bindings,
+                $"profiles/runtime-promotion-plans/{runtime.RuntimeId}.json",
+                runtime.RuntimeId,
+                "plan");
+            AddBinding(
+                bindings,
+                $"profiles/runtime-promotion-plans/{runtime.RuntimeId}.profile.json",
+                runtime.RuntimeId,
+                "preflight-profile");
+            AddBinding(
+                bindings,
+                $"profiles/runtimes/{runtime.RuntimeId}.json",
+                runtime.RuntimeId,
+                "active-profile");
+        }
+        var expectedCapturedPaths = snapshotFiles.Keys
+            .Concat(bindings.Keys)
+            .ToHashSet(StringComparer.Ordinal);
+        if (!expectedCapturedPaths.SetEquals(captured.Keys))
+        {
+            throw new BundleValidationException(
+                "Promotion source closure has unexpected or missing captured evidence inputs.");
+        }
+
+        var root = Path.Combine(staging, PromotionEvidenceDirectoryName);
+        var sourceRoot = Path.Combine(root, "source");
+        Directory.CreateDirectory(sourceRoot);
+        var expectedRuntimeIds = trust.Select(static item => item.RuntimeId)
+            .OrderBy(static item => item, StringComparer.Ordinal)
+            .ToArray();
+        var entries = new List<PromotionEvidenceManifestEntry>(captured.Count);
+        foreach (var file in captured.Values.OrderBy(static item => item.RelativePath, StringComparer.Ordinal))
+        {
+            ValidatePromotionEvidencePath(file.RelativePath);
+            var bundlePath = $"source/{file.RelativePath}";
+            var destination = Path.Combine(
+                sourceRoot,
+                file.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+            var destinationDirectory = Path.GetDirectoryName(destination)
+                ?? throw new BundleValidationException("Promotion evidence destination has no parent directory.");
+            Directory.CreateDirectory(destinationDirectory);
+            await File.WriteAllBytesAsync(destination, file.Bytes, cancellationToken);
+
+            bindings.TryGetValue(file.RelativePath, out var binding);
+            entries.Add(new PromotionEvidenceManifestEntry
+            {
+                Kind = binding?.Kind ?? "source-closure",
+                SourcePath = file.RelativePath,
+                BundlePath = bundlePath,
+                Sha256 = file.Sha256,
+                SizeBytes = file.Bytes.LongLength,
+                ProfileIds = binding?.RuntimeIds.ToArray() ?? expectedRuntimeIds,
+                RuntimeIds = binding?.RuntimeIds.ToArray() ?? expectedRuntimeIds
+            });
+        }
+
+        var actualRuntimeIds = entries.Where(static item => item.RuntimeIds is not null)
+            .SelectMany(static item => item.RuntimeIds!)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static item => item, StringComparer.Ordinal)
+            .ToArray();
+        if (!expectedRuntimeIds.SequenceEqual(actualRuntimeIds, StringComparer.Ordinal))
+        {
+            throw new BundleValidationException(
+                "Promotion evidence manifest does not bind every promoted runtime.");
+        }
+
+        var manifestPath = Path.Combine(root, "manifest.json");
+        await WriteJsonAsync(
+            manifestPath,
+            new PromotionEvidenceManifest
+            {
+                SchemaVersion = 1,
+                BuildSourceRevision = sourceClosure.BuildSourceRevision,
+                ReleaseSourceRevision = sourceClosure.ReleaseSourceRevision,
+                PromotedRuntimeIds = expectedRuntimeIds,
+                Entries = entries
+            },
+            cancellationToken);
+        await WritePromotionEvidenceVerificationManifestAsync(
+            Path.Combine(root, "manifest.tsv"),
+            sourceClosure,
+            $"sha256:{await ComputeFileSha256Async(manifestPath, cancellationToken)}",
+            expectedRuntimeIds,
+            entries,
+            cancellationToken);
+    }
+
+    private static Task WritePromotionEvidenceVerificationManifestAsync(
+        string path,
+        RuntimePromotionSourceClosureSnapshot sourceClosure,
+        string manifestJsonSha256,
+        IReadOnlyList<string> promotedRuntimeIds,
+        IReadOnlyList<PromotionEvidenceManifestEntry> entries,
+        CancellationToken cancellationToken)
+    {
+        var lines = new List<string>(entries.Count + 4)
+        {
+            "schemaVersion\t1",
+            $"buildSourceRevision\t{sourceClosure.BuildSourceRevision}",
+            $"releaseSourceRevision\t{sourceClosure.ReleaseSourceRevision}",
+            $"manifestJsonSha256\t{manifestJsonSha256}",
+            $"promotedRuntimeIds\t{string.Join(',', promotedRuntimeIds)}"
+        };
+        foreach (var entry in entries)
+        {
+            lines.Add(string.Join(
+                '\t',
+                "entry",
+                entry.Kind,
+                entry.ProfileIds.Length == 0 ? "-" : string.Join(',', entry.ProfileIds),
+                entry.RuntimeIds.Length == 0 ? "-" : string.Join(',', entry.RuntimeIds),
+                entry.SourcePath,
+                entry.BundlePath,
+                entry.Sha256,
+                entry.SizeBytes.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        return File.WriteAllTextAsync(
+            path,
+            (string.Join('\n', lines) + "\n").ReplaceLineEndings("\n"),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            cancellationToken);
+    }
+
+    private static void AddBinding(
+        Dictionary<string, PromotionEvidenceBinding> bindings,
+        string path,
+        string runtimeId,
+        string kind)
+    {
+        ValidatePromotionEvidencePath(path);
+        if (bindings.TryGetValue(path, out var existing))
+        {
+            if (!StringComparer.Ordinal.Equals(existing.Kind, kind))
+            {
+                throw new BundleValidationException(
+                    $"Promotion evidence source '{path}' has conflicting evidence kinds.");
+            }
+            existing.RuntimeIds.Add(runtimeId);
+            return;
+        }
+        bindings[path] = new PromotionEvidenceBinding(
+            kind,
+            new SortedSet<string>(StringComparer.Ordinal) { runtimeId });
+    }
+
+    private static void ValidatePromotionEvidencePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || path.Contains('\\') || path.Contains('\t') ||
+            path.Contains('\r') || path.Contains('\n') || Path.IsPathRooted(path) ||
+            path.Split('/').Any(static segment => segment is "" or "." or ".."))
+        {
+            throw new BundleValidationException($"Promotion evidence path '{path}' is not canonical.");
         }
     }
 
@@ -855,9 +1168,10 @@ public sealed class ReleaseBundleBuilder(
         Message = message
     };
 
-    private static async Task WriteWeakCopyleftSourcesAsync(
+    private async Task WriteWeakCopyleftSourcesAsync(
         string repositoryRoot,
         IReadOnlyList<DependencyComponent> dependencies,
+        WineRuntimePackageManifest wineManifest,
         string staging,
         CancellationToken cancellationToken)
     {
@@ -906,11 +1220,267 @@ public sealed class ReleaseBundleBuilder(
                 relative));
         }
 
+        await WriteOperatingSystemSourcesAsync(
+            wineManifest,
+            staging,
+            materials,
+            cancellationToken);
+
         await WriteJsonAsync(
             Path.Combine(staging, "sources", "manifest.json"),
             new SourceMaterialDocument(1, DateTimeOffset.UtcNow, materials),
             cancellationToken);
     }
+
+    internal async Task WriteOperatingSystemSourcesAsync(
+        WineRuntimePackageManifest manifest,
+        string staging,
+        List<SourceMaterialComponent> materials,
+        CancellationToken cancellationToken)
+    {
+        var sourceRoot = Path.Combine(staging, "sources", "ubuntu");
+        Directory.CreateDirectory(sourceRoot);
+        var materialized = new HashSet<string>(StringComparer.Ordinal);
+        var fileCount = 0;
+        long totalBytes = 0;
+        foreach (var sourcePackage in manifest.SourcePackages)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var identity = $"{sourcePackage.Name}\0{sourcePackage.Version}";
+            if (!materialized.Add(identity))
+                throw new BundleValidationException("Wine source package was requested more than once.");
+
+            var sourceDirectory = sourcePackage.Files[0].Path[..sourcePackage.Files[0].Path.LastIndexOf('/')];
+            if (sourcePackage.Files.Any(file =>
+                    !file.Path.StartsWith(sourceDirectory + "/", StringComparison.Ordinal)))
+            {
+                throw new BundleValidationException(
+                    $"Operating-system source package '{sourcePackage.Name}@{sourcePackage.Version}' spans multiple pool directories.");
+            }
+            var relative = $"sources/ubuntu/{sourcePackage.ArchiveSnapshotId}/{sourceDirectory}";
+            var destination = Path.Combine(staging, relative.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(destination);
+            foreach (var file in sourcePackage.Files)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var sourceUri = WineRuntimePackageManifestLoader.ArchiveUri(
+                    manifest,
+                    sourcePackage.ArchiveSnapshotId,
+                    file.Path);
+                await using var material = await (externalSourceMaterialFetcher ??
+                    new HttpClientExternalSourceMaterialFetcher()).FetchAsync(sourceUri, cancellationToken);
+                if (Uri.Compare(
+                        material.FinalUri,
+                        sourceUri,
+                        UriComponents.AbsoluteUri,
+                        UriFormat.UriEscaped,
+                        StringComparison.Ordinal) != 0)
+                {
+                    throw new BundleValidationException(
+                        $"Operating-system source material '{file.Path}' redirected away from its reviewed snapshot URL.");
+                }
+                if (material.ContentLength is { } contentLength && contentLength != file.SizeBytes)
+                {
+                    throw new BundleValidationException(
+                        $"Operating-system source material '{file.Path}' has an unexpected content length.");
+                }
+
+                var destinationPath = Path.Combine(destination, Path.GetFileName(file.Path));
+                var inspection = await CopyExternalSourceMaterialAsync(
+                    material.Content,
+                    destinationPath,
+                    file.SizeBytes,
+                    WineRuntimePackageManifestLoader.MaximumClosureSourceTotalBytes - totalBytes,
+                    cancellationToken);
+                if (!string.Equals(inspection.Sha256, file.Sha256, StringComparison.Ordinal) ||
+                    inspection.SizeBytes != file.SizeBytes)
+                {
+                    throw new BundleValidationException(
+                        $"Operating-system source material '{file.Path}' does not match its reviewed SHA-256 identity.");
+                }
+                fileCount = checked(fileCount + 1);
+                totalBytes = checked(totalBytes + inspection.SizeBytes);
+            }
+
+            var descriptor = sourcePackage.Files.Single(static file =>
+                file.Path.EndsWith(".dsc", StringComparison.Ordinal));
+            materials.Add(new SourceMaterialComponent(
+                "apt-source",
+                sourcePackage.Name,
+                sourcePackage.Version,
+                string.Equals(sourcePackage.Name, "wine", StringComparison.Ordinal)
+                    ? "LGPL-2.1+"
+                    : "NOASSERTION",
+                WineRuntimePackageManifestLoader.ArchiveUri(
+                    manifest,
+                    sourcePackage.ArchiveSnapshotId,
+                    descriptor.Path).AbsoluteUri,
+                relative));
+        }
+
+        var expectedTotal = manifest.SourcePackages.Sum(static package =>
+            package.Files.Sum(static file => file.SizeBytes));
+        if (materialized.Count != WineRuntimePackageManifestLoader.RequiredSourcePackageCount ||
+            fileCount != WineRuntimePackageManifestLoader.RequiredSourceFileCount ||
+            totalBytes != expectedTotal || totalBytes > WineRuntimePackageManifestLoader.MaximumClosureSourceTotalBytes)
+        {
+            throw new BundleValidationException(
+                "Operating-system source material did not produce the exact reviewed 162-source/526-file closure.");
+        }
+    }
+
+    internal async Task WriteWineNoticeArchiveAsync(
+        WineRuntimePackageManifestSnapshot manifestSnapshot,
+        IReadOnlyList<InspectedImage> images,
+        string staging,
+        CancellationToken cancellationToken)
+    {
+        var manifest = manifestSnapshot.Manifest;
+        var componentDigest = $"sha256:{WineManifestSha256(manifestSnapshot)}";
+        var labelPrefix = ComponentLabelPrefix + manifest.Component.Id + ".";
+        var sourceImage = images
+            .Where(image =>
+                image.Labels.TryGetValue(labelPrefix + "version", out var version) &&
+                string.Equals(version, manifest.Component.ResolvedVersion, StringComparison.Ordinal) &&
+                image.Labels.TryGetValue(labelPrefix + "digest", out var digest) &&
+                string.Equals(digest, componentDigest, StringComparison.Ordinal) &&
+                image.Labels.TryGetValue(labelPrefix + "source-uri", out var sourceUri) &&
+                string.Equals(sourceUri, manifest.Component.SourceUri, StringComparison.Ordinal))
+            .OrderBy(static image => image.Id, StringComparer.Ordinal)
+            .FirstOrDefault()
+            ?? throw new BundleValidationException(
+                "No inspected final Wine image carries the exact userspace component identity required for notice extraction.");
+
+        var destination = Path.Combine(
+            staging,
+            WineNoticeArchiveBundleRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        var inspection = await docker.CopyImageFileAsync(
+            sourceImage.ImageId,
+            manifest.NoticeArchive.ImagePath,
+            destination,
+            WineRuntimePackageManifestLoader.MaximumNoticeArchiveBytes,
+            cancellationToken);
+        if (!string.Equals(
+                inspection.Sha256,
+                $"sha256:{manifest.NoticeArchive.Sha256}",
+                StringComparison.Ordinal) ||
+            inspection.Length != manifest.NoticeArchive.SizeBytes)
+        {
+            throw new BundleValidationException(
+                "Wine notice archive copied from the final image does not match its manifest identity.");
+        }
+
+        await ValidateWineNoticeArchiveAsync(destination, manifest, cancellationToken);
+    }
+
+    internal static async Task ValidateWineNoticeArchiveAsync(
+        string archivePath,
+        WineRuntimePackageManifest manifest,
+        CancellationToken cancellationToken)
+    {
+        var expected = new Dictionary<string, (string Sha256, long SizeBytes)>(StringComparer.Ordinal);
+        foreach (var package in manifest.ResolvedPackages)
+        {
+            var path = package.CopyrightPath[1..];
+            if (expected.TryGetValue(path, out var existing) &&
+                (existing.SizeBytes != package.CopyrightSizeBytes ||
+                 !string.Equals(existing.Sha256, package.CopyrightSha256, StringComparison.Ordinal)))
+            {
+                throw new BundleValidationException(
+                    $"Wine notice '{package.CopyrightPath}' has conflicting package identities.");
+            }
+            expected[path] = (package.CopyrightSha256, package.CopyrightSizeBytes);
+        }
+        if (expected.Count != manifest.NoticeArchive.EntryCount)
+            throw new BundleValidationException("Wine notice archive entry count does not match the package inventory.");
+
+        var actual = new HashSet<string>(StringComparer.Ordinal);
+        await using var stream = new FileStream(
+            archivePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            64 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        using var reader = new TarReader(stream, leaveOpen: false);
+        while (await reader.GetNextEntryAsync(copyData: false, cancellationToken) is { } entry)
+        {
+            if (entry is not UstarTarEntry ustar ||
+                entry.EntryType is not (TarEntryType.RegularFile or TarEntryType.V7RegularFile) ||
+                entry.DataStream is null ||
+                entry.ModificationTime != DateTimeOffset.UnixEpoch ||
+                ustar.Uid != 0 || ustar.Gid != 0 ||
+                !IsCanonicalBundlePath(entry.Name) ||
+                !actual.Add(entry.Name) ||
+                !expected.TryGetValue(entry.Name, out var identity) ||
+                entry.Length != identity.SizeBytes)
+            {
+                throw new BundleValidationException(
+                    "Wine notice archive must contain only the exact deterministic regular-file copyright closure.");
+            }
+
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            var buffer = new byte[64 * 1024];
+            long length = 0;
+            while (true)
+            {
+                var read = await entry.DataStream.ReadAsync(buffer, cancellationToken);
+                if (read == 0) break;
+                length = checked(length + read);
+                if (length > identity.SizeBytes)
+                    throw new BundleValidationException($"Wine notice '{entry.Name}' exceeds its reviewed size.");
+                hash.AppendData(buffer.AsSpan(0, read));
+            }
+            var sha256 = Convert.ToHexStringLower(hash.GetHashAndReset());
+            if (length != identity.SizeBytes || !string.Equals(sha256, identity.Sha256, StringComparison.Ordinal))
+                throw new BundleValidationException($"Wine notice '{entry.Name}' does not match its reviewed identity.");
+        }
+
+        if (!actual.SetEquals(expected.Keys))
+            throw new BundleValidationException("Wine notice archive is missing reviewed copyright entries.");
+    }
+
+    private static async Task<ExternalSourceMaterialInspection> CopyExternalSourceMaterialAsync(
+        Stream input,
+        string destination,
+        long expectedSize,
+        long remainingTotalBytes,
+        CancellationToken cancellationToken)
+    {
+        if (remainingTotalBytes < expectedSize)
+            throw new BundleValidationException("Wine source material exceeds the offline bundle limit.");
+
+        using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(
+            System.Security.Cryptography.HashAlgorithmName.SHA256);
+        await using var output = new FileStream(
+            destination,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            64 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        var buffer = new byte[64 * 1024];
+        long sizeBytes = 0;
+        while (true)
+        {
+            var read = await input.ReadAsync(buffer, cancellationToken);
+            if (read == 0)
+                break;
+
+            sizeBytes = checked(sizeBytes + read);
+            if (sizeBytes > expectedSize || sizeBytes > remainingTotalBytes)
+                throw new BundleValidationException("Wine source material exceeds its reviewed size limit.");
+            hash.AppendData(buffer.AsSpan(0, read));
+            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+        }
+
+        return new ExternalSourceMaterialInspection(
+            Convert.ToHexStringLower(hash.GetHashAndReset()),
+            sizeBytes);
+    }
+
+    private sealed record ExternalSourceMaterialInspection(string Sha256, long SizeBytes);
 
     private static async Task CopyDirectoryBoundedAsync(
         string source,
@@ -972,6 +1542,14 @@ public sealed class ReleaseBundleBuilder(
         return builder.Length > 0 ? builder.ToString() : "component";
     }
 
+    private static bool IsCanonicalBundlePath(string value) =>
+        value.Length is > 0 and <= 512 &&
+        value.StartsWith("usr/share/doc/", StringComparison.Ordinal) &&
+        value.EndsWith("/copyright", StringComparison.Ordinal) &&
+        !value.Contains('\\') &&
+        value.Split('/').All(static segment => segment.Length > 0 && segment is not "." and not ".." &&
+            segment.All(static character => !char.IsControl(character)));
+
     private static ReleaseLockDocument CreateBundleLock(
         ReleaseLockDocument releaseLock,
         IReadOnlyList<InspectedImage> images)
@@ -1010,7 +1588,8 @@ public sealed class ReleaseBundleBuilder(
         string releaseId,
         ReleaseLockDocument releaseLock,
         IReadOnlyList<InspectedImage> images,
-        IReadOnlyList<DependencyComponent> dependencies)
+        IReadOnlyList<DependencyComponent> dependencies,
+        WineRuntimePackageManifest wineManifest)
     {
         var packages = new List<object>();
         packages.AddRange(releaseLock.Components.OrderBy(static pair => pair.Key, StringComparer.Ordinal)
@@ -1035,6 +1614,22 @@ public sealed class ReleaseBundleBuilder(
             licenseConcluded = dependency.License,
             licenseDeclared = dependency.License,
             checksums = IntegrityChecksums(dependency.Integrity, spdx: true)
+        }));
+        packages.AddRange(wineManifest.ResolvedPackages.Select(package => (object)new
+        {
+            SPDXID = $"SPDXRef-OS-apt-{SafeSpdxId(package.Name)}-{SafeSpdxId(package.Version)}",
+            name = package.Name,
+            versionInfo = package.Version,
+            downloadLocation = WineRuntimePackageManifestLoader.ArchiveUri(
+                wineManifest,
+                package.ArchiveSnapshotId,
+                package.Path).AbsoluteUri,
+            filesAnalyzed = false,
+            licenseConcluded = "NOASSERTION",
+            licenseDeclared = "NOASSERTION",
+            checksums = (object[])[new { algorithm = "SHA256", checksumValue = package.Sha256 }],
+            comment = $"Ubuntu {package.Architecture} binary; source {package.SourcePackage}@{package.SourceVersion}; " +
+                $"snapshot {package.ArchiveSnapshotId}/{package.ArchiveSuite}; copyright {package.CopyrightPath} sha256:{package.CopyrightSha256}"
         }));
         packages.AddRange(images.Select(image => (object)new
         {
@@ -1067,7 +1662,8 @@ public sealed class ReleaseBundleBuilder(
         string releaseId,
         ReleaseLockDocument releaseLock,
         IReadOnlyList<InspectedImage> images,
-        IReadOnlyList<DependencyComponent> dependencies)
+        IReadOnlyList<DependencyComponent> dependencies,
+        WineRuntimePackageManifest wineManifest)
     {
         var components = new List<object>();
         components.AddRange(releaseLock.Components.OrderBy(static pair => pair.Key, StringComparer.Ordinal)
@@ -1088,6 +1684,25 @@ public sealed class ReleaseBundleBuilder(
             hashes = IntegrityChecksums(dependency.Integrity, spdx: false),
             licenses = new[] { new { expression = dependency.License } },
             properties = new[] { new { name = "sharplabnext:direct", value = dependency.Direct.ToString().ToLowerInvariant() } }
+        }));
+        components.AddRange(wineManifest.ResolvedPackages.Select(package => (object)new
+        {
+            type = "library",
+            group = "ubuntu",
+            name = package.Name,
+            version = package.Version,
+            purl = OsPackageUrl(package),
+            hashes = (object[])[new { alg = "SHA-256", content = package.Sha256 }],
+            properties = new[]
+            {
+                new { name = "sharplabnext:scope", value = "os-package" },
+                new { name = "sharplabnext:archive-snapshot", value = package.ArchiveSnapshotId },
+                new { name = "sharplabnext:archive-suite", value = package.ArchiveSuite },
+                new { name = "sharplabnext:source-package", value = package.SourcePackage },
+                new { name = "sharplabnext:source-version", value = package.SourceVersion },
+                new { name = "sharplabnext:copyright-path", value = package.CopyrightPath },
+                new { name = "sharplabnext:copyright-sha256", value = package.CopyrightSha256 }
+            }
         }));
         components.AddRange(images.Select(image => (object)new
         {
@@ -1119,6 +1734,7 @@ public sealed class ReleaseBundleBuilder(
         ReleaseLockDocument releaseLock,
         IReadOnlyList<InspectedImage> images,
         IReadOnlyList<DependencyComponent> dependencies,
+        WineRuntimePackageManifestSnapshot wineManifestSnapshot,
         BaseImageManifest baseImages,
         IReadOnlyList<MaintainedProvenanceInput> maintainedProvenance,
         RepositorySourceProvenance source)
@@ -1134,6 +1750,37 @@ public sealed class ReleaseBundleBuilder(
             uri = $"pkg:{dependency.PackageManager}/{Uri.EscapeDataString(dependency.Name)}@{Uri.EscapeDataString(dependency.Version)}",
             digest = IntegrityDigest(dependency.Integrity)
         }));
+        resolvedDependencies.AddRange(wineManifestSnapshot.Manifest.ResolvedPackages.Select(package => (object)new
+        {
+            uri = OsPackageUrl(package),
+            downloadLocation = WineRuntimePackageManifestLoader.ArchiveUri(
+                wineManifestSnapshot.Manifest,
+                package.ArchiveSnapshotId,
+                package.Path).AbsoluteUri,
+            digest = new Dictionary<string, string> { ["sha256"] = package.Sha256 },
+            sourcePackage = package.SourcePackage,
+            sourceVersion = package.SourceVersion
+        }));
+        resolvedDependencies.AddRange(wineManifestSnapshot.Manifest.SourcePackages.SelectMany(sourcePackage =>
+            sourcePackage.Files.Select(file => (object)new
+            {
+                uri = WineRuntimePackageManifestLoader.ArchiveUri(
+                    wineManifestSnapshot.Manifest,
+                    sourcePackage.ArchiveSnapshotId,
+                    file.Path).AbsoluteUri,
+                digest = new Dictionary<string, string> { ["sha256"] = file.Sha256 },
+                sourcePackage = sourcePackage.Name,
+                sourceVersion = sourcePackage.Version
+            })));
+        resolvedDependencies.Add(new
+        {
+            uri = $"https://github.com/sharplabnext/SharpLabNext/blob/{source.Revision}/" +
+                WineRuntimePackageManifestLoader.ManifestRelativePath,
+            digest = new Dictionary<string, string>
+            {
+                ["sha256"] = WineManifestSha256(wineManifestSnapshot)
+            }
+        });
         resolvedDependencies.AddRange(baseImages.Images.Select(image => (object)new
         {
             uri = $"pkg:docker/{Uri.EscapeDataString(image.Reference[..image.Reference.LastIndexOf('@')])}",
@@ -1281,6 +1928,17 @@ public sealed class ReleaseBundleBuilder(
         }
     }
 
+    private static string WineManifestSha256(WineRuntimePackageManifestSnapshot snapshot)
+    {
+        var actual = Convert.ToHexStringLower(SHA256.HashData(snapshot.ManifestBytes.Span));
+        if (!string.Equals(snapshot.ManifestSha256, $"sha256:{actual}", StringComparison.Ordinal))
+        {
+            throw new BundleValidationException(
+                "Wine package inventory bytes changed after their release identity was validated.");
+        }
+        return actual;
+    }
+
     private static object[] ComponentChecksums(LockedComponent component)
     {
         if (component.Sha512 is not null)
@@ -1322,6 +1980,10 @@ public sealed class ReleaseBundleBuilder(
             : Uri.EscapeDataString(component.Name);
         return $"pkg:{component.PackageManager}/{name}@{Uri.EscapeDataString(component.Version)}";
     }
+
+    private static string OsPackageUrl(WineResolvedPackage package) =>
+        $"pkg:deb/ubuntu/{Uri.EscapeDataString(package.Name)}@{Uri.EscapeDataString(package.Version)}" +
+        $"?arch={Uri.EscapeDataString(package.Architecture)}&distro=ubuntu-24.04";
 
     private static string SafeSpdxId(string value) =>
         new(value.Select(static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-'
@@ -1683,6 +2345,9 @@ public sealed class ReleaseBundleBuilder(
             var component = releaseLock.Components[runtime.Id];
             profile.Image = image.ImageId;
             profile.RuntimeImageId = image.ImageId;
+            // The receipt and registry reference bind source promotion. The release
+            // overlay runs only the image ID captured after that trust check.
+            profile.PromotionReceipt = null;
             profile.RuntimeVersion = component.ResolvedVersion;
             if (RequiresCommitIdentity(runtime))
             {
@@ -2486,10 +3151,17 @@ public sealed class ReleaseBundleBuilder(
         }
     }
 
-    private static async Task WriteJsonAsync(string path, object value, CancellationToken cancellationToken)
+    private static Task WriteJsonAsync(string path, object value, CancellationToken cancellationToken) =>
+        WriteJsonAsync(path, value, JsonOptions, cancellationToken);
+
+    private static async Task WriteJsonAsync(
+        string path,
+        object value,
+        JsonSerializerOptions options,
+        CancellationToken cancellationToken)
     {
         await using var stream = File.Create(path);
-        await JsonSerializer.SerializeAsync(stream, value, value.GetType(), JsonOptions, cancellationToken);
+        await JsonSerializer.SerializeAsync(stream, value, value.GetType(), options, cancellationToken);
         await stream.WriteAsync("\n"u8.ToArray(), cancellationToken);
     }
 
@@ -2501,22 +3173,53 @@ public sealed class ReleaseBundleBuilder(
         return Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken));
     }
 
+    private static DeploymentScriptBindings GetDeploymentScriptBindings(
+        IReadOnlyList<RuntimePromotionTrustSnapshot> trust)
+    {
+        var production = RuntimePromotionTrust.RuntimePromotionPlanSignatureTrust.ProductionVerifier;
+        var bindings = trust.Select(runtime =>
+        {
+            var signedPlan = runtime.SignedPlan ?? throw new BundleValidationException(
+                $"Runtime '{runtime.RuntimeId}' has no captured signed promotion plan.");
+            return new DeploymentScriptBindings(
+                signedPlan.Verifier.KeyId,
+                signedPlan.PublicKey.RelativePath,
+                signedPlan.PublicKey.Sha256);
+        }).Distinct().ToArray();
+        if (bindings.Length > 1)
+        {
+            throw new BundleValidationException(
+                "Promotion-bound release material uses multiple plan-signature trust roots.");
+        }
+
+        return bindings.Length == 1
+            ? bindings[0]
+            : new DeploymentScriptBindings(
+                production.KeyId,
+                production.PublicKeyPath,
+                $"sha256:{Convert.ToHexStringLower(SHA256.HashData(production.PublicKeyPem))}");
+    }
+
     private static async Task WriteDeploymentScriptAsync(
         string staging,
         string scriptName,
+        DeploymentScriptBindings bindings,
         CancellationToken cancellationToken)
     {
         var resourceName = $"SharpLabNext.BundleBuilder.DeploymentScripts.{scriptName}";
         await using var input = typeof(ReleaseBundleBuilder).Assembly.GetManifestResourceStream(resourceName)
             ?? throw new BundleValidationException($"Embedded deployment script '{scriptName}' is missing.");
-        await using var output = new FileStream(
+        using var reader = new StreamReader(input, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var script = await reader.ReadToEndAsync(cancellationToken);
+        script = script
+            .Replace("__RUNTIME_PROMOTION_PLAN_KEY_ID__", bindings.KeyId, StringComparison.Ordinal)
+            .Replace("__RUNTIME_PROMOTION_PLAN_PUBLIC_KEY_PATH__", bindings.PublicKeyPath, StringComparison.Ordinal)
+            .Replace("__RUNTIME_PROMOTION_PLAN_PUBLIC_KEY_SHA256__", bindings.PublicKeySha256, StringComparison.Ordinal);
+        await File.WriteAllTextAsync(
             Path.Combine(staging, scriptName),
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None,
-            64 * 1024,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
-        await input.CopyToAsync(output, cancellationToken);
+            script,
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            cancellationToken);
     }
 
     private static readonly string[] DeploymentScriptNames =
@@ -2527,11 +3230,41 @@ public sealed class ReleaseBundleBuilder(
         "smoke.sh",
         "deployment-common.ps1",
         "deployment-common.sh",
+        "deploy.sh",
         "install.ps1",
         "install.sh",
         "rollback.ps1",
         "rollback.sh"
     ];
+
+    private sealed record PromotionEvidenceBinding(string Kind, SortedSet<string> RuntimeIds);
+
+    private sealed record DeploymentScriptBindings(
+        string KeyId,
+        string PublicKeyPath,
+        string PublicKeySha256);
+
+    private sealed class PromotionEvidenceManifest
+    {
+        public required int SchemaVersion { get; init; }
+        public required string BuildSourceRevision { get; init; }
+        public required string ReleaseSourceRevision { get; init; }
+        public required IReadOnlyList<string> PromotedRuntimeIds { get; init; }
+        public required IReadOnlyList<PromotionEvidenceManifestEntry> Entries { get; init; }
+    }
+
+    private sealed class PromotionEvidenceManifestEntry
+    {
+        public required string Kind { get; init; }
+        public required string SourcePath { get; init; }
+        public required string BundlePath { get; init; }
+        public required string Sha256 { get; init; }
+        public required long SizeBytes { get; init; }
+
+        public required string[] ProfileIds { get; init; }
+
+        public required string[] RuntimeIds { get; init; }
+    }
 
     private static void DeleteStagingDirectory(string staging, string parent)
     {

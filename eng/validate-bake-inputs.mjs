@@ -1,14 +1,18 @@
+import childProcess from 'node:child_process'
 import fs from 'node:fs'
+import crypto from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { findDockerfileStageArgumentScopeViolations } from './dockerfile-stage-arguments.mjs'
+import { validateDockerfileFrontend } from './dockerfile-frontend.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const manifestPath = path.join(repositoryRoot, 'profiles', 'base-images.json')
 const bakePath = path.join(repositoryRoot, 'eng', 'bake.hcl')
 const candidateBakePath = path.join(repositoryRoot, 'eng', 'bake.runtime-candidates.hcl')
 const dockerDirectory = path.join(repositoryRoot, 'deploy', 'docker')
+const winePackageManifestPath = path.join(repositoryRoot, 'profiles', 'runtime-wine-packages.json')
 
 const expectedBaseImages = new Map([
   ['node-builder', 'BASE_NODE_IMAGE'],
@@ -44,7 +48,27 @@ const frameworkManagedReferenceSetIds = [
   'netfx48-managed-ref',
 ]
 
+const coreClrReferenceSets = [
+  ['netcoreapp2.0-ref', 'NETCOREAPP20_REFERENCE_VERSION', 'NETCOREAPP20', 'netcoreapp20', 'NETCOREAPP20_REFERENCE_SOURCE_URI'],
+  ['netcoreapp2.1-ref', 'NETCOREAPP21_REFERENCE_VERSION', 'NETCOREAPP21', 'netcoreapp21', 'NETCOREAPP21_REFERENCE_SOURCE_URI'],
+  ['netcoreapp2.2-ref', 'NETCOREAPP22_REFERENCE_VERSION', 'NETCOREAPP22', 'netcoreapp22', 'NETCOREAPP22_REFERENCE_SOURCE_URI'],
+  ['netcoreapp3.0-ref', 'NETCOREAPP30_REFERENCE_VERSION', 'NETCOREAPP30', 'netcoreapp30', 'NETCOREAPP30_REFERENCE_SOURCE_URI'],
+  ['netcoreapp3.1-ref', 'NETCOREAPP31_REFERENCE_VERSION', 'NETCOREAPP31', 'netcoreapp31', 'NETCOREAPP31_REFERENCE_SOURCE_URI'],
+  ['net5-ref', 'NET5_REFERENCE_VERSION', 'NET5', 'net5', 'NET5_REFERENCE_SOURCE_URI'],
+  ['net6-ref', 'NET6_REFERENCE_VERSION', 'NET6', 'net6', 'NET6_REFERENCE_SOURCE_URI'],
+  ['net7-ref', 'NET7_REFERENCE_VERSION', 'NET7', 'net7', 'NET7_REFERENCE_SOURCE_URI'],
+  ['net8-ref', 'NET8_REFERENCE_VERSION', 'NET8', 'net8', 'NET8_REFERENCE_SOURCE_URI'],
+  ['net9-ref', 'NET9_REFERENCE_VERSION', 'NET9', 'net9', 'NET9_REFERENCE_SOURCE_URI'],
+  ['net10-ref', 'NET10_REFERENCE_PACK_VERSION', 'NET10', 'net10', 'NET10_REFERENCE_URL'],
+  ['net11-preview-ref', 'NET11_REFERENCE_VERSION', 'NET11', 'net11', 'NET11_REFERENCE_URL'],
+]
+
 const expectedComponentLabels = new Map([
+  ['operator-wine-coreclr', [
+    'wine-coreclr-userspace.version',
+    'wine-coreclr-userspace.digest',
+    'wine-coreclr-userspace.source-uri',
+  ]],
   ['runtime-dotnet10', [
     'dotnet-10-linux-x64.version',
     'dotnet-10-linux-x64.commit',
@@ -267,10 +291,12 @@ const versionToolsConsumers = new Map([
 
 const failures = []
 const manifest = readJson(manifestPath)
+const winePackageManifest = readJson(winePackageManifestPath)
 const bake = fs.readFileSync(bakePath, 'utf8')
 const candidateBake = fs.readFileSync(candidateBakePath, 'utf8')
 
 validateManifest(manifest)
+validateWinePackageManifest(winePackageManifest)
 validateBake(bake, candidateBake)
 validateDockerfiles()
 
@@ -314,6 +340,157 @@ function validateManifest(document) {
   }
 }
 
+function validateWinePackageManifest(document) {
+  const expectedResolvedHash = 'sha256:fa83c245764fc09102029b249f5149a48baeda53a40c0432de973ebe09e39dee'
+  const expectedDirectPackages = new Map([
+    ['wine', ['9.0~repack-4build3', 'all']],
+    ['wine64', ['9.0~repack-4build3', 'amd64']],
+    ['fonts-wine', ['9.0~repack-4build3', 'all']],
+    ['xvfb', ['2:21.1.12-1ubuntu1.6', 'amd64']],
+  ])
+  if (document.schemaVersion !== 1 ||
+      document.platform !== 'linux/amd64' ||
+      document.baseImageId !== 'dotnet-runtime-deps' ||
+      document.component?.id !== 'wine-coreclr-userspace' ||
+      document.component?.kind !== 'runtime-dependency' ||
+      document.component?.sourceUri !== 'https://snapshot.ubuntu.com/ubuntu/20260810T000000Z/') {
+    failures.push('profiles/runtime-wine-packages.json must identify the source-controlled Linux Wine userspace')
+    return
+  }
+  const expectedSuites = new Map([
+    ['20260810T000000Z\0noble', ['cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0', 255850]],
+    ['20260810T000000Z\0noble-updates', ['ef81441269d3a8bdd8cdfe9095de7deb7f1af70d42191f61f1af3c8fb72cfb32', 126125]],
+    ['20260810T000000Z\0noble-security', ['3cfb1c8d7499c0bac1bfbe1e32675d200f0ca74b18afc4248c45325a073d0fd0', 126127]],
+    ['20260610T000000Z\0noble-updates', ['f51355c88d0b337b45cede930d215a56f806b7c9339e95487b6600ea02c728ce', 126125]],
+  ])
+  const archiveIndexes = new Set()
+  let archiveSuiteCount = 0
+  if (!Array.isArray(document.archiveSnapshots) || document.archiveSnapshots.length !== 2) {
+    failures.push('Wine userspace must pin its exact Ubuntu installation and base-image evidence snapshot origins')
+  }
+  else {
+    for (const snapshot of document.archiveSnapshots) {
+      if (snapshot.uri !== `https://snapshot.ubuntu.com/ubuntu/${snapshot.id}/` || !Array.isArray(snapshot.suites)) {
+        failures.push(`Wine archive snapshot '${snapshot.id}' has an invalid immutable URI or suite list`)
+        continue
+      }
+      for (const suite of snapshot.suites) {
+        archiveSuiteCount++
+        const expected = expectedSuites.get(`${snapshot.id}\0${suite.name}`)
+        if (expected === undefined || suite.inReleaseSha256 !== expected[0] ||
+            suite.inReleaseSizeBytes !== expected[1] ||
+            suite.signingKeyFingerprint !== 'F6ECB3762474EDA9D21B7022871920D1991BC93C' ||
+            !Array.isArray(suite.indexes) || suite.indexes.length !== 8) {
+          failures.push(`Wine archive suite '${snapshot.id}/${suite.name}' has invalid signed metadata`)
+          continue
+        }
+        for (const index of suite.indexes) {
+          const identity = `${snapshot.id}\0${suite.name}\0${index.kind}\0${index.component}\0${index.path}`
+          if (archiveIndexes.has(identity) || !/^[0-9a-f]{64}$/.test(index.sha256) ||
+              !Number.isSafeInteger(index.sizeBytes) || index.sizeBytes <= 0) {
+            failures.push(`Wine archive index '${identity}' has an invalid or duplicate identity`)
+          }
+          archiveIndexes.add(identity)
+        }
+      }
+    }
+    if (archiveSuiteCount !== 4 || archiveIndexes.size !== 32) {
+      failures.push('Wine userspace must retain exactly four signed suites and 32 binary/source indexes')
+    }
+  }
+  if (!Array.isArray(document.directPackages) || document.directPackages.length !== 4) {
+    failures.push('profiles/runtime-wine-packages.json must lock exactly four direct Wine/Xvfb packages')
+  }
+  else {
+    const actualDirectPackages = new Set()
+    for (const item of document.directPackages) {
+      actualDirectPackages.add(item.name)
+      const expected = expectedDirectPackages.get(item.name)
+      if (expected === undefined || item.version !== expected[0] || item.architecture !== expected[1]) {
+        failures.push(`profiles/runtime-wine-packages.json has an unexpected direct package '${item.name}@${item.version}'`)
+      }
+      if (!/^[0-9a-f]{64}$/.test(item.sha256) || !/^pool\//.test(item.path)) {
+        failures.push(`Wine direct package '${item.name}' must have a source-controlled pool path and SHA-256`)
+      }
+      if (!['LGPL-2.1+', 'MIT'].includes(item.license) ||
+          !/^[0-9a-f]{64}$/.test(item.sourceSha256) ||
+          !Number.isInteger(item.sourceSizeBytes) || item.sourceSizeBytes <= 0) {
+        failures.push(`Wine direct package '${item.name}' must retain its source license and identity`)
+      }
+    }
+    for (const id of expectedDirectPackages.keys()) {
+      if (!actualDirectPackages.has(id)) failures.push(`Wine direct package '${id}' is missing`)
+    }
+    const xvfb = document.directPackages.find(item => item.name === 'xvfb')
+    if (xvfb?.path !== 'pool/universe/x/xorg-server/xvfb_21.1.12-1ubuntu1.6_amd64.deb' ||
+        xvfb.sourceUri !== 'https://snapshot.ubuntu.com/ubuntu/20260810T000000Z/pool/main/x/xorg-server/xorg-server_21.1.12-1ubuntu1.6.dsc') {
+      failures.push('Xvfb must retain its archive binary path and separate Xorg source-package URI')
+    }
+  }
+  const resolved = document.resolvedPackages
+  if (!Array.isArray(resolved) || resolved.length !== 228) {
+    failures.push('profiles/runtime-wine-packages.json must lock exactly 228 resolved packages')
+  }
+  else {
+    const rendered = resolved.map(item => `${item.name}=${item.version}\n`).join('')
+    const hash = `sha256:${crypto.createHash('sha256').update(rendered, 'utf8').digest('hex')}`
+    if (hash !== expectedResolvedHash || document.resolvedPackageListSha256 !== expectedResolvedHash) {
+      failures.push('Wine resolved package closure must match its canonical 228-line SHA-256')
+    }
+    const names = resolved.map(item => item.name)
+    if (names.some((name, index) => index > 0 && names[index - 1] >= name)) {
+      failures.push('Wine resolved packages must be sorted ordinal by package name')
+    }
+    if (names.some(name => name.endsWith(':i386'))) {
+      failures.push('Wine resolved package closure must not contain i386 packages')
+    }
+    const sources = new Set((document.sourcePackages ?? []).map(item => `${item.name}\0${item.version}`))
+    const copyrightPaths = new Set()
+    for (const item of resolved) {
+      const binaryIndex = `${item.archiveSnapshotId}\0${item.archiveSuite}\0binary\0${item.archiveComponent}\0${item.archiveIndexPath}`
+      if (!archiveIndexes.has(binaryIndex) || !sources.has(`${item.sourcePackage}\0${item.sourceVersion}`) ||
+          !/^[0-9a-f]{64}$/.test(item.sha256) || !/^[0-9a-f]{64}$/.test(item.copyrightSha256) ||
+          !/^\/usr\/share\/doc\/[A-Za-z0-9][A-Za-z0-9.+_-]*\/copyright$/.test(item.copyrightPath)) {
+        failures.push(`Wine binary package '${item.name}' lacks signed binary/source/notice evidence`)
+      }
+      copyrightPaths.add(item.copyrightPath)
+    }
+    if (copyrightPaths.size !== 225 ||
+        resolved.find(item => item.name === 'openssl')?.copyrightPath !== '/usr/share/doc/openssl/copyright') {
+      failures.push('Wine copyright closure must contain the canonical 225-entry set including OpenSSL')
+    }
+  }
+  const sourcePackages = document.sourcePackages
+  if (!Array.isArray(sourcePackages) || sourcePackages.length !== 162) {
+    failures.push('Wine userspace must retain exactly 162 source packages')
+  }
+  else {
+    const sourceFiles = sourcePackages.flatMap(source => source.files ?? [])
+    const sourceBytes = sourceFiles.reduce((total, file) => total + file.sizeBytes, 0)
+    if (sourceFiles.length !== 526 || sourceBytes !== 840446201 ||
+        sourcePackages.some(source => !source.files.some(file => file.path.endsWith('.dsc')))) {
+      failures.push('Wine userspace source closure must contain 526 files, one descriptor per source, and 840446201 bytes')
+    }
+  }
+  const offer = document.sourceOffer
+  if (offer?.package !== 'wine' ||
+      offer.baseUri !== 'https://snapshot.ubuntu.com/ubuntu/20260810T000000Z/pool/universe/w/wine/' ||
+      offer.version !== '9.0~repack-4build3' ||
+      offer.license !== 'LGPL-2.1+' ||
+      !Array.isArray(offer.files) || offer.files.length !== 3 ||
+      offer.files.some(file => !/^[0-9a-f]{64}$/.test(file.sha256) || !Number.isInteger(file.sizeBytes))) {
+    failures.push('Wine LGPL source offer must retain its three exact source files')
+  }
+  if (document.noticeArchive?.imagePath !== '/usr/local/share/sharplabnext/wine-coreclr-copyright-notices.tar' ||
+      document.noticeArchive?.sha256 !== '3fcd04a992da99ac8fb08d3b7aa5a3ac29f28d9de221f7bc37c455c431e27f8d' ||
+      document.noticeArchive?.sizeBytes !== 2887680 || document.noticeArchive?.entryCount !== 225) {
+    failures.push('Wine notice archive must bind the deterministic 225-entry USTAR identity')
+  }
+  if (/archive\.ubuntu\.com|blob\/main/.test(JSON.stringify(document))) {
+    failures.push('Wine userspace must not contain mutable Ubuntu or Git branch URLs')
+  }
+}
+
 function validateBake(source, candidateSource) {
   const blocks = variableBlocks(source)
   for (const [name, body] of blocks) {
@@ -342,6 +519,49 @@ function validateBake(source, candidateSource) {
   const productionTargets = namedBlocks(source, 'target')
   const candidateTargets = namedBlocks(candidateSource, 'target')
   const targets = new Map([...productionTargets, ...candidateTargets])
+  const defaultGroup = namedBlocks(source, 'group').get('default')
+  const wineOperator = productionTargets.get('operator-wine-coreclr')
+  if (wineOperator === undefined) {
+    failures.push("eng/bake.hcl is missing target 'operator-wine-coreclr'")
+  }
+  else {
+    for (const requiredText of [
+      'context = "."',
+      'platforms = ["linux/amd64"]',
+      'output = ["type=docker,rewrite-timestamp=true,unpack=false"]',
+      'attest = ["type=provenance,disabled=true"]',
+      'dockerfile = "deploy/docker/Dockerfile.operator-wine-coreclr"',
+      'target = "final"',
+      'SOURCE_DATE_EPOCH = unix_seconds(required(SOURCE_DATE_EPOCH))',
+      'RUNTIME_DEPS_IMAGE = required(BASE_DOTNET_RUNTIME_DEPS_IMAGE)',
+      'SOURCE_REVISION = required(SOURCE_REVISION)',
+      'WINE_CORECLR_USERSPACE_VERSION = required(WINE_CORECLR_USERSPACE_VERSION)',
+      'WINE_CORECLR_USERSPACE_DIGEST = required(WINE_CORECLR_USERSPACE_DIGEST)',
+      'WINE_CORECLR_USERSPACE_SOURCE_URI = required(WINE_CORECLR_USERSPACE_SOURCE_URI)',
+      'OPERATOR_SOURCE_CONTEXT = required(OPERATOR_SOURCE_CONTEXT)',
+      'OPERATOR_PROMOTION_ELIGIBLE = required(OPERATOR_PROMOTION_ELIGIBLE)',
+      'OPERATOR_DEVELOPMENT_ONLY = required(OPERATOR_DEVELOPMENT_ONLY)',
+      '"org.opencontainers.image.version" = "wine-9.0-noble-amd64"',
+      '"org.opencontainers.image.revision" = required(SOURCE_REVISION)',
+      '"org.opencontainers.image.source" = "https://github.com/sharplabnext/SharpLabNext"',
+      '"io.sharplabnext.source.revision" = required(SOURCE_REVISION)',
+      '"io.sharplabnext.base-image.dotnet-runtime-deps" = required(BASE_DOTNET_RUNTIME_DEPS_IMAGE)',
+      '"io.sharplabnext.source.context" = required(OPERATOR_SOURCE_CONTEXT)',
+      '"io.sharplabnext.development-only" = required(OPERATOR_DEVELOPMENT_ONLY)',
+      '"com.sharplabnext.operator.promotion-eligible" = required(OPERATOR_PROMOTION_ELIGIBLE)',
+      'operator-wine-coreclr:${required(RELEASE_ID)}',
+    ]) {
+      if (!wineOperator.includes(requiredText)) {
+        failures.push(`operator-wine-coreclr is missing '${requiredText}'`)
+      }
+    }
+    if (wineOperator.includes('inherits = ["common"]')) {
+      failures.push('operator-wine-coreclr must not inherit unrelated common base-image inputs')
+    }
+  }
+  if (defaultGroup?.includes('operator-wine-coreclr')) {
+    failures.push('operator-wine-coreclr must not be a default Bake target')
+  }
   const common = productionTargets.get('common')
   if (common === undefined) {
     failures.push("eng/bake.hcl is missing target 'common'")
@@ -400,6 +620,8 @@ function validateBake(source, candidateSource) {
     }
   }
 
+  validateCoreClrReferenceSetBakeWiring(productionTargets)
+
   const matrixCandidate = targets.get('runtime-dotnet-matrix-candidate')
   if (matrixCandidate !== undefined) {
     for (const requiredText of [
@@ -432,6 +654,21 @@ function validateBake(source, candidateSource) {
     failures.push("eng/bake.runtime-candidates.hcl is missing target 'runtime-dotnet-matrix-candidate'")
   }
 
+  for (const input of [
+    'WINE_CORECLR_OPERATOR_RECEIPT_SHA256',
+    'WINE_CORECLR_OPERATOR_RECEIPT_KEY_ID',
+    'WINE_CORECLR_OPERATOR_REFERENCE',
+    'WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE',
+    'WINE_CORECLR_DEVELOPMENT_OPERATOR_TAG',
+  ]) {
+    if (candidateSource.includes(`required(${input})`)) {
+      failures.push(
+        `eng/bake.runtime-candidates.hcl must not eagerly require '${input}'; ` +
+        'Buildx evaluates unselected Wine targets while building Linux candidates',
+      )
+    }
+  }
+
   for (const [targetName, dockerfile, markers] of [
     ['runtime-mono-matrix-candidate', 'deploy/docker/Dockerfile.runtime-mono-matrix', [
       'SDK_IMAGE = BASE_DOTNET_SDK_IMAGE',
@@ -442,7 +679,8 @@ function validateBake(source, candidateSource) {
     ]],
     ['runtime-wine-dotnet-matrix-candidate', 'deploy/docker/Dockerfile.runtime-wine-dotnet-matrix', [
       'SDK_IMAGE = BASE_DOTNET_SDK_IMAGE',
-      'WINE_IMAGE = RUNTIME_MATRIX_WINE_IMAGE',
+      'WINE_IMAGE = WINE_CORECLR_DEVELOPMENT_OPERATOR_TAG != "" ? WINE_CORECLR_DEVELOPMENT_OPERATOR_TAG : RUNTIME_MATRIX_WINE_IMAGE',
+      'WINE_IDENTITY = RUNTIME_MATRIX_WINE_IMAGE',
       'CONTROL_IMAGE = RUNTIME_MATRIX_CONTROL_IMAGE',
     ]],
     ['runtime-wine-framework-matrix-candidate', 'deploy/docker/Dockerfile.runtime-wine-framework-matrix', [
@@ -455,6 +693,7 @@ function validateBake(source, candidateSource) {
     ['runtime-wine-framework-matrix-shared-candidate', 'deploy/docker/Dockerfile.runtime-wine-framework-matrix-shared', [
       'SDK_IMAGE = BASE_DOTNET_SDK_IMAGE',
       'PARENT_IMAGE = RUNTIME_MATRIX_FRAMEWORK_PARENT_IMAGE',
+      'FRAMEWORK_SOURCE_REVISION = RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION',
       'WINE_IMAGE = RUNTIME_MATRIX_WINE_IMAGE',
       'CONTROL_IMAGE = RUNTIME_MATRIX_CONTROL_IMAGE',
       'FRAMEWORK_MATRIX_INPUT_SHA256 = RUNTIME_MATRIX_FRAMEWORK_MATRIX_INPUT_SHA256',
@@ -522,12 +761,22 @@ function validateBake(source, candidateSource) {
       if (targetName === 'runtime-wine-framework-matrix-shared-candidate') {
         for (const requiredText of [
           'PARENT_IMAGE = RUNTIME_MATRIX_FRAMEWORK_PARENT_IMAGE',
+          'FRAMEWORK_SOURCE_REVISION = RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION',
           'FRAMEWORK_MATRIX_INPUT_SHA256 = RUNTIME_MATRIX_FRAMEWORK_MATRIX_INPUT_SHA256',
           'FRAMEWORK_MATRIX_SOURCE_URI = RUNTIME_MATRIX_FRAMEWORK_MATRIX_SOURCE_URI',
           'FRAMEWORK_ROW_OPERATOR_IMAGE = RUNTIME_MATRIX_FRAMEWORK_ROW_OPERATOR_IMAGE',
           'FRAMEWORK_ROW_DIGEST = RUNTIME_MATRIX_FRAMEWORK_ROW_DIGEST',
+          'HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT = RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT',
           '"io.sharplabnext.framework.matrix-parent"',
+          '"io.sharplabnext.framework.source-revision"',
           '"io.sharplabnext.framework.matrix-selector"',
+          'RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT != "true" ? {',
+          '"io.sharplabnext.operator.receipt-sha256" = WINE_CORECLR_OPERATOR_RECEIPT_SHA256',
+          '"io.sharplabnext.operator.receipt-key-id" = WINE_CORECLR_OPERATOR_RECEIPT_KEY_ID',
+          '"io.sharplabnext.operator.userspace-reference" = WINE_CORECLR_OPERATOR_REFERENCE',
+          '"io.sharplabnext.component.wine-coreclr-userspace.version" = WINE_CORECLR_USERSPACE_VERSION',
+          '"io.sharplabnext.component.wine-coreclr-userspace.digest" = WINE_CORECLR_USERSPACE_DIGEST',
+          '"io.sharplabnext.component.wine-coreclr-userspace.source-uri" = WINE_CORECLR_USERSPACE_SOURCE_URI',
         ]) {
           if (!candidate.includes(requiredText)) {
             failures.push(`${targetName} is missing '${requiredText}'`)
@@ -549,6 +798,16 @@ function validateBake(source, candidateSource) {
         }
       }
     }
+    for (const requiredText of [
+      'CANDIDATE_SOURCE_CONTEXT = RUNTIME_CANDIDATE_SOURCE_CONTEXT',
+      'CANDIDATE_PROMOTION_ELIGIBLE = RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE',
+      '"io.sharplabnext.source.context" = RUNTIME_CANDIDATE_SOURCE_CONTEXT',
+      '"com.sharplabnext.runtime-candidate.promotion-eligible" = RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE',
+    ]) {
+      if (!candidate.includes(requiredText)) {
+        failures.push(`${targetName} is missing source-context binding '${requiredText}'`)
+      }
+    }
   }
 
   for (const target of versionToolsConsumers.keys()) {
@@ -556,6 +815,93 @@ function validateBake(source, candidateSource) {
     if (body !== undefined &&
         !body.includes('CONST_GENERICS_VERSIONTOOLS_SOURCE_URI = required(CONST_GENERICS_VERSIONTOOLS_SOURCE_URI)')) {
       failures.push(`Bake target '${target}' does not inject the locked VersionTools package source URI`)
+    }
+  }
+}
+
+function validateCoreClrReferenceSetBakeWiring(productionTargets) {
+  const fullCoreTarget = productionTargets.get('service-with-roslyn-coreclr-reference-sets')
+  const stableTarget = productionTargets.get('worker-roslyn-stable')
+  const mainTarget = productionTargets.get('worker-roslyn-main')
+  if (fullCoreTarget === undefined) {
+    failures.push("eng/bake.hcl is missing target 'service-with-roslyn-coreclr-reference-sets'")
+    return
+  }
+  if (!fullCoreTarget.includes('target = "final-with-roslyn-coreclr-reference-sets"')) {
+    failures.push('Roslyn CoreCLR reference target must select final-with-roslyn-coreclr-reference-sets')
+  }
+  if (stableTarget === undefined ||
+      !stableTarget.includes('inherits = ["service-with-roslyn-coreclr-reference-sets"]')) {
+    failures.push('worker-roslyn-stable must use the complete Roslyn CoreCLR reference target')
+  }
+  if (mainTarget === undefined) {
+    failures.push("eng/bake.hcl is missing target 'worker-roslyn-main'")
+    return
+  }
+
+  for (const [referenceSetId, versionVariable, prefix, optionPrefix, urlVariable] of coreClrReferenceSets) {
+    for (const target of [fullCoreTarget, mainTarget]) {
+      for (const marker of [
+        `"io.sharplabnext.component.${referenceSetId}.version" = required(${versionVariable})`,
+        `"io.sharplabnext.component.${referenceSetId}.source-uri" = required(${urlVariable})`,
+        `"io.sharplabnext.component.${referenceSetId}.source-sha512" = required(${prefix}_REFERENCE_SHA512)`,
+        `"io.sharplabnext.reference-set.${referenceSetId}" = required(${prefix}_REFERENCE_PACKAGE_CONTENT_HASH)`,
+      ]) {
+        if (!target.includes(marker)) {
+          failures.push(`Roslyn CoreCLR reference target is missing '${marker}'`)
+        }
+      }
+      for (const marker of [
+        `${versionVariable} = required(${versionVariable})`,
+        `${urlVariable} = required(${urlVariable})`,
+        `${prefix}_REFERENCE_SHA512 = required(${prefix}_REFERENCE_SHA512)`,
+        `${prefix}_REFERENCE_PACKAGE_CONTENT_HASH = required(${prefix}_REFERENCE_PACKAGE_CONTENT_HASH)`,
+      ]) {
+        if (!target.includes(marker)) {
+          failures.push(`Roslyn CoreCLR materializer build arguments are missing '${marker}'`)
+        }
+      }
+    }
+    for (const [dockerfile, source] of [
+      ['Dockerfile.worker', fs.readFileSync(path.join(dockerDirectory, 'Dockerfile.worker'), 'utf8')],
+      ['Dockerfile.worker-roslyn-main', fs.readFileSync(path.join(dockerDirectory, 'Dockerfile.worker-roslyn-main'), 'utf8')],
+    ]) {
+      for (const marker of [
+        `ARG ${versionVariable}`,
+        `ARG ${urlVariable}`,
+        `ARG ${prefix}_REFERENCE_SHA512`,
+        `ARG ${prefix}_REFERENCE_PACKAGE_CONTENT_HASH`,
+        `--${optionPrefix}-version`,
+        `--${optionPrefix}-url`,
+        `--${optionPrefix}-sha512`,
+        `--${optionPrefix}-content-hash`,
+      ]) {
+        if (!source.includes(marker)) {
+          failures.push(`${dockerfile} is missing full CoreCLR identity binding '${marker}'`)
+        }
+      }
+    }
+  }
+
+  for (const targetName of ['worker-fsharp', 'worker-il', 'worker-minilang', 'worker-artifacts-jsil']) {
+    const target = productionTargets.get(targetName)
+    if (target?.includes('service-with-roslyn-coreclr-reference-sets')) {
+      failures.push(`${targetName} must not inherit the Roslyn-only CoreCLR reference closure`)
+    }
+  }
+
+  for (const [dockerfile, source] of [
+    ['Dockerfile.worker', fs.readFileSync(path.join(dockerDirectory, 'Dockerfile.worker'), 'utf8')],
+    ['Dockerfile.worker-roslyn-main', fs.readFileSync(path.join(dockerDirectory, 'Dockerfile.worker-roslyn-main'), 'utf8')],
+  ]) {
+    for (const marker of [
+      'src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj',
+      '--framework netstandard2.1',
+      '/app/sharplab-runtime-netstandard21/SharpLab.Runtime.dll',
+    ]) {
+      if (!source.includes(marker)) {
+        failures.push(`${dockerfile} must materialize and use the netstandard2.1 SharpLab.Runtime product`)
+      }
     }
   }
 }
@@ -584,12 +930,21 @@ function validateCandidateBakeBoundary(productionSource, candidateSource, candid
     'RUNTIME_MATRIX_CONTROL_IMAGE',
     'RUNTIME_MATRIX_WINE_IMAGE',
     'RUNTIME_MATRIX_FRAMEWORK_PARENT_IMAGE',
+    'RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION',
     'RUNTIME_MATRIX_FRAMEWORK_MATRIX_INPUT_SHA256',
     'RUNTIME_MATRIX_FRAMEWORK_MATRIX_SOURCE_URI',
     'RUNTIME_MATRIX_FRAMEWORK_TARGET_ID',
     'RUNTIME_MATRIX_FRAMEWORK_CLR_GENERATION',
     'RUNTIME_MATRIX_FRAMEWORK_ROW_OPERATOR_IMAGE',
     'RUNTIME_MATRIX_FRAMEWORK_ROW_DIGEST',
+    'RUNTIME_CANDIDATE_SOURCE_CONTEXT',
+    'RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE',
+    'RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT',
+    'WINE_CORECLR_OPERATOR_RECEIPT_SHA256',
+    'WINE_CORECLR_OPERATOR_RECEIPT_KEY_ID',
+    'WINE_CORECLR_OPERATOR_REFERENCE',
+    'WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE',
+    'WINE_CORECLR_DEVELOPMENT_OPERATOR_TAG',
     'RUNTIME_MATRIX_WINDOWS_URL',
     'RUNTIME_MATRIX_WINDOWS_SHA512',
     'RUNTIME_MATRIX_CHECKED_JIT_COMMIT',
@@ -661,7 +1016,14 @@ function validateCandidateBakeBoundary(productionSource, candidateSource, candid
   const entry = fs.readFileSync(entryPath, 'utf8')
   for (const marker of [
     "from './runtime-candidate-input-validation.mjs'",
-    'const failures = validateCandidateBuildInputs(target, values)',
+    "from './committed-source-context.mjs'",
+    'const failures = validateCandidateBuildInputs(target, values, effectiveRepositoryRoot, {',
+    'candidateCommittedSourceFiles(target, values)',
+    'validateCandidateBuildInputs(target, dockerEnvironment, sourceRoot, {',
+    '`${target}.context=${sourceRoot}`',
+    'cwd: sourceRoot',
+    'Git source state changed during Bake',
+    'sourceContext.dispose()',
     "'eng/bake.hcl'",
     "'eng/bake.runtime-candidates.hcl'",
     'inspectDockerImage(',
@@ -671,7 +1033,9 @@ function validateCandidateBakeBoundary(productionSource, candidateSource, candid
       failures.push(`eng/build-runtime-candidate.mjs is missing '${marker}'`)
     }
   }
-  const validationIndex = entry.indexOf('const failures = validateCandidateBuildInputs(target, values)')
+  const validationIndex = entry.indexOf(
+    'const failures = validateCandidateBuildInputs(target, values, effectiveRepositoryRoot, {',
+  )
   const dockerIndex = entry.indexOf("spawn('docker'")
   if (validationIndex < 0 || dockerIndex < 0 || validationIndex > dockerIndex) {
     failures.push('candidate entry must validate selected-target inputs before starting Docker')
@@ -681,16 +1045,66 @@ function validateCandidateBakeBoundary(productionSource, candidateSource, candid
   if (inspectIndex < dockerIndex || identityIndex < inspectIndex) {
     failures.push('candidate entry must verify built-image labels after Docker returns successfully')
   }
+
+  const committedContext = fs.readFileSync(
+    path.join(repositoryRoot, 'eng', 'committed-source-context.mjs'),
+    'utf8',
+  )
+  for (const marker of [
+    "['archive', '--format=tar', '--output', archive, revision]",
+    "['--extract', '--file', archive, '--directory', directory]",
+    'requiredFiles.length === 0',
+    'info.isSymbolicLink()',
+    'removeRoot(root, true)',
+  ]) {
+    if (!committedContext.includes(marker)) {
+      failures.push(`eng/committed-source-context.mjs is missing '${marker}'`)
+    }
+  }
+
+  const wineOperatorEntry = fs.readFileSync(
+    path.join(repositoryRoot, 'eng', 'build-wine-coreclr-operator.mjs'),
+    'utf8',
+  )
+  for (const marker of [
+    "from './committed-source-context.mjs'",
+    "from './runtime-promotion-image-binding.mjs'",
+    'wineCoreClrOperatorCommittedFiles',
+    'committedSourceFiles()',
+    'createCommittedSourceContext',
+    'validateGitSourceState',
+    'Git source state changed during Bake',
+    'OPERATOR_SOURCE_CONTEXT',
+    'OPERATOR_PROMOTION_ELIGIBLE',
+    'OPERATOR_DEVELOPMENT_ONLY',
+    'wineCoreClrOperatorExpectedLabels',
+    'bindRuntimeCandidateImage',
+  ]) {
+    if (!wineOperatorEntry.includes(marker)) {
+      failures.push(`eng/build-wine-coreclr-operator.mjs is missing '${marker}'`)
+    }
+  }
 }
 
 function validateDockerfiles() {
   const allowedDefaults = new Set(['CONFIGURATION=Release', 'SERVICE_TITLE="SharpLabNext Worker"'])
-  const files = fs.readdirSync(dockerDirectory)
-    .filter(fileName => fileName.startsWith('Dockerfile'))
+  const files = childProcess.execFileSync(
+    'git',
+    ['ls-files', '--', '**/Dockerfile*'],
+    { cwd: repositoryRoot, encoding: 'utf8' },
+  )
+    .split(/\r?\n/)
+    .filter(Boolean)
     .sort()
 
-  for (const fileName of files) {
-    const source = fs.readFileSync(path.join(dockerDirectory, fileName), 'utf8')
+  for (const relativePath of files) {
+    const fileName = path.basename(relativePath)
+    const source = fs.readFileSync(path.join(repositoryRoot, relativePath), 'utf8')
+    const sourceWithoutFrontendDirective = source.replace(/^# syntax=[^\r\n]*(?:\r?\n)?/, '')
+    for (const violation of validateDockerfileFrontend(source)) {
+      failures.push(`${relativePath} ${violation}`)
+    }
+    if (!relativePath.startsWith('deploy/docker/')) continue
     for (const violation of findDockerfileStageArgumentScopeViolations(source, 'CONTROL_TFM')) {
       failures.push(
         `${fileName}:${violation.line} uses CONTROL_TFM in stage '${violation.stage}' ` +
@@ -707,7 +1121,8 @@ function validateDockerfiles() {
         failures.push(`${fileName} uses an external FROM without an injected build argument: ${value}`)
       }
     }
-    if (/@sha256:[0-9a-f]{64}/.test(source) || /\b[0-9a-f]{40}\b/.test(source)) {
+    if (/@sha256:[0-9a-f]{64}/.test(sourceWithoutFrontendDirective) ||
+        /\b[0-9a-f]{40}\b/.test(sourceWithoutFrontendDirective)) {
       failures.push(`${fileName} contains a maintained image digest or source commit`)
     }
     if (/CONST_GENERICS_[A-Z0-9_]*TREE|CONST_GENERICS_ILSPY_LEGACY_METADATA_SHA256/.test(source)) {
@@ -730,7 +1145,94 @@ function validateDockerfiles() {
     }
   }
 
+  const wineOperator = fs.readFileSync(
+    path.join(dockerDirectory, 'Dockerfile.operator-wine-coreclr'),
+    'utf8')
+  const wineOperatorRelativePath = 'deploy/docker/Dockerfile.operator-wine-coreclr'
+  if (!files.includes(wineOperatorRelativePath)) {
+    for (const violation of validateDockerfileFrontend(wineOperator)) {
+      failures.push(`${wineOperatorRelativePath} ${violation}`)
+    }
+  }
+  for (const requiredText of [
+    'ARG RUNTIME_DEPS_IMAGE',
+    'FROM ${RUNTIME_DEPS_IMAGE} AS final',
+    'COPY profiles/runtime-wine-packages.json',
+    'https://snapshot.ubuntu.com/ubuntu/20260810T000000Z/',
+    "find /etc/apt \\( -name '*.list' -o -name '*.sources' \\) -delete",
+    "test -z \"$(find /etc/apt \\( -name '*.list' -o -name '*.sources' \\) -print -quit)\"",
+    "test \"$(find /etc/apt \\( -name '*.list' -o -name '*.sources' \\) -print)\" = '/etc/apt/sources.list.d/sharplabnext-snapshot.sources'",
+    "test -z \"$(find /var/lib/apt/lists",
+    "snapshot.ubuntu.com_ubuntu_20260810T000000Z_dists_noble_InRelease",
+    "snapshot.ubuntu.com_ubuntu_20260810T000000Z_dists_noble-updates_InRelease",
+    "snapshot.ubuntu.com_ubuntu_20260810T000000Z_dists_noble-security_InRelease",
+    'apt-get download',
+    'apt-get install --yes --no-install-recommends',
+    'wine=9.0~repack-4build3',
+    'wine64=9.0~repack-4build3',
+    'fonts-wine=9.0~repack-4build3',
+    'xvfb=2:21.1.12-1ubuntu1.6',
+    'mv xvfb_2%3a21.1.12-1ubuntu1.6_amd64.deb xvfb_21.1.12-1ubuntu1.6_amd64.deb',
+    'sha256sum --check --strict',
+    'dpkg-query -W -f=\'${binary:Package}\\t${Version}\\n\'',
+    "sort -t $'\\t' -k1,1",
+    'sha256:fa83c245764fc09102029b249f5149a48baeda53a40c0432de973ebe09e39dee',
+    'test -z "$(dpkg --print-foreign-architectures)"',
+    'xvfb-run -a /usr/bin/wineboot-stable --init',
+    'WINEARCH=win64',
+    'Wine prefix system.reg does not declare win64.',
+    'Wine loader is not an ELF64 executable.',
+    'org.opencontainers.image.version="wine-9.0-noble-amd64"',
+    'io.sharplabnext.operator.wine-version="9.0"',
+    'io.sharplabnext.operator.root="${RUNTIME_DEPS_IMAGE}"',
+    'io.sharplabnext.component.wine-coreclr-userspace.version="${WINE_CORECLR_USERSPACE_VERSION}"',
+    'io.sharplabnext.component.wine-coreclr-userspace.digest="${WINE_CORECLR_USERSPACE_DIGEST}"',
+    'io.sharplabnext.component.wine-coreclr-userspace.source-uri="${WINE_CORECLR_USERSPACE_SOURCE_URI}"',
+    'ARG OPERATOR_SOURCE_CONTEXT',
+    'ARG OPERATOR_PROMOTION_ELIGIBLE',
+    'ARG OPERATOR_DEVELOPMENT_ONLY',
+    '"${OPERATOR_SOURCE_CONTEXT}:${OPERATOR_PROMOTION_ELIGIBLE}:${OPERATOR_DEVELOPMENT_ONLY}" = "committed:true:false"',
+    '"${OPERATOR_SOURCE_CONTEXT}:${OPERATOR_PROMOTION_ELIGIBLE}:${OPERATOR_DEVELOPMENT_ONLY}" = "working-tree-development:false:true"',
+    'io.sharplabnext.source.context="${OPERATOR_SOURCE_CONTEXT}"',
+    'io.sharplabnext.development-only="${OPERATOR_DEVELOPMENT_ONLY}"',
+    'com.sharplabnext.operator.promotion-eligible="${OPERATOR_PROMOTION_ELIGIBLE}"',
+    '/usr/share/doc/wine/copyright',
+    '/usr/share/doc/xvfb/copyright',
+    '/usr/share/doc/openssl/copyright',
+    '../libssl3t64/copyright',
+    'copyrightSizeBytes',
+    'wine-coreclr-copyright-notices.tar',
+    'tar --format=ustar',
+    '--dereference --hard-dereference',
+    'test "$(wc -l < "${copyright_paths}")" -eq 225',
+    '/var/cache/apt/archives/*',
+  ]) {
+    if (!wineOperator.includes(requiredText)) {
+      failures.push(`Dockerfile.operator-wine-coreclr is missing '${requiredText}'`)
+    }
+  }
+  if (/WINE_SOURCE_IMAGE|COPY --from=.*wine-source|operator\.wine-source/.test(wineOperator)) {
+    failures.push('Dockerfile.operator-wine-coreclr must not consume a historical Wine source image')
+  }
+
+  const sourceStatusDockerfiles = new Set([
+    'Dockerfile.runtime-dotnet-matrix',
+    'Dockerfile.runtime-mono-matrix',
+    'Dockerfile.runtime-mono-wine-matrix',
+    'Dockerfile.runtime-wine-dotnet-matrix',
+    'Dockerfile.runtime-wine-framework-matrix',
+    'Dockerfile.runtime-wine-framework-matrix-shared',
+  ])
   const candidateRuntimeChecks = new Map([
+    ['Dockerfile.operator-wine-framework-matrix', [
+      'ARG SOURCE_REVISION',
+      '[[ "${SOURCE_REVISION}" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]',
+      'org.opencontainers.image.revision="${SOURCE_REVISION}"',
+      'io.sharplabnext.source.revision="${SOURCE_REVISION}"',
+      'io.sharplabnext.framework.installer-manifest-sha256="${INSTALLER_MANIFEST_SHA256}"',
+      'io.sharplabnext.operator-base="${BASE_IMAGE}"',
+      'io.sharplabnext.operator-root="${ROOT_IMAGE}"',
+    ]],
     ['Dockerfile.operator-wine-framework-matrix-parent', [
       'FROM ${WINE_IMAGE} AS wine-source',
       'FROM ${ROOT_IMAGE} AS final',
@@ -753,6 +1255,7 @@ function validateDockerfiles() {
       '.framework-matrix-source-uri',
       'io.sharplabnext.framework.matrix-strategy="shared-framework-target-prefix-matrix-v1"',
       'org.opencontainers.image.revision="${SOURCE_REVISION}"',
+      'io.sharplabnext.source.revision="${SOURCE_REVISION}"',
       'org.opencontainers.image.version="${VERSION}"',
       'io.sharplabnext.framework.layout-strategy="hardlink-static-runtime-matrix-v1"',
       'io.sharplabnext.framework.dedupe-policy="wine-static-runtime-payload-v1"',
@@ -766,6 +1269,22 @@ function validateDockerfiles() {
       'mono --version | grep --fixed-strings --quiet',
       'ldd /usr/bin/mono-sgen',
       'FROM mono-runtime-check AS final',
+      'command -v stat >/dev/null',
+      'command -v cp >/dev/null',
+      'command -v cmp >/dev/null',
+      'mono_source=/usr/bin/mono-sgen',
+      'mono_destination=/usr/bin/mono',
+      'test -f "${mono_source}"',
+      'test ! -L "${mono_source}"',
+      'test -L "${mono_destination}"',
+      'cp --preserve=mode,ownership,timestamps -- "${mono_source}" "${mono_destination}"',
+      'test -f "${mono_destination}"',
+      'test ! -L "${mono_destination}"',
+      'test "$(stat --format=%a "${mono_destination}")" = "${mono_mode}"',
+      'test "$(stat --format=%u:%g "${mono_destination}")" = "${mono_owner}"',
+      'test "$(stat --format=%y "${mono_destination}")" = "${mono_timestamp}"',
+      'test "$(stat --format=%h "${mono_destination}")" -eq 1',
+      'cmp --silent "${mono_source}" "${mono_destination}"',
       'COPY --from=control-image /usr/share/dotnet/ /usr/share/dotnet/',
       'COPY --from=publish /target-runtime-runner/ /opt/sharplabnext/',
       'test -s /opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe',
@@ -793,11 +1312,13 @@ function validateDockerfiles() {
       'test -r /opt/wine-dotnet/system.reg',
       'index($0, "#arch=") == 1',
       '= win64',
-      'test ! -e /usr/lib/x86_64-linux-gnu/wine/i386-windows',
+      'od -An -t x1 -j 4 -N 1 /usr/lib/wine/wine64',
+      'dpkg --print-foreign-architectures',
+      "grep ':i386$'",
       "'Z:\\\\opt\\\\wine-dotnet\\\\drive_c\\\\dotnet\\\\dotnet.exe' --list-runtimes",
       'test "$(find /runtime/shared/Microsoft.NETCore.App -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1',
       'io.sharplabnext.control-image="${CONTROL_IMAGE}"',
-      'io.sharplabnext.operator-image.wine="${WINE_IMAGE}"',
+      'io.sharplabnext.operator-image.wine="${WINE_IDENTITY}"',
     ]],
     ['Dockerfile.runtime-wine-framework-matrix', [
       'ARG CONTROL_IMAGE',
@@ -825,17 +1346,31 @@ function validateDockerfiles() {
       'test ! -e /usr/lib/x86_64-linux-gnu/wine/i386-windows',
       'src/RuntimeJobs/SharpLabNext.TargetRuntimeRunner/SharpLabNext.TargetRuntimeRunner.csproj',
       '--output /target-runtime-runner',
+      'src/RuntimeJobs/SharpLabNext.DesktopClrJitInspector/SharpLabNext.DesktopClrJitInspector.csproj',
+      'src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj',
+      '--output /desktop-clr-jit-inspector',
+      '--output /wine-runner',
       'COPY --from=control-image /usr/share/dotnet/ /usr/share/dotnet/',
       'COPY --from=publish /target-runtime-runner/ /opt/sharplabnext/',
+      'COPY --from=publish /desktop-clr-jit-inspector/ /opt/sharplabnext/',
+      'COPY --from=publish /wine-runner/ /opt/sharplabnext/',
       '/usr/share/dotnet/dotnet --info',
       'test -s /opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe',
       'test -s /opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe.config',
       "'Z:\\\\opt\\\\sharplabnext\\\\SharpLabNext.TargetRuntimeRunner.exe' self-test",
+      '/opt/sharplabnext/SharpLabNext.DesktopClrJitInspector.exe',
+      '/opt/sharplabnext/SharpLabNext.WineRunner.dll',
+      'install -d -m 0755 /workspace',
+      'desktop-jit',
+      'WindowsAbi',
+      'wine-framework-desktop-clr-jit-preflight-v1',
       'io.sharplabnext.control-image="${CONTROL_IMAGE}"',
     ]],
     ['Dockerfile.runtime-wine-framework-matrix-shared', [
       'ARG PARENT_IMAGE',
       'ARG WINE_IMAGE',
+      'ARG FRAMEWORK_SOURCE_REVISION',
+      'ARG HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT',
       'ARG FRAMEWORK_MATRIX_INPUT_SHA256',
       'ARG FRAMEWORK_MATRIX_SOURCE_URI',
       'FROM ${PARENT_IMAGE} AS matrix-parent',
@@ -849,10 +1384,30 @@ function validateDockerfiles() {
       '.framework-matrix-input-sha256',
       '.framework-matrix-source-uri',
       'io.sharplabnext.operator-image.wine="${WINE_IMAGE}"',
+      'io.sharplabnext.framework.source-revision="${FRAMEWORK_SOURCE_REVISION}"',
+      'test "${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = true || test "${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = false',
+      'test "${FRAMEWORK_SOURCE_REVISION}" != "${SOURCE_REVISION}"',
+      'test "${FRAMEWORK_SOURCE_REVISION}" = "${SOURCE_REVISION}"',
+      '"${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}:${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = "committed:true:false"',
+      '"${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}:${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = "working-tree-development:false:false"',
+      '"${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}:${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = "committed-historical-framework-input-development:false:true"',
+      '"${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}:${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = "working-tree-historical-framework-input-development:false:true"',
       'test -L "${canonical_prefix}"',
       'test ! -e "${other_prefix}"',
       'FROM runtime-base AS preflight',
       'sharplabnext-wine-netfx-preflight',
+      'src/RuntimeJobs/SharpLabNext.DesktopClrJitInspector/SharpLabNext.DesktopClrJitInspector.csproj',
+      'src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj',
+      '--output /desktop-clr-jit-inspector',
+      '--output /wine-runner',
+      'COPY --from=publish /desktop-clr-jit-inspector/ /opt/sharplabnext/',
+      'COPY --from=publish /wine-runner/ /opt/sharplabnext/',
+      '/opt/sharplabnext/SharpLabNext.DesktopClrJitInspector.exe',
+      '/opt/sharplabnext/SharpLabNext.WineRunner.dll',
+      'install -d -m 0755 /workspace',
+      'desktop-jit',
+      'WindowsAbi',
+      'wine-framework-desktop-clr-jit-preflight-v1',
       'io.sharplabnext.framework.matrix-parent',
       'io.sharplabnext.framework.selector',
       'io.sharplabnext.framework.matrix-selector="true"',
@@ -893,6 +1448,33 @@ function validateDockerfiles() {
     for (const text of requiredText) {
       if (!source.includes(text)) {
         failures.push(`${fileName} is missing candidate preflight check '${text}'`)
+      }
+    }
+    if (sourceStatusDockerfiles.has(fileName)) {
+      const sourceContextChecks = fileName === 'Dockerfile.runtime-wine-framework-matrix-shared'
+        ? [
+            'ARG CANDIDATE_SOURCE_CONTEXT',
+            'ARG CANDIDATE_PROMOTION_ELIGIBLE',
+            'ARG HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT',
+            '"${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}:${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = "committed:true:false"',
+            '"${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}:${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = "working-tree-development:false:false"',
+            '"${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}:${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = "committed-historical-framework-input-development:false:true"',
+            '"${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}:${HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT}" = "working-tree-historical-framework-input-development:false:true"',
+            'io.sharplabnext.source.context="${CANDIDATE_SOURCE_CONTEXT}"',
+            'com.sharplabnext.runtime-candidate.promotion-eligible="${CANDIDATE_PROMOTION_ELIGIBLE}"',
+          ]
+        : [
+            'ARG CANDIDATE_SOURCE_CONTEXT',
+            'ARG CANDIDATE_PROMOTION_ELIGIBLE',
+            '"${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "committed:true"',
+            '"${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "working-tree-development:false"',
+            'io.sharplabnext.source.context="${CANDIDATE_SOURCE_CONTEXT}"',
+            'com.sharplabnext.runtime-candidate.promotion-eligible="${CANDIDATE_PROMOTION_ELIGIBLE}"',
+          ]
+      for (const text of sourceContextChecks) {
+        if (!source.includes(text)) {
+          failures.push(`${fileName} is missing source-context check '${text}'`)
+        }
       }
     }
     if ((fileName === 'Dockerfile.runtime-wine-dotnet-matrix' ||
@@ -977,6 +1559,21 @@ function validateDockerfiles() {
       }
     }
   }
+  for (const requiredText of [
+    'src/RuntimeJobs/SharpLabNext.DesktopClrJitInspector/SharpLabNext.DesktopClrJitInspector.csproj',
+    'src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj',
+    '--output /desktop-clr-jit-inspector',
+    'COPY --from=publish /desktop-clr-jit-inspector/ /opt/sharplabnext/',
+    '/opt/sharplabnext/SharpLabNext.DesktopClrJitInspector.exe',
+    '/opt/sharplabnext/SharpLabNext.WineRunner.dll',
+    'install -d -m 0755 /workspace',
+    'desktop-jit',
+    'WindowsAbi',
+  ]) {
+    if (!netfxRuntime.includes(requiredText)) {
+      failures.push(`Dockerfile.runtime-wine-netfx48 is missing Desktop CLR JIT wiring '${requiredText}'`)
+    }
+  }
   if (!jsharpWorker.includes('FROM jsharp-wine-base AS final')) {
     failures.push('Dockerfile.worker-jsharp must inherit the shared J# Wine base target')
   }
@@ -1025,6 +1622,13 @@ function validateDockerfiles() {
   const serviceWorker = fs.readFileSync(
     path.join(dockerDirectory, 'Dockerfile.worker'),
     'utf8')
+  const measurementHelperPath = path.join(
+    dockerDirectory,
+    'runtime-measurement-helper.sh')
+  const measurementHelperSha256 = crypto
+    .createHash('sha256')
+    .update(fs.readFileSync(measurementHelperPath))
+    .digest('hex')
   for (const requiredText of [
     'FROM publish AS framework-reference-sets',
     'COPY profiles/runtime-matrix.json /inputs/runtime-matrix.json',
@@ -1036,6 +1640,8 @@ function validateDockerfiles() {
     'COPY --from=jsharp-reference-source --chown=1654:1654',
     '/reference-sets/jsharp20-ref/ /reference-sets/jsharp20-ref/',
     'test "${reference_content_digest}" = "${JSHARP_REFERENCE_DIGEST}"',
+    `"${measurementHelperSha256}"`,
+    'sha256sum --check --status -',
   ]) {
     if (!serviceWorker.includes(requiredText)) {
       failures.push(`Dockerfile.worker is missing artifact reference wiring '${requiredText}'`)

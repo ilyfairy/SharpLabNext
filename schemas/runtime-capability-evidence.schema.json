@@ -102,7 +102,7 @@
       "properties": {
         "parentArtifactSha256": { "$ref": "#/$defs/sha256" },
         "processorId": { "const": "artifacts-default" },
-        "processorVersion": { "const": "1.0.0" },
+        "processorVersion": { "const": "1.0.1" },
         "optionsSha256": { "$ref": "#/$defs/sha256" },
         "transformId": { "const": "runtime-instrumentation-v1" },
         "profileId": { "const": "execution-flow-v1" },
@@ -116,13 +116,17 @@
         "contract",
         "sourceArtifactSha256",
         "artifactSha256",
-        "entryAssemblySha256"
+        "entryAssemblySha256",
+        "planSha256",
+        "preflightProfileSha256"
       ],
       "properties": {
         "contract": { "const": "runtime-capability-probe-v1" },
         "sourceArtifactSha256": { "$ref": "#/$defs/sha256" },
         "artifactSha256": { "$ref": "#/$defs/sha256" },
         "entryAssemblySha256": { "$ref": "#/$defs/sha256" },
+        "planSha256": { "$ref": "#/$defs/sha256" },
+        "preflightProfileSha256": { "$ref": "#/$defs/sha256" },
         "derivation": { "$ref": "#/$defs/probeDerivation" }
       }
     },
@@ -344,7 +348,7 @@
       "required": ["kind", "source", "rangeCount", "distinctSourceRangeCount", "allRangesMatchPdb"],
       "properties": {
         "kind": { "enum": ["none", "linux-profiler", "checked-jit-debug-info"] },
-        "source": { "enum": ["method", "ordinary", "rich", "checked-jit-debug-info"] },
+        "source": { "enum": ["none", "method", "ordinary", "rich", "checked-jit-debug-info"] },
         "rangeCount": { "type": "integer", "minimum": 0, "maximum": 1000000 },
         "distinctSourceRangeCount": { "type": "integer", "minimum": 0, "maximum": 1000000 },
         "allRangesMatchPdb": { "type": "boolean" }
@@ -408,7 +412,7 @@
         "derivedArtifactSha256": { "$ref": "#/$defs/sha256" },
         "parentArtifactSha256": { "$ref": "#/$defs/sha256" },
         "processorId": { "const": "artifacts-default" },
-        "processorVersion": { "const": "1.0.0" },
+        "processorVersion": { "const": "1.0.1" },
         "optionsSha256": { "$ref": "#/$defs/sha256" },
         "transformId": { "const": "runtime-instrumentation-v1" },
         "profileId": { "const": "execution-flow-v1" },

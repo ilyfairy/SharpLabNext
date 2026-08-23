@@ -234,9 +234,14 @@ export function MonacoEditor(props: MonacoEditorProps) {
       sourceAssociationPointerDown = null
       const position = event.target.position
       const selection = editor.getSelection()
+      const browserEvent = event.event.browserEvent
       if (
         !event.event.leftButton ||
-        event.event.browserEvent.detail > 1 ||
+        browserEvent.detail > 1 ||
+        browserEvent.shiftKey ||
+        browserEvent.ctrlKey ||
+        browserEvent.metaKey ||
+        browserEvent.altKey ||
         !position ||
         !selection ||
         selection.isEmpty() ||

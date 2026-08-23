@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -23,6 +24,16 @@ const sourceRevision = 'c'.repeat(40)
 const pinnedReference = `registry.example/runtime@sha256:${'d'.repeat(64)}`
 const containerId = 'e'.repeat(64)
 const imageSizeBytes = 536870912
+
+function git(cwd, arguments_) {
+  const result = spawnSync('git', arguments_, {
+    cwd,
+    encoding: 'utf8',
+    shell: false,
+  })
+  assert.equal(result.status, 0, result.stderr)
+  return result.stdout
+}
 
 function inspection(overrides = {}) {
   return {
@@ -170,6 +181,20 @@ test('pinned reference must be a RepoDigest resolving to the captured object', (
         : inspection({ repoDigests: [pinnedReference] })
     },
   }), /reports Size 536870913.*reports Size 536870912/s)
+
+  assert.throws(() => bindRuntimeCandidateImage({
+    candidateReference: 'registry.example/runtime:candidate',
+    pinnedReference,
+    sourceRevision,
+    inspect(reference) {
+      return reference === pinnedReference
+        ? inspection({
+            repoDigests: [pinnedReference],
+            labels: { ...inspection().labels, unexpected: 'remote-only' },
+          })
+        : inspection({ repoDigests: [pinnedReference] })
+    },
+  }), /complete label map/)
 })
 
 test('Docker inspection rejects missing, non-integral and unsafe Size values', () => {
@@ -225,7 +250,7 @@ test('Git inspection independently observes HEAD and dirty state', () => {
   assert.deepEqual(state, { headRevision: sourceRevision, isDirty: true })
   assert.deepEqual(calls, [
     ['git', ['rev-parse', '--verify', 'HEAD']],
-    ['git', ['status', '--porcelain=v1', '-z', '--untracked-files=normal']],
+    ['git', ['status', '--porcelain=v1', '-z', '--untracked-files=all']],
   ])
 })
 
@@ -249,6 +274,41 @@ test('Git inspection permits only explicitly bound generated paths', () => {
   assert.equal(inspect(
     '?? profiles/runtime-promotion-plans/runtime.json\0 M eng/file.mjs\0',
   ).isDirty, true)
+})
+
+test('Git inspection permits exact generated files inside a new untracked directory', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-git-inspection-'))
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  git(root, ['init', '--quiet'])
+  git(root, ['config', 'user.name', 'SharpLabNext Test'])
+  git(root, ['config', 'user.email', 'sharplabnext-test@example.invalid'])
+  fs.mkdirSync(path.join(root, 'profiles'))
+  fs.writeFileSync(path.join(root, 'tracked.txt'), 'tracked\n')
+  fs.writeFileSync(path.join(root, 'profiles', 'tracked.txt'), 'tracked\n')
+  git(root, ['add', 'tracked.txt', 'profiles/tracked.txt'])
+  git(root, ['commit', '--quiet', '-m', 'initial'])
+
+  const directory = path.join(root, 'profiles', 'runtime-promotion-plans')
+  fs.mkdirSync(directory, { recursive: true })
+  const allowedDirtyPaths = [
+    'profiles/runtime-promotion-plans/runtime.profile.json',
+    'profiles/runtime-promotion-plans/runtime.json',
+  ]
+  fs.writeFileSync(path.join(directory, 'runtime.profile.json'), '{}\n')
+  fs.writeFileSync(path.join(directory, 'runtime.json'), '{}\n')
+
+  const collapsed = git(root, [
+    'status', '--porcelain=v1', '-z', '--untracked-files=normal',
+  ])
+  assert.equal(collapsed, '?? profiles/runtime-promotion-plans/\0')
+
+  assert.deepEqual(inspectGitSourceState({ cwd: root, allowedDirtyPaths }), {
+    headRevision: git(root, ['rev-parse', '--verify', 'HEAD']).trim(),
+    isDirty: false,
+  })
+
+  fs.writeFileSync(path.join(directory, 'unexpected.json'), '{}\n')
+  assert.equal(inspectGitSourceState({ cwd: root, allowedDirtyPaths }).isDirty, true)
 })
 
 test('helper bytes are copied from an immutable image ID and hashed on the host', () => {

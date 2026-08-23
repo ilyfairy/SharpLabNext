@@ -16,6 +16,17 @@ import {
 } from './promote-runtime-matrix.mjs'
 import { formalRuntimeCandidateProfileIds } from './runtime-candidate-environment.mjs'
 import { validateRuntimePromotionReceipts } from './runtime-promotion-receipt-validation.mjs'
+import {
+  isWinePromotionFamily,
+  runtimeOperatorReceiptPaths,
+  validateWineOperatorBinding,
+} from './runtime-wine-operator-binding.mjs'
+import {
+  runtimePromotionPlanKeyId,
+  runtimePromotionPlanSignaturePath,
+  serializeRuntimePromotionPlan,
+  verifyRuntimePromotionPlanSignature,
+} from './runtime-promotion-plan-signature.mjs'
 
 const defaultRepositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const maximumFileBytes = 1024 * 1024
@@ -292,6 +303,48 @@ function readMatrix(root) {
   return { bytes, canonicalBytes: canonicalJson(value), value }
 }
 
+function assertPristinePromotionBaseline(root, matrix, profileIds, label) {
+  const operatorPaths = runtimeOperatorReceiptPaths(gitRevision(root))
+  for (const relativePath of [operatorPaths.receiptPath, operatorPaths.signaturePath]) {
+    const candidate = path.join(root, ...relativePath.split('/'))
+    if (fs.lstatSync(candidate, { throwIfNoEntry: false }) !== undefined) {
+      fail(`${label} contains stale promotion output '${relativePath}' before batch init.`)
+    }
+  }
+  for (const profileId of profileIds) {
+    const binding = findRuntimeMatrixBinding(matrix, profileId)
+    const capability = binding.capability
+    if (capability?.promotionState !== 'blocked') {
+      fail(`${label} formal row '${profileId}' must have promotionState 'blocked' before batch init.`)
+    }
+    if (Object.hasOwn(capability ?? {}, 'promotionReceipt')) {
+      fail(`${label} formal row '${profileId}' must not have a promotionReceipt before batch init.`)
+    }
+
+    for (const relativePath of [
+      `profiles/runtime-promotion-receipts/${profileId}.json`,
+      `profiles/runtime-promotion-plans/${profileId}.json`,
+      runtimePromotionPlanSignaturePath(profileId),
+      `profiles/runtime-promotion-plans/${profileId}.profile.json`,
+    ]) {
+      const candidate = path.join(root, ...relativePath.split('/'))
+      if (fs.lstatSync(candidate, { throwIfNoEntry: false }) !== undefined) {
+        fail(`${label} contains stale promotion output '${relativePath}' before batch init.`)
+      }
+    }
+
+    const evidenceDirectory = path.join(root, 'profiles', 'runtime-promotion-evidence', profileId)
+    const evidenceStat = fs.lstatSync(evidenceDirectory, { throwIfNoEntry: false })
+    if (evidenceStat === undefined) continue
+    if (!evidenceStat.isDirectory() || evidenceStat.isSymbolicLink()) {
+      fail(`${label} has an invalid promotion evidence directory for '${profileId}' before batch init.`)
+    }
+    if (fs.readdirSync(evidenceDirectory).length > 0) {
+      fail(`${label} contains stale promotion evidence for '${profileId}' before batch init.`)
+    }
+  }
+}
+
 function initialManifest(batchId, sourceRevision, matrixBytes, profileIds) {
   return {
     schemaVersion: 1,
@@ -375,10 +428,14 @@ export function initRuntimePromotionBatch(input, options = {}) {
     requireCleanRepository(producerRoot, aggregateRevision, 'producer repository')
     const aggregateMatrix = readMatrix(aggregateRoot)
     const producerMatrix = readMatrix(producerRoot)
+    const aggregateProfileIds = [...formalRuntimeCandidateProfileIds(aggregateMatrix.value)]
+    const producerProfileIds = [...formalRuntimeCandidateProfileIds(producerMatrix.value)]
+    assertPristinePromotionBaseline(aggregateRoot, aggregateMatrix.value, aggregateProfileIds, 'aggregate repository')
+    assertPristinePromotionBaseline(producerRoot, producerMatrix.value, producerProfileIds, 'producer repository')
     if (!buffersEqual(aggregateMatrix.canonicalBytes, producerMatrix.canonicalBytes)) {
       fail('Producer and aggregate runtime matrices differ at source revision A.')
     }
-    const profileIds = [...formalRuntimeCandidateProfileIds(aggregateMatrix.value)]
+    const profileIds = aggregateProfileIds
     const manifest = initialManifest(batchId, aggregateRevision, aggregateMatrix.canonicalBytes, profileIds)
     const state = initialState(manifest)
     const parent = batchParent(aggregateRoot)
@@ -403,7 +460,7 @@ export function initRuntimePromotionBatch(input, options = {}) {
   })
 }
 
-function outputPathsFromReceipt(root, profileId, sourceRevision) {
+function outputPathsFromReceipt(root, profileId, sourceRevision, options = {}) {
   const receiptPath = `profiles/runtime-promotion-receipts/${profileId}.json`
   const receiptBytes = readBoundedFile(root, path.join(root, ...receiptPath.split('/')), 'promotion receipt')
   const receipt = parseJson(receiptBytes, 'promotion receipt')
@@ -413,6 +470,7 @@ function outputPathsFromReceipt(root, profileId, sourceRevision) {
     fail(`Promotion receipt for '${profileId}' does not close source revision and image identity.`)
   }
   const planPath = `profiles/runtime-promotion-plans/${profileId}.json`
+  const planSignaturePath = runtimePromotionPlanSignaturePath(profileId)
   const preflightPath = `profiles/runtime-promotion-plans/${profileId}.profile.json`
   const checks = receipt.checks
   if (!Array.isArray(checks) || checks.length === 0) fail(`Receipt '${profileId}' has no capability checks.`)
@@ -433,7 +491,23 @@ function outputPathsFromReceipt(root, profileId, sourceRevision) {
       !digestPattern.test(receipt.performance?.evidenceSha256 ?? '')) {
     fail(`Receipt '${profileId}' has a noncanonical performance evidence binding.`)
   }
-  const relativePaths = [planPath, preflightPath, receiptPath, performancePath, ...capabilityPaths]
+  const operatorPaths = isWinePromotionFamily(receipt.family)
+    ? runtimeOperatorReceiptPaths(sourceRevision)
+    : undefined
+  try {
+    validateWineOperatorBinding(receipt.wineOperator, receipt.family, sourceRevision)
+  } catch (error) {
+    fail(`Promotion receipt for '${profileId}' has an invalid Wine operator binding: ${error.message}`)
+  }
+  if (operatorPaths !== undefined &&
+      (receipt.wineOperator.receiptPath !== operatorPaths.receiptPath ||
+       receipt.wineOperator.signaturePath !== operatorPaths.signaturePath)) {
+    fail(`Promotion receipt for '${profileId}' has noncanonical Wine operator receipt paths.`)
+  }
+  const relativePaths = [
+    planPath, planSignaturePath, preflightPath, receiptPath, performancePath, ...capabilityPaths,
+    ...(operatorPaths === undefined ? [] : [operatorPaths.receiptPath, operatorPaths.signaturePath]),
+  ]
     .sort((left, right) => left < right ? -1 : left > right ? 1 : 0)
   if (new Set(relativePaths).size !== relativePaths.length) fail(`Receipt '${profileId}' repeats an output path.`)
   const files = new Map(relativePaths.map(relativePath => [
@@ -441,20 +515,40 @@ function outputPathsFromReceipt(root, profileId, sourceRevision) {
     readBoundedFile(root, path.join(root, ...relativePath.split('/')), `promotion output '${relativePath}'`),
   ]))
   const plan = parseJson(files.get(planPath), `${profileId} promotion plan`)
+  const planSignature = files.get(planSignaturePath)
   const preflight = parseJson(files.get(preflightPath), `${profileId} preflight profile`)
   const performance = parseJson(files.get(performancePath), `${profileId} performance evidence`)
   if (plan.profileId !== profileId || plan.sourceRevision !== sourceRevision ||
       sha256(files.get(planPath)) !== receipt.planSha256 ||
-      JSON.stringify(plan.image) !== JSON.stringify(receipt.image) ||
+      !serializeRuntimePromotionPlan(plan.image).equals(serializeRuntimePromotionPlan(receipt.image)) ||
       plan.preflightProfile?.path !== preflightPath ||
       plan.preflightProfile?.sha256 !== sha256(files.get(preflightPath)) ||
       preflight.id !== profileId || preflight.image !== receipt.image.reference ||
       preflight.runtimeImageId !== receipt.image.imageId ||
       performance.profileId !== profileId || performance.sourceRevision !== sourceRevision ||
       performance.planSha256 !== receipt.planSha256 ||
-      JSON.stringify(performance.image) !== JSON.stringify(receipt.image) ||
+      !serializeRuntimePromotionPlan(performance.image).equals(serializeRuntimePromotionPlan(receipt.image)) ||
       sha256(files.get(performancePath)) !== receipt.performance.evidenceSha256) {
     fail(`Promotion output closure for '${profileId}' does not match its plan/receipt.`)
+  }
+  if (!planSignature || !Buffer.from(files.get(planPath)).equals(serializeRuntimePromotionPlan(plan)) ||
+      receipt.planSignature?.path !== planSignaturePath ||
+      receipt.planSignature?.sha256 !== sha256(planSignature) ||
+      receipt.planSignature?.keyId !== (options.planSignatureKeyId ?? runtimePromotionPlanKeyId)) {
+    fail(`Promotion plan signature closure for '${profileId}' is invalid.`)
+  }
+  try { verifyRuntimePromotionPlanSignature(files.get(planPath), planSignature,
+    options.planSignaturePublicKey === undefined
+      ? {}
+      : { publicKey: options.planSignaturePublicKey, keyId: options.planSignatureKeyId }) } catch (error) {
+    fail(`Promotion plan signature for '${profileId}' is invalid: ${error.message}`)
+  }
+  if (operatorPaths !== undefined &&
+      (!serializeRuntimePromotionPlan(plan.wineOperator).equals(
+        serializeRuntimePromotionPlan(receipt.wineOperator)) ||
+       sha256(files.get(operatorPaths.receiptPath)) !== receipt.wineOperator.receiptSha256 ||
+       sha256(files.get(operatorPaths.signaturePath)) !== receipt.wineOperator.signatureSha256)) {
+    fail(`Promotion Wine operator closure for '${profileId}' does not match its plan/receipt.`)
   }
   for (const check of checks) {
     const evidence = parseJson(files.get(check.evidencePath), `${profileId} ${check.capability} evidence`)
@@ -500,9 +594,9 @@ function rowManifest(batch, profileId, closure) {
   }
 }
 
-function installEscrow(batch, profileId, closure, faultInjector) {
+function installEscrow(batch, profileId, closure, faultInjector, options = {}) {
   const destination = escrowRoot(batch.root, profileId)
-  if (fs.existsSync(destination)) return readAndVerifyEscrow(batch, profileId)
+  if (fs.existsSync(destination)) return readAndVerifyEscrow(batch, profileId, options)
   const parent = path.dirname(destination)
   const staging = path.join(parent, `.stage-${profileId}-${crypto.randomUUID().replaceAll('-', '')}`)
   fs.mkdirSync(staging, { mode: 0o700 })
@@ -518,14 +612,14 @@ function installEscrow(batch, profileId, closure, faultInjector) {
     fs.renameSync(staging, destination)
     fsyncDirectory(parent)
     faultInjector?.('after-escrow-commit', profileId)
-    return readAndVerifyEscrow(batch, profileId)
+    return readAndVerifyEscrow(batch, profileId, options)
   } catch (error) {
     fs.rmSync(staging, { recursive: true, force: true })
     throw error
   }
 }
 
-function readAndVerifyEscrow(batch, profileId) {
+function readAndVerifyEscrow(batch, profileId, options = {}) {
   const root = realDirectory(escrowRoot(batch.root, profileId), `escrow '${profileId}'`)
   const manifest = readCanonicalJson(root, path.join(root, 'manifest.json'), `escrow manifest '${profileId}'`).value
   if (manifest?.schemaVersion !== 1 || manifest.batchId !== batch.manifest.batchId ||
@@ -535,6 +629,7 @@ function readAndVerifyEscrow(batch, profileId) {
     fail(`Escrow manifest for '${profileId}' is invalid.`)
   }
   const paths = new Set()
+  const files = new Map()
   for (const file of manifest.files) {
     const relativePath = canonicalRelativePath(file?.path, 'escrow file path')
     if (paths.has(relativePath) || !Number.isSafeInteger(file.sizeBytes) || file.sizeBytes < 1 ||
@@ -546,6 +641,7 @@ function readAndVerifyEscrow(batch, profileId) {
     if (bytes.length !== file.sizeBytes || sha256(bytes) !== file.sha256) {
       fail(`Escrow file '${relativePath}' changed.`)
     }
+    files.set(relativePath, bytes)
   }
   const actual = []
   walkRegularFiles(root, root, actual)
@@ -553,9 +649,38 @@ function readAndVerifyEscrow(batch, profileId) {
   if (actual.length !== expected.size || actual.some(value => !expected.has(value))) {
     fail(`Escrow '${profileId}' contains an extra or unsafe file.`)
   }
-  const receipt = manifest.files.find(file =>
-    file.path === `profiles/runtime-promotion-receipts/${profileId}.json`)
-  if (receipt?.sha256 !== manifest.receiptSha256) fail(`Escrow '${profileId}' receipt binding is invalid.`)
+  const receiptPath = `profiles/runtime-promotion-receipts/${profileId}.json`
+  const receiptBytes = files.get(receiptPath)
+  if (receiptBytes === undefined || sha256(receiptBytes) !== manifest.receiptSha256) {
+    fail(`Escrow '${profileId}' receipt binding is invalid.`)
+  }
+  const receipt = parseJson(receiptBytes, `escrow receipt '${profileId}'`)
+  const planPath = `profiles/runtime-promotion-plans/${profileId}.json`
+  const signaturePath = runtimePromotionPlanSignaturePath(profileId)
+  const planBytes = files.get(planPath)
+  const signatureBytes = files.get(signaturePath)
+  const expectedKeyId = options.planSignatureKeyId ?? runtimePromotionPlanKeyId
+  if (receipt?.profileId !== profileId || receipt.sourceRevision !== batch.manifest.sourceRevision ||
+      planBytes === undefined || signatureBytes === undefined || receipt.planSha256 !== sha256(planBytes) ||
+      receipt.planSignature?.path !== signaturePath || receipt.planSignature?.sha256 !== sha256(signatureBytes) ||
+      receipt.planSignature?.keyId !== expectedKeyId) {
+    fail(`Escrow '${profileId}' promotion plan signature closure is invalid.`)
+  }
+  const plan = parseJson(planBytes, `escrow plan '${profileId}'`)
+  if (!planBytes.equals(serializeRuntimePromotionPlan(plan)) || plan.profileId !== profileId ||
+      plan.sourceRevision !== batch.manifest.sourceRevision) {
+    fail(`Escrow '${profileId}' promotion plan binding is invalid.`)
+  }
+  try { verifyRuntimePromotionPlanSignature(planBytes, signatureBytes,
+    options.planSignaturePublicKey === undefined
+      ? {}
+      : { publicKey: options.planSignaturePublicKey, keyId: options.planSignatureKeyId }) } catch (error) {
+    fail(`Escrow '${profileId}' promotion plan signature is invalid: ${error.message}`)
+  }
+  const operatorPaths = runtimeOperatorReceiptPaths(batch.manifest.sourceRevision)
+  const hasOperatorReceipt = manifest.files.some(file => file.path === operatorPaths.receiptPath)
+  const hasOperatorSignature = manifest.files.some(file => file.path === operatorPaths.signaturePath)
+  if (hasOperatorReceipt !== hasOperatorSignature) fail(`Escrow '${profileId}' has a partial Wine operator receipt closure.`)
   return manifest
 }
 
@@ -598,14 +723,14 @@ export function escrowRuntimePromotionProfile(input, options = {}) {
     }
     let manifest
     if (fs.existsSync(escrowRoot(batch.root, profileId))) {
-      manifest = readAndVerifyEscrow(batch, profileId)
+      manifest = readAndVerifyEscrow(batch, profileId, options)
     } else {
       if (row.phase !== 'pending') fail(`Escrow for '${profileId}' is missing at phase '${row.phase}'.`)
       const promotionRunner = options.promotionRunner ?? defaultPromotionRunner
       promotionRunner({ repositoryRoot: producerRoot, profileId, check: true })
-      const closure = outputPathsFromReceipt(producerRoot, profileId, batch.manifest.sourceRevision)
+      const closure = outputPathsFromReceipt(producerRoot, profileId, batch.manifest.sourceRevision, options)
       requireExactChanges(producerRoot, new Set(closure.files.keys()), 'producer repository')
-      manifest = installEscrow(batch, profileId, closure, options.faultInjector)
+      manifest = installEscrow(batch, profileId, closure, options.faultInjector, options)
     }
     deleteCanonicalOutputs(producerRoot, manifest)
     options.faultInjector?.('after-canonical-delete', profileId)
@@ -643,12 +768,39 @@ function copyEscrowOutputs(batch, aggregateRoot, manifest) {
   }
 }
 
-function removeImportedOutputs(aggregateRoot, manifest) {
+function appliedEscrowFiles(batch, options = {}) {
+  const protectedFiles = new Map()
+  for (const row of batch.state.rows) {
+    if (row.phase !== 'applied') continue
+    const applied = readAndVerifyEscrow(batch, row.profileId, options)
+    for (const file of applied.files) {
+      const existing = protectedFiles.get(file.path)
+      if (existing !== undefined &&
+          (existing.sha256 !== file.sha256 || existing.sizeBytes !== file.sizeBytes)) {
+        fail(`Applied runtime rows disagree about shared output '${file.path}'.`)
+      }
+      protectedFiles.set(file.path, file)
+    }
+  }
+  return protectedFiles
+}
+
+function removeImportedOutputs(batch, aggregateRoot, manifest, options = {}) {
+  const protectedFiles = appliedEscrowFiles(batch, options)
   for (const file of manifest.files) {
     const target = path.join(aggregateRoot, ...file.path.split('/'))
     if (!fs.existsSync(target)) continue
     const bytes = readBoundedFile(aggregateRoot, target, `aggregate output '${file.path}'`)
-    if (sha256(bytes) !== file.sha256) fail(`Cannot roll back changed aggregate output '${file.path}'.`)
+    if (sha256(bytes) !== file.sha256 || bytes.length !== file.sizeBytes) {
+      fail(`Cannot roll back changed aggregate output '${file.path}'.`)
+    }
+    const protectedFile = protectedFiles.get(file.path)
+    if (protectedFile !== undefined) {
+      if (protectedFile.sha256 !== file.sha256 || protectedFile.sizeBytes !== file.sizeBytes) {
+        fail(`Cannot roll back conflicting shared aggregate output '${file.path}'.`)
+      }
+      continue
+    }
     fs.rmSync(target)
   }
 }
@@ -662,11 +814,11 @@ function bindingIsApplied(aggregateRoot, profileId, receiptSha256) {
     binding.capability?.promotionReceipt?.sha256 === receiptSha256
 }
 
-function allowedAggregateChanges(batch, currentManifest = undefined, currentApplied = false) {
+function allowedAggregateChanges(batch, currentManifest = undefined, currentApplied = false, options = {}) {
   const allowed = new Set()
   for (const row of batch.state.rows) {
     if (row.phase !== 'applied') continue
-    const manifest = readAndVerifyEscrow(batch, row.profileId)
+    const manifest = readAndVerifyEscrow(batch, row.profileId, options)
     for (const file of manifest.files) allowed.add(file.path)
     allowed.add(`profiles/runtimes/${row.profileId}.json`)
   }
@@ -708,12 +860,12 @@ export function importPromoteRuntimeProfile(input, options = {}) {
     if (phases.indexOf(row.phase) < phases.indexOf('escrowed')) {
       fail(`Profile '${profileId}' has not been escrowed.`)
     }
-    const manifest = readAndVerifyEscrow(batch, profileId)
+    const manifest = readAndVerifyEscrow(batch, profileId, options)
     if (manifest.receiptSha256 !== row.receiptSha256) fail(`State receipt binding for '${profileId}' changed.`)
     const alreadyApplied = bindingIsApplied(aggregateRoot, profileId, manifest.receiptSha256)
     requireExactChanges(
       aggregateRoot,
-      allowedAggregateChanges(batch, manifest, alreadyApplied),
+      allowedAggregateChanges(batch, manifest, alreadyApplied, options),
       'aggregate repository',
     )
     if (alreadyApplied) {
@@ -728,12 +880,12 @@ export function importPromoteRuntimeProfile(input, options = {}) {
     row.phase = 'copied'
     replaceCanonicalState(batch.root, batch.state)
     options.faultInjector?.('after-copy', profileId)
-    requireExactChanges(aggregateRoot, allowedAggregateChanges(batch, manifest, false), 'aggregate repository')
+    requireExactChanges(aggregateRoot, allowedAggregateChanges(batch, manifest, false, options), 'aggregate repository')
     const promotionRunner = options.promotionRunner ?? defaultPromotionRunner
     try {
       promotionRunner({ repositoryRoot: aggregateRoot, profileId, check: true })
     } catch (error) {
-      removeImportedOutputs(aggregateRoot, manifest)
+      removeImportedOutputs(batch, aggregateRoot, manifest, options)
       row.phase = 'escrowed'
       replaceCanonicalState(batch.root, batch.state)
       throw error
@@ -744,7 +896,7 @@ export function importPromoteRuntimeProfile(input, options = {}) {
     try {
       promotionRunner({ repositoryRoot: aggregateRoot, profileId, check: false })
     } catch (error) {
-      removeImportedOutputs(aggregateRoot, manifest)
+      removeImportedOutputs(batch, aggregateRoot, manifest, options)
       row.phase = 'escrowed'
       replaceCanonicalState(batch.root, batch.state)
       throw error
@@ -757,7 +909,7 @@ export function importPromoteRuntimeProfile(input, options = {}) {
     row.phase = 'applied'
     batch.state.nextIndex += 1
     replaceCanonicalState(batch.root, batch.state)
-    requireExactChanges(aggregateRoot, allowedAggregateChanges(batch), 'aggregate repository')
+    requireExactChanges(aggregateRoot, allowedAggregateChanges(batch, undefined, false, options), 'aggregate repository')
     return Object.freeze({ profileId, phase: 'applied', recovered: false })
   })
 }
@@ -777,12 +929,12 @@ function batchStatusDocument(manifest, state) {
   }
 }
 
-export function runtimePromotionBatchStatus(input) {
+export function runtimePromotionBatchStatus(input, options = {}) {
   const aggregateRoot = realDirectory(input.aggregateRoot, 'aggregate repository')
   return withGlobalLock(aggregateRoot, () => {
     const batch = loadBatch(aggregateRoot, input.batchId)
     for (const row of batch.state.rows) {
-      if (row.phase !== 'pending') readAndVerifyEscrow(batch, row.profileId)
+      if (row.phase !== 'pending') readAndVerifyEscrow(batch, row.profileId, options)
     }
     return batchStatusDocument(batch.manifest, batch.state)
   })
@@ -805,7 +957,7 @@ export function verifyRuntimePromotionBatchComplete(input, options = {}) {
     }
     const closure = new Set(commonPromotionOutputs)
     for (const row of batch.state.rows) {
-      const manifest = readAndVerifyEscrow(batch, row.profileId)
+      const manifest = readAndVerifyEscrow(batch, row.profileId, options)
       verifyManifestAtAggregate(batch, aggregateRoot, manifest)
       if (!bindingIsApplied(aggregateRoot, row.profileId, manifest.receiptSha256)) {
         fail(`Final runtime matrix row '${row.profileId}' is not verified by its escrow receipt.`)
@@ -816,6 +968,8 @@ export function verifyRuntimePromotionBatchComplete(input, options = {}) {
     const receiptFailures = (options.validateReceipts ?? validateRuntimePromotionReceipts)(
       matrix,
       aggregateRoot,
+      fs.readFileSync,
+      options,
     )
     if (receiptFailures.length > 0) {
       fail(`Final runtime promotion receipts are invalid: ${receiptFailures.join(' ')}`)

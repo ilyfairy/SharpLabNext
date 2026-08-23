@@ -28,7 +28,6 @@ const manifestDigest = `sha256:${'d'.repeat(64)}`
 const destination = `registry.example/sharplabnext/runtime-${profileId}:${releaseId}`
 const destinationRepository = destination.slice(0, destination.lastIndexOf(':'))
 const pinnedReference = `${destinationRepository}@${manifestDigest}`
-
 function pinnedImage(name, character) {
   return `registry.example/${name}@sha256:${character.repeat(64)}`
 }
@@ -76,6 +75,7 @@ function successfulFixture(overrides = {}) {
         headRevision: sourceRevision,
         isDirty: false,
       })),
+      rebuildCandidate: overrides.rebuildCandidate ?? (() => {}),
       inspectImage(reference) {
         if (overrides.inspectImage !== undefined) {
           const replacement = overrides.inspectImage(reference, {
@@ -200,6 +200,70 @@ test('publisher rejects source, input and label drift before push', () => {
     /runtime\.commit/,
   )
   assert.equal(labelDrift.calls.some(([, args]) => args[1] === 'push'), false)
+})
+
+test('publisher requires candidate-local committed and promotion-eligible attestations', () => {
+  const cases = [
+    ['missing source context', labels => { delete labels['io.sharplabnext.source.context'] }],
+    ['development source context', labels => { labels['io.sharplabnext.source.context'] = 'working-tree-development' }],
+    ['missing promotion eligibility', labels => { delete labels['com.sharplabnext.runtime-candidate.promotion-eligible'] }],
+    ['false promotion eligibility', labels => { labels['com.sharplabnext.runtime-candidate.promotion-eligible'] = 'false' }],
+  ]
+  for (const [name, mutate] of cases) {
+    const fixture = successfulFixture({
+      inspectImage(reference, state) {
+        const labels = {
+          ...candidateExpectedImageLabels(target, state.values),
+        }
+        mutate(labels)
+        return inspection(state.values, {
+          imageId: reference === destination ? state.destinationImageId : state.sourceImageId,
+          labels,
+        })
+      },
+    })
+    assert.throws(
+      () => publishRuntimeCandidate({ target, destination }, fixture.options),
+      /io\.sharplabnext\.source\.context|com\.sharplabnext\.runtime-candidate\.promotion-eligible/,
+      name,
+    )
+    assert.equal(fixture.calls.length, 0, `${name} must fail before Docker mutation`)
+  }
+})
+
+test('publisher rejects every candidate identity field changed by committed-source rebuild', () => {
+  for (const [name, mutate] of [
+    ['image ID', value => { value.imageId = otherImageId }],
+    ['size', value => { value.sizeBytes++ }],
+    ['operating system', value => { value.operatingSystem = 'windows' }],
+    ['architecture', value => { value.architecture = 'arm64' }],
+    ['source revision', value => {
+      value.labels = {
+        ...value.labels,
+        'org.opencontainers.image.revision': '0'.repeat(40),
+      }
+    }],
+    ['complete labels', value => { value.labels = { ...value.labels, injected: 'changed' } }],
+  ]) {
+    let rebuilt = false
+    const fixture = successfulFixture({
+      rebuildCandidate() { rebuilt = true },
+      inspectImage(reference, state) {
+        if (!rebuilt || reference === destination || reference.includes('@sha256:')) {
+          return undefined
+        }
+        const value = inspection(state.values, { imageId: state.sourceImageId })
+        mutate(value)
+        return value
+      },
+    })
+    assert.throws(
+      () => publishRuntimeCandidate({ target, destination }, fixture.options),
+      /committed-source rebuild|image binding failed/,
+      name,
+    )
+    assert.equal(fixture.calls.length, 0, `${name} drift must fail before tag or push`)
+  }
 })
 
 test('publisher detects tag races and a pinned digest resolving to the wrong image', () => {
@@ -334,17 +398,24 @@ test('CLI returns canonical JSON and surfaces push failures', () => {
     log(value) { this.logs.push(value) },
     error(value) { this.errors.push(value) },
   }
-  const fixture = successfulFixture()
+  const fixture = successfulFixture({
+    rebuildCandidate() {
+      output.error('formal build diagnostic on stderr')
+    },
+  })
   assert.equal(runRuntimeCandidatePublish([
     target, '--destination', destination,
   ], { ...fixture.options, output }), 0)
+  assert.equal(output.logs.length, 1)
   assert.deepEqual(JSON.parse(output.logs[0]), publishShape())
+  assert.deepEqual(output.errors, ['formal build diagnostic on stderr'])
 
   const failureOutput = { ...output, logs: [], errors: [] }
   const failure = successfulFixture({ pushFailure: true })
   assert.equal(runRuntimeCandidatePublish([
     target, '--destination', destination,
   ], { ...failure.options, output: failureOutput }), 1)
+  assert.equal(failureOutput.logs.length, 0)
   assert.match(failureOutput.errors.join('\n'), /push failed/)
 })
 

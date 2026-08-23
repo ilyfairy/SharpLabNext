@@ -21,9 +21,21 @@ internal static partial class FrameworkRuntimePreparation
         "profiles/runtime-framework-installers.json";
     private const string MatrixRelativePath = "profiles/runtime-matrix.json";
     private const long MaximumInstallerBytes = 2L * 1024 * 1024 * 1024;
+    private const int MaximumCommittedSourceFileBytes = 32 * 1024 * 1024;
+    private static readonly string[] CommittedSourceFiles =
+    [
+        DockerfileRelativePath,
+        ManifestRelativePath,
+        MatrixRelativePath,
+        "deploy/docker/wine-netfx-framework-preflight.sh",
+        "deploy/docker/dedupe-wine-prefixes.py",
+        "deploy/docker/certificates/microsoft-tls-rsa-root-g2-xsign.crt",
+        "deploy/docker/certificates/microsoft-tls-g2-rsa-ca-ocsp-04.crt"
+    ];
     private const string Usage =
         "Usage: dotnet run eng/prepare-framework-runtime.cs -- " +
         "--target-id ID --base-image REFERENCE --root-image REFERENCE --output-image REFERENCE " +
+        "--source-revision COMMIT " +
         "[--installer-url-secret-file PATH | --installer-secret-file PATH] " +
         "--accept-microsoft-dotnet-framework-eula " +
         "[--repository-root PATH] [--docker-command COMMAND] [--dry-run]";
@@ -41,33 +53,37 @@ internal static partial class FrameworkRuntimePreparation
             return 64;
         }
 
-        ValidatedInputs inputs;
         try
         {
-            inputs = Validate(options);
-        }
-        catch (UsageException exception)
-        {
-            WriteUsageError(exception);
-            return 64;
-        }
-        catch (InputValidationException exception)
-        {
-            Console.Error.WriteLine(exception.Message);
-            return 1;
-        }
-
-        try
-        {
+            var repositoryRoot = ResolveRepositoryRoot(options.RepositoryRoot);
+            ValidateSourceState(repositoryRoot, options.SourceRevision, options.DryRun);
+            using var sourceContext = CommittedSourceContext.Create(
+                repositoryRoot,
+                options.SourceRevision);
+            var inputs = Validate(options, repositoryRoot, sourceContext.Directory);
             using var stagedContext = StagedBuildContext.Create(inputs.AssetSource);
-            var invocation = CreateDockerInvocation(options, inputs, stagedContext);
+            var invocation = CreateDockerInvocation(
+                options,
+                inputs,
+                sourceContext,
+                stagedContext);
             if (options.DryRun)
             {
                 Console.WriteLine(invocation.RenderRedacted());
                 return 0;
             }
 
-            return await ExecuteAsync(invocation, inputs, stagedContext);
+            return await ExecuteAsync(
+                invocation,
+                inputs,
+                sourceContext,
+                stagedContext,
+                options.SourceRevision);
+        }
+        catch (UsageException exception)
+        {
+            WriteUsageError(exception);
+            return 64;
         }
         catch (InputValidationException exception)
         {
@@ -90,6 +106,7 @@ internal static partial class FrameworkRuntimePreparation
         string? baseImage = null;
         string? rootImage = null;
         string? outputImage = null;
+        string? sourceRevision = null;
         string? installerUrlSecretFile = null;
         string? installerSecretFile = null;
         var acceptEula = false;
@@ -122,6 +139,9 @@ internal static partial class FrameworkRuntimePreparation
                 case "--output-image":
                     outputImage = RequiredValue(args, ref index, option);
                     break;
+                case "--source-revision":
+                    sourceRevision = RequiredValue(args, ref index, option);
+                    break;
                 case "--installer-url-secret-file":
                     installerUrlSecretFile = RequiredValue(args, ref index, option);
                     break;
@@ -142,9 +162,11 @@ internal static partial class FrameworkRuntimePreparation
         if (string.IsNullOrWhiteSpace(targetId) ||
             string.IsNullOrWhiteSpace(baseImage) ||
             string.IsNullOrWhiteSpace(rootImage) ||
-            string.IsNullOrWhiteSpace(outputImage))
+            string.IsNullOrWhiteSpace(outputImage) ||
+            string.IsNullOrWhiteSpace(sourceRevision))
         {
-            throw new UsageException("Target ID and base/root/output images are required.");
+            throw new UsageException(
+                "Target ID, base/root/output images, and source revision are required.");
         }
         if (!acceptEula)
             throw new UsageException("--accept-microsoft-dotnet-framework-eula is required.");
@@ -161,15 +183,18 @@ internal static partial class FrameworkRuntimePreparation
             ValidateDigestPinnedImageReference(baseImage, "--base-image"),
             ValidateDigestPinnedImageReference(rootImage, "--root-image"),
             ValidateOutputImageReference(outputImage),
+            ValidateSourceRevision(sourceRevision),
             installerUrlSecretFile,
             installerSecretFile,
             dryRun);
     }
 
-    private static ValidatedInputs Validate(PreparationOptions options)
+    private static ValidatedInputs Validate(
+        PreparationOptions options,
+        string repositoryRoot,
+        string sourceRoot)
     {
-        var repositoryRoot = ResolveRepositoryRoot(options.RepositoryRoot);
-        var manifestPath = Path.Combine(repositoryRoot, ManifestRelativePath);
+        var manifestPath = Path.Combine(sourceRoot, ManifestRelativePath);
         byte[] manifestBytes;
         InstallerManifest manifest;
         try
@@ -186,7 +211,7 @@ internal static partial class FrameworkRuntimePreparation
             throw new InputValidationException("The Framework installer manifest is invalid or unreadable.");
         }
 
-        ValidateManifest(manifest, repositoryRoot);
+        ValidateManifest(manifest, sourceRoot);
         var target = manifest.Targets.SingleOrDefault(
             candidate => StringComparer.Ordinal.Equals(candidate.Id, options.TargetId));
         if (target is null)
@@ -384,15 +409,18 @@ internal static partial class FrameworkRuntimePreparation
     private static DockerInvocation CreateDockerInvocation(
         PreparationOptions options,
         ValidatedInputs inputs,
+        CommittedSourceContext sourceContext,
         StagedBuildContext stagedContext)
     {
-        var dockerfile = Path.Combine(inputs.RepositoryRoot, DockerfileRelativePath);
+        var dockerfile = Path.Combine(sourceContext.Directory, DockerfileRelativePath);
         var arguments = new List<DockerArgument>
         {
             new("buildx"),
             new("build"),
             new("--file"),
-            new(dockerfile),
+            new(
+                dockerfile,
+                $"<committed-source-context>/{DockerfileRelativePath}"),
             new("--tag"),
             new(options.OutputImage),
             new("--load"),
@@ -410,6 +438,8 @@ internal static partial class FrameworkRuntimePreparation
             new("--build-arg"),
             new($"INSTALLER_MANIFEST_SHA256={inputs.ManifestSha256}"),
             new("--build-arg"),
+            new($"SOURCE_REVISION={options.SourceRevision}"),
+            new("--build-arg"),
             new("ACCEPT_MICROSOFT_DOTNET_FRAMEWORK_EULA=true")
         };
         if (inputs.AssetSource.Kind == AssetSourceKind.Url)
@@ -421,14 +451,16 @@ internal static partial class FrameworkRuntimePreparation
         arguments.Add(new(
             $"framework-installer-context={stagedContext.Directory}",
             "framework-installer-context=<staged-local-context>"));
-        arguments.Add(new(inputs.RepositoryRoot));
+        arguments.Add(new(sourceContext.Directory, "<committed-source-context>"));
         return new DockerInvocation(options.DockerCommand, arguments);
     }
 
     private static async Task<int> ExecuteAsync(
         DockerInvocation invocation,
         ValidatedInputs inputs,
-        StagedBuildContext stagedContext)
+        CommittedSourceContext sourceContext,
+        StagedBuildContext stagedContext,
+        string sourceRevision)
     {
         var startInfo = new ProcessStartInfo(invocation.Command)
         {
@@ -462,6 +494,7 @@ internal static partial class FrameworkRuntimePreparation
             {
                 inputs.AssetSource.Path,
                 inputs.AssetSource.SensitiveContent,
+                sourceContext.Directory,
                 stagedContext.Directory
             }.Where(static value => !string.IsNullOrEmpty(value)).Select(static value => value!).ToArray();
             var output = ForwardRedactedAsync(process.StandardOutput, Console.Out, sensitiveValues);
@@ -475,6 +508,7 @@ internal static partial class FrameworkRuntimePreparation
             }
         }
 
+        ValidateSourceState(inputs.RepositoryRoot, sourceRevision, dryRun: false);
         return 0;
     }
 
@@ -553,6 +587,139 @@ internal static partial class FrameworkRuntimePreparation
         return value;
     }
 
+    private static string ValidateSourceRevision(string value)
+    {
+        if (value.Length is not (40 or 64) ||
+            value.Any(static character =>
+                character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
+        {
+            throw new UsageException(
+                "--source-revision must be a complete lowercase Git commit identity.");
+        }
+        return value;
+    }
+
+    private static void ValidateSourceState(
+        string repositoryRoot,
+        string sourceRevision,
+        bool dryRun)
+    {
+        var head = RunGit(repositoryRoot, "rev-parse", "--verify", "HEAD").Trim();
+        if (!StringComparer.Ordinal.Equals(head, sourceRevision))
+        {
+            throw new InputValidationException(
+                $"The source revision '{sourceRevision}' does not match Git HEAD '{head}'.");
+        }
+
+        var status = RunGit(
+            repositoryRoot,
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=normal");
+        if (!dryRun && status.Length != 0)
+        {
+            throw new InputValidationException(
+                "The Framework operator source worktree must be clean.");
+        }
+    }
+
+    private static string RunGit(string repositoryRoot, params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            WorkingDirectory = repositoryRoot
+        };
+        foreach (var argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+
+        try
+        {
+            using var process = Process.Start(startInfo)
+                ?? throw new InputValidationException(
+                    "Could not inspect the Framework operator Git source.");
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0)
+            {
+                throw new InputValidationException(
+                    "Could not inspect the Framework operator Git source.");
+            }
+            return output;
+        }
+        catch (InputValidationException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (
+            exception is InvalidOperationException or Win32Exception)
+        {
+            throw new InputValidationException(
+                "Could not inspect the Framework operator Git source.");
+        }
+    }
+
+    private static byte[] ReadCommittedSourceFile(
+        string repositoryRoot,
+        string sourceRevision,
+        string relativePath)
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            WorkingDirectory = repositoryRoot
+        };
+        startInfo.ArgumentList.Add("show");
+        startInfo.ArgumentList.Add("--no-ext-diff");
+        startInfo.ArgumentList.Add("--no-textconv");
+        startInfo.ArgumentList.Add($"{sourceRevision}:{relativePath}");
+
+        try
+        {
+            using var process = Process.Start(startInfo)
+                ?? throw new InputValidationException(
+                    $"Could not read committed Framework operator source '{relativePath}'.");
+            var error = process.StandardError.ReadToEndAsync();
+            using var output = new MemoryStream();
+            var buffer = new byte[64 * 1024];
+            while (true)
+            {
+                var read = process.StandardOutput.BaseStream.Read(buffer, 0, buffer.Length);
+                if (read == 0)
+                    break;
+                output.Write(buffer, 0, read);
+                if (output.Length > MaximumCommittedSourceFileBytes)
+                {
+                    process.Kill(entireProcessTree: true);
+                    throw new InputValidationException(
+                        $"Committed Framework operator source '{relativePath}' is too large.");
+                }
+            }
+            process.WaitForExit();
+            _ = error.GetAwaiter().GetResult();
+            if (process.ExitCode != 0 || output.Length == 0)
+            {
+                throw new InputValidationException(
+                    $"Could not read committed Framework operator source '{relativePath}'.");
+            }
+            return output.ToArray();
+        }
+        catch (InputValidationException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (
+            exception is InvalidOperationException or Win32Exception or IOException)
+        {
+            throw new InputValidationException(
+                $"Could not read committed Framework operator source '{relativePath}'.");
+        }
+    }
+
     private static string RequiredValue(string[] args, ref int index, string option)
     {
         index++;
@@ -598,6 +765,7 @@ internal static partial class FrameworkRuntimePreparation
         string BaseImage,
         string RootImage,
         string OutputImage,
+        string SourceRevision,
         string? InstallerUrlSecretFile,
         string? InstallerSecretFile,
         bool DryRun);
@@ -622,6 +790,77 @@ internal static partial class FrameworkRuntimePreparation
     {
         public static ValidatedAssetSource None() =>
             new(AssetSourceKind.None, Path: null, SensitiveContent: null);
+    }
+
+    private sealed class CommittedSourceContext : IDisposable
+    {
+        private CommittedSourceContext(string directory) => Directory = directory;
+
+        public string Directory { get; }
+
+        public static CommittedSourceContext Create(
+            string repositoryRoot,
+            string sourceRevision)
+        {
+            var directory = Path.Combine(
+                Path.GetTempPath(),
+                $".sharplabnext-framework-source-{Guid.NewGuid():N}");
+            try
+            {
+                System.IO.Directory.CreateDirectory(directory);
+                if (!OperatingSystem.IsWindows())
+                {
+                    File.SetUnixFileMode(
+                        directory,
+                        UnixFileMode.UserRead |
+                        UnixFileMode.UserWrite |
+                        UnixFileMode.UserExecute);
+                }
+                foreach (var relativePath in CommittedSourceFiles)
+                {
+                    var destination = Path.Combine(
+                        directory,
+                        relativePath.Replace('/', Path.DirectorySeparatorChar));
+                    System.IO.Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                    File.WriteAllBytes(
+                        destination,
+                        ReadCommittedSourceFile(repositoryRoot, sourceRevision, relativePath));
+                }
+                return new CommittedSourceContext(directory);
+            }
+            catch (InputValidationException)
+            {
+                TryDelete(directory, failClosed: false);
+                throw;
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException or NotSupportedException)
+            {
+                TryDelete(directory, failClosed: false);
+                throw new InputValidationException(
+                    "The committed Framework operator source context could not be created.");
+            }
+        }
+
+        public void Dispose() => TryDelete(Directory, failClosed: true);
+
+        private static void TryDelete(string directory, bool failClosed)
+        {
+            try
+            {
+                if (System.IO.Directory.Exists(directory))
+                    System.IO.Directory.Delete(directory, recursive: true);
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+                if (failClosed)
+                {
+                    throw new InputValidationException(
+                        "The committed Framework operator source context could not be removed.");
+                }
+            }
+        }
     }
 
     private sealed partial class StagedBuildContext : IDisposable

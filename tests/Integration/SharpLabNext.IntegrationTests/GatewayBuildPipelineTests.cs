@@ -21,18 +21,18 @@ public sealed class GatewayBuildPipelineTests
         await using var artifactStore = await ArtifactStoreProcess.StartAsync(
             TestContext.Current.CancellationToken,
             internalServiceToken: internalServiceToken);
+        var workerEnvironment = new Dictionary<string, string?>
+        {
+            ["ASPNETCORE_ENVIRONMENT"] = "Development",
+            ["RoslynWorker__ReleaseId"] = catalog.ReleaseId,
+            ["ArtifactStore__BaseUrl"] = artifactStore.HttpClient.BaseAddress!.AbsoluteUri,
+            ["RoslynWorker__DevelopmentArtifactEnvelope__Enabled"] = "false"
+        };
+        GatewayTestCatalog.AddRoslynStableReferenceSets(workerEnvironment, catalog);
         await using var worker = await DotNetWebServiceProcess.StartAsync(
             "src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable.csproj",
             "/health/ready",
-            new Dictionary<string, string?>
-            {
-                ["ASPNETCORE_ENVIRONMENT"] = "Development",
-                ["RoslynWorker__ReleaseId"] = catalog.ReleaseId,
-                ["ArtifactStore__BaseUrl"] = artifactStore.HttpClient.BaseAddress!.AbsoluteUri,
-                ["ReferenceSets__net10-ref__Path"] = FindNet10ReferencePath(),
-                ["ReferenceSets__net11-preview-ref__Path"] = FindNet11ReferencePath(),
-                ["RoslynWorker__DevelopmentArtifactEnvelope__Enabled"] = "false"
-            },
+            workerEnvironment,
             TestContext.Current.CancellationToken,
             internalServiceToken: internalServiceToken);
         await using var gateway = await DotNetWebServiceProcess.StartAsync(
@@ -270,49 +270,6 @@ public sealed class GatewayBuildPipelineTests
             BuildOptions: options);
     }
 
-    private static string FindNet10ReferencePath()
-    {
-        var roots = new List<string?>
-        {
-            Environment.GetEnvironmentVariable("DOTNET_ROOT"),
-            Environment.GetEnvironmentVariable("DOTNET_ROOT_X64"),
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) is { Length: > 0 } programFiles
-                ? Path.Combine(programFiles, "dotnet")
-                : null,
-            "/usr/share/dotnet"
-        };
-        foreach (var root in roots.Where(static root => !string.IsNullOrWhiteSpace(root)))
-        {
-            var exact = Path.Combine(root!, "packs", "Microsoft.NETCore.App.Ref", "10.0.9", "ref", "net10.0");
-            if (Directory.Exists(exact))
-            {
-                return exact;
-            }
-        }
-
-        throw new DirectoryNotFoundException("The .NET 10.0.9 reference pack was not found.");
-    }
-
-    private static string FindNet11ReferencePath()
-    {
-        var roots = new List<string?>
-        {
-            Environment.GetEnvironmentVariable("DOTNET_ROOT"),
-            Environment.GetEnvironmentVariable("DOTNET_ROOT_X64"),
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) is { Length: > 0 } programFiles
-                ? Path.Combine(programFiles, "dotnet")
-                : null,
-            "/usr/share/dotnet"
-        };
-        foreach (var root in roots.Where(static root => !string.IsNullOrWhiteSpace(root)))
-        {
-            var exact = Path.Combine(root!, "packs", "Microsoft.NETCore.App.Ref", "11.0.0-preview.5.26302.115", "ref", "net11.0");
-            if (Directory.Exists(exact))
-                return exact;
-        }
-
-        throw new DirectoryNotFoundException("The .NET 11 preview reference pack was not found.");
-    }
 }
 
 internal sealed class DotNetWebServiceProcess : IAsyncDisposable

@@ -6,8 +6,8 @@ import { validateRuntimeProfileChannels } from './runtime-profile-channel-valida
 import { validateRuntimePromotionReceipts } from './runtime-promotion-receipt-validation.mjs'
 import {
   isSupportedJsonSchemaFormat,
-  isValidJsonSchemaFormat,
 } from './json-schema-formats.mjs'
+import { validateJsonSchemaInstance } from './json-schema-instance-validation.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const schemaDirectory = path.join(repositoryRoot, 'schemas')
@@ -34,6 +34,7 @@ const expectedSchemas = new Set([
   'runtime-matrix.schema.json',
   'runtime-capability-evidence.schema.json',
   'runtime-framework-installers.schema.json',
+  'runtime-wine-packages.schema.json',
   'runtime-performance-evidence.schema.json',
   'runtime-performance-policy.schema.json',
   'runtime-promotion-plan.schema.json',
@@ -92,6 +93,7 @@ const documents = [
   ['profiles/license-policy.json', 'license-policy.schema.json'],
   ['profiles/profile-update-status.example.json', 'profile-update-status.schema.json'],
   ['profiles/runtime-framework-installers.json', 'runtime-framework-installers.schema.json'],
+  ['profiles/runtime-wine-packages.json', 'runtime-wine-packages.schema.json'],
   ['profiles/runtime-matrix.json', 'runtime-matrix.schema.json'],
   ['profiles/runtime-performance-policies/runtime-image-linux-x64-v1.json', 'runtime-performance-policy.schema.json'],
   ['profiles/provenance/const-generics-runtime.json', 'maintained-provenance.schema.json'],
@@ -164,7 +166,7 @@ for (const [relativePath, schemaName] of documents) {
 
   const schema = schemas.get(schemaName)
   if (schema !== undefined) {
-    for (const error of validateInstance(document, schema, schema, '#')) {
+    for (const error of validateJsonSchemaInstance(document, schema)) {
       failures.push(`${documentLabel}${error}`)
     }
   }
@@ -271,111 +273,4 @@ function inspectSchema(node, root, fileName, pointer) {
 
 function escapePointer(value) {
   return value.replaceAll('~', '~0').replaceAll('/', '~1')
-}
-
-function validateInstance(value, schema, root, pointer) {
-  if (schema.$ref !== undefined) {
-    return validateInstance(value, resolveRef(schema.$ref, root), root, pointer)
-  }
-
-  const errors = []
-  if (Array.isArray(schema.allOf)) {
-    for (const candidate of schema.allOf) errors.push(...validateInstance(value, candidate, root, pointer))
-  }
-  if (Array.isArray(schema.anyOf)) {
-    const candidates = schema.anyOf.map(candidate => validateInstance(value, candidate, root, pointer))
-    if (!candidates.some(candidate => candidate.length === 0)) {
-      errors.push(`${pointer}: value does not match any allowed schema`)
-      return errors
-    }
-  }
-
-  if (schema.const !== undefined && !sameJson(value, schema.const)) {
-    errors.push(`${pointer}: expected constant ${JSON.stringify(schema.const)}`)
-  }
-  if (Array.isArray(schema.enum) && !schema.enum.some(candidate => sameJson(value, candidate))) {
-    errors.push(`${pointer}: value is not in the allowed enum`)
-  }
-
-  const allowedTypes = Array.isArray(schema.type) ? schema.type : schema.type === undefined ? [] : [schema.type]
-  if (allowedTypes.length > 0 && !allowedTypes.some(type => hasJsonType(value, type))) {
-    errors.push(`${pointer}: expected type ${allowedTypes.join('|')}`)
-    return errors
-  }
-
-  if (typeof value === 'string') {
-    if (schema.minLength !== undefined && value.length < schema.minLength) errors.push(`${pointer}: string is shorter than minLength`)
-    if (schema.maxLength !== undefined && value.length > schema.maxLength) errors.push(`${pointer}: string is longer than maxLength`)
-    if (schema.pattern !== undefined && !new RegExp(schema.pattern).test(value)) errors.push(`${pointer}: string does not match pattern`)
-    if (schema.format !== undefined && !isValidJsonSchemaFormat(value, schema.format)) {
-      errors.push(`${pointer}: string does not match format '${schema.format}'`)
-    }
-  }
-
-  if (typeof value === 'number') {
-    if (schema.minimum !== undefined && value < schema.minimum) errors.push(`${pointer}: number is below minimum`)
-    if (schema.maximum !== undefined && value > schema.maximum) errors.push(`${pointer}: number is above maximum`)
-  }
-
-  if (Array.isArray(value)) {
-    if (schema.minItems !== undefined && value.length < schema.minItems) errors.push(`${pointer}: array has too few items`)
-    if (schema.maxItems !== undefined && value.length > schema.maxItems) errors.push(`${pointer}: array has too many items`)
-    if (schema.uniqueItems === true && new Set(value.map(item => JSON.stringify(item))).size !== value.length) {
-      errors.push(`${pointer}: array items must be unique`)
-    }
-    if (schema.items !== undefined && schema.items !== false) {
-      value.forEach((item, index) => errors.push(...validateInstance(item, schema.items, root, `${pointer}/${index}`)))
-    }
-  }
-
-  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-    const properties = schema.properties ?? {}
-    for (const required of schema.required ?? []) {
-      if (!(required in value)) errors.push(`${pointer}: missing required property ${required}`)
-    }
-    if (schema.minProperties !== undefined && Object.keys(value).length < schema.minProperties) {
-      errors.push(`${pointer}: object has too few properties`)
-    }
-    for (const [key, item] of Object.entries(value)) {
-      const itemPointer = `${pointer}/${escapePointer(key)}`
-      if (key in properties) {
-        errors.push(...validateInstance(item, properties[key], root, itemPointer))
-      } else if (schema.additionalProperties === false) {
-        errors.push(`${itemPointer}: unknown property`)
-      } else if (schema.additionalProperties !== undefined && typeof schema.additionalProperties === 'object') {
-        errors.push(...validateInstance(item, schema.additionalProperties, root, itemPointer))
-      }
-      if (schema.propertyNames !== undefined) {
-        errors.push(...validateInstance(key, schema.propertyNames, root, `${pointer}/<property-name>`))
-      }
-    }
-  }
-
-  return errors
-}
-
-function resolveRef(reference, root) {
-  if (!reference.startsWith('#/')) throw new Error(`Only local schema references are supported: ${reference}`)
-  return reference
-    .slice(2)
-    .split('/')
-    .map(segment => segment.replaceAll('~1', '/').replaceAll('~0', '~'))
-    .reduce((node, segment) => node[segment], root)
-}
-
-function sameJson(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right)
-}
-
-function hasJsonType(value, type) {
-  switch (type) {
-    case 'null': return value === null
-    case 'array': return Array.isArray(value)
-    case 'object': return value !== null && typeof value === 'object' && !Array.isArray(value)
-    case 'integer': return Number.isInteger(value)
-    case 'number': return typeof value === 'number' && Number.isFinite(value)
-    case 'string': return typeof value === 'string'
-    case 'boolean': return typeof value === 'boolean'
-    default: return false
-  }
 }

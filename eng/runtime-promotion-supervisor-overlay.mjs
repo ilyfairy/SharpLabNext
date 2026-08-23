@@ -12,6 +12,11 @@ import {
   inspectDockerImage,
   validateRuntimeImageInspection,
 } from './runtime-promotion-image-binding.mjs'
+import {
+  runtimePromotionPlanSignaturePath,
+  serializeRuntimePromotionPlan,
+  verifyRuntimePromotionPlanSignature,
+} from './runtime-promotion-plan-signature.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const maximumInputBytes = 1024 * 1024
@@ -301,7 +306,14 @@ function validatePlanAndProfile(plan, planBytes, profile, profileBytes, binding)
   }
 }
 
-function bindControlImages(input, sourceRevision, inspectImage, inspectOptions) {
+function imageRepositoryName(reference) {
+  const separator = reference.lastIndexOf('@sha256:')
+  if (separator <= 0) return undefined
+  const repository = reference.slice(0, separator)
+  return repository.slice(repository.lastIndexOf('/') + 1)
+}
+
+function bindControlImages(input, sourceRevision, candidateImage, inspectImage, inspectOptions) {
   const definitions = [
     ['artifact-store', input.artifactStoreImage],
     ['worker-artifacts-default', input.artifactWorkerImage],
@@ -312,6 +324,11 @@ function bindControlImages(input, sourceRevision, inspectImage, inspectOptions) 
     if (!pinnedReferencePattern.test(reference ?? '')) {
       throw new RuntimePromotionSupervisorOverlayError(
         `${service} control image must be repository@sha256:<64 lowercase hex>.`,
+      )
+    }
+    if (service === 'runtime-supervisor' && reference === candidateImage.reference) {
+      throw new RuntimePromotionSupervisorOverlayError(
+        'Runtime measurement helper image must be distinct from the candidate runtime image.',
       )
     }
     let inspection
@@ -342,6 +359,18 @@ function bindControlImages(input, sourceRevision, inspectImage, inspectOptions) 
       new Set(Object.values(bindings).map(binding => binding.imageId)).size !== definitions.length) {
     throw new RuntimePromotionSupervisorOverlayError(
       'Runtime promotion control services must use three distinct immutable images.',
+    )
+  }
+  const measurementHelper = bindings['runtime-supervisor']
+  if (imageRepositoryName(measurementHelper.reference) !== 'runtime-supervisor') {
+    throw new RuntimePromotionSupervisorOverlayError(
+      'Runtime measurement helper image repository must be named runtime-supervisor.',
+    )
+  }
+  if (measurementHelper.reference === candidateImage.reference ||
+      measurementHelper.imageId === candidateImage.imageId) {
+    throw new RuntimePromotionSupervisorOverlayError(
+      'Runtime measurement helper image must be distinct from the candidate runtime image.',
     )
   }
   return Object.freeze(bindings)
@@ -418,6 +447,10 @@ function createOverlay(
           RuntimePromotionPreflight__SourceRevision: digests.sourceRevision,
           RuntimePromotionPreflight__ProfilePath: profileMountPath,
           RuntimePromotionPreflight__ProfileSha256: digests.profileSha256,
+          RuntimePromotionPreflight__MeasurementHelperImage:
+            controlImages['runtime-supervisor'].reference,
+          RuntimePromotionPreflight__MeasurementHelperImageId:
+            controlImages['runtime-supervisor'].imageId,
           RuntimeSupervisor__SessionReuseEnabled: 'false',
         },
         volumes: [{
@@ -535,6 +568,17 @@ export function produceRuntimePromotionSupervisorOverlay(input, options = {}) {
   const binding = canonicalPlanBinding(root, input.planPath)
   const planBytes = readRegularFile(binding.absolute, 'runtime promotion plan')
   const plan = parseJson(planBytes, 'runtime promotion plan')
+  if (!planBytes.equals(serializeRuntimePromotionPlan(plan))) {
+    throw new RuntimePromotionSupervisorOverlayError('Runtime promotion plan is not canonical.')
+  }
+  const signaturePath = path.join(root, ...runtimePromotionPlanSignaturePath(binding.profileId).split('/'))
+  const signatureBytes = readRegularFile(signaturePath, 'runtime promotion plan signature')
+  try { verifyRuntimePromotionPlanSignature(planBytes, signatureBytes,
+    options.planSignaturePublicKey === undefined
+      ? {}
+      : { publicKey: options.planSignaturePublicKey, keyId: options.planSignatureKeyId }) } catch (error) {
+    throw new RuntimePromotionSupervisorOverlayError(`Runtime promotion plan signature is invalid: ${error.message}`, { cause: error })
+  }
   const expectedProfilePath =
     `profiles/runtime-promotion-plans/${binding.profileId}.profile.json`
   const profileAbsolutePath = path.join(root, ...expectedProfilePath.split('/'))
@@ -546,7 +590,13 @@ export function produceRuntimePromotionSupervisorOverlay(input, options = {}) {
     cwd: root,
     env: options.env ?? process.env,
   }
-  const controlImages = bindControlImages(input, digests.sourceRevision, inspectImage, inspectOptions)
+  const controlImages = bindControlImages(
+    input,
+    digests.sourceRevision,
+    plan.image,
+    inspectImage,
+    inspectOptions,
+  )
   const overlay = createOverlay(
     profileAbsolutePath,
     digests,
@@ -561,12 +611,14 @@ export function produceRuntimePromotionSupervisorOverlay(input, options = {}) {
   const outputPath = path.join(outputDirectoryState.directory, `${binding.profileId}.compose.json`)
   const verifyInputs = () => {
     if (!readRegularFile(binding.absolute, 'runtime promotion plan').equals(planBytes) ||
+        !readRegularFile(signaturePath, 'runtime promotion plan signature').equals(signatureBytes) ||
         !readRegularFile(profileAbsolutePath, 'immutable preflight profile').equals(profileBytes)) {
       throw new RuntimePromotionSupervisorOverlayError('Promotion plan or profile changed before commit.')
     }
     const repeatedControlImages = bindControlImages(
       input,
       digests.sourceRevision,
+      plan.image,
       inspectImage,
       inspectOptions,
     )

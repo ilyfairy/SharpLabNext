@@ -107,6 +107,14 @@ public sealed class RuntimePromotionMatrixBindingTests
         new RuntimePromotionFileSnapshot(
             "profiles/runtime-performance-policies/test.json",
             "sha256:" + new string('1', 64)),
+        new RuntimePromotionMeasurementHelperSnapshot(
+            "sharplabnext-runtime-cgroup-sidecar-v1",
+            "registry.example/runtime-supervisor@sha256:" + new string('2', 64),
+            "sha256:" + new string('3', 64),
+            1,
+            "/usr/local/bin/sharplabnext-runtime-measurement",
+            new string('c', 40),
+            RuntimeMeasurementHelperContract.ContentSha256),
         []);
 
     private static byte[] CreateMatrix(string path, string digest, string state) =>

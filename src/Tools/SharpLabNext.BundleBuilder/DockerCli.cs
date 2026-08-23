@@ -15,6 +15,14 @@ public interface IDockerCli
         long maximumBytes,
         CancellationToken cancellationToken);
 
+    Task<DockerImageFileInspection> CopyImageFileAsync(
+        string imageId,
+        string absolutePath,
+        string destinationPath,
+        long maximumBytes,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This Docker client does not support copying image files.");
+
     Task SaveImagesAsync(
         IReadOnlyList<string> references,
         string outputPath,
@@ -84,6 +92,38 @@ public sealed class DockerCli(string command) : IDockerCli
         string imageId,
         string absolutePath,
         long maximumBytes,
+        CancellationToken cancellationToken) =>
+        await ReadImageFileAsync(imageId, absolutePath, null, maximumBytes, cancellationToken);
+
+    public async Task<DockerImageFileInspection> CopyImageFileAsync(
+        string imageId,
+        string absolutePath,
+        string destinationPath,
+        long maximumBytes,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+        var destination = Path.GetFullPath(destinationPath);
+        var parent = Path.GetDirectoryName(destination);
+        if (parent is null || !Directory.Exists(parent) || File.Exists(destination) || Directory.Exists(destination))
+        {
+            throw new BundleValidationException(
+                "Image file copy destination must be a new file in an existing directory.");
+        }
+
+        return await ReadImageFileAsync(
+            imageId,
+            absolutePath,
+            destination,
+            maximumBytes,
+            cancellationToken);
+    }
+
+    private async Task<DockerImageFileInspection> ReadImageFileAsync(
+        string imageId,
+        string absolutePath,
+        string? destinationPath,
+        long maximumBytes,
         CancellationToken cancellationToken)
     {
         if (!IsCanonicalImageId(imageId))
@@ -114,6 +154,7 @@ public sealed class DockerCli(string command) : IDockerCli
             return await InspectContainerFileAsync(
                 containerId,
                 absolutePath,
+                destinationPath,
                 maximumBytes,
                 cancellationToken);
         }
@@ -188,6 +229,7 @@ public sealed class DockerCli(string command) : IDockerCli
     private async Task<DockerImageFileInspection> InspectContainerFileAsync(
         string containerId,
         string absolutePath,
+        string? destinationPath,
         long maximumBytes,
         CancellationToken cancellationToken)
     {
@@ -224,6 +266,7 @@ public sealed class DockerCli(string command) : IDockerCli
                 inspection = await ComputeDigestAsync(
                     entry.DataStream,
                     absolutePath,
+                    destinationPath,
                     maximumBytes,
                     cancellationToken);
             }
@@ -254,36 +297,62 @@ public sealed class DockerCli(string command) : IDockerCli
     private static async Task<DockerImageFileInspection> ComputeDigestAsync(
         Stream input,
         string path,
+        string? destinationPath,
         long maximumBytes,
         CancellationToken cancellationToken)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        await using var output = destinationPath is null
+            ? null
+            : new FileStream(
+                destinationPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.Delete,
+                64 * 1024,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
         var buffer = new byte[64 * 1024];
         long length = 0;
-        while (true)
+        try
         {
-            var read = await input.ReadAsync(buffer, cancellationToken);
-            if (read == 0)
+            while (true)
             {
-                break;
+                var read = await input.ReadAsync(buffer, cancellationToken);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                length = checked(length + read);
+                if (length > maximumBytes)
+                {
+                    throw new BundleValidationException(
+                        $"Image file '{path}' exceeds the {maximumBytes}-byte validation limit.");
+                }
+                hash.AppendData(buffer.AsSpan(0, read));
+                if (output is not null)
+                {
+                    await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                }
             }
 
-            length = checked(length + read);
-            if (length > maximumBytes)
+            if (length == 0)
             {
-                throw new BundleValidationException(
-                    $"Image file '{path}' exceeds the {maximumBytes}-byte validation limit.");
+                throw new BundleValidationException($"Image file '{path}' is empty.");
             }
-            hash.AppendData(buffer.AsSpan(0, read));
-        }
-        if (length == 0)
-        {
-            throw new BundleValidationException($"Image file '{path}' is empty.");
-        }
 
-        return new DockerImageFileInspection(
-            $"sha256:{Convert.ToHexStringLower(hash.GetHashAndReset())}",
-            length);
+            return new DockerImageFileInspection(
+                $"sha256:{Convert.ToHexStringLower(hash.GetHashAndReset())}",
+                length);
+        }
+        catch
+        {
+            if (destinationPath is not null)
+            {
+                try { File.Delete(destinationPath); } catch (IOException) { }
+            }
+            throw;
+        }
     }
 
     private ProcessStartInfo CreateStartInfo(IReadOnlyList<string> arguments)

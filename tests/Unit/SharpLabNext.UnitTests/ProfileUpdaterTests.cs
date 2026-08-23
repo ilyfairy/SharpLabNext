@@ -416,8 +416,16 @@ public sealed class ProfileUpdaterTests
                 .ToArray()
         };
 
+        var components = releaseLock.Components.ToDictionary(
+            static pair => pair.Key,
+            static pair => pair.Value,
+            StringComparer.Ordinal);
+        Assert.True(components.Remove(runtimeId));
+
         var exception = Assert.Throws<ProfileUpdateValidationException>(() =>
-            CandidateReleaseMaterializer.ValidateIdentityClosure(releaseLock, candidateCatalog));
+            CandidateReleaseMaterializer.ValidateIdentityClosure(
+                releaseLock with { Components = components },
+                candidateCatalog));
 
         Assert.Contains("no corresponding lock component", exception.Message, StringComparison.Ordinal);
         Assert.Contains(runtimeId, exception.Message, StringComparison.Ordinal);
@@ -445,8 +453,9 @@ public sealed class ProfileUpdaterTests
                 .Select(runtime => runtime.Id == runtimeId
                     ? runtime with
                     {
-                        RuntimeCommit = null,
-                        JitCommit = null,
+                        RuntimeCommit = "not-applicable",
+                        JitVersion = "not-applicable",
+                        JitCommit = "not-applicable",
                         Availability = new ComponentAvailability
                         {
                             Installed = true,
@@ -471,6 +480,37 @@ public sealed class ProfileUpdaterTests
         CandidateReleaseMaterializer.ValidateIdentityClosure(
             releaseLock with { Components = components },
             candidateCatalog);
+    }
+
+    [Fact]
+    public async Task CandidateIdentityClosureRejectsOperatorCoreClrCommitClaims()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var catalog = await CatalogLoader.LoadCatalogAsync(
+            Path.Combine(repositoryRoot, "profiles", "catalog", "catalog.json"),
+            TestContext.Current.CancellationToken);
+        var releaseLock = await CatalogLoader.LoadReleaseLockAsync(
+            Path.Combine(repositoryRoot, "profiles", "lock.json"),
+            TestContext.Current.CancellationToken);
+        catalog = CandidateReleaseMaterializer.CreateCatalog(
+            catalog,
+            releaseLock,
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        const string runtimeId = "mono-6.12-linux-x64";
+        var candidateCatalog = catalog with
+        {
+            Runtimes = catalog.Runtimes
+                .Select(runtime => runtime.Id == runtimeId
+                    ? runtime with { RuntimeCommit = new string('a', 40) }
+                    : runtime)
+                .ToArray()
+        };
+
+        var exception = Assert.Throws<ProfileUpdateValidationException>(() =>
+            CandidateReleaseMaterializer.ValidateIdentityClosure(releaseLock, candidateCatalog));
+
+        Assert.Contains("not-applicable", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(runtimeId, exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -709,6 +749,20 @@ public sealed class ProfileUpdaterTests
             "profiles",
             "versions.props")));
         var workspaceRoot = Path.Combine(Path.GetDirectoryName(result.CandidatePath)!, "workspace");
+        var generatedJsonPaths = new List<string>
+        {
+            result.CandidatePath,
+            Path.Combine(Path.GetDirectoryName(result.CandidatePath)!, "receipt.json"),
+            Path.Combine(workspaceRoot, "profiles", "catalog", "catalog.json"),
+            Path.Combine(repository.StateRoot, "state.json"),
+            repository.PublicStatusPath
+        };
+        generatedJsonPaths.AddRange(Directory.EnumerateFiles(
+            Path.Combine(workspaceRoot, "profiles", "runtimes"),
+            "*.json",
+            SearchOption.TopDirectoryOnly));
+        foreach (var generatedJsonPath in generatedJsonPaths)
+            await AssertUtf8NoBomLfAsync(generatedJsonPath);
         var resolvedLock = await CatalogLoader.LoadReleaseLockAsync(
             result.CandidatePath,
             TestContext.Current.CancellationToken);
@@ -719,6 +773,14 @@ public sealed class ProfileUpdaterTests
             resolvedLock.Components["roslyn-stable-netfx48"].ResolvedVersion,
             materializedCatalog.Toolchains.Single(static item =>
                 item.Id == "roslyn-stable-netfx48").ResolvedVersion);
+        Assert.Equal(
+            $"Roslyn Stable {resolvedLock.Components["roslyn-stable-netfx48"].ResolvedVersion} / .NET Framework",
+            materializedCatalog.Toolchains.Single(static item =>
+                item.Id == "roslyn-stable-netfx48").DisplayName);
+        Assert.Equal(
+            resolvedLock.Components["gsharp-stable"].ResolvedVersion,
+            materializedCatalog.Toolchains.Single(static item =>
+                item.Id == "gsharp-stable").DisplayName);
         Assert.Equal(
             resolvedLock.Components["roslyn-stable"] with { PatchDigest = null, ImageId = null },
             resolvedLock.Components["roslyn-stable-netfx48"]);
@@ -1011,6 +1073,30 @@ public sealed class ProfileUpdaterTests
         Assert.Equal("11.0.0-preview.5", bake.Environment["NET11_REFERENCE_VERSION"]);
         Assert.Equal(new string('d', 128), bake.Environment["NET11_REFERENCE_SHA512"]);
         Assert.Equal("sha512-test-content-hash", bake.Environment["NET11_REFERENCE_PACKAGE_CONTENT_HASH"]);
+        foreach (var (referenceSetId, versionVariable, prefix) in new (string ReferenceSetId, string VersionVariable, string Prefix)[]
+        {
+            ("netcoreapp2.0-ref", "NETCOREAPP20_REFERENCE_VERSION", "NETCOREAPP20"),
+            ("netcoreapp2.1-ref", "NETCOREAPP21_REFERENCE_VERSION", "NETCOREAPP21"),
+            ("netcoreapp2.2-ref", "NETCOREAPP22_REFERENCE_VERSION", "NETCOREAPP22"),
+            ("netcoreapp3.0-ref", "NETCOREAPP30_REFERENCE_VERSION", "NETCOREAPP30"),
+            ("netcoreapp3.1-ref", "NETCOREAPP31_REFERENCE_VERSION", "NETCOREAPP31"),
+            ("net5-ref", "NET5_REFERENCE_VERSION", "NET5"),
+            ("net6-ref", "NET6_REFERENCE_VERSION", "NET6"),
+            ("net7-ref", "NET7_REFERENCE_VERSION", "NET7"),
+            ("net8-ref", "NET8_REFERENCE_VERSION", "NET8"),
+            ("net9-ref", "NET9_REFERENCE_VERSION", "NET9"),
+            ("net10-ref", "NET10_REFERENCE_PACK_VERSION", "NET10"),
+            ("net11-preview-ref", "NET11_REFERENCE_VERSION", "NET11")
+        })
+        {
+            var component = resolvedLock.Components[referenceSetId];
+            Assert.Equal(component.ResolvedVersion, bake.Environment[versionVariable]);
+            Assert.Equal(component.SourceUri, bake.Environment[$"{prefix}_REFERENCE_SOURCE_URI"]);
+            Assert.Equal(component.Sha512, bake.Environment[$"{prefix}_REFERENCE_SHA512"]);
+            Assert.Equal(
+                component.PackageContentHash,
+                bake.Environment[$"{prefix}_REFERENCE_PACKAGE_CONTENT_HASH"]);
+        }
         var netfx48ManagedReference = resolvedLock.Components["netfx48-managed-ref"];
         Assert.Equal(
             netfx48ManagedReference.ResolvedVersion,
@@ -1147,6 +1233,223 @@ public sealed class ProfileUpdaterTests
         Assert.Empty(candidateOnlyVariables.Intersect(environment.Keys, StringComparer.Ordinal));
         Assert.Empty(declaredVariables.Except(environment.Keys, StringComparer.Ordinal));
         Assert.All(environment.Values, static value => Assert.False(string.IsNullOrWhiteSpace(value)));
+    }
+
+    [Fact]
+    public async Task BakeEnvironmentDerivesTheSourceControlledWineUserspaceIdentity()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var environment = await BakeEnvironmentResolver.CreateAsync(
+            Path.Combine(repositoryRoot, "profiles", "lock.json"),
+            Path.Combine(repositoryRoot, "profiles", "base-images.json"),
+            "test-source-revision",
+            "1700000000",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            "wine-9.0~repack-4build3+xvfb-2:21.1.12-1ubuntu1.6",
+            environment["WINE_CORECLR_USERSPACE_VERSION"]);
+        Assert.Equal(
+            "sha256:4ecfff207a9b13eb6492aa3f9ca01d2d3dd1b713837ef2917524eaf23fa55981",
+            environment["WINE_CORECLR_USERSPACE_DIGEST"]);
+        Assert.Equal(
+            "https://snapshot.ubuntu.com/ubuntu/20260810T000000Z/",
+            environment["WINE_CORECLR_USERSPACE_SOURCE_URI"]);
+
+        var bake = await File.ReadAllTextAsync(
+            Path.Combine(repositoryRoot, "eng", "bake.hcl"),
+            TestContext.Current.CancellationToken);
+        var wineOperator = ExtractNamedBlock(bake, "target", "operator-wine-coreclr");
+        Assert.Contains(
+            "\"org.opencontainers.image.version\" = \"wine-9.0-noble-amd64\"",
+            wineOperator,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BakeEnvironmentMarksTheStandaloneWineOperatorAsDevelopmentOnly()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var environment = await BakeEnvironmentResolver.CreateAsync(
+            Path.Combine(repositoryRoot, "profiles", "lock.json"),
+            Path.Combine(repositoryRoot, "profiles", "base-images.json"),
+            "test-source-revision",
+            "1700000000",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Only build-wine-coreclr-operator.mjs may promote this tuple after it
+        // has verified a clean committed source context.
+        Assert.Equal("working-tree-development", environment["OPERATOR_SOURCE_CONTEXT"]);
+        Assert.Equal("false", environment["OPERATOR_PROMOTION_ELIGIBLE"]);
+        Assert.Equal("true", environment["OPERATOR_DEVELOPMENT_ONLY"]);
+    }
+
+    [Fact]
+    public async Task BakeEnvironmentRejectsWineUserspaceWithAnUnexpectedKind()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var lockDocument = JsonSerializer.Deserialize<ReleaseLockDocument>(
+            await File.ReadAllTextAsync(
+                Path.Combine(repositoryRoot, "profiles", "lock.json"),
+                TestContext.Current.CancellationToken),
+            WebJsonOptions)
+            ?? throw new InvalidOperationException("Repository release lock is invalid.");
+        var components = lockDocument.Components.ToDictionary(static pair => pair.Key, static pair => pair.Value);
+        components["wine-coreclr-userspace"] = components["wine-coreclr-userspace"] with
+        {
+            Kind = "operator-image"
+        };
+        var temporaryLock = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllTextAsync(
+                temporaryLock,
+                JsonSerializer.Serialize(lockDocument with { Components = components }, WebJsonOptions),
+                TestContext.Current.CancellationToken);
+
+            var exception = await Assert.ThrowsAsync<BakeEnvironmentValidationException>(() =>
+                BakeEnvironmentResolver.CreateAsync(
+                    temporaryLock,
+                    Path.Combine(repositoryRoot, "profiles", "base-images.json"),
+                    "test-source-revision",
+                    "1700000000",
+                    cancellationToken: TestContext.Current.CancellationToken));
+
+            Assert.Contains("wine-coreclr-userspace.kind", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(temporaryLock);
+        }
+    }
+
+    [Fact]
+    public async Task RoslynCoreClrReferenceSetsAreBoundToEveryBuildArgumentAndUseNetStandardRuntimeApi()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var bake = await File.ReadAllTextAsync(
+            Path.Combine(repositoryRoot, "eng", "bake.hcl"),
+            TestContext.Current.CancellationToken);
+        var stableTarget = ExtractNamedBlock(bake, "target", "service-with-roslyn-coreclr-reference-sets");
+        var mainTarget = ExtractNamedBlock(bake, "target", "worker-roslyn-main");
+        var workerDockerfile = await File.ReadAllTextAsync(
+            Path.Combine(repositoryRoot, "deploy", "docker", "Dockerfile.worker"),
+            TestContext.Current.CancellationToken);
+        var mainDockerfile = await File.ReadAllTextAsync(
+            Path.Combine(repositoryRoot, "deploy", "docker", "Dockerfile.worker-roslyn-main"),
+            TestContext.Current.CancellationToken);
+
+        foreach (var (versionVariable, sourceVariable, prefix, optionPrefix) in new[]
+                 {
+                     ("NETCOREAPP20_REFERENCE_VERSION", "NETCOREAPP20_REFERENCE_SOURCE_URI", "NETCOREAPP20", "netcoreapp20"),
+                     ("NETCOREAPP21_REFERENCE_VERSION", "NETCOREAPP21_REFERENCE_SOURCE_URI", "NETCOREAPP21", "netcoreapp21"),
+                     ("NETCOREAPP22_REFERENCE_VERSION", "NETCOREAPP22_REFERENCE_SOURCE_URI", "NETCOREAPP22", "netcoreapp22"),
+                     ("NETCOREAPP30_REFERENCE_VERSION", "NETCOREAPP30_REFERENCE_SOURCE_URI", "NETCOREAPP30", "netcoreapp30"),
+                     ("NETCOREAPP31_REFERENCE_VERSION", "NETCOREAPP31_REFERENCE_SOURCE_URI", "NETCOREAPP31", "netcoreapp31"),
+                     ("NET5_REFERENCE_VERSION", "NET5_REFERENCE_SOURCE_URI", "NET5", "net5"),
+                     ("NET6_REFERENCE_VERSION", "NET6_REFERENCE_SOURCE_URI", "NET6", "net6"),
+                     ("NET7_REFERENCE_VERSION", "NET7_REFERENCE_SOURCE_URI", "NET7", "net7"),
+                     ("NET8_REFERENCE_VERSION", "NET8_REFERENCE_SOURCE_URI", "NET8", "net8"),
+                     ("NET9_REFERENCE_VERSION", "NET9_REFERENCE_SOURCE_URI", "NET9", "net9"),
+                     ("NET10_REFERENCE_PACK_VERSION", "NET10_REFERENCE_URL", "NET10", "net10"),
+                     ("NET11_REFERENCE_VERSION", "NET11_REFERENCE_URL", "NET11", "net11")
+                 })
+        {
+            foreach (var target in new[] { stableTarget, mainTarget })
+            {
+                Assert.Contains($"{versionVariable} = required({versionVariable})", target, StringComparison.Ordinal);
+                Assert.Contains($"{sourceVariable} = required({sourceVariable})", target, StringComparison.Ordinal);
+                Assert.Contains(
+                    $"{prefix}_REFERENCE_SHA512 = required({prefix}_REFERENCE_SHA512)",
+                    target,
+                    StringComparison.Ordinal);
+                Assert.Contains(
+                    $"{prefix}_REFERENCE_PACKAGE_CONTENT_HASH = required({prefix}_REFERENCE_PACKAGE_CONTENT_HASH)",
+                    target,
+                    StringComparison.Ordinal);
+            }
+
+            foreach (var dockerfile in new[] { workerDockerfile, mainDockerfile })
+            {
+                Assert.Contains($"ARG {versionVariable}", dockerfile, StringComparison.Ordinal);
+                Assert.Contains($"ARG {sourceVariable}", dockerfile, StringComparison.Ordinal);
+                Assert.Contains($"ARG {prefix}_REFERENCE_SHA512", dockerfile, StringComparison.Ordinal);
+                Assert.Contains($"ARG {prefix}_REFERENCE_PACKAGE_CONTENT_HASH", dockerfile, StringComparison.Ordinal);
+                Assert.Contains($"--{optionPrefix}-version", dockerfile, StringComparison.Ordinal);
+                Assert.Contains($"--{optionPrefix}-url", dockerfile, StringComparison.Ordinal);
+                Assert.Contains($"--{optionPrefix}-sha512", dockerfile, StringComparison.Ordinal);
+                Assert.Contains($"--{optionPrefix}-content-hash", dockerfile, StringComparison.Ordinal);
+            }
+        }
+
+        foreach (var dockerfile in new[] { workerDockerfile, mainDockerfile })
+        {
+            Assert.Contains("src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj", dockerfile, StringComparison.Ordinal);
+            Assert.Contains("--framework netstandard2.1", dockerfile, StringComparison.Ordinal);
+            Assert.Contains("/app/sharplab-runtime-netstandard21/SharpLab.Runtime.dll", dockerfile, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task DevelopmentComposeConsumesPrebuiltRoslynCoreClrImagesWithoutRemotePulls()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var compose = await File.ReadAllTextAsync(
+            Path.Combine(repositoryRoot, "deploy", "compose.dev.yaml"),
+            TestContext.Current.CancellationToken);
+
+        foreach (var (service, nextService) in new[]
+                 {
+                     ("worker-roslyn-stable", "worker-roslyn-netfx48"),
+                     ("worker-roslyn-main", "worker-roslyn-const-generics")
+                 })
+        {
+            var start = compose.IndexOf($"\n  {service}:\n", StringComparison.Ordinal);
+            var end = compose.IndexOf($"\n  {nextService}:\n", start, StringComparison.Ordinal);
+            Assert.True(start >= 0 && end > start, $"Could not locate {service} in development Compose.");
+            var block = compose[start..end];
+            Assert.DoesNotContain("    build:\n", block, StringComparison.Ordinal);
+            Assert.Contains("    pull_policy: never\n", block, StringComparison.Ordinal);
+        }
+
+        var composeValidator = await File.ReadAllTextAsync(
+            Path.Combine(repositoryRoot, "eng", "validate-compose.mjs"),
+            TestContext.Current.CancellationToken);
+        Assert.Contains(
+            ".filter(key => /^ReferenceSets__/.test(key))",
+            composeValidator,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "/^ReferenceSets__.+__Path$/.test(key)",
+            composeValidator,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "must use pull_policy=never for its prebuilt development image",
+            composeValidator,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BakeEnvironmentRejectsMissingCoreClrReferenceSet()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var releaseLock = await CatalogLoader.LoadReleaseLockAsync(
+            Path.Combine(repositoryRoot, "profiles", "lock.json"),
+            TestContext.Current.CancellationToken);
+        var components = releaseLock.Components.ToDictionary(
+            static pair => pair.Key,
+            static pair => pair.Value,
+            StringComparer.Ordinal);
+        Assert.True(components.Remove("netcoreapp2.0-ref"));
+
+        var exception = Assert.Throws<BakeEnvironmentValidationException>(() =>
+            BakeEnvironmentResolver.Create(
+                releaseLock with { Components = components },
+                Path.Combine(repositoryRoot, "profiles", "base-images.json"),
+                "test-source-revision",
+                "1700000000"));
+
+        Assert.Contains("netcoreapp2.0-ref", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1435,6 +1738,7 @@ public sealed class ProfileUpdaterTests
             TestContext.Current.CancellationToken);
 
         Assert.Contains("target \"service-with-reference-sets\"", bake, StringComparison.Ordinal);
+        Assert.Contains("target \"service-with-roslyn-coreclr-reference-sets\"", bake, StringComparison.Ordinal);
         Assert.Contains("target \"service-with-framework-reference-sets\"", bake, StringComparison.Ordinal);
         Assert.Contains("target = \"final-without-reference-sets\"", bake, StringComparison.Ordinal);
         Assert.Contains("target = \"final-with-reference-sets\"", bake, StringComparison.Ordinal);
@@ -1445,7 +1749,6 @@ public sealed class ProfileUpdaterTests
             StringComparison.Ordinal);
         foreach (var target in new[]
                  {
-                     "worker-roslyn-stable",
                      "worker-fsharp",
                      "worker-il",
                      "worker-minilang"
@@ -1456,6 +1759,10 @@ public sealed class ProfileUpdaterTests
                 @"\s+inherits = \[""service-with-reference-sets""\]",
                 bake);
         }
+        Assert.Matches(
+            Regex.Escape("target \"worker-roslyn-stable\" {") +
+            @"\s+inherits = \[""service-with-roslyn-coreclr-reference-sets""\]",
+            bake);
         Assert.Matches(
             Regex.Escape("target \"worker-artifacts-default\" {") +
             @"\s+inherits = \[""service-with-framework-reference-sets""\]",
@@ -2290,6 +2597,17 @@ public sealed class ProfileUpdaterTests
     private static string Digest(byte[] bytes) =>
         $"sha256:{Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant()}";
 
+    private static async Task AssertUtf8NoBomLfAsync(string path)
+    {
+        var bytes = await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken);
+        Assert.NotEmpty(bytes);
+        Assert.False(bytes.AsSpan().StartsWith("\uFEFF"u8));
+        Assert.DoesNotContain((byte)'\r', bytes);
+        Assert.Equal((byte)'\n', bytes[^1]);
+        _ = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
+            .GetString(bytes);
+    }
+
     private static byte[] CreateRuntimeArchive(string commit, string version)
     {
         using var output = new MemoryStream();
@@ -2415,9 +2733,15 @@ public sealed class ProfileUpdaterTests
             }
             foreach (var runtimeProfileId in ActiveRuntimeProfileIds)
             {
+                var runtimeProfilePath = Path.Combine(
+                    Root,
+                    "profiles",
+                    "runtimes",
+                    $"{runtimeProfileId}.json");
                 File.Copy(
                     Path.Combine(sourceRepository, "profiles", "runtimes", $"{runtimeProfileId}.json"),
-                    Path.Combine(Root, "profiles", "runtimes", $"{runtimeProfileId}.json"));
+                    runtimeProfilePath);
+                NormalizeDevelopmentRuntimeProfileImage(runtimeProfilePath, runtimeProfileId);
             }
             File.WriteAllText(Path.Combine(Root, "packages.lock.json"), "{}\n");
             var sourceLock = JsonSerializer.Deserialize<ReleaseLockDocument>(
@@ -2431,6 +2755,7 @@ public sealed class ProfileUpdaterTests
                 ResolvedAt = DateTimeOffset.UnixEpoch,
                 Components = new Dictionary<string, LockedComponent>
                 {
+                    ["wine-coreclr-userspace"] = sourceLock.Components["wine-coreclr-userspace"],
                     ["jit-profiler-clr-samples"] = sourceLock.Components["jit-profiler-clr-samples"],
                     ["jit-profiler-runtime-headers"] = sourceLock.Components["jit-profiler-runtime-headers"],
                     ["msvc-wine-source"] = sourceLock.Components["msvc-wine-source"],
@@ -2554,9 +2879,37 @@ public sealed class ProfileUpdaterTests
             {
                 documentComponents.TryAdd(componentId, component);
             }
+            foreach (var componentId in new[]
+                     {
+                         "netcoreapp2.0-ref",
+                         "netcoreapp2.1-ref",
+                         "netcoreapp2.2-ref",
+                         "netcoreapp3.0-ref",
+                         "netcoreapp3.1-ref",
+                         "net5-ref",
+                         "net6-ref",
+                         "net7-ref",
+                         "net8-ref",
+                         "net9-ref",
+                         "net10-ref",
+                         "net11-preview-ref"
+                     })
+            {
+                documentComponents.TryAdd(componentId, sourceLock.Components[componentId]);
+            }
             File.WriteAllText(
                 LockPath,
                 JsonSerializer.Serialize(document, LockJsonOptions) + Environment.NewLine);
+            var catalogPath = Path.Combine(Root, "profiles", "catalog", "catalog.json");
+            var template = JsonSerializer.Deserialize<CatalogDocument>(
+                File.ReadAllText(catalogPath),
+                WebJsonOptions)
+                ?? throw new InvalidOperationException("Repository catalog is invalid.");
+            File.WriteAllText(
+                catalogPath,
+                JsonSerializer.Serialize(
+                    RestrictSelectableRuntimesToLock(template, document),
+                    LockJsonOptions) + Environment.NewLine);
             ActiveDigest = Digest(File.ReadAllBytes(LockPath));
         }
 
@@ -2578,6 +2931,72 @@ public sealed class ProfileUpdaterTests
         public void Dispose()
         {
             Directory.Delete(Root, recursive: true);
+        }
+
+        private static CatalogDocument RestrictSelectableRuntimesToLock(
+            CatalogDocument catalog,
+            ReleaseLockDocument releaseLock)
+        {
+            var referenceSetIds = catalog.ReferenceSets
+                .Where(referenceSet => HasComponent(releaseLock, referenceSet.Id, "reference-set") ||
+                                       IsResolvedBySyntheticChannel(referenceSet.Id))
+                .Select(static referenceSet => referenceSet.Id)
+                .ToHashSet(StringComparer.Ordinal);
+            return catalog with
+            {
+                Toolchains = catalog.Toolchains
+                    .Select(toolchain => toolchain with
+                    {
+                        AllowedReferenceSetIds = toolchain.AllowedReferenceSetIds
+                            .Where(referenceSetIds.Contains)
+                            .ToArray()
+                    })
+                    .ToArray(),
+                ReferenceSets = catalog.ReferenceSets
+                    .Where(referenceSet => referenceSetIds.Contains(referenceSet.Id))
+                    .ToArray(),
+                Runtimes = catalog.Runtimes
+                    .Select(runtime => HasComponent(releaseLock, runtime.Id, "runtime")
+                        ? runtime
+                        : runtime with
+                        {
+                            Availability = new ComponentAvailability
+                            {
+                                Installed = false,
+                                Health = "unavailable",
+                                Reason = "Not represented by this synthetic release lock."
+                            }
+                        })
+                    .ToArray(),
+                Compatibility = catalog.Compatibility
+                    .Where(rule => rule.Kind != CompatibilityRuleKind.ToolchainReferenceSet ||
+                                   referenceSetIds.Contains(rule.ToId))
+                    .ToArray(),
+                Presets = catalog.Presets
+                    .Where(preset => referenceSetIds.Contains(preset.ReferenceSetId))
+                    .ToArray()
+            };
+        }
+
+        private static bool HasComponent(
+            ReleaseLockDocument releaseLock,
+            string id,
+            string kind) =>
+            releaseLock.Components.TryGetValue(id, out var component) &&
+            string.Equals(component.Kind, kind, StringComparison.Ordinal);
+
+        private static bool IsResolvedBySyntheticChannel(string referenceSetId) =>
+            referenceSetId is "net10-ref" or "net11-preview-ref";
+
+        private static void NormalizeDevelopmentRuntimeProfileImage(string path, string runtimeProfileId)
+        {
+            var profile = JsonNode.Parse(File.ReadAllText(path)) as JsonObject
+                ?? throw new InvalidOperationException($"Runtime profile '{runtimeProfileId}' is invalid.");
+            var image = profile["image"]?.GetValue<string>()
+                ?? throw new InvalidOperationException($"Runtime profile '{runtimeProfileId}' has no image.");
+            if (image.Contains('@'))
+                profile["image"] = $"{image[..image.IndexOf('@')]}:development";
+            File.WriteAllText(path, profile.ToJsonString() + "\n");
         }
     }
 

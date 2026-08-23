@@ -24,6 +24,31 @@ internal sealed class AttestedReferenceSetTestData : IDisposable
 
     public string PathFor(string referenceSetId) => paths[referenceSetId];
 
+    public void AddToEnvironment(
+        IDictionary<string, string?> environment,
+        params string[] referenceSetIds)
+    {
+        foreach (var referenceSetId in referenceSetIds)
+        {
+            var path = PathFor(referenceSetId);
+            using var document = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(
+                path,
+                ReferenceSetAttestationReader.ManifestFileName)));
+            var referenceSet = document.RootElement.GetProperty("referenceSet");
+            var prefix = $"ReferenceSets__{referenceSetId}__";
+            environment[prefix + "Path"] = path;
+            environment[prefix + "TargetFramework"] =
+                referenceSet.GetProperty("targetFramework").GetString();
+            environment[prefix + "FrameworkVersion"] = referenceSet
+                .GetProperty("provenance")
+                .GetProperty("resolvedVersion")
+                .GetString();
+            environment[prefix + "Digest"] = referenceSet.GetProperty("digest").GetString();
+            environment[prefix + "IncludeSharpLabRuntime"] =
+                File.Exists(Path.Combine(path, "SharpLab.Runtime.dll")) ? "true" : "false";
+        }
+    }
+
     public static async Task<AttestedReferenceSetTestData> CreateAsync(CancellationToken cancellationToken)
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -73,7 +98,7 @@ internal sealed class AttestedReferenceSetTestData : IDisposable
         LockedComponent component,
         CancellationToken cancellationToken)
     {
-        var source = FindReferencePath(component.ResolvedVersion, targetFramework);
+        var source = FindReferencePath(id, component.ResolvedVersion, targetFramework);
         var destination = Path.Combine(root, id);
         Directory.CreateDirectory(destination);
         foreach (var path in Directory.EnumerateFiles(source, "*.dll", SearchOption.TopDirectoryOnly))
@@ -129,8 +154,17 @@ internal sealed class AttestedReferenceSetTestData : IDisposable
             cancellationToken);
     }
 
-    private static string FindReferencePath(string version, string targetFramework)
+    private static string FindReferencePath(string id, string version, string targetFramework)
     {
+        var materializedRoot = Environment.GetEnvironmentVariable(
+            "SHARPLABNEXT_TEST_CORECLR_REFERENCE_SETS");
+        if (!string.IsNullOrWhiteSpace(materializedRoot))
+        {
+            var materialized = Path.Combine(materializedRoot, id);
+            if (Directory.Exists(materialized))
+                return materialized;
+        }
+
         var roots = new[]
         {
             Environment.GetEnvironmentVariable("DOTNET_ROOT"),

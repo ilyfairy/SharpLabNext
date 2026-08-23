@@ -19,6 +19,13 @@ interface ModelContentEvent {
   }[]
 }
 
+interface MockMouseModifiers {
+  altKey?: boolean
+  ctrlKey?: boolean
+  metaKey?: boolean
+  shiftKey?: boolean
+}
+
 const mocks = vi.hoisted(() => {
   const sessionUpdates: Array<{
     key: string
@@ -56,13 +63,13 @@ const mocks = vi.hoisted(() => {
   let keyDownHandler: (() => void) | null = null
   let mouseUpHandler:
     | ((event: {
-        event: { leftButton: boolean; browserEvent: { detail: number } }
+        event: { leftButton: boolean; browserEvent: { detail: number } & MockMouseModifiers }
         target: { position: { lineNumber: number; column: number } | null }
       }) => void)
     | null = null
   let mouseDownHandler:
     | ((event: {
-        event: { leftButton: boolean; browserEvent: { detail: number } }
+        event: { leftButton: boolean; browserEvent: { detail: number } & MockMouseModifiers }
         target: { position: { lineNumber: number; column: number } | null }
       }) => void)
     | null = null
@@ -101,7 +108,7 @@ const mocks = vi.hoisted(() => {
     onMouseDown: vi.fn(
       (
         handler: (event: {
-          event: { leftButton: boolean; browserEvent: { detail: number } }
+          event: { leftButton: boolean; browserEvent: { detail: number } & MockMouseModifiers }
           target: { position: { lineNumber: number; column: number } | null }
         }) => void,
       ) => {
@@ -112,7 +119,7 @@ const mocks = vi.hoisted(() => {
     onMouseUp: vi.fn(
       (
         handler: (event: {
-          event: { leftButton: boolean; browserEvent: { detail: number } }
+          event: { leftButton: boolean; browserEvent: { detail: number } & MockMouseModifiers }
           target: { position: { lineNumber: number; column: number } | null }
         }) => void,
       ) => {
@@ -204,14 +211,24 @@ const mocks = vi.hoisted(() => {
           },
         ],
       }),
-    emitMouseDown: (lineNumber: number, column: number, detail = 1) =>
+    emitMouseDown: (
+      lineNumber: number,
+      column: number,
+      detail = 1,
+      modifiers: MockMouseModifiers = {},
+    ) =>
       mouseDownHandler?.({
-        event: { leftButton: true, browserEvent: { detail } },
+        event: { leftButton: true, browserEvent: { detail, ...modifiers } },
         target: { position: { lineNumber, column } },
       }),
-    emitMouseUp: (lineNumber: number, column: number, detail = 1) =>
+    emitMouseUp: (
+      lineNumber: number,
+      column: number,
+      detail = 1,
+      modifiers: MockMouseModifiers = {},
+    ) =>
       mouseUpHandler?.({
-        event: { leftButton: true, browserEvent: { detail } },
+        event: { leftButton: true, browserEvent: { detail, ...modifiers } },
         target: { position: { lineNumber, column } },
       }),
     emitLanguageStatus: (status: string) => languageStatusHandler?.({ status }),
@@ -1018,6 +1035,13 @@ describe('Monaco execution-flow presentation', () => {
       mocks.emitMouseUp(1, 3)
     })
     expect(mocks.editor.setPosition).toHaveBeenCalledWith({ lineNumber: 1, column: 3 })
+
+    mocks.editor.setPosition.mockClear()
+    act(() => {
+      mocks.emitMouseDown(1, 3, 1, { shiftKey: true })
+      mocks.emitMouseUp(1, 3, 1, { shiftKey: true })
+    })
+    expect(mocks.editor.setPosition).not.toHaveBeenCalled()
     mocks.editor.getSelection.mockReturnValue({ isEmpty: () => true } as never)
 
     view.rerender(<MonacoEditor {...props} activeSourceAssociationKey={identifier.key} />)

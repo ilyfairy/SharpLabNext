@@ -10,6 +10,7 @@ public sealed class PrepareFrameworkRuntimeTests
         RepositoryRoot,
         "eng",
         "prepare-framework-runtime.cs");
+    private static readonly string RepositoryRevision = ReadRepositoryRevision();
 
     [Fact]
     public void SharedPreparationScriptExists()
@@ -31,9 +32,39 @@ public sealed class PrepareFrameworkRuntimeTests
         Assert.Contains("FRAMEWORK_TARGET_ID=netfx48", result.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("FRAMEWORK_VERSION=4.8", result.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("CLR_GENERATION=clr4", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains($"SOURCE_REVISION={RepositoryRevision}", result.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("ROOT_IMAGE=operator/root:10.0@sha256:", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("<committed-source-context>", result.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("framework-installer-context=<staged-local-context>", result.StandardOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain(RepositoryRoot, result.StandardOutput, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("id=framework-installer-url", result.StandardOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CommittedSourceContextHasAnExplicitMinimalAllowlist()
+    {
+        var source = File.ReadAllText(ScriptPath);
+        string[] requiredFiles =
+        [
+            "deploy/docker/Dockerfile.operator-wine-framework-matrix",
+            "profiles/runtime-framework-installers.json",
+            "profiles/runtime-matrix.json",
+            "deploy/docker/wine-netfx-framework-preflight.sh",
+            "deploy/docker/dedupe-wine-prefixes.py",
+            "deploy/docker/certificates/microsoft-tls-rsa-root-g2-xsign.crt",
+            "deploy/docker/certificates/microsoft-tls-g2-rsa-ca-ocsp-04.crt"
+        ];
+
+        Assert.Contains("CommittedSourceFiles", source, StringComparison.Ordinal);
+        Assert.Contains("git", source, StringComparison.Ordinal);
+        Assert.Contains("show", source, StringComparison.Ordinal);
+        Assert.Contains("--no-textconv", source, StringComparison.Ordinal);
+        foreach (var file in requiredFiles)
+            Assert.Contains(file, source, StringComparison.Ordinal);
+        Assert.Contains(
+            "ValidateSourceState(inputs.RepositoryRoot, sourceRevision, dryRun: false)",
+            source,
+            StringComparison.Ordinal);
     }
 
     [Theory]
@@ -142,6 +173,19 @@ public sealed class PrepareFrameworkRuntimeTests
         Assert.Contains("is not present in the Framework installer manifest", result.StandardError, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task SourceRevisionMustMatchRepositoryHead()
+    {
+        using var secrets = new SecretFiles();
+        var arguments = ValidArguments("netfx48", secrets, includeInstallerSource: false);
+        arguments[Array.IndexOf(arguments, "--source-revision") + 1] = new string('0', 40);
+
+        var result = await RunAsync(arguments);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("does not match Git HEAD", result.StandardError, StringComparison.Ordinal);
+    }
+
     private static string[] ValidArguments(
         string targetId,
         SecretFiles secrets,
@@ -154,6 +198,7 @@ public sealed class PrepareFrameworkRuntimeTests
             "--base-image", $"operator/wine:9.0@sha256:{new string('c', 64)}",
             "--root-image", $"operator/root:10.0@sha256:{new string('d', 64)}",
             "--output-image", $"sharplabnext/operator-{targetId}:test",
+            "--source-revision", RepositoryRevision,
             "--accept-microsoft-dotnet-framework-eula",
         };
         if (includeInstallerSource)
@@ -210,6 +255,27 @@ public sealed class PrepareFrameworkRuntimeTests
             directory = directory.Parent;
         }
         throw new InvalidOperationException("SharpLabNext.slnx was not found above the test output directory.");
+    }
+
+    private static string ReadRepositoryRevision()
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            WorkingDirectory = RepositoryRoot
+        };
+        startInfo.ArgumentList.Add("rev-parse");
+        startInfo.ArgumentList.Add("--verify");
+        startInfo.ArgumentList.Add("HEAD");
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Could not read the repository revision.");
+        var output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException("Could not read the repository revision.");
+        return output.Trim();
     }
 
     private sealed class SecretFiles : IDisposable

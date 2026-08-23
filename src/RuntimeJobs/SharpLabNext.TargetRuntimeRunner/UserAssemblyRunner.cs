@@ -1,8 +1,10 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Text;
+using System.Threading;
 
 namespace SharpLabNext.TargetRuntimeRunner
 {
@@ -12,12 +14,23 @@ namespace SharpLabNext.TargetRuntimeRunner
         private static readonly string[] SelfTestArguments = { "first", "second" };
         private static readonly string[] SelfTestThrowArguments = { "throw" };
         private static bool _selfTestVoidCalled;
+        private const int CorFixupsInExecutable = unchecked((int)0x80131019);
         private delegate object EntryPointInvoker(string[] arguments);
         private delegate object InstanceMethodInvoker(object instance);
 
         public static int Run(string assemblyPath, string[] arguments)
         {
-            Assembly assembly = Assembly.LoadFrom(assemblyPath);
+            Assembly assembly;
+            try
+            {
+                assembly = Assembly.LoadFrom(assemblyPath);
+            }
+            catch (System.IO.FileLoadException exception) when (
+                Environment.OSVersion.Platform == PlatformID.Win32NT &&
+                System.Runtime.InteropServices.Marshal.GetHRForException(exception) == CorFixupsInExecutable)
+            {
+                return RunNativeEntryPoint(assemblyPath, arguments);
+            }
             MethodInfo entryPoint = assembly.EntryPoint;
             if (entryPoint == null)
             {
@@ -76,15 +89,62 @@ namespace SharpLabNext.TargetRuntimeRunner
             var startInfo = new ProcessStartInfo(assemblyPath, BuildWindowsCommandLine(arguments))
             {
                 CreateNoWindow = true,
-                UseShellExecute = false
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
             };
             using (Process process = Process.Start(startInfo))
             {
                 if (process == null)
                     throw new InvalidOperationException("The native user entry point could not be started.");
+                Exception stdoutFailure = null;
+                Exception stderrFailure = null;
+                var stdoutThread = StartOutputPump(
+                    "SharpLabNext.NativeEntryPoint.Stdout",
+                    process.StandardOutput,
+                    Console.Out,
+                    delegate(Exception exception) { stdoutFailure = exception; });
+                var stderrThread = StartOutputPump(
+                    "SharpLabNext.NativeEntryPoint.Stderr",
+                    process.StandardError,
+                    Console.Error,
+                    delegate(Exception exception) { stderrFailure = exception; });
                 process.WaitForExit();
+                stdoutThread.Join();
+                stderrThread.Join();
+                if (stdoutFailure != null)
+                    throw new IOException("The native user stdout stream could not be captured.", stdoutFailure);
+                if (stderrFailure != null)
+                    throw new IOException("The native user stderr stream could not be captured.", stderrFailure);
                 return process.ExitCode;
             }
+        }
+
+        private static Thread StartOutputPump(
+            string name,
+            StreamReader reader,
+            TextWriter writer,
+            Action<Exception> reportFailure)
+        {
+            var thread = new Thread(delegate()
+            {
+                try
+                {
+                    var buffer = new char[4096];
+                    int count;
+                    while ((count = reader.Read(buffer, 0, buffer.Length)) > 0)
+                        writer.Write(buffer, 0, count);
+                    writer.Flush();
+                }
+                catch (Exception exception)
+                {
+                    reportFailure(exception);
+                }
+            });
+            thread.IsBackground = true;
+            thread.Name = name;
+            thread.Start();
+            return thread;
         }
 
         private static string BuildWindowsCommandLine(string[] arguments)

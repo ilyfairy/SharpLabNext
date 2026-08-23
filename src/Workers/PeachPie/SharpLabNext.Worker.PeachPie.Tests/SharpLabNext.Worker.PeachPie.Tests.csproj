@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SharpLabNext.Worker.PeachPie\SharpLabNext.Worker.PeachPie.csproj" />
+    <ProjectReference Include="..\..\..\..\tests\Shared\SharpLabNext.Testing\SharpLabNext.Testing.csproj" />
   </ItemGroup>
 
 </Project>

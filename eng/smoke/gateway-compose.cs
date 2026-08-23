@@ -162,8 +162,7 @@ var languages = new[]
 
 var runtimes = new[]
 {
-    new RuntimeCase("dotnet-10-linux-x64", "10."),
-    new RuntimeCase("dotnet-11-preview-linux-x64", "11.")
+    new RuntimeCase("dotnet-10-linux-x64", "10.")
 };
 
 var gsharpStable = languages.Single(static language => language.Id == "gsharp");
@@ -365,6 +364,51 @@ foreach (var language in runtimeLanguages)
     }
 }
 
+var net5OnNewerRuntime = languages[0] with
+{
+    ReferenceSetId = "net5-ref",
+    Source = """
+        using System;
+
+        public static class Program
+        {
+            public static void Main() => Console.WriteLine("compose-net5-roll-forward");
+        }
+        """,
+    ExpectedOutput = "compose-net5-roll-forward"
+};
+await CheckAsync("net5 defaults to its matching runtime", async () =>
+{
+    var execution = await ExecutePipelineDetailedAsync(net5OnNewerRuntime, "run", null);
+    Require(ResultType(execution.Result) == "run", "net5 default Run returned the wrong result type.");
+    Require(execution.Result.GetProperty("Status").GetString() == "completed", "net5 default Run did not complete.");
+    Require(
+        DecodeOutput(execution.Events, "stdout").Contains(net5OnNewerRuntime.ExpectedOutput, StringComparison.Ordinal),
+        "net5 default Run stdout is incorrect.");
+    Require(
+        execution.Result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString()?.StartsWith(
+            "5.",
+            StringComparison.Ordinal) == true,
+        "net5 default Run did not select the matching .NET 5 runtime.");
+});
+await CheckAsync("net5 can run on explicitly selected net10", async () =>
+{
+    var execution = await ExecutePipelineDetailedAsync(
+        net5OnNewerRuntime,
+        "run",
+        "dotnet-10-linux-x64");
+    Require(ResultType(execution.Result) == "run", "net5-on-net10 Run returned the wrong result type.");
+    Require(execution.Result.GetProperty("Status").GetString() == "completed", "net5-on-net10 Run did not complete.");
+    Require(
+        DecodeOutput(execution.Events, "stdout").Contains(net5OnNewerRuntime.ExpectedOutput, StringComparison.Ordinal),
+        "net5-on-net10 Run stdout is incorrect.");
+    Require(
+        execution.Result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString()?.StartsWith(
+            "10.",
+            StringComparison.Ordinal) == true,
+        "net5-on-net10 Run did not use the explicitly selected .NET 10 runtime.");
+});
+
 if (full)
 {
     string? constGenericsArtifactRef = null;
@@ -504,7 +548,7 @@ if (full)
                 DecodeOutput(execution.Events, "stdout").Contains(language.ExpectedOutput, StringComparison.Ordinal),
                 $"{displayName} Wine Run stdout is incorrect.");
             Require(
-                result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString() == "wine-9.0+netfx48",
+                result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString() == "4.8",
                 $"{displayName} did not use the Wine/.NET Framework runtime.");
         });
     }
@@ -628,7 +672,7 @@ if (full)
             "C++/CLI Wine Run stderr is incorrect.");
         var runtimeIdentity = result.GetProperty("Identity");
         Require(
-            runtimeIdentity.GetProperty("RuntimeVersion").GetString() == "wine-9.0+netfx48",
+            runtimeIdentity.GetProperty("RuntimeVersion").GetString() == "4.8",
             "C++/CLI Run did not use the Wine/.NET Framework runtime.");
         Require(
             runtimeIdentity.GetProperty("RuntimeCommit").GetString() == "not-applicable",

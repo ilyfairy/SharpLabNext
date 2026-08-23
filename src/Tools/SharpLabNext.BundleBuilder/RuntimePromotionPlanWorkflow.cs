@@ -26,6 +26,7 @@ public static class RuntimePromotionPlanWorkflow
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         WriteIndented = true,
+        NewLine = "\n",
         TypeInfoResolver = new DefaultJsonTypeInfoResolver()
     };
 
@@ -252,11 +253,20 @@ public static class RuntimePromotionPlanWorkflow
         RequireEqual(plan.Family, profile.Family, "promotion plan family");
         RequireEqual(plan.ResolvedVersion, profile.RuntimeVersion, "promotion plan runtime version");
         Require(IsGitCommit(plan.SourceRevision), "The promotion plan source revision is invalid.");
+        Require(IsGitCommit(plan.SourceTree), "The promotion plan source tree is invalid.");
+        Require(IsExpectedCandidateTarget(plan.CandidateTarget, profile.Family),
+            "The promotion plan candidate target does not match the Runtime Profile family.");
+        Require(
+            plan.BuildInputs is { Count: >= 1 and <= 64 } &&
+            plan.BuildInputs.All(static item => IsCanonicalBuildInput(item.Key, item.Value)) &&
+            HasRequiredBuildBindings(plan) &&
+            IsSha256(plan.BuildInputsSha256) &&
+            StringComparer.Ordinal.Equals(plan.BuildInputsSha256, Sha256(CanonicalizeBuildInputs(plan.BuildInputs))),
+            "The promotion plan build-input binding is invalid.");
         Require(
             plan.Producer is not null && plan.Producer.Id == ProducerId &&
             plan.Producer.SourceRevision == plan.SourceRevision,
             "The promotion plan producer identity is invalid.");
-        Require(IsCanonicalUtcTimestamp(plan.CreatedAtUtc), "The promotion plan timestamp is not canonical UTC.");
         Require(
             IsCanonicalId(plan.SecurityPolicyId) &&
             profile.AllowedSecurityPolicyIds.Contains(plan.SecurityPolicyId, StringComparer.Ordinal) &&
@@ -271,6 +281,7 @@ public static class RuntimePromotionPlanWorkflow
         Require(IsSha256(image.ImageId), "The promotion plan image ID is invalid.");
         Require(image.SizeBytes is > 0 and <= 17_179_869_184,
             "The promotion plan image size is invalid.");
+        ValidateOperatorReceiptBinding(profile, plan.WineOperator, plan.SourceRevision);
         ValidateComponentIdentity(profile, plan.ComponentIdentity);
         var runtimeIdentity = plan.RuntimeIdentity
             ?? throw new BundleValidationException("The promotion plan has no runtime identity.");
@@ -438,17 +449,72 @@ public static class RuntimePromotionPlanWorkflow
         preflightNode["image"] = candidateNode["image"]?.DeepClone();
         preflightNode["runtimeImageId"] = candidateNode["runtimeImageId"]?.DeepClone();
         preflightNode["capabilities"] = candidateNode["capabilities"]?.DeepClone();
+        var profilesMatch = JsonNode.DeepEquals(candidateNode, preflightNode) ||
+            IsAllowedFrameworkRangeNormalization(candidateNode.AsObject(), preflightNode.AsObject());
         Require(
-            JsonNode.DeepEquals(candidateNode, preflightNode),
-            "The immutable preflight Runtime Profile changes fields other than image identity and plan-bound instrumentation capabilities.");
+            profilesMatch,
+            "The immutable preflight Runtime Profile changes fields other than image identity, " +
+            "framework range normalization, and plan-bound instrumentation capabilities.");
     }
+
+    private static bool IsAllowedFrameworkRangeNormalization(
+        JsonObject candidate,
+        JsonObject preflight)
+    {
+        var runtimeVersion = OptionalString(preflight, "runtimeVersion");
+        if (runtimeVersion is null ||
+            !StringComparer.Ordinal.Equals(OptionalString(candidate, "runtimeVersion"), runtimeVersion) ||
+            !TryGetSingleObject(candidate, "acceptedFrameworks", out var candidateFramework) ||
+            !TryGetSingleObject(preflight, "acceptedFrameworks", out var preflightFramework))
+        {
+            return false;
+        }
+
+        var candidateExact = OptionalString(candidateFramework, "exactVersion");
+        var candidateMinimum = OptionalString(candidateFramework, "minimumVersion");
+        var candidateMaximum = OptionalString(candidateFramework, "maximumVersion");
+        var preflightExact = OptionalString(preflightFramework, "exactVersion");
+        var preflightMinimum = OptionalString(preflightFramework, "minimumVersion");
+        var preflightMaximum = OptionalString(preflightFramework, "maximumVersion");
+
+        return candidateExact is null &&
+            candidateMinimum is not null &&
+            candidateMaximum is not null &&
+            preflightExact is not null &&
+            StringComparer.Ordinal.Equals(preflightExact, runtimeVersion) &&
+            preflightMinimum is null &&
+            preflightMaximum is null &&
+            StringComparer.Ordinal.Equals(
+                OptionalString(candidateFramework, "name"),
+                OptionalString(preflightFramework, "name"));
+    }
+
+    private static bool TryGetSingleObject(
+        JsonObject root,
+        string propertyName,
+        out JsonObject value)
+    {
+        if (root[propertyName] is JsonArray array &&
+            array.Count == 1 &&
+            array[0] is JsonObject item)
+        {
+            value = item;
+            return true;
+        }
+
+        value = null!;
+        return false;
+    }
+
+    private static string? OptionalString(JsonObject root, string propertyName) =>
+        root[propertyName]?.GetValue<string>();
 
     private static void ValidateComponentIdentity(
         RuntimeProfileDefinition profile,
         RuntimePromotionComponentIdentity? component)
     {
         Require(component is not null, "The promotion plan has no component identity.");
-        Require(IsImmutableSourceUri(component!.SourceUri),
+        Require(RuntimePromotionTrust.IsImmutableSourceUri(component!.SourceUri),
             "The promotion plan component source URI is not immutable.");
         if (profile.Family is "coreclr" or "coreclr-wine")
         {
@@ -469,7 +535,57 @@ public static class RuntimePromotionPlanWorkflow
         }
     }
 
-    private static void ValidateJitLibraryPath(RuntimeProfileDefinition profile, string? path)
+    private static void ValidateOperatorReceiptBinding(
+        RuntimeProfileDefinition profile,
+        RuntimePromotionWineOperatorBinding? binding,
+        string planSourceRevision)
+    {
+        var requiresWineOperator = profile.Family is "coreclr-wine" or "netfx-clr-wine";
+        if (!requiresWineOperator)
+        {
+            Require(binding is null,
+                "Only Wine runtime promotion plans may bind a Wine operator receipt.");
+            return;
+        }
+
+        Require(binding is not null,
+            "Wine runtime promotion plans must bind a signed Wine operator receipt.");
+        Require(IsGitCommit(binding!.SourceRevision) && IsGitCommit(binding.SourceTree),
+            "Wine operator receipt source identity is invalid.");
+        RequireEqual(binding.SourceRevision, planSourceRevision, "Wine operator receipt source revision");
+        RequireEqual(
+            binding.ReceiptPath,
+            $"profiles/runtime-operator-receipts/wine-coreclr-{binding.SourceRevision}.json",
+            "Wine operator receipt path");
+        RequireEqual(
+            binding.SignaturePath,
+            binding.ReceiptPath + ".sig",
+            "Wine operator receipt signature path");
+        Require(IsSha256(binding.ReceiptSha256), "Wine operator receipt digest is invalid.");
+        Require(IsSha256(binding.SignatureSha256), "Wine operator receipt signature digest is invalid.");
+        RequireEqual(
+            binding.KeyId,
+            WineCoreClrOperatorReceiptTrust.KeyId,
+            "Wine operator receipt key ID");
+        Require(IsImmutableReference(binding.Reference),
+            "Wine operator receipt reference is not immutable.");
+        Require(IsSha256(binding.ImageId), "Wine operator receipt image ID is invalid.");
+        Require(binding.SizeBytes is > 0 and <= 9_007_199_254_740_991 and <= 17_179_869_184,
+            "Wine operator receipt image size is invalid.");
+        Require(binding.LineageKind is "direct" or "framework-row" or "framework-parent",
+            "Wine operator receipt lineage is invalid.");
+        var direct = profile.Family == "coreclr-wine";
+        Require(direct == (binding.LineageKind == "direct"),
+            "Wine operator receipt lineage does not match the runtime family.");
+        Require(
+            direct
+                ? binding.IntermediaryReference is null && binding.IntermediaryImageId is null && binding.IntermediarySizeBytes is null
+                : IsImmutableReference(binding.IntermediaryReference!) && IsSha256(binding.IntermediaryImageId!) &&
+                  binding.IntermediarySizeBytes is > 0 and <= 9_007_199_254_740_991 and <= 17_179_869_184,
+            "Wine operator receipt intermediary lineage is invalid.");
+    }
+
+    internal static void ValidateJitLibraryPath(RuntimeProfileDefinition profile, string? path)
     {
         var requiresJit = profile.Capabilities.Contains("jit-asm", StringComparer.Ordinal);
         Require(requiresJit == (path is not null),
@@ -484,26 +600,78 @@ public static class RuntimePromotionPlanWorkflow
                 !path.Contains("/./", StringComparison.Ordinal) &&
                 !path.EndsWith("/.", StringComparison.Ordinal),
             "The promotion plan JIT library path is not canonical.");
-        var wine = profile.Family == "coreclr-wine";
+        var matchesRuntimeFamily = profile.Family switch
+        {
+            "coreclr" => path.EndsWith("/libclrjit.so", StringComparison.Ordinal),
+            "coreclr-wine" => path.EndsWith("clrjit.dll", StringComparison.OrdinalIgnoreCase),
+            "mono" => StringComparer.Ordinal.Equals(path, "/usr/bin/mono-sgen"),
+            _ => false
+        };
         Require(
-            wine
-                ? path.EndsWith("clrjit.dll", StringComparison.OrdinalIgnoreCase)
-                : path.EndsWith("/libclrjit.so", StringComparison.Ordinal),
+            matchesRuntimeFamily,
             "The promotion plan JIT library path does not match the runtime platform.");
     }
 
     private static string Sha256(byte[] bytes) =>
         $"sha256:{Convert.ToHexStringLower(SHA256.HashData(bytes))}";
 
-    private static bool IsImmutableSourceUri(string? value)
+    private static byte[] CanonicalizeBuildInputs(IReadOnlyDictionary<string, string> values)
     {
-        if (string.IsNullOrWhiteSpace(value) || value != value.Trim())
-            return false;
-        if (value.StartsWith("docker://", StringComparison.Ordinal))
-            return IsImmutableReference(value["docker://".Length..]);
-        return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-               uri.Scheme == Uri.UriSchemeHttps && uri.Host.Length > 0 && uri.UserInfo.Length == 0;
+        using var document = JsonDocument.Parse(JsonSerializer.SerializeToUtf8Bytes(values));
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions
+               {
+                   Indented = false,
+                   Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+               }))
+        {
+            writer.WriteStartObject();
+            foreach (var item in document.RootElement.EnumerateObject().OrderBy(static item => item.Name, StringComparer.Ordinal))
+            {
+                writer.WriteString(item.Name, item.Value.GetString());
+            }
+            writer.WriteEndObject();
+        }
+        stream.WriteByte((byte)'\n');
+        return stream.ToArray();
     }
+
+    private static bool IsCanonicalBuildInput(string key, string value) =>
+        key.Length is > 0 and <= 128 &&
+        key.All(static character => character is >= 'A' and <= 'Z' or >= '0' and <= '9' or '_') &&
+        !key.Contains("SECRET", StringComparison.Ordinal) &&
+        !key.Contains("TOKEN", StringComparison.Ordinal) &&
+        !key.Contains("PASSWORD", StringComparison.Ordinal) &&
+        !key.Contains("PRIVATE", StringComparison.Ordinal) &&
+        !key.Contains("PATH", StringComparison.Ordinal) &&
+        value.Length is > 0 and <= 4096 &&
+        value.All(static character => character is >= ' ' and <= '~');
+
+    private static bool HasRequiredBuildBindings(RuntimePromotionPlanDocument plan) =>
+        plan.BuildInputs.TryGetValue("IMAGE_PREFIX", out var imagePrefix) && imagePrefix.Length > 0 &&
+        plan.BuildInputs.TryGetValue("RELEASE_ID", out var releaseId) && releaseId.Length > 0 &&
+        plan.BuildInputs.TryGetValue("SOURCE_DATE_EPOCH", out var epoch) &&
+        epoch.All(static character => char.IsAsciiDigit(character)) &&
+        plan.BuildInputs.TryGetValue("RUNTIME_MATRIX_PROFILE_ID", out var profileId) &&
+        StringComparer.Ordinal.Equals(profileId, plan.ProfileId) &&
+        plan.BuildInputs.TryGetValue("RUNTIME_MATRIX_RUNTIME_VERSION", out var runtimeVersion) &&
+        StringComparer.Ordinal.Equals(runtimeVersion, plan.ResolvedVersion) &&
+        !plan.BuildInputs.ContainsKey("SOURCE_REVISION") &&
+        (!plan.BuildInputs.TryGetValue("RUNTIME_MATRIX_RUNTIME_COMMIT", out var runtimeCommit) ||
+         StringComparer.Ordinal.Equals(runtimeCommit, plan.RuntimeIdentity.RuntimeCommit)) &&
+        (!plan.BuildInputs.TryGetValue("RUNTIME_MATRIX_JIT_COMMIT", out var jitCommit) ||
+         StringComparer.Ordinal.Equals(jitCommit, plan.RuntimeIdentity.JitCommit));
+
+    private static bool IsExpectedCandidateTarget(string? target, string? family) =>
+        (target, family) switch
+        {
+            ("runtime-dotnet-matrix-candidate", "coreclr") => true,
+            ("runtime-mono-matrix-candidate", "mono") => true,
+            ("runtime-wine-dotnet-matrix-candidate", "coreclr-wine") => true,
+            ("runtime-wine-framework-matrix-candidate", "netfx-clr-wine") => true,
+            ("runtime-wine-framework-matrix-shared-candidate", "netfx-clr-wine") => true,
+            _ => false
+        };
 
     private static bool IsImmutableReference(string? value)
     {
@@ -539,13 +707,6 @@ public static class RuntimePromotionPlanWorkflow
         value.All(static character =>
             character is >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '_' or '-');
 
-    private static bool IsCanonicalUtcTimestamp(string? value) =>
-        value is not null && DateTimeOffset.TryParseExact(
-            value,
-            ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"],
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-            out _);
 
     private static void Require(bool condition, string message)
     {
@@ -608,6 +769,7 @@ public sealed class RuntimePromotionPlanContext
     public string PerformancePolicyPath => _plan.Performance.PolicyPath;
     public string PerformancePolicySha256 => _plan.Performance.PolicySha256;
     public string PerformanceEvidencePath => _plan.Performance.EvidencePath;
+    internal RuntimePromotionWineOperatorBinding? WineOperator => _plan.WineOperator;
 
     public RuntimeCapabilityEvidencePreflightValidationResult ValidateDocument(
         byte[] evidenceBytes,
@@ -734,6 +896,7 @@ public sealed class RuntimePromotionPlanContext
         Family = _plan.Family,
         ResolvedVersion = _plan.ResolvedVersion,
         Image = _plan.Image,
+        WineOperator = _plan.WineOperator,
         ComponentIdentity = _plan.ComponentIdentity,
         RuntimeIdentity = _plan.RuntimeIdentity,
         Operations = _plan.Operations,
@@ -788,6 +951,7 @@ internal static class RuntimePromotionPlanWorkflowInput
 internal sealed class RuntimePromotionPlanDocument
 {
     public required int SchemaVersion { get; init; }
+    public required string CandidateTarget { get; init; }
     public required string ProfileId { get; init; }
     public required string ProfileSha256 { get; init; }
     public required string MatrixTargetId { get; init; }
@@ -795,10 +959,17 @@ internal sealed class RuntimePromotionPlanDocument
     public required string Family { get; init; }
     public required string ResolvedVersion { get; init; }
     public required RuntimePromotionImageIdentity Image { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("wineOperator")]
+    public RuntimePromotionWineOperatorBinding? WineOperator { get; init; }
+
     public required RuntimePromotionComponentIdentity ComponentIdentity { get; init; }
     public required RuntimePromotionRuntimeIdentity RuntimeIdentity { get; init; }
     public required string SourceRevision { get; init; }
-    public required string CreatedAtUtc { get; init; }
+    public required string SourceTree { get; init; }
+    public required Dictionary<string, string> BuildInputs { get; init; }
+    public required string BuildInputsSha256 { get; init; }
     public required RuntimePromotionPlanProducer Producer { get; init; }
     public required string SecurityPolicyId { get; init; }
     public required List<string> Capabilities { get; init; }

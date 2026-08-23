@@ -15,6 +15,8 @@ string? sourceRevision = null;
 string? repositoryRoot = null;
 string? runtimeMatrixPath = null;
 var allowUncommittedSourceForDevelopment = false;
+const string developmentGrantEnvironmentVariable =
+    "SHARPLABNEXT_BAKE_ALLOW_UNCOMMITTED_SOURCE_FOR_DEVELOPMENT";
 var imagePrefix = "sharplabnext";
 var command = new List<string>();
 for (var index = 0; index < args.Length; index++)
@@ -98,6 +100,9 @@ try
         startInfo.ArgumentList.Add(argument);
     foreach (var pair in environment)
         startInfo.Environment[pair.Key] = pair.Value;
+    startInfo.Environment.Remove(developmentGrantEnvironmentVariable);
+    if (allowUncommittedSourceForDevelopment)
+        startInfo.Environment[developmentGrantEnvironmentVariable] = "true";
 
     using var process = Process.Start(startInfo);
     if (process is null)

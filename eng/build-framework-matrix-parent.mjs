@@ -210,7 +210,13 @@ function copyContainerMetadata(spawn, containerId, source, destination) {
   }
 }
 
-function inspectMetadataImage(reference, expectedDigest, expectedRowCount, spawn = spawnSync) {
+export function inspectMetadataImage(
+  reference,
+  expectedDigest,
+  expectedRowCount,
+  expectedRevision,
+  spawn = spawnSync,
+) {
   const result = spawn('docker', ['image', 'inspect', reference], {
     cwd: repositoryRoot,
     encoding: 'utf8',
@@ -225,6 +231,11 @@ function inspectMetadataImage(reference, expectedDigest, expectedRowCount, spawn
     fail('metadata image inspect did not return exactly one image')
   }
   const info = parsed[0]
+  const suppliedDigest = reference.slice(reference.lastIndexOf('@') + 1)
+  const repoDigests = Array.isArray(info.RepoDigests) ? info.RepoDigests : []
+  if (info.Id !== suppliedDigest && !repoDigests.includes(reference)) {
+    fail('metadata image does not resolve to its supplied immutable digest')
+  }
   const labels = info.Config?.Labels ?? {}
   for (const [label, expected] of Object.entries({
     'io.sharplabnext.framework.matrix-context': 'true',
@@ -232,6 +243,8 @@ function inspectMetadataImage(reference, expectedDigest, expectedRowCount, spawn
     'io.sharplabnext.framework.matrix-strategy': matrixStrategy,
     'io.sharplabnext.framework.matrix-input-sha256': expectedDigest,
     'io.sharplabnext.framework.matrix-row-count': String(expectedRowCount),
+    'org.opencontainers.image.revision': expectedRevision,
+    'io.sharplabnext.source.revision': expectedRevision,
   })) {
     if (labels[label] !== expected) fail(`metadata image label ${label} does not match the matrix input`)
   }
@@ -242,12 +255,23 @@ function inspectMetadataImage(reference, expectedDigest, expectedRowCount, spawn
   }
 }
 
-function inspectDockerMatrixInput(reference, expectedDigest, spawn = spawnSync) {
+function inspectDockerMatrixInput(
+  reference,
+  expectedDigest,
+  expectedRevision,
+  spawn = spawnSync,
+) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-framework-metadata-'))
   let containerId
   let primaryError
   try {
-    inspectMetadataImage(reference, expectedDigest, requiredFrameworkRows.length, spawn)
+    inspectMetadataImage(
+      reference,
+      expectedDigest,
+      requiredFrameworkRows.length,
+      expectedRevision,
+      spawn,
+    )
     const created = spawn(
       'docker',
       ['create', '--platform', 'linux/amd64', '--entrypoint', '/bin/false', reference],
@@ -548,6 +572,7 @@ function expectedParentLabels(expectedValues) {
     'io.sharplabnext.framework.matrix-strategy': 'shared-framework-target-prefix-matrix-v1',
     'io.sharplabnext.framework.dedupe-policy': 'wine-static-runtime-payload-v1',
     'org.opencontainers.image.revision': expectedValues.SOURCE_REVISION,
+    'io.sharplabnext.source.revision': expectedValues.SOURCE_REVISION,
     'org.opencontainers.image.version': expectedValues.VERSION ?? 'development',
     'io.sharplabnext.framework.matrix-input-sha256': expectedValues.FRAMEWORK_MATRIX_INPUT_SHA256,
     'io.sharplabnext.framework.matrix-source-uri': expectedValues.FRAMEWORK_MATRIX_SOURCE_URI,
@@ -657,7 +682,12 @@ export function runParentBuild(argv, values = process.env, spawn = spawnSync, ou
     const sourceReference = immutableDockerSourceReference(merged.FRAMEWORK_MATRIX_SOURCE_URI)
     const hasLocalContext = typeof merged.CONTEXT === 'string' && merged.CONTEXT.length > 0
     matrixInput = parsed.push || !hasLocalContext
-      ? inspectDockerMatrixInput(sourceReference, merged.FRAMEWORK_MATRIX_INPUT_SHA256, spawn)
+      ? inspectDockerMatrixInput(
+        sourceReference,
+        merged.FRAMEWORK_MATRIX_INPUT_SHA256,
+        merged.SOURCE_REVISION,
+        spawn,
+      )
       : readMatrixInput(realDirectory(merged.CONTEXT, 'CONTEXT'))
   } catch (error) {
     output.error(`framework parent context error: ${error.message}`)
@@ -673,6 +703,12 @@ export function runParentBuild(argv, values = process.env, spawn = spawnSync, ou
       inspectOrPullOperator(row, spawn, {
         baseImage: merged.WINE_IMAGE,
         rootImage: merged.ROOT_IMAGE,
+        installerManifestSha256: crypto.createHash('sha256').update(fs.readFileSync(
+          path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json'),
+        )).digest('hex'),
+        ...(merged.SOURCE_REVISION === 'development'
+          ? {}
+          : { sourceRevision: merged.SOURCE_REVISION }),
       })
     }
   } catch (error) {

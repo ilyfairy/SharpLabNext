@@ -3,57 +3,38 @@
   "releaseId": "development",
   "resolvedAt": "2026-07-20T15:13:59Z",
   "components": {
-    "dotnet-sdk-host": {
-      "kind": "sdk",
-      "resolvedVersion": "10.0.301",
-      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.301/dotnet-sdk-10.0.301-linux-x64.tar.gz",
-      "sha512": "cfbeec3a3a1d3ad3e168e37a77c4cc26c23125acd84a86d014047da3ecffce4c368a9acac4d7c950a047fa3d98989ce8aea69f8e5842cb6d330e8911e1c335a7",
-      "releaseDate": "2026-06-09"
+    "artifacts-const-generics": {
+      "kind": "artifact-processor",
+      "resolvedVersion": "a2042c704a93-79f7f1408b2c-ctarg-v1",
+      "commit": "a2042c704a935a5402c6d700626e52702866ed6d",
+      "digest": "sha256:2b4f80b014d2bdacb71031c42cf3df6c9fef8194f5b4cc2a39c473f2c9f44b7e",
+      "sourceUri": "https://github.com/ilyfairy/ILSpy/tree/a2042c704a935a5402c6d700626e52702866ed6d",
+      "releaseDate": "2025-02-28"
     },
-    "dotnet-10-linux-x64": {
-      "kind": "runtime",
-      "resolvedVersion": "10.0.9",
-      "commit": "901ca941248413c79832d2fdbd709da0c4386353",
-      "jitCommit": "901ca941248413c79832d2fdbd709da0c4386353",
-      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.9/dotnet-runtime-10.0.9-linux-x64.tar.gz",
-      "sha512": "e413f4914e7911e1cd994aa01c433cb30c3f505b369ff55c6c61d130dcd4305e0e078dbe9dc05b27d10514cf3afce08fc7797bc64f7fa0d9945381a805f85cb9",
-      "releaseDate": "2026-06-09"
+    "artifacts-default": {
+      "kind": "artifact-processor",
+      "resolvedVersion": "ilspy/10.1.0.8386+ilverify/10.0.9"
     },
-    "dotnet-11-preview-linux-x64": {
-      "kind": "runtime",
-      "resolvedVersion": "11.0.0-preview.5.26302.115",
-      "commit": "f7b4c5716faaee8fb8a289aed29118cad955c45f",
-      "jitCommit": "f7b4c5716faaee8fb8a289aed29118cad955c45f",
-      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/11.0.0-preview.5.26302.115/dotnet-runtime-11.0.0-preview.5.26302.115-linux-x64.tar.gz",
-      "sha512": "df845a83ae9c9389271583642b83747990c958ebff9f8c808f7a195fb78af0cdf2e6f98d55e1b42b576643e3a3a542e6f7d98a2342506f216b6960422f3f9951",
-      "releaseDate": "2026-06-09"
+    "artifacts-jsil": {
+      "kind": "artifact-processor",
+      "resolvedVersion": "0.8.2+mono.6.12.0.182",
+      "commit": "1d57d5427c87ab92ffa3ca4b82429cd7509796ba",
+      "digest": "sha256:e165f0f03274068cab1a9738685b0e5322ce52f4066d365c7e53c3562304414c",
+      "sourceUri": "https://github.com/sq/JSIL/tree/1d57d5427c87ab92ffa3ca4b82429cd7509796ba"
     },
-    "jit-profiler-clr-samples": {
+    "wine-coreclr-userspace": {
+      "kind": "runtime-dependency",
+      "resolvedVersion": "wine-9.0~repack-4build3+xvfb-2:21.1.12-1ubuntu1.6",
+      "digest": "sha256:4ecfff207a9b13eb6492aa3f9ca01d2d3dd1b713837ef2917524eaf23fa55981",
+      "sourceUri": "https://snapshot.ubuntu.com/ubuntu/20260810T000000Z/"
+    },
+    "const-generics-ilspy-source": {
       "kind": "source",
-      "resolvedVersion": "5f9a631ecb4f558b7d5e1d17af7d4d93ea836cbc",
-      "commit": "5f9a631ecb4f558b7d5e1d17af7d4d93ea836cbc",
-      "sourceUri": "https://github.com/microsoft/clr-samples/tree/5f9a631ecb4f558b7d5e1d17af7d4d93ea836cbc/ProfilingAPI/ELTProfiler"
-    },
-    "jit-profiler-runtime-headers": {
-      "kind": "source",
-      "resolvedVersion": "7ee91972e27c086d92b7d223f905cf391578b256",
-      "commit": "7ee91972e27c086d92b7d223f905cf391578b256",
-      "sourceUri": "https://github.com/dotnet/runtime/tree/7ee91972e27c086d92b7d223f905cf391578b256"
-    },
-    "const-generics-runtime-source": {
-      "kind": "source",
-      "resolvedVersion": "79f7f1408b2c811904c983419b45139e654f1e46",
-      "commit": "79f7f1408b2c811904c983419b45139e654f1e46",
-      "digest": "sha256:00f0f9fcfc083e931004ceaa914633990ad7e389ce8d21012b97af5844f501b4",
-      "sourceUri": "https://codeload.github.com/hez2010/runtime/tar.gz/79f7f1408b2c811904c983419b45139e654f1e46",
-      "releaseDate": "2023-09-20"
-    },
-    "const-generics-versiontools": {
-      "kind": "build-dependency",
-      "resolvedVersion": "8.0.0-beta.23516.4",
-      "digest": "sha256:ad0a9c0ef28dd49bd2bfd7eb1be7ec355bd11a9671c0e2d8f1c08016b56be1bf",
-      "sourceUri": "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-eng/nuget/v3/flat2/microsoft.dotnet.versiontools.tasks/8.0.0-beta.23516.4/microsoft.dotnet.versiontools.tasks.8.0.0-beta.23516.4.nupkg",
-      "package": "Microsoft.DotNet.VersionTools.Tasks"
+      "resolvedVersion": "a2042c704a935a5402c6d700626e52702866ed6d",
+      "commit": "a2042c704a935a5402c6d700626e52702866ed6d",
+      "digest": "sha256:2b4f80b014d2bdacb71031c42cf3df6c9fef8194f5b4cc2a39c473f2c9f44b7e",
+      "sourceUri": "https://codeload.github.com/ilyfairy/ILSpy/tar.gz/a2042c704a935a5402c6d700626e52702866ed6d",
+      "releaseDate": "2025-02-28"
     },
     "const-generics-linux-x64": {
       "kind": "runtime",
@@ -71,28 +52,183 @@
       "sourceUri": "https://codeload.github.com/hez2010/runtime/tar.gz/79f7f1408b2c811904c983419b45139e654f1e46",
       "releaseDate": "2023-09-20"
     },
-    "roslyn-stable": {
-      "kind": "toolchain",
-      "resolvedVersion": "5.6.0",
-      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.codeanalysis.csharp/5.6.0/microsoft.codeanalysis.csharp.5.6.0.nupkg",
-      "package": "Microsoft.CodeAnalysis.CSharp",
-      "packageContentHash": "sha512-6fek0NrSP5NsR/f\u002BJMajZVqKCiuQ0vZR9GQnPBIZCMj3o9eDOpriDjG2SjQXcSAoEqojG0s52zhHurKKQ0R8PQ==",
-      "sha512": "e9f7a4d0dad23f936c47f7fe24c6a3655a8a0a2b90d2f651f464273c121908c8f7a3d7833a9ae20e31b64a341771202812aa231b4b39db3847bab28a43447c3d"
+    "const-generics-roslyn-source": {
+      "kind": "source",
+      "resolvedVersion": "bcd209abd947ac1bc71ef1ee29bd8a02d8e78ffc",
+      "commit": "bcd209abd947ac1bc71ef1ee29bd8a02d8e78ffc",
+      "digest": "sha256:e43c77373cc7dc07a58a73516fce5512f441b5435e7d17d0e18af41942dc7487",
+      "sourceUri": "https://codeload.github.com/hez2010/roslyn/tar.gz/bcd209abd947ac1bc71ef1ee29bd8a02d8e78ffc",
+      "releaseDate": "2023-09-08"
     },
-    "roslyn-stable-netfx48": {
-      "kind": "toolchain",
-      "resolvedVersion": "5.6.0",
-      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.codeanalysis.csharp/5.6.0/microsoft.codeanalysis.csharp.5.6.0.nupkg",
-      "package": "Microsoft.CodeAnalysis.CSharp",
-      "packageContentHash": "sha512-6fek0NrSP5NsR/f\u002BJMajZVqKCiuQ0vZR9GQnPBIZCMj3o9eDOpriDjG2SjQXcSAoEqojG0s52zhHurKKQ0R8PQ==",
-      "sha512": "e9f7a4d0dad23f936c47f7fe24c6a3655a8a0a2b90d2f651f464273c121908c8f7a3d7833a9ae20e31b64a341771202812aa231b4b39db3847bab28a43447c3d"
+    "const-generics-runtime-source": {
+      "kind": "source",
+      "resolvedVersion": "79f7f1408b2c811904c983419b45139e654f1e46",
+      "commit": "79f7f1408b2c811904c983419b45139e654f1e46",
+      "digest": "sha256:00f0f9fcfc083e931004ceaa914633990ad7e389ce8d21012b97af5844f501b4",
+      "sourceUri": "https://codeload.github.com/hez2010/runtime/tar.gz/79f7f1408b2c811904c983419b45139e654f1e46",
+      "releaseDate": "2023-09-20"
     },
-    "roslyn-main": {
+    "const-generics-versiontools": {
+      "kind": "build-dependency",
+      "resolvedVersion": "8.0.0-beta.23516.4",
+      "digest": "sha256:ad0a9c0ef28dd49bd2bfd7eb1be7ec355bd11a9671c0e2d8f1c08016b56be1bf",
+      "sourceUri": "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-eng/nuget/v3/flat2/microsoft.dotnet.versiontools.tasks/8.0.0-beta.23516.4/microsoft.dotnet.versiontools.tasks.8.0.0-beta.23516.4.nupkg",
+      "package": "Microsoft.DotNet.VersionTools.Tasks"
+    },
+    "dotnet-10-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "10.0.10",
+      "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+      "jitCommit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-linux-x64.tar.gz",
+      "sha512": "74b2b41ee177fe72da02741d5ba30e8a3c5ead44151d7a72a04ed81a0a933e827f5f8cfcc048ba4e8de5aeb7651953761b7586277d0bcce2e01323ca29ccb813",
+      "releaseDate": "2026-07-14"
+    },
+    "dotnet-11-preview-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "11.0.0-preview.6.26359.118",
+      "commit": "ba53d0ed335bed4ab7bfd01988c8e3953ee5ffbe",
+      "jitCommit": "ba53d0ed335bed4ab7bfd01988c8e3953ee5ffbe",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/11.0.0-preview.6.26359.118/dotnet-runtime-11.0.0-preview.6.26359.118-linux-x64.tar.gz",
+      "sha512": "ce5530c0314dd38d6f1b8348fbddf65341cee31e05ebddfd7906937c785d799c0d2b95f920d0457f5de5371bd0ede98df9fd8c9588ee58029864d599dd6e1565",
+      "releaseDate": "2026-07-14"
+    },
+    "dotnet-5-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "5.0.17",
+      "commit": "6a984143635bde23e728abaaccbde52f5ea8fa3e",
+      "jitCommit": "6a984143635bde23e728abaaccbde52f5ea8fa3e",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/5.0.17/dotnet-runtime-5.0.17-linux-x64.tar.gz",
+      "sha512": "a9c4784930a977abbc42aff1337dda06ec588c1ec4769a59f9fcab4d5df4fc9efe65f8e61e5433db078f67a94ea2dfe870c32c482a50d4c16283ffacacff4261",
+      "releaseDate": "2022-05-10"
+    },
+    "dotnet-6-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "6.0.36",
+      "commit": "f1dd57165bfd91875761329ac3a8b17f6606ad18",
+      "jitCommit": "f1dd57165bfd91875761329ac3a8b17f6606ad18",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/6.0.36/dotnet-runtime-6.0.36-linux-x64.tar.gz",
+      "sha512": "afb6018fcabec468ccd7ae2f1131d8c9de7f4de7645b8f0c223efbbdbfdc515fb0642a399ebfe372c02044416c4cae463c9c802cd156b9da4181efff0e33ee94",
+      "releaseDate": "2024-11-12"
+    },
+    "dotnet-7-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "7.0.20",
+      "commit": "0fb6ac59fb1edbe4ed3ad62661df0eb7eacd7903",
+      "jitCommit": "0fb6ac59fb1edbe4ed3ad62661df0eb7eacd7903",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/7.0.20/dotnet-runtime-7.0.20-linux-x64.tar.gz",
+      "sha512": "87855297338555a7b577d7e314e5dbf2c2350f8c867a489cd1e535634bad5c123a1871464d37fc9421837ff5d426c2eadecbe0f60bbf3fd32bc2461f47790a40",
+      "releaseDate": "2024-05-28"
+    },
+    "dotnet-8-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "8.0.29",
+      "commit": "18fd75c847399745c43b5970fec840ba71064e80",
+      "jitCommit": "18fd75c847399745c43b5970fec840ba71064e80",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.29/dotnet-runtime-8.0.29-linux-x64.tar.gz",
+      "sha512": "2739a48f5ec81738d05376f7bf26b2efc5297639db3f4748b458d54bf795a084c5bd47886449b9996eb1a3371bb8c3900d72049e8f0150d0a5ac8230ef38a65e",
+      "releaseDate": "2026-07-14"
+    },
+    "dotnet-9-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "9.0.18",
+      "commit": "d839c41c85988aadc213e8e42269ecd7883a1790",
+      "jitCommit": "d839c41c85988aadc213e8e42269ecd7883a1790",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.18/dotnet-runtime-9.0.18-linux-x64.tar.gz",
+      "sha512": "97eb89a5a3781b9761e2a850996912ae81b96996089c78abcebbc441113457088bfcbd7cf1fa97d3036f7ac8fe22c7d30e043e93ecafc910f07b73317c73bad5",
+      "releaseDate": "2026-07-14"
+    },
+    "dotnet-core-2.0-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "2.0.9",
+      "commit": "1632fa1589b0eee3277a8841ce1770e554ece037",
+      "jitCommit": "1632fa1589b0eee3277a8841ce1770e554ece037",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/2.0.9/dotnet-runtime-2.0.9-linux-x64.tar.gz",
+      "sha512": "2b49b24ef712fbfc056e0fda95ff18037b4ec938ca8bb41f4c336b6a50870e922f5093684ac92c4bb8e1155b03c36d132d7f90817793f31c9ade5267fff6629a",
+      "releaseDate": "2018-07-10"
+    },
+    "dotnet-core-2.1-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "2.1.30",
+      "commit": "5e17f34de8b34fce04f665640e046d89e8991d00",
+      "jitCommit": "5e17f34de8b34fce04f665640e046d89e8991d00",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/2.1.30/dotnet-runtime-2.1.30-linux-x64.tar.gz",
+      "sha512": "b7433c9f03f7363759a044b50d8cca9486cfe402fdf62163696ba6a172e9839a140553e3d3298bb75c89dda2f6f4bec294847411f3fc2796fa4881a2b01a7178",
+      "releaseDate": "2021-08-19"
+    },
+    "dotnet-core-2.2-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "2.2.8",
+      "commit": "b9aa1abc510165cdc4c92e59d938def6f3eee0e1",
+      "jitCommit": "b9aa1abc510165cdc4c92e59d938def6f3eee0e1",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/2.2.8/dotnet-runtime-2.2.8-linux-x64.tar.gz",
+      "sha512": "b818557b0090ec047be0fb2e5ffee212e23e8417e1b0164f455e3a880bf5b94967dc4c86d6ed82397af9acc1f7415674904f6225a1abff85d28d2a6d5de8073b",
+      "releaseDate": "2019-11-19"
+    },
+    "dotnet-core-3.0-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "3.0.3",
+      "commit": "c03f2fe62663edec83d1bc12b4e9f11bd3de5d0e",
+      "jitCommit": "c03f2fe62663edec83d1bc12b4e9f11bd3de5d0e",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/3.0.3/dotnet-runtime-3.0.3-linux-x64.tar.gz",
+      "sha512": "3d1f0ba2f293f43e087a8940a0f4736561f43b9f28bc5beda79a61f887e258543aea4dc71e88414a7c6e271dcda984a989afb62fc659a72223707a179cdde9c5",
+      "releaseDate": "2020-02-18"
+    },
+    "dotnet-core-3.1-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "3.1.32",
+      "commit": "f94bb2c3ff432dcc4a6229eca2f978197bf06150",
+      "jitCommit": "f94bb2c3ff432dcc4a6229eca2f978197bf06150",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/3.1.32/dotnet-runtime-3.1.32-linux-x64.tar.gz",
+      "sha512": "a1de9bbc3d2e3a4f5f52b7742c678b182a58a724d36232997511e390027044d60144a7e010a29d6ee016ec91f2911daef28ac5712a827fff8bdde73314b7e002",
+      "releaseDate": "2022-12-13"
+    },
+    "dotnet-ilverify": {
+      "kind": "artifact-processor",
+      "resolvedVersion": "10.0.9",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.ilverification/10.0.9/microsoft.ilverification.10.0.9.nupkg",
+      "package": "Microsoft.ILVerification",
+      "packageContentHash": "sha512-PreciilpOri7j1AjVTlLy4sc/81laO7DOtm2UH55P7O6vi4plzQf1kiFeYAlhmGOso3oR+nPp9st73p2/qMLgw==",
+      "sha512": "3eb79c8a29693ab8bb8f502355394bcb8b1cffcd6568eec33ad9b6507e793fb3babe2e2997341fd6488579802586618eb28de847e9cfa7db2def7a76fea30b83"
+    },
+    "dotnet-sdk-host": {
+      "kind": "sdk",
+      "resolvedVersion": "10.0.301",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.301/dotnet-sdk-10.0.301-linux-x64.tar.gz",
+      "sha512": "cfbeec3a3a1d3ad3e168e37a77c4cc26c23125acd84a86d014047da3ecffce4c368a9acac4d7c950a047fa3d98989ce8aea69f8e5842cb6d330e8911e1c335a7",
+      "releaseDate": "2026-06-09"
+    },
+    "fsharp-core": {
+      "kind": "runtime-dependency",
+      "resolvedVersion": "10.1.204",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/fsharp.core/10.1.204/fsharp.core.10.1.204.nupkg",
+      "package": "FSharp.Core",
+      "packageContentHash": "sha512-f2HG4CIS+sfFuRY7DYnEa6P/qEW2g4b6O54jcDD9OkDewWlbk7sd2dbL+Enm3/tVSEsMrgQA7m1+smdizBC6fg==",
+      "sha512": "7f61c6e02212fac7c5b9163b0d89c46ba3ffa845b68386fa3b9e237030fd3a40dec1695b93bb1dd9d6cbf849e6dffb55484b0cae0400ee6d7eb26762cc10ba7e"
+    },
+    "fsharp-stable": {
       "kind": "toolchain",
-      "resolvedVersion": "5.10.0",
-      "commit": "708c0a9669c6c996b7e13ea4b161d841bbfdf8b2",
-      "digest": "sha256:3af860c05820fc9177f603aae87501fb66bcaa42d32a2e585018dbbd3227988f",
-      "sourceUri": "https://github.com/dotnet/roslyn/archive/708c0a9669c6c996b7e13ea4b161d841bbfdf8b2.tar.gz"
+      "resolvedVersion": "43.12.204",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/fsharp.compiler.service/43.12.204/fsharp.compiler.service.43.12.204.nupkg",
+      "package": "FSharp.Compiler.Service",
+      "packageContentHash": "sha512-xVbzkHsIkvG9017PGgAJCbjnodWQ9yhQqpXcJcl/Fci8tR+2wJHPsZ8OFTSljBiO+JQudaYnM1N7bHeBituiFw==",
+      "sha512": "c556f3907b0892f1bdd35ecf1a000909b8e7a1d590f72850aa95dc25c97f15c8bcb51fb6c091cfb19f0e1534a58c188ef8942e75a62733537b6c77818adba217"
+    },
+    "gsharp-legacy-0.3.8": {
+      "kind": "toolchain",
+      "resolvedVersion": "0.3.8",
+      "commit": "723cbdaeb3374ce9c7b36a6bf2c4e97ba25edf01",
+      "digest": "sha256:d01510636cb7a4598f76fb01c8d2cf59898def757fd536049a92c359cd9c71fb",
+      "sourceUri": "https://github.com/DavidObando/gsharp/tree/723cbdaeb3374ce9c7b36a6bf2c4e97ba25edf01",
+      "releaseDate": "2026-07-09"
+    },
+    "gsharp-legacy-0.3.8-source": {
+      "kind": "source",
+      "resolvedVersion": "0.3.8",
+      "commit": "723cbdaeb3374ce9c7b36a6bf2c4e97ba25edf01",
+      "digest": "sha256:d01510636cb7a4598f76fb01c8d2cf59898def757fd536049a92c359cd9c71fb",
+      "sourceUri": "https://codeload.github.com/DavidObando/gsharp/tar.gz/723cbdaeb3374ce9c7b36a6bf2c4e97ba25edf01",
+      "releaseDate": "2026-07-09"
     },
     "gsharp-source": {
       "kind": "source",
@@ -110,103 +246,11 @@
       "sourceUri": "https://github.com/DavidObando/gsharp/tree/aaf35bb8d5e1e8704e982ad0ab95263451bd2d3d",
       "releaseDate": "2026-07-15"
     },
-    "gsharp-legacy-0.3.8-source": {
-      "kind": "source",
-      "resolvedVersion": "0.3.8",
-      "commit": "723cbdaeb3374ce9c7b36a6bf2c4e97ba25edf01",
-      "digest": "sha256:d01510636cb7a4598f76fb01c8d2cf59898def757fd536049a92c359cd9c71fb",
-      "sourceUri": "https://codeload.github.com/DavidObando/gsharp/tar.gz/723cbdaeb3374ce9c7b36a6bf2c4e97ba25edf01",
-      "releaseDate": "2026-07-09"
-    },
-    "gsharp-legacy-0.3.8": {
-      "kind": "toolchain",
-      "resolvedVersion": "0.3.8",
-      "commit": "723cbdaeb3374ce9c7b36a6bf2c4e97ba25edf01",
-      "digest": "sha256:d01510636cb7a4598f76fb01c8d2cf59898def757fd536049a92c359cd9c71fb",
-      "sourceUri": "https://github.com/DavidObando/gsharp/tree/723cbdaeb3374ce9c7b36a6bf2c4e97ba25edf01",
-      "releaseDate": "2026-07-09"
-    },
-    "peachpie-stable": {
-      "kind": "toolchain",
-      "resolvedVersion": "1.1.13",
-      "commit": "608bf30cf3f43f97e32825076a2cfdaa25043e50",
-      "sourceUri": "https://api.nuget.org/v3-flatcontainer/peachpie.codeanalysis/1.1.13/peachpie.codeanalysis.1.1.13.nupkg",
-      "package": "Peachpie.CodeAnalysis",
-      "packageContentHash": "sha512-Q1XzhqGM3cR1FW5hWh7JIfjCCNtmNM1u0HW1nM0UCyl4X5MM7cM9dxeBjmWETIumKpP/8yj19WXF0wRmfQgaew==",
-      "sha512": "2841ee2678ee3ce086b130382898c81f15f55dd2fe00f513fe57e4ef653099c04e7cfe8b2ce2cf22f22b36374ec8ac348aa376f8421c36efadfcffe5aeed6117"
-    },
-    "peachpie-runtime": {
-      "kind": "runtime-dependency",
-      "resolvedVersion": "1.1.13",
-      "commit": "608bf30cf3f43f97e32825076a2cfdaa25043e50",
-      "sourceUri": "https://api.nuget.org/v3-flatcontainer/peachpie.runtime/1.1.13/peachpie.runtime.1.1.13.nupkg",
-      "package": "Peachpie.Runtime",
-      "packageContentHash": "sha512-ZltR4twzl0KMPAa91xiqwqFZMnvj8NPB3EIt24sWztTbstWekrUxjhAsFtCQdn7xdZceSoG4Sg+zHOopVOjMxA==",
-      "sha512": "90f3a5e03bb115521175730ec19e5dd66d2b1de652d4fc3a0c8e670198fd3134b96e5e4eb8c31eb91e23b60a4520bcda59a343072efcc83d3a50feef32a40b97"
-    },
-    "peachpie-library": {
-      "kind": "runtime-dependency",
-      "resolvedVersion": "1.1.13",
-      "commit": "608bf30cf3f43f97e32825076a2cfdaa25043e50",
-      "sourceUri": "https://api.nuget.org/v3-flatcontainer/peachpie.library/1.1.13/peachpie.library.1.1.13.nupkg",
-      "package": "Peachpie.Library",
-      "packageContentHash": "sha512-5BA1KJ2M0zsqTRrqHL7zbT1zpEDI2mILkxkmGXiQm3G0i+GkPv50/Kt1mQqHHLCTx5I7r67Ny6oTgn4TarP8pg==",
-      "sha512": "2398e79e418d229ea35d875c579925d8ea8fe0ee5cc5593abfc76c62c516bdb4e83f0a51763bb3bda887a39c92430a660ef35d200e557071e9e7fdc4af79e9e8"
-    },
-    "const-generics-roslyn-source": {
-      "kind": "source",
-      "resolvedVersion": "bcd209abd947ac1bc71ef1ee29bd8a02d8e78ffc",
-      "commit": "bcd209abd947ac1bc71ef1ee29bd8a02d8e78ffc",
-      "digest": "sha256:e43c77373cc7dc07a58a73516fce5512f441b5435e7d17d0e18af41942dc7487",
-      "sourceUri": "https://codeload.github.com/hez2010/roslyn/tar.gz/bcd209abd947ac1bc71ef1ee29bd8a02d8e78ffc",
-      "releaseDate": "2023-09-08"
-    },
-    "roslyn-const-generics": {
-      "kind": "toolchain",
-      "resolvedVersion": "4.8.0-const-generics.bcd209abd947",
-      "commit": "bcd209abd947ac1bc71ef1ee29bd8a02d8e78ffc",
-      "digest": "sha256:e43c77373cc7dc07a58a73516fce5512f441b5435e7d17d0e18af41942dc7487",
-      "sourceUri": "https://github.com/hez2010/roslyn/tree/bcd209abd947ac1bc71ef1ee29bd8a02d8e78ffc",
-      "releaseDate": "2023-09-08"
-    },
-    "const-generics-ilspy-source": {
-      "kind": "source",
-      "resolvedVersion": "a2042c704a935a5402c6d700626e52702866ed6d",
-      "commit": "a2042c704a935a5402c6d700626e52702866ed6d",
-      "digest": "sha256:2b4f80b014d2bdacb71031c42cf3df6c9fef8194f5b4cc2a39c473f2c9f44b7e",
-      "sourceUri": "https://codeload.github.com/ilyfairy/ILSpy/tar.gz/a2042c704a935a5402c6d700626e52702866ed6d",
-      "releaseDate": "2025-02-28"
-    },
-    "artifacts-const-generics": {
+    "il-assembler": {
       "kind": "artifact-processor",
-      "resolvedVersion": "a2042c704a93-79f7f1408b2c-ctarg-v1",
-      "commit": "a2042c704a935a5402c6d700626e52702866ed6d",
-      "digest": "sha256:2b4f80b014d2bdacb71031c42cf3df6c9fef8194f5b4cc2a39c473f2c9f44b7e",
-      "sourceUri": "https://github.com/ilyfairy/ILSpy/tree/a2042c704a935a5402c6d700626e52702866ed6d",
-      "releaseDate": "2025-02-28"
-    },
-    "fsharp-stable": {
-      "kind": "toolchain",
-      "resolvedVersion": "43.12.204",
-      "sourceUri": "https://api.nuget.org/v3-flatcontainer/fsharp.compiler.service/43.12.204/fsharp.compiler.service.43.12.204.nupkg",
-      "package": "FSharp.Compiler.Service",
-      "packageContentHash": "sha512-xVbzkHsIkvG9017PGgAJCbjnodWQ9yhQqpXcJcl/Fci8tR\u002B2wJHPsZ8OFTSljBiO\u002BJQudaYnM1N7bHeBituiFw==",
-      "sha512": "c556f3907b0892f1bdd35ecf1a000909b8e7a1d590f72850aa95dc25c97f15c8bcb51fb6c091cfb19f0e1534a58c188ef8942e75a62733537b6c77818adba217"
-    },
-    "fsharp-core": {
-      "kind": "runtime-dependency",
-      "resolvedVersion": "10.1.204",
-      "sourceUri": "https://api.nuget.org/v3-flatcontainer/fsharp.core/10.1.204/fsharp.core.10.1.204.nupkg",
-      "package": "FSharp.Core",
-      "packageContentHash": "sha512-f2HG4CIS\u002BsfFuRY7DYnEa6P/qEW2g4b6O54jcDD9OkDewWlbk7sd2dbL\u002BEnm3/tVSEsMrgQA7m1\u002BsmdizBC6fg==",
-      "sha512": "7f61c6e02212fac7c5b9163b0d89c46ba3ffa845b68386fa3b9e237030fd3a40dec1695b93bb1dd9d6cbf849e6dffb55484b0cae0400ee6d7eb26762cc10ba7e"
-    },
-    "mobius-ilasm-stable": {
-      "kind": "toolchain",
       "resolvedVersion": "0.1.0",
-      "sourceUri": "https://api.nuget.org/v3-flatcontainer/mobius.ilasm/0.1.0/mobius.ilasm.0.1.0.nupkg",
       "package": "Mobius.ILasm",
-      "packageContentHash": "sha512-0uB5lko7fQZ4eOqkEyApSwxSwdMqdrduTpi6aAvr1nr03Lw\u002BmuS6UaAYCvk2ICN\u002BAR94lPelvSx1\u002BHCCwBMhTQ==",
+      "packageContentHash": "sha512-0uB5lko7fQZ4eOqkEyApSwxSwdMqdrduTpi6aAvr1nr03Lw+muS6UaAYCvk2ICN+AR94lPelvSx1+HCCwBMhTQ==",
       "sha512": "d2e079964a3b7d067878eaa41320294b0c52c1d32a76b76e4e98ba680bebd67af4dcbc3e9ae4ba51a0180af93620237e011f7894f7a5bd2c75f87082c013214d"
     },
     "ilsense": {
@@ -223,56 +267,43 @@
       "digest": "sha256:5c42956f5a423f44ed1e22526ed11d7a30af127be5f90d0700c06bb13db9ca00",
       "sourceUri": "https://codeload.github.com/OrgEleCho/ILSense/tar.gz/a2253dd77d052e02f654908e5ecb60b6602be782"
     },
-    "minilang-stable": {
-      "kind": "toolchain",
-      "resolvedVersion": "1.0.0"
-    },
-    "il-assembler": {
-      "kind": "artifact-processor",
-      "resolvedVersion": "0.1.0",
-      "package": "Mobius.ILasm",
-      "packageContentHash": "sha512-0uB5lko7fQZ4eOqkEyApSwxSwdMqdrduTpi6aAvr1nr03Lw\u002BmuS6UaAYCvk2ICN\u002BAR94lPelvSx1\u002BHCCwBMhTQ==",
-      "sha512": "d2e079964a3b7d067878eaa41320294b0c52c1d32a76b76e4e98ba680bebd67af4dcbc3e9ae4ba51a0180af93620237e011f7894f7a5bd2c75f87082c013214d"
-    },
     "ilspy": {
       "kind": "artifact-processor",
       "resolvedVersion": "10.1.0.8386",
       "sourceUri": "https://api.nuget.org/v3-flatcontainer/icsharpcode.decompiler/10.1.0.8386/icsharpcode.decompiler.10.1.0.8386.nupkg",
       "package": "ICSharpCode.Decompiler",
-      "packageContentHash": "sha512-qqv9CICyxyZPZFhA7v/ctpQ664EOVL1vcohzpF1lqBsODHZPao1BF1bePWEKcaAoCxCpjTRO8kDL5XDpV\u002B7kzw==",
+      "packageContentHash": "sha512-qqv9CICyxyZPZFhA7v/ctpQ664EOVL1vcohzpF1lqBsODHZPao1BF1bePWEKcaAoCxCpjTRO8kDL5XDpV+7kzw==",
       "sha512": "aaabfd0880b2c7264f645840eeffdcb6943aeb810e54bd6f728873a45d65a81b0e0c764f6a8d411756de3d610a71a0280b10a98d344ef240cbe570e957eee4cf"
     },
-    "artifacts-default": {
-      "kind": "artifact-processor",
-      "resolvedVersion": "ilspy/10.1.0.8386+ilverify/10.0.9"
-    },
-    "jsil-source": {
+    "jit-profiler-clr-samples": {
       "kind": "source",
-      "resolvedVersion": "0.8.2",
-      "commit": "1d57d5427c87ab92ffa3ca4b82429cd7509796ba",
-      "digest": "sha256:e165f0f03274068cab1a9738685b0e5322ce52f4066d365c7e53c3562304414c",
-      "sourceUri": "https://codeload.github.com/sq/JSIL/tar.gz/1d57d5427c87ab92ffa3ca4b82429cd7509796ba"
+      "resolvedVersion": "5f9a631ecb4f558b7d5e1d17af7d4d93ea836cbc",
+      "commit": "5f9a631ecb4f558b7d5e1d17af7d4d93ea836cbc",
+      "sourceUri": "https://github.com/microsoft/clr-samples/tree/5f9a631ecb4f558b7d5e1d17af7d4d93ea836cbc/ProfilingAPI/ELTProfiler"
     },
-    "jsil-meta-source": {
+    "jit-profiler-runtime-headers": {
       "kind": "source",
-      "resolvedVersion": "b185a3d1a30e",
-      "commit": "b185a3d1a30e6d580456e6d78eaf07f0b06a13bb",
-      "digest": "sha256:89c17085f16ce1b1718d9d3ae10920f367be13bb87ff6fa670e62f3899c10668",
-      "sourceUri": "https://codeload.github.com/sq/JSIL.Meta/tar.gz/b185a3d1a30e6d580456e6d78eaf07f0b06a13bb"
+      "resolvedVersion": "7ee91972e27c086d92b7d223f905cf391578b256",
+      "commit": "7ee91972e27c086d92b7d223f905cf391578b256",
+      "sourceUri": "https://github.com/dotnet/runtime/tree/7ee91972e27c086d92b7d223f905cf391578b256"
     },
-    "jsil-ilspy-source": {
-      "kind": "source",
-      "resolvedVersion": "2a9fb7086631",
-      "commit": "2a9fb7086631f9f117c1864ad5c95e74cae4b679",
-      "digest": "sha256:8802b2eb83f5baaa708c9a99c214c8d330696020376fe580c45cc11c2cf963e8",
-      "sourceUri": "https://codeload.github.com/kg/ILSpy/tar.gz/2a9fb7086631f9f117c1864ad5c95e74cae4b679"
+    "jsharp20": {
+      "kind": "operator-image",
+      "resolvedVersion": "2.0.50727.937-clr2-x64",
+      "digest": "sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6",
+      "sourceUri": "docker://sharplabnext/operator-jsharp20@sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6"
     },
-    "jsil-nrefactory-source": {
-      "kind": "source",
-      "resolvedVersion": "a2b55de351be",
-      "commit": "a2b55de351be2119b6f0c3a17c36b5b9adbd7c59",
-      "digest": "sha256:b25625050e2b9c0b7490f37c48a7c4e6a5a5bc4d2f05ccf1b0a8542efb2db238",
-      "sourceUri": "https://codeload.github.com/icsharpcode/NRefactory/tar.gz/a2b55de351be2119b6f0c3a17c36b5b9adbd7c59"
+    "jsharp20-prepared-base": {
+      "kind": "operator-image",
+      "resolvedVersion": "runtime-matrix-v2",
+      "digest": "sha256:ab6b92e21deb3d590b59c8da2367b89fafa6d8bc641b65430aa2f1eb2c045b21",
+      "sourceUri": "docker://localhost:5000/sharplabnext/jsharp20-prepared-base@sha256:ab6b92e21deb3d590b59c8da2367b89fafa6d8bc641b65430aa2f1eb2c045b21"
+    },
+    "jsharp20-ref": {
+      "kind": "reference-set",
+      "resolvedVersion": "2.0.50727.937",
+      "digest": "sha256:25288dc53b3190f14a65ebf96258601a262ebd4a8fa68e4881c897258b122013",
+      "sourceUri": "docker://sharplabnext/operator-jsharp20@sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6"
     },
     "jsil-cecil-source": {
       "kind": "source",
@@ -281,36 +312,69 @@
       "digest": "sha256:15627578d5653040ffa8a09659ce1f480535d83b434940056a37b7dece29fd03",
       "sourceUri": "https://codeload.github.com/jbevain/cecil/tar.gz/53df0bc39e48d8544020856e83f8d8a2e11c8a3a"
     },
-    "artifacts-jsil": {
-      "kind": "artifact-processor",
-      "resolvedVersion": "0.8.2+mono.6.12.0.182",
+    "jsil-ilspy-source": {
+      "kind": "source",
+      "resolvedVersion": "2a9fb7086631",
+      "commit": "2a9fb7086631f9f117c1864ad5c95e74cae4b679",
+      "digest": "sha256:8802b2eb83f5baaa708c9a99c214c8d330696020376fe580c45cc11c2cf963e8",
+      "sourceUri": "https://codeload.github.com/kg/ILSpy/tar.gz/2a9fb7086631f9f117c1864ad5c95e74cae4b679"
+    },
+    "jsil-meta-source": {
+      "kind": "source",
+      "resolvedVersion": "b185a3d1a30e",
+      "commit": "b185a3d1a30e6d580456e6d78eaf07f0b06a13bb",
+      "digest": "sha256:89c17085f16ce1b1718d9d3ae10920f367be13bb87ff6fa670e62f3899c10668",
+      "sourceUri": "https://codeload.github.com/sq/JSIL.Meta/tar.gz/b185a3d1a30e6d580456e6d78eaf07f0b06a13bb"
+    },
+    "jsil-nrefactory-source": {
+      "kind": "source",
+      "resolvedVersion": "a2b55de351be",
+      "commit": "a2b55de351be2119b6f0c3a17c36b5b9adbd7c59",
+      "digest": "sha256:b25625050e2b9c0b7490f37c48a7c4e6a5a5bc4d2f05ccf1b0a8542efb2db238",
+      "sourceUri": "https://codeload.github.com/icsharpcode/NRefactory/tar.gz/a2b55de351be2119b6f0c3a17c36b5b9adbd7c59"
+    },
+    "jsil-source": {
+      "kind": "source",
+      "resolvedVersion": "0.8.2",
       "commit": "1d57d5427c87ab92ffa3ca4b82429cd7509796ba",
       "digest": "sha256:e165f0f03274068cab1a9738685b0e5322ce52f4066d365c7e53c3562304414c",
-      "sourceUri": "https://github.com/sq/JSIL/tree/1d57d5427c87ab92ffa3ca4b82429cd7509796ba"
+      "sourceUri": "https://codeload.github.com/sq/JSIL/tar.gz/1d57d5427c87ab92ffa3ca4b82429cd7509796ba"
     },
-    "net10-ref": {
-      "kind": "reference-set",
-      "resolvedVersion": "10.0.9",
-      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/10.0.9/microsoft.netcore.app.ref.10.0.9.nupkg",
-      "package": "Microsoft.NETCore.App.Ref",
-      "packageContentHash": "sha512-rWQyRVuTET24XM2aUdxbWPmhRgd5mIypan61IN8BOCfZoQbqP5VX5EjRDcxLwF3RzzIkxTyeh0SbVuGLt93xGw==",
-      "sha512": "ad6432455b93113db85ccd9a51dc5b58f9a1460779988ca96a7eb520df013827d9a106ea3f9557e448d10dcc4bc05dd1cf3224c53c9e87449b56e18bb7ddf11b"
+    "minilang-stable": {
+      "kind": "toolchain",
+      "resolvedVersion": "1.0.0"
     },
-    "net11-preview-ref": {
-      "kind": "reference-set",
-      "resolvedVersion": "11.0.0-preview.5.26302.115",
-      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/11.0.0-preview.5.26302.115/microsoft.netcore.app.ref.11.0.0-preview.5.26302.115.nupkg",
-      "package": "Microsoft.NETCore.App.Ref",
-      "packageContentHash": "sha512-16anh5wbcRpV0Dm2nZHURKka5JSL1VjMIlG4xD2NwYfXaI4ZSUknKttRhjH1TE1V70\u002Bd/XbwgbAfmCI7GNLK6A==",
-      "sha512": "d7a6a7879c1b711a55d039b69d91d444a91ae4948bd558cc2251b8c43d8dc187d7688e194949272adb518631f54c4d55ef4f9dfd76f081b01f98223b18d2cae8"
+    "mobius-ilasm-stable": {
+      "kind": "toolchain",
+      "resolvedVersion": "0.1.0",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/mobius.ilasm/0.1.0/mobius.ilasm.0.1.0.nupkg",
+      "package": "Mobius.ILasm",
+      "packageContentHash": "sha512-0uB5lko7fQZ4eOqkEyApSwxSwdMqdrduTpi6aAvr1nr03Lw+muS6UaAYCvk2ICN+AR94lPelvSx1+HCCwBMhTQ==",
+      "sha512": "d2e079964a3b7d067878eaa41320294b0c52c1d32a76b76e4e98ba680bebd67af4dcbc3e9ae4ba51a0180af93620237e011f7894f7a5bd2c75f87082c013214d"
     },
-    "dotnet-ilverify": {
-      "kind": "artifact-processor",
-      "resolvedVersion": "10.0.9",
-      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.ilverification/10.0.9/microsoft.ilverification.10.0.9.nupkg",
-      "package": "Microsoft.ILVerification",
-      "packageContentHash": "sha512-PreciilpOri7j1AjVTlLy4sc/81laO7DOtm2UH55P7O6vi4plzQf1kiFeYAlhmGOso3oR\u002BnPp9st73p2/qMLgw==",
-      "sha512": "3eb79c8a29693ab8bb8f502355394bcb8b1cffcd6568eec33ad9b6507e793fb3babe2e2997341fd6488579802586618eb28de847e9cfa7db2def7a76fea30b83"
+    "mono-6.12-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "6.12.0.182",
+      "digest": "sha256:d2ae1881a608fb6401bcebbf0d444fc2fcadf0db27f07c87153a79e7b14e861a",
+      "sourceUri": "docker://mono:6.12@sha256:d2ae1881a608fb6401bcebbf0d444fc2fcadf0db27f07c87153a79e7b14e861a"
+    },
+    "msvc-cppcli-netfx48": {
+      "kind": "toolchain",
+      "resolvedVersion": "19.51.36248",
+      "digest": "sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743",
+      "sourceUri": "docker://codex/msvc-wine@sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743"
+    },
+    "msvc-cppcli-prepared-base": {
+      "kind": "operator-image",
+      "resolvedVersion": "runtime-matrix-v2",
+      "digest": "sha256:dfd2473d9faae804d8514e583cec77fe5622c3c955d2e97eeaa3a7952969e3e8",
+      "sourceUri": "docker://localhost:5000/sharplabnext/msvc-cppcli-prepared-base@sha256:dfd2473d9faae804d8514e583cec77fe5622c3c955d2e97eeaa3a7952969e3e8"
+    },
+    "msvc-cppcli-private-image": {
+      "kind": "operator-image",
+      "resolvedVersion": "19.51.36248-netfx48",
+      "digest": "sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743",
+      "sourceUri": "docker://codex/msvc-wine@sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743"
     },
     "msvc-wine-source": {
       "kind": "source",
@@ -320,23 +384,101 @@
       "sourceUri": "https://codeload.github.com/mstorsjo/msvc-wine/tar.gz/514f8ea34842cd6d831804d0e9658d3a32870ae1",
       "releaseDate": "2026-05-24"
     },
-    "msvc-cppcli-private-image": {
-      "kind": "operator-image",
-      "resolvedVersion": "19.51.36248-netfx48",
-      "digest": "sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743",
-      "sourceUri": "docker://sharplabnext/operator-msvc-cppcli@sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743"
+    "net10-ref": {
+      "kind": "reference-set",
+      "resolvedVersion": "10.0.10",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/10.0.10/microsoft.netcore.app.ref.10.0.10.nupkg",
+      "package": "Microsoft.NETCore.App.Ref",
+      "packageContentHash": "sha512-PHarHjlmwT/23Hyxb9BXDgFyNk4+Du4pktmWCMcdHZiuIDHqxUmBMeBETeyqGTG1d1caX+G1m07dwsyfp7xSiw==",
+      "sha512": "3c76ab1e3966c13ff6dc7cb16fd0570e0172364e3e0eee2992d99608c71d1d98ae2031eac5498131e0444decaa1931b577571a5fe1b59b4eddc2cc9fa7bc528b"
     },
-    "msvc-cppcli-prepared-base": {
-      "kind": "operator-image",
-      "resolvedVersion": "19.51.36248-netfx48-prepared",
-      "digest": "sha256:dfd2473d9faae804d8514e583cec77fe5622c3c955d2e97eeaa3a7952969e3e8",
-      "sourceUri": "docker://sharplabnext/msvc-cppcli-prepared-base@sha256:dfd2473d9faae804d8514e583cec77fe5622c3c955d2e97eeaa3a7952969e3e8"
+    "net11-preview-ref": {
+      "kind": "reference-set",
+      "resolvedVersion": "11.0.0-preview.6.26359.118",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/11.0.0-preview.6.26359.118/microsoft.netcore.app.ref.11.0.0-preview.6.26359.118.nupkg",
+      "package": "Microsoft.NETCore.App.Ref",
+      "packageContentHash": "sha512-0K5AWYhlCIo5lbk+k48Uau+hyd0qqfss6G2TKlj3hHo5sazrIVrS68Yrwvp7rk1VUHgR1bVq0arOrND6bcitxA==",
+      "sha512": "d0ae40598865088a3995b93e938f146aefa1c9dd2aa9fb2ce86d932a58f7847a39b1aceb215ad2ebc62bc2fa7bae4d55507811d5b56ad1aaceacd0fa6dc8adc4"
     },
-    "msvc-cppcli-netfx48": {
-      "kind": "toolchain",
-      "resolvedVersion": "19.51.36248",
-      "digest": "sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743",
-      "sourceUri": "docker://sharplabnext/operator-msvc-cppcli@sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743"
+    "net5-ref": {
+      "kind": "reference-set",
+      "resolvedVersion": "5.0.0",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/5.0.0/microsoft.netcore.app.ref.5.0.0.nupkg",
+      "package": "Microsoft.NETCore.App.Ref",
+      "packageContentHash": "sha512-bBp1LYzTBY58dMaCABHnp44CYBcBvW7RrfSsXENaS7iRq/yx39g+jhWdgUBZcJQBoF6AZeGbHhKV+JAoT3LHDw==",
+      "sha512": "6c1a752d8cd3058e7c74c6820011e7a78e02601701bd6ed1adf4ac5c435a4bb891abfcb1dfd83e8e159d814059709401a05e8065e19b1e1295f890284f72c70f"
+    },
+    "net6-ref": {
+      "kind": "reference-set",
+      "resolvedVersion": "6.0.36",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/6.0.36/microsoft.netcore.app.ref.6.0.36.nupkg",
+      "package": "Microsoft.NETCore.App.Ref",
+      "packageContentHash": "sha512-qAcjjw2vDNJrTIw7R4UWLQuvslJbUpXxTrd1ckfDpWPqE0cEehOd9CvwizbD7HADjewzVv+LKvB5aOWYnpNmKA==",
+      "sha512": "a807238f0daf0cd26b4c8c3b4785162d0bafb2525b5295f14eb7757247c3a563ea1347047a139df42bf08b36c3ec70038dec3356ff8b2af07968e5989e936628"
+    },
+    "net7-ref": {
+      "kind": "reference-set",
+      "resolvedVersion": "7.0.20",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/7.0.20/microsoft.netcore.app.ref.7.0.20.nupkg",
+      "package": "Microsoft.NETCore.App.Ref",
+      "packageContentHash": "sha512-dk6z/ZqMpZ4lxVisgnPX1H+MwiUTRQHhwq3e9VMSIRL5loVdqHlZ9fRFfAejEz3U8EbvGV43Vp3OwF5R7mlTTw==",
+      "sha512": "764eb3fd9a8ca59e25c558ac8273d7d47f8cc225134501e1c2addef553122112f996855da87959f5f4457c07a3133dd4f046ef195e37569dcec05e51ee69534f"
+    },
+    "net8-ref": {
+      "kind": "reference-set",
+      "resolvedVersion": "8.0.29",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/8.0.29/microsoft.netcore.app.ref.8.0.29.nupkg",
+      "package": "Microsoft.NETCore.App.Ref",
+      "packageContentHash": "sha512-MxCbP4EyXRlKy+3qvEL6rV71FCBRaUj7SOHxP9gVAhaCzXzkrkUW48gjiBM8cZEZj5md0jSoifWKe5cA/q1edw==",
+      "sha512": "33109b3f81325d194acbedeabc42faad5ef51420516948fb48e1f13fd815021682cd7ce4ae4516e3c82388133c7191198f999dd234a889f58a7b9700fead5e77"
+    },
+    "net9-ref": {
+      "kind": "reference-set",
+      "resolvedVersion": "9.0.18",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/9.0.18/microsoft.netcore.app.ref.9.0.18.nupkg",
+      "package": "Microsoft.NETCore.App.Ref",
+      "packageContentHash": "sha512-yuXsXQO/15gtlUWYy/NToZgXCESBJoFaEhf64a2FmZeMAh1s9ApQN8EiXCXKX4uPNfzJ25gDaIQ+d7inZWSuAQ==",
+      "sha512": "cae5ec5d03bfd7982d954598cbf353a1981708448126815a1217fae1ad8599978c021d6cf40a5037c1225c25ca5f8b8f35fcc9db980368843e77b8a76564ae01"
+    },
+    "netcoreapp2.0-ref": {
+      "kind": "reference-set",
+      "resolvedVersion": "2.0.9",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app/2.0.9/microsoft.netcore.app.2.0.9.nupkg",
+      "package": "Microsoft.NETCore.App",
+      "packageContentHash": "sha512-RA35OXXK2enpLyFQrBW6N5WxPQLGJ8cx4SVNPa0PRLEmPcIu1OmdiPzOlqaB++7ejGWY5O3o3CKkOgEgsHzDqA==",
+      "sha512": "440df93975cad9e9e92f2150ac15ba3795b13d02c627c731e1254d3dad0f44b1263dc22ed4e99d88fcce96a681fbeede8c6598e4ede8dc22a43a0120b07cc3a8"
+    },
+    "netcoreapp2.1-ref": {
+      "kind": "reference-set",
+      "resolvedVersion": "2.1.30",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app/2.1.30/microsoft.netcore.app.2.1.30.nupkg",
+      "package": "Microsoft.NETCore.App",
+      "packageContentHash": "sha512-rjXfBeXZZOixeTIXi8F+HkfXSf+iauTQg0wO+CZbzqDOm5XPesc2GypYQ0otFOBbfbFP4awZrZwNa60LaYVvYQ==",
+      "sha512": "ae35df05e5d964e8b17932178bc17e1e47d749ffa26ae4d0834c0ef8265bcea0ce9b95cf7ac7361b2a58434a2d14e05b7db14fe1ac19ad9c0d6bad0b69856f61"
+    },
+    "netcoreapp2.2-ref": {
+      "kind": "reference-set",
+      "resolvedVersion": "2.2.8",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app/2.2.8/microsoft.netcore.app.2.2.8.nupkg",
+      "package": "Microsoft.NETCore.App",
+      "packageContentHash": "sha512-WZ0ojrXi2DZ66MWxds4jU7ZWUyMgKOQB7gyQ70ovrvbrhzu50XNUjnlfTT7ZpWoxKDGAfneDoJjTHoJk+Oa1RA==",
+      "sha512": "599d288eb5e2d8367ae8c5b176ce2353b65653232028e401ee0c90ef4a2faef6eb873bb9d173548e795f4d3ed9a56a312831807e7783a098d31e8264f8e6b544"
+    },
+    "netcoreapp3.0-ref": {
+      "kind": "reference-set",
+      "resolvedVersion": "3.0.1",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/3.0.1/microsoft.netcore.app.ref.3.0.1.nupkg",
+      "package": "Microsoft.NETCore.App.Ref",
+      "packageContentHash": "sha512-JPbWGLnLSKJoP+E4dqQd93QIQ4GqXXv/+iltuzd1hFXHEqf1Ie5oOK/x/Z/oJn6PeFTSvOghef32T4cBUi9C1A==",
+      "sha512": "24f6d618b9cb48a2683fe13876a41df774084381aa5d7bfffa296dbb37758455c712a7f521ee6838aff1fd9fe8267e8f7854d2bce82179fdf64f8701522f42d4"
+    },
+    "netcoreapp3.1-ref": {
+      "kind": "reference-set",
+      "resolvedVersion": "3.1.0",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/3.1.0/microsoft.netcore.app.ref.3.1.0.nupkg",
+      "package": "Microsoft.NETCore.App.Ref",
+      "packageContentHash": "sha512-cTXlQgzxZx5XsAIVw8tcdYhvPpcScA3vG3AQ/ScleqMn32SMBCIQqetoE0X0EqPSjW3S+hw/pRIUli0msjiJ9A==",
+      "sha512": "7135e5420cf1671e57b00215c3cb5c75886f3e9712700def1b7010fd27257aa327df648c042210a9eb681345f412a3d28d6dd2fa1c3fa51214962d26b23889f4"
     },
     "netfx20-managed-ref": {
       "kind": "reference-set",
@@ -439,12 +581,6 @@
       "packageContentHash": "sha512-PvZKpFbtsxtJBi6hJyzt/iaK71qGdu9mNVpJT43+i1Wp23ym57YVuQI+BEnO/99K2pxPMEgYtz62n7yZFEgi2A==",
       "sha512": "3ef64aa456edb31b49062ea1272cedfe268aef5a8676ef66355a494f8dfe8b55a9db7ca6e7b615b9023e0449ceffdf4ada9c4f304818b73eb69fbc99144822d8"
     },
-    "netfx48-ref": {
-      "kind": "reference-set",
-      "resolvedVersion": "4.8",
-      "digest": "sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743",
-      "sourceUri": "docker://sharplabnext/operator-msvc-cppcli@sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743"
-    },
     "netfx48-managed-ref": {
       "kind": "reference-set",
       "resolvedVersion": "1.0.3",
@@ -453,39 +589,226 @@
       "packageContentHash": "sha512-XWKgyeNadNcTQaIVvQB8BrdCNrEar6fo/de1OdQRZ9HFy0jcBSaM8IV5q64ZampsSnC8AlTsACaGZUuoFw41RA==",
       "sha512": "5d62a0c9e35a74d71341a215bd007c06b74236b11aafa7e8fdd7b539d41167d1c5cb48dc05268cf08579abae196a6a6c4a70bc0254ec002686654ba8170e3544"
     },
-    "wine-netfx48-linux-x64": {
-      "kind": "runtime",
-      "resolvedVersion": "wine-9.0+netfx48",
+    "netfx48-ref": {
+      "kind": "reference-set",
+      "resolvedVersion": "4.8",
       "digest": "sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743",
-      "sourceUri": "docker://sharplabnext/operator-msvc-cppcli@sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743"
+      "sourceUri": "docker://codex/msvc-wine@sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743"
     },
-    "jsharp20": {
-      "kind": "operator-image",
-      "resolvedVersion": "2.0.50727.937-clr2-x64",
-      "digest": "sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6",
-      "sourceUri": "docker://sharplabnext/operator-jsharp20@sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6"
+    "peachpie-library": {
+      "kind": "runtime-dependency",
+      "resolvedVersion": "1.1.13",
+      "commit": "608bf30cf3f43f97e32825076a2cfdaa25043e50",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/peachpie.library/1.1.13/peachpie.library.1.1.13.nupkg",
+      "package": "Peachpie.Library",
+      "packageContentHash": "sha512-5BA1KJ2M0zsqTRrqHL7zbT1zpEDI2mILkxkmGXiQm3G0i+GkPv50/Kt1mQqHHLCTx5I7r67Ny6oTgn4TarP8pg==",
+      "sha512": "2398e79e418d229ea35d875c579925d8ea8fe0ee5cc5593abfc76c62c516bdb4e83f0a51763bb3bda887a39c92430a660ef35d200e557071e9e7fdc4af79e9e8"
     },
-    "jsharp20-prepared-base": {
-      "kind": "operator-image",
-      "resolvedVersion": "2.0.50727.937-clr2-x64-prepared",
-      "digest": "sha256:ab6b92e21deb3d590b59c8da2367b89fafa6d8bc641b65430aa2f1eb2c045b21",
-      "sourceUri": "docker://sharplabnext/jsharp20-prepared-base@sha256:ab6b92e21deb3d590b59c8da2367b89fafa6d8bc641b65430aa2f1eb2c045b21"
+    "peachpie-runtime": {
+      "kind": "runtime-dependency",
+      "resolvedVersion": "1.1.13",
+      "commit": "608bf30cf3f43f97e32825076a2cfdaa25043e50",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/peachpie.runtime/1.1.13/peachpie.runtime.1.1.13.nupkg",
+      "package": "Peachpie.Runtime",
+      "packageContentHash": "sha512-ZltR4twzl0KMPAa91xiqwqFZMnvj8NPB3EIt24sWztTbstWekrUxjhAsFtCQdn7xdZceSoG4Sg+zHOopVOjMxA==",
+      "sha512": "90f3a5e03bb115521175730ec19e5dd66d2b1de652d4fc3a0c8e670198fd3134b96e5e4eb8c31eb91e23b60a4520bcda59a343072efcc83d3a50feef32a40b97"
+    },
+    "peachpie-stable": {
+      "kind": "toolchain",
+      "resolvedVersion": "1.1.13",
+      "commit": "608bf30cf3f43f97e32825076a2cfdaa25043e50",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/peachpie.codeanalysis/1.1.13/peachpie.codeanalysis.1.1.13.nupkg",
+      "package": "Peachpie.CodeAnalysis",
+      "packageContentHash": "sha512-Q1XzhqGM3cR1FW5hWh7JIfjCCNtmNM1u0HW1nM0UCyl4X5MM7cM9dxeBjmWETIumKpP/8yj19WXF0wRmfQgaew==",
+      "sha512": "2841ee2678ee3ce086b130382898c81f15f55dd2fe00f513fe57e4ef653099c04e7cfe8b2ce2cf22f22b36374ec8ac348aa376f8421c36efadfcffe5aeed6117"
+    },
+    "roslyn-const-generics": {
+      "kind": "toolchain",
+      "resolvedVersion": "4.8.0-const-generics.bcd209abd947",
+      "commit": "bcd209abd947ac1bc71ef1ee29bd8a02d8e78ffc",
+      "digest": "sha256:e43c77373cc7dc07a58a73516fce5512f441b5435e7d17d0e18af41942dc7487",
+      "sourceUri": "https://github.com/hez2010/roslyn/tree/bcd209abd947ac1bc71ef1ee29bd8a02d8e78ffc",
+      "releaseDate": "2023-09-08"
+    },
+    "roslyn-main": {
+      "kind": "toolchain",
+      "resolvedVersion": "5.10.0",
+      "commit": "708c0a9669c6c996b7e13ea4b161d841bbfdf8b2",
+      "digest": "sha256:3af860c05820fc9177f603aae87501fb66bcaa42d32a2e585018dbbd3227988f",
+      "sourceUri": "https://github.com/dotnet/roslyn/archive/708c0a9669c6c996b7e13ea4b161d841bbfdf8b2.tar.gz"
+    },
+    "roslyn-stable": {
+      "kind": "toolchain",
+      "resolvedVersion": "5.6.0",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.codeanalysis.csharp/5.6.0/microsoft.codeanalysis.csharp.5.6.0.nupkg",
+      "package": "Microsoft.CodeAnalysis.CSharp",
+      "packageContentHash": "sha512-6fek0NrSP5NsR/f+JMajZVqKCiuQ0vZR9GQnPBIZCMj3o9eDOpriDjG2SjQXcSAoEqojG0s52zhHurKKQ0R8PQ==",
+      "sha512": "e9f7a4d0dad23f936c47f7fe24c6a3655a8a0a2b90d2f651f464273c121908c8f7a3d7833a9ae20e31b64a341771202812aa231b4b39db3847bab28a43447c3d"
+    },
+    "roslyn-stable-netfx48": {
+      "kind": "toolchain",
+      "resolvedVersion": "5.6.0",
+      "sourceUri": "https://api.nuget.org/v3-flatcontainer/microsoft.codeanalysis.csharp/5.6.0/microsoft.codeanalysis.csharp.5.6.0.nupkg",
+      "package": "Microsoft.CodeAnalysis.CSharp",
+      "packageContentHash": "sha512-6fek0NrSP5NsR/f+JMajZVqKCiuQ0vZR9GQnPBIZCMj3o9eDOpriDjG2SjQXcSAoEqojG0s52zhHurKKQ0R8PQ==",
+      "sha512": "e9f7a4d0dad23f936c47f7fe24c6a3655a8a0a2b90d2f651f464273c121908c8f7a3d7833a9ae20e31b64a341771202812aa231b4b39db3847bab28a43447c3d"
     },
     "vjc-jsharp20": {
       "kind": "toolchain",
       "resolvedVersion": "2.0.50727.937"
     },
-    "jsharp20-ref": {
-      "kind": "reference-set",
-      "resolvedVersion": "2.0.50727.937",
-      "digest": "sha256:25288dc53b3190f14a65ebf96258601a262ebd4a8fa68e4881c897258b122013",
-      "sourceUri": "docker://sharplabnext/operator-jsharp20@sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6"
+    "wine-dotnet-10-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "10.0.10",
+      "commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+      "jitCommit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-win-x64.zip",
+      "sha512": "2161dfa1cf027cdc074de7195b5f206b17ebd829ae415b9e7c9ee5f06d3952b6583030022dbe0d6e9221b5c577c411d7cd5322241f6d2299d9c886641215699b",
+      "releaseDate": "2026-07-14"
+    },
+    "wine-dotnet-11-preview-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "11.0.0-preview.6.26359.118",
+      "commit": "ba53d0ed335bed4ab7bfd01988c8e3953ee5ffbe",
+      "jitCommit": "ba53d0ed335bed4ab7bfd01988c8e3953ee5ffbe",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/11.0.0-preview.6.26359.118/dotnet-runtime-11.0.0-preview.6.26359.118-win-x64.zip",
+      "sha512": "31f6c1c9dcf70e575a9c532d1064a99ecffab7e90eef24eab7336c9ed04137fef9058aa45dd06aa04c592d17244c6d20678d350d6291f36b088fdf04ecc9160f",
+      "releaseDate": "2026-07-14"
+    },
+    "wine-dotnet-5-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "5.0.17",
+      "commit": "6a984143635bde23e728abaaccbde52f5ea8fa3e",
+      "jitCommit": "6a984143635bde23e728abaaccbde52f5ea8fa3e",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/5.0.17/dotnet-runtime-5.0.17-win-x64.zip",
+      "sha512": "424df2b535f73c40aea164623a8a8f549bd18f89406eb2cb84289cb4cfceb3450db7762c5582756263d79ed628a574730e708d87dc906fd2c00d29f64942c782",
+      "releaseDate": "2022-05-10"
+    },
+    "wine-dotnet-6-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "6.0.36",
+      "commit": "f1dd57165bfd91875761329ac3a8b17f6606ad18",
+      "jitCommit": "f1dd57165bfd91875761329ac3a8b17f6606ad18",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/6.0.36/dotnet-runtime-6.0.36-win-x64.zip",
+      "sha512": "935db5c6cee19f2c016e67168bfae7b491044735de76c673abb3b125dd325fd5e779d7efe12ba80178d46689ae70a25e558a3fa846417d44c5f4ca256e7f4bf2",
+      "releaseDate": "2024-11-12"
+    },
+    "wine-dotnet-7-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "7.0.20",
+      "commit": "0fb6ac59fb1edbe4ed3ad62661df0eb7eacd7903",
+      "jitCommit": "0fb6ac59fb1edbe4ed3ad62661df0eb7eacd7903",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/7.0.20/dotnet-runtime-7.0.20-win-x64.zip",
+      "sha512": "4943862d33d3c483396adae24c932d254b218aaaa4638e47b22bdd1d61eea248f90f5a768a0842b8c743db8b96039506941af6384411e8c891aeefdebd7db4fd",
+      "releaseDate": "2024-05-28"
+    },
+    "wine-dotnet-8-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "8.0.29",
+      "commit": "18fd75c847399745c43b5970fec840ba71064e80",
+      "jitCommit": "18fd75c847399745c43b5970fec840ba71064e80",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.29/dotnet-runtime-8.0.29-win-x64.zip",
+      "sha512": "e3f31d298a2b674b54c7fc89fb3f06d9645fc5879a54f2ebf2ea20e9ee7ae55f1bfe3284c1f90a591d6be2d6bcd251790ddc27771d65303e7a6a56d331df4632",
+      "releaseDate": "2026-07-14"
+    },
+    "wine-dotnet-9-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "9.0.18",
+      "commit": "d839c41c85988aadc213e8e42269ecd7883a1790",
+      "jitCommit": "d839c41c85988aadc213e8e42269ecd7883a1790",
+      "sourceUri": "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.18/dotnet-runtime-9.0.18-win-x64.zip",
+      "sha512": "38dd0b646bcf8e593d86456b97f75566a902358c437f84ab8b2b21c8f54cc0272910a91330936f02c8eec6e45c1157b716b21d15b91d55187daf19831c32b8a8",
+      "releaseDate": "2026-07-14"
     },
     "wine-jsharp20-linux-x64": {
       "kind": "runtime",
       "resolvedVersion": "wine-9.0+clr2+jsharp-2.0.50727.937",
       "digest": "sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6",
       "sourceUri": "docker://sharplabnext/operator-jsharp20@sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6"
+    },
+    "wine-netfx20-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "2.0",
+      "digest": "sha256:6a4f768ac251a47e11711e62ea28b0059c206084d887fa8c4ab5287855e301a0",
+      "sourceUri": "docker://localhost:5000/sharplabnext/revision-b-88c2291/operator-netfx20@sha256:6a4f768ac251a47e11711e62ea28b0059c206084d887fa8c4ab5287855e301a0"
+    },
+    "wine-netfx30-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "3.0",
+      "digest": "sha256:afed9b3dd46df5a099fbf7996c2f34061409bd6ad00a556c6653fe373509b23b",
+      "sourceUri": "docker://localhost:5000/sharplabnext/revision-b-88c2291/operator-netfx30@sha256:afed9b3dd46df5a099fbf7996c2f34061409bd6ad00a556c6653fe373509b23b"
+    },
+    "wine-netfx35-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "3.5",
+      "digest": "sha256:82a17b4f880579bb2df18e12fcb96e4a5fd9fc39d804091ff86018b792ea0116",
+      "sourceUri": "docker://localhost:5000/sharplabnext/revision-b-88c2291/operator-netfx35@sha256:82a17b4f880579bb2df18e12fcb96e4a5fd9fc39d804091ff86018b792ea0116"
+    },
+    "wine-netfx40-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "4.0",
+      "digest": "sha256:10308225d843a2df5b29a75dff759c59733d31d8245fa3b3cd160b655fb92047",
+      "sourceUri": "docker://localhost:5000/sharplabnext/revision-b-88c2291/operator-netfx40@sha256:10308225d843a2df5b29a75dff759c59733d31d8245fa3b3cd160b655fb92047"
+    },
+    "wine-netfx45-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "4.5",
+      "digest": "sha256:c17167640a2880ed11f32e9628d4b574c8b843d67e175ecc5b4058e6c6cf274e",
+      "sourceUri": "docker://localhost:5000/sharplabnext/revision-b-88c2291/operator-netfx45@sha256:c17167640a2880ed11f32e9628d4b574c8b843d67e175ecc5b4058e6c6cf274e"
+    },
+    "wine-netfx451-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "4.5.1",
+      "digest": "sha256:ae8a00a9a36c69c723b1314356a7a76e3db09de92c30b9b1225e091b8ede4f35",
+      "sourceUri": "docker://localhost:5000/sharplabnext/revision-b-88c2291/operator-netfx451@sha256:ae8a00a9a36c69c723b1314356a7a76e3db09de92c30b9b1225e091b8ede4f35"
+    },
+    "wine-netfx452-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "4.5.2",
+      "digest": "sha256:80b800e1d4032cf7e9aa3ee3f108df602d5b395b38722b69c4dd91eda27d135a",
+      "sourceUri": "docker://localhost:5000/sharplabnext/revision-b-88c2291/operator-netfx452@sha256:80b800e1d4032cf7e9aa3ee3f108df602d5b395b38722b69c4dd91eda27d135a"
+    },
+    "wine-netfx46-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "4.6",
+      "digest": "sha256:c89b45d081322e98c3e1ec3b3f2c4bec4d131d7fc029d3025b022900fbe5fda5",
+      "sourceUri": "docker://localhost:5000/sharplabnext/revision-b-88c2291/operator-netfx46@sha256:c89b45d081322e98c3e1ec3b3f2c4bec4d131d7fc029d3025b022900fbe5fda5"
+    },
+    "wine-netfx461-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "4.6.1",
+      "digest": "sha256:6d423517defc70932348edf90a0fd53d7713c4b6baf74cf39463d4dbfdc5a66c",
+      "sourceUri": "docker://localhost:5000/sharplabnext/revision-b-88c2291/operator-netfx461@sha256:6d423517defc70932348edf90a0fd53d7713c4b6baf74cf39463d4dbfdc5a66c"
+    },
+    "wine-netfx462-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "4.6.2",
+      "digest": "sha256:61722ecea25f71f2a69e3fb5dabf9db19f7ffffb3aac4d914fe1c29e2edf239c",
+      "sourceUri": "docker://localhost:5000/sharplabnext/revision-b-88c2291/operator-netfx462@sha256:61722ecea25f71f2a69e3fb5dabf9db19f7ffffb3aac4d914fe1c29e2edf239c"
+    },
+    "wine-netfx47-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "4.7",
+      "digest": "sha256:262d3c9287433ce3efaaa0b66c88b038e08e4320c5026fd0c8aaef373f393b86",
+      "sourceUri": "docker://localhost:5000/sharplabnext/revision-b-88c2291/operator-netfx47@sha256:262d3c9287433ce3efaaa0b66c88b038e08e4320c5026fd0c8aaef373f393b86"
+    },
+    "wine-netfx471-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "4.7.1",
+      "digest": "sha256:c603a3cd5644ee175afc3768b60fded82d53422d1cd10c1410b75226013a8573",
+      "sourceUri": "docker://localhost:5000/sharplabnext/revision-b-88c2291/operator-netfx471@sha256:c603a3cd5644ee175afc3768b60fded82d53422d1cd10c1410b75226013a8573"
+    },
+    "wine-netfx472-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "4.7.2",
+      "digest": "sha256:feb2e1fcb89011bd3e86e07cd7b7982e07710f00995d01d8a6ef2e915c0d1718",
+      "sourceUri": "docker://localhost:5000/sharplabnext/revision-b-88c2291/operator-netfx472@sha256:feb2e1fcb89011bd3e86e07cd7b7982e07710f00995d01d8a6ef2e915c0d1718"
+    },
+    "wine-netfx48-linux-x64": {
+      "kind": "runtime",
+      "resolvedVersion": "4.8",
+      "digest": "sha256:dedd9a2d14337930bbe73870a3b4a814838a96401657dc19f3c4a91fe34b0458",
+      "sourceUri": "docker://localhost:5000/sharplabnext/revision-b-88c2291/operator-netfx48@sha256:dedd9a2d14337930bbe73870a3b4a814838a96401657dc19f3c4a91fe34b0458"
     }
   }
 }

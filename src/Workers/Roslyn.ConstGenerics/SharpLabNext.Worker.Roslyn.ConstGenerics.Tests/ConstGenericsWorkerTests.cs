@@ -82,6 +82,29 @@ public sealed class ConstGenericsWorkerTests
     }
 
     [Fact]
+    public async Task CompileCheckAllowsUnsafeCSharpWithTheForkCompiler()
+    {
+        var request = CreateRequest(
+            BuildTarget.CompileCheck,
+            "unsafe class Program { static void Main() { int value = 42; int* pointer = &value; System.Console.WriteLine(*pointer); } }");
+        var options = request.EffectiveOptions with { AllowUnsafe = true };
+        request = request with
+        {
+            Options = options,
+            Workspace = request.Workspace with { BuildOptions = options }
+        };
+
+        var execution = await CreateCSharpService().ExecuteAsync(
+            request,
+            TestContext.Current.CancellationToken);
+
+        var result = Assert.IsType<CompilationCheckResult>(execution.Result);
+        Assert.True(result.CompilationSucceeded);
+        Assert.DoesNotContain(result.Diagnostics, static diagnostic =>
+            diagnostic.Severity == SharpLabNext.Contracts.DiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public void SourceBuildExposesTheLockedForkSurfaceAndIdentity()
     {
         Assert.Equal(ConstGenericsTestSettings.CompilerVersion, CSharpBuildService.GetLoadedCompilerVersion());

@@ -31,7 +31,7 @@ public sealed class FSharpBuildServiceTests
                 typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location,
                 Path.Combine(referenceRoot, "SharpLab.Runtime.dll"));
             using var provider = new FSharpReferenceSetProvider(
-                [new FSharpReferenceSetDefinition("net10-ref", referenceRoot, "net10.0", "10.0.9")]);
+                [new FSharpReferenceSetDefinition("net10-ref", referenceRoot, "net10.0", FSharpTestSettings.Net10Version)]);
 
             var loaded = await provider.GetAsync("net10-ref", TestContext.Current.CancellationToken);
 

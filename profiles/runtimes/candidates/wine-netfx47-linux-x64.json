@@ -24,7 +24,8 @@
     "dotnet-framework-managed-pe-v1"
   ],
   "capabilities": [
-    "run"
+    "run",
+    "jit-asm"
   ],
   "providedRuntimeFeatureTags": [],
   "providedMetadataFeatureTags": [],
@@ -51,6 +52,20 @@
           "{arguments}"
         ]
       }
+    },
+    "jit": {
+      "implementationId": "sharplabnext-desktop-clr-jit-inspector-v1",
+      "pathStyle": "unix",
+      "command": {
+        "executable": "/usr/share/dotnet/dotnet",
+        "argv": [
+          "/opt/sharplabnext/SharpLabNext.WineRunner.dll",
+          "desktop-jit",
+          "{entryAssembly}",
+          "{methodFilter}"
+        ]
+      },
+      "sourceMappingKind": "none"
     }
   },
   "layout": {
@@ -58,14 +73,15 @@
     "dotNetHostPath": "/usr/lib/wine/wine64",
     "wineHostPath": "/usr/lib/wine/wine64",
     "winePrefixPath": "/opt/wine-netfx-clr4",
-    "runnerAssemblyPath": "/opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe"
+    "runnerAssemblyPath": "/opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe",
+    "jitInspectorAssemblyPath": "/opt/sharplabnext/SharpLabNext.WineRunner.dll"
   },
   "securityPolicies": [
     {
       "id": "runtime-job-wine-netfx",
       "memoryBytes": 1073741824,
       "nanoCpus": 1000000000,
-      "pidsLimit": 64,
+      "pidsLimit": 128,
       "maximumDurationSeconds": 30,
       "maximumArtifactBytes": 67108864,
       "maximumOutputBytes": 1048576,

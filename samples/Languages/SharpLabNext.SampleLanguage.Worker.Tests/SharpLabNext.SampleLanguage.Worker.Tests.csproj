@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\..\src\Infrastructure\SharpLabNext.Observability\SharpLabNext.Observability.csproj" />
     <ProjectReference Include="..\..\..\src\WorkerHost\SharpLabNext.LanguageWorker.Conformance\SharpLabNext.LanguageWorker.Conformance.csproj" />
     <ProjectReference Include="..\SharpLabNext.SampleLanguage.Worker\SharpLabNext.SampleLanguage.Worker.csproj" />
+    <ProjectReference Include="..\..\..\tests\Shared\SharpLabNext.Testing\SharpLabNext.Testing.csproj" />
   </ItemGroup>
 
 </Project>

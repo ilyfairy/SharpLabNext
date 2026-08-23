@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "id": "wine-netfx45-linux-x64",
+  "image": "sharplabnext/runtime-wine-netfx45-linux-x64:development",
+  "family": "netfx-clr-wine",
+  "acceptedRuntimeFamilies": [
+    "netfx-clr-wine"
+  ],
+  "acceptedFrameworks": [
+    {
+      "name": ".NETFramework",
+      "exactVersion": "4.5"
+    }
+  ],
+  "runtimeVersion": "4.5",
+  "runtimeCommit": "not-applicable",
+  "jitVersion": "not-applicable",
+  "jitCommit": "not-applicable",
+  "runtimeImageId": "sha256:3b9d12789f47a3dfccc2a05758f3cf0e1ec2551c679dd9d2e3e8cee1cdfa98bc",
+  "rid": "linux-x64",
+  "architecture": "x64",
+  "cpuFeatureProfile": "x64-v2",
+  "acceptedArtifactFormats": [
+    "dotnet-framework-managed-pe-v1"
+  ],
+  "capabilities": [
+    "run",
+    "jit-asm"
+  ],
+  "providedRuntimeFeatureTags": [],
+  "providedMetadataFeatureTags": [],
+  "allowedSecurityPolicyIds": [
+    "runtime-job-wine-netfx"
+  ],
+  "container": {
+    "isolationKind": "wine",
+    "environmentKind": "wine",
+    "executionUser": "0:0",
+    "winePrefixPath": "/opt/wine-netfx-clr4"
+  },
+  "operations": {
+    "run": {
+      "implementationId": "sharplabnext-target-runtime-runner-v1",
+      "pathStyle": "wine-z",
+      "command": {
+        "executable": "/usr/lib/wine/wine64",
+        "argv": [
+          "Z:\\opt\\sharplabnext\\SharpLabNext.TargetRuntimeRunner.exe",
+          "run",
+          "{entryAssembly}",
+          "--",
+          "{arguments}"
+        ]
+      }
+    },
+    "jit": {
+      "implementationId": "sharplabnext-desktop-clr-jit-inspector-v1",
+      "pathStyle": "unix",
+      "command": {
+        "executable": "/usr/share/dotnet/dotnet",
+        "argv": [
+          "/opt/sharplabnext/SharpLabNext.WineRunner.dll",
+          "desktop-jit",
+          "{entryAssembly}",
+          "{methodFilter}"
+        ]
+      },
+      "sourceMappingKind": "none"
+    }
+  },
+  "layout": {
+    "runnerKind": "wine-netfx",
+    "dotNetHostPath": "/usr/lib/wine/wine64",
+    "wineHostPath": "/usr/lib/wine/wine64",
+    "winePrefixPath": "/opt/wine-netfx-clr4",
+    "runnerAssemblyPath": "/opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe",
+    "jitInspectorAssemblyPath": "/opt/sharplabnext/SharpLabNext.WineRunner.dll"
+  },
+  "securityPolicies": [
+    {
+      "id": "runtime-job-wine-netfx",
+      "memoryBytes": 1073741824,
+      "nanoCpus": 1000000000,
+      "pidsLimit": 128,
+      "maximumDurationSeconds": 30,
+      "maximumArtifactBytes": 67108864,
+      "maximumOutputBytes": 1048576,
+      "tmpfsBytes": 33554432
+    }
+  ]
+}

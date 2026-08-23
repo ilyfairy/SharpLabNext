@@ -13,6 +13,7 @@ describe('createWorkbenchBuildOptions', () => {
         configuration: 'release',
         optimize: true,
         outputKind: 'auto',
+        allowUnsafe: true,
         languageVersion: 'preview',
       }),
     )
@@ -36,8 +37,11 @@ describe('createWorkbenchBuildOptions', () => {
     expect(createWorkbenchBuildOptions(languageId, 'debug', runStages).outputKind).toBe('console')
   })
 
+  it('keeps top-level F# source executable for non-Run artifact outputs', () => {
+    expect(createWorkbenchBuildOptions('fsharp', 'debug', buildStages).outputKind).toBe('console')
+  })
+
   it.each([
-    'fsharp',
     'il',
   ] as const)('builds %s as a library when the resolved pipeline does not execute the program', (languageId) => {
     expect(createWorkbenchBuildOptions(languageId, 'debug', buildStages).outputKind).toBe('library')
@@ -53,12 +57,13 @@ describe('createWorkbenchBuildOptions', () => {
   ] as const)('does not impose the C# language version on %s', (languageId) => {
     const options = createWorkbenchBuildOptions(languageId, 'debug', buildStages)
     expect(options).toEqual(expect.objectContaining({ configuration: 'debug', optimize: false }))
+    expect(options.allowUnsafe).toBe(false)
     expect(options.outputKind).toBe(
       languageId === 'visual-basic'
         ? 'auto'
         : languageId === 'gsharp'
           ? 'auto'
-          : ['fsharp', 'il'].includes(languageId)
+          : languageId === 'il'
             ? 'library'
             : 'console',
     )

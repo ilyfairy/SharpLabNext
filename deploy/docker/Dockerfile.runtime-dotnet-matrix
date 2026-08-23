@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
 # Shared candidate image for every Linux CoreCLR target in the runtime matrix.
 # The target runtime is deliberately copied into its own directory instead of
@@ -324,6 +324,8 @@ FROM ${RUNTIME_DEPS_IMAGE} AS final
 ARG PROFILE_ID
 ARG VERSION
 ARG SOURCE_REVISION
+ARG CANDIDATE_SOURCE_CONTEXT
+ARG CANDIDATE_PROMOTION_ELIGIBLE
 ARG DOTNET_RUNTIME_VERSION
 ARG DOTNET_RUNTIME_COMMIT
 ARG DOTNET_JIT_COMMIT
@@ -357,6 +359,8 @@ ENV SHARPLABNEXT_CHECKED_JIT_SOURCE_MAPPING_KIND="${DOTNET_CHECKED_JIT_SOURCE_MA
 RUN test -n "${PROFILE_ID}" \
     && test -n "${VERSION}" \
     && test -n "${SOURCE_REVISION}" \
+    && { test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "committed:true" \
+         || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "working-tree-development:false"; } \
     && test -n "${DOTNET_RUNTIME_VERSION}" \
     && test -n "${DOTNET_RUNTIME_COMMIT}" \
     && test -n "${DOTNET_JIT_COMMIT}" \
@@ -383,6 +387,8 @@ RUN test -n "${PROFILE_ID}" \
 LABEL org.opencontainers.image.title="SharpLabNext Linux CoreCLR Matrix Runtime Job" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      io.sharplabnext.source.context="${CANDIDATE_SOURCE_CONTEXT}" \
+      com.sharplabnext.runtime-candidate.promotion-eligible="${CANDIDATE_PROMOTION_ELIGIBLE}" \
       org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
       com.sharplabnext.runtime-profile="${PROFILE_ID}" \
       com.sharplabnext.runtime-version="${DOTNET_RUNTIME_VERSION}" \

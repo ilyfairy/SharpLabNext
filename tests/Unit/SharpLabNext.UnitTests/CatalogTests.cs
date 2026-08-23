@@ -4,12 +4,11 @@ namespace SharpLabNext.UnitTests;
 
 public sealed class CatalogTests
 {
-    private static readonly string[] CppCliReleaseComponentIds =
+    private static readonly string[] CppCliSharedReleaseComponentIds =
     [
         "msvc-cppcli-private-image",
         "msvc-cppcli-netfx48",
-        "netfx48-ref",
-        "wine-netfx48-linux-x64"
+        "netfx48-ref"
     ];
 
     private static readonly string[] FrameworkManagedReferenceSetIds =
@@ -37,7 +36,8 @@ public sealed class CatalogTests
 
         var catalog = await CatalogLoader.LoadCatalogAsync(path, TestContext.Current.CancellationToken);
 
-        Assert.Equal("20260721.1", catalog.Revision);
+        Assert.StartsWith("runtime-promotion-", catalog.Revision, StringComparison.Ordinal);
+        Assert.Equal("development", catalog.ReleaseId);
         Assert.Contains(catalog.Languages, static language =>
             language.Id == "csharp" && language.DefaultToolchainId == "roslyn-main");
         Assert.Contains(catalog.Toolchains, static toolchain =>
@@ -57,6 +57,7 @@ public sealed class CatalogTests
         Assert.Contains(catalog.Toolchains, static toolchain => toolchain.Id == "roslyn-stable");
         Assert.Contains(catalog.Toolchains, static toolchain =>
             toolchain.Id == "roslyn-stable-netfx48" &&
+            toolchain.DisplayName == "Roslyn Stable 5.6.0 / .NET Framework" &&
             toolchain.WorkerId == "roslyn-stable-netfx48" &&
             toolchain.ResolvedVersion == "5.6.0" &&
             toolchain.SupportedLanguageIds.SequenceEqual(["csharp", "visual-basic"], StringComparer.Ordinal) &&
@@ -66,13 +67,20 @@ public sealed class CatalogTests
                 StringComparer.Ordinal));
         Assert.Contains(catalog.Toolchains, static toolchain =>
             toolchain.Id == "gsharp-stable" &&
+            toolchain.DisplayName == "0.3.33" &&
             toolchain.ResolvedVersion == "0.3.33" &&
             toolchain.AllowedReferenceSetIds.SequenceEqual(["net10-ref"], StringComparer.Ordinal));
         Assert.Contains(catalog.Toolchains, static toolchain =>
             toolchain.Id == "gsharp-legacy-0.3.8" &&
+            toolchain.DisplayName == "0.3.8" &&
             toolchain.ResolvedVersion == "0.3.8" &&
             toolchain.WorkerId == "gsharp-stable" &&
             toolchain.AllowedReferenceSetIds.SequenceEqual(["net10-ref"], StringComparer.Ordinal));
+        Assert.All(
+            catalog.Compatibility.Where(static rule =>
+                rule.Kind == CompatibilityRuleKind.ToolchainReferenceSet &&
+                rule.FromId is "fsharp-stable" or "gsharp-stable" or "gsharp-legacy-0.3.8"),
+            static rule => Assert.True(rule.Allowed, $"{rule.FromId} -> {rule.ToId} must be selectable."));
         Assert.Contains(catalog.Languages, static language =>
             language.Id == "php" &&
             language.DefaultFileName == "index.php" &&
@@ -94,20 +102,20 @@ public sealed class CatalogTests
             language.Capabilities.Contains("code-actions", StringComparer.Ordinal));
         Assert.Contains(catalog.Runtimes, static runtime =>
             runtime.Id == "dotnet-10-linux-x64" &&
-            runtime.DisplayName == ".NET 10" &&
-            runtime.ResolvedVersion == "10.0.9");
+            runtime.DisplayName == ".NET 10.0.10 / Linux x64" &&
+            runtime.ResolvedVersion == "10.0.10");
         Assert.Contains(catalog.Runtimes, static runtime =>
             runtime.Id == "dotnet-11-preview-linux-x64" &&
-            runtime.DisplayName == ".NET Main" &&
-            runtime.ResolvedVersion == "11.0.0-preview.5.26302.115");
+            runtime.DisplayName == ".NET 11.0.0-preview.6.26359.118 / Linux x64" &&
+            runtime.ResolvedVersion == "11.0.0-preview.6.26359.118");
         Assert.Contains(catalog.ReferenceSets, static reference =>
             reference.Id == "net10-ref" &&
-            reference.DisplayName == ".NET 10" &&
+            reference.DisplayName == "10.0.10" &&
             reference.TargetFramework == "net10.0" &&
             reference.Availability.Installed);
         Assert.Contains(catalog.ReferenceSets, static reference =>
             reference.Id == "net11-preview-ref" &&
-            reference.DisplayName == ".NET Main" &&
+            reference.DisplayName == "11.0.0-preview.6.26359.118" &&
             reference.Availability.Installed);
         Assert.Contains(catalog.ReferenceSets, static reference =>
             reference.Id == "const-generics-ref" &&
@@ -123,23 +131,21 @@ public sealed class CatalogTests
             reference.RuntimeFamily == "netfx-clr-wine" &&
             reference.Digest == "sha512-XWKgyeNadNcTQaIVvQB8BrdCNrEar6fo/de1OdQRZ9HFy0jcBSaM8IV5q64ZampsSnC8AlTsACaGZUuoFw41RA==" &&
             reference.RequiredRuntimeFeatureTags.Count == 0);
-        string[] healthyStablePresets =
+        string[] healthyPromotedPresets =
         [
-            "csharp-stable-net11-preview",
-            "csharp-stable-netfx48",
-            "vb-stable-net11-preview",
-            "vb-stable-netfx48",
-            "fsharp-stable-net10",
-            "fsharp-stable-net11-preview",
-            "gsharp-stable-net10",
-            "php-peachpie-net10",
-            "il-mobius-net10",
-            "il-mobius-net11-preview",
-            "csharp-const-generics"
+            "csharp-roslyn-stable-dotnet-core-2.0",
+            "visual-basic-roslyn-stable-dotnet-core-2.0",
+            "csharp-roslyn-stable-dotnet-5",
+            "visual-basic-roslyn-stable-dotnet-11-preview",
+            "csharp-roslyn-stable-netfx48-mono-6.12-linux-x64",
+            "visual-basic-roslyn-stable-netfx48-netfx20",
+            "csharp-roslyn-stable-netfx48-netfx48",
+            "csharp-const-generics",
+            "jsharp-vjc-net20"
         ];
         Assert.All(
-            healthyStablePresets,
-            id => Assert.Contains(catalog.Presets, preset => preset.Id == id && preset.Availability.Installed));
+            healthyPromotedPresets,
+            id => Assert.Contains(catalog.Presets, preset => preset.Id == id && preset.Availability.IsSelectable));
         Assert.All(catalog.Presets, static preset => Assert.Equal("decompiled-csharp", preset.DefaultOutputId));
         Assert.Contains(catalog.Outputs, static output => output.Id == "compile-check");
         Assert.Contains(catalog.Outputs, static output => output.Id == "il-verify");
@@ -182,7 +188,7 @@ public sealed class CatalogTests
         Assert.Contains(catalog.Runtimes, static runtime =>
             runtime.Id == "wine-netfx48-linux-x64" &&
             runtime.Family == "netfx-clr-wine" &&
-            runtime.Capabilities.SequenceEqual(["run"], StringComparer.Ordinal) &&
+            runtime.Capabilities.SequenceEqual(["run", "jit-asm"], StringComparer.Ordinal) &&
             runtime.AcceptedArtifactFormats.SequenceEqual(
                 ["dotnet-framework-managed-pe-v1", "dotnet-framework-mixed-pe-v1"],
                 StringComparer.Ordinal));
@@ -225,6 +231,9 @@ public sealed class CatalogTests
                 ["dotnet-framework-managed-pe-v1"],
                 StringComparer.Ordinal) &&
             runtime.Capabilities.SequenceEqual(["run"], StringComparer.Ordinal) &&
+            runtime.AcceptedFrameworks.Count == 1 &&
+            runtime.AcceptedFrameworks[0].Name == ".NETFramework" &&
+            runtime.AcceptedFrameworks[0].ExactVersion == "2.0" &&
             runtime.ProvidedRuntimeFeatureTags.SequenceEqual(
                 ["runtime.jsharp20-wine"],
                 StringComparer.Ordinal));
@@ -245,8 +254,8 @@ public sealed class CatalogTests
 
         var releaseLock = await CatalogLoader.LoadReleaseLockAsync(path, TestContext.Current.CancellationToken);
 
-        Assert.Equal("10.0.9", releaseLock.Components["dotnet-10-linux-x64"].ResolvedVersion);
-        Assert.Equal("11.0.0-preview.5.26302.115", releaseLock.Components["dotnet-11-preview-linux-x64"].ResolvedVersion);
+        Assert.Equal("10.0.10", releaseLock.Components["dotnet-10-linux-x64"].ResolvedVersion);
+        Assert.Equal("11.0.0-preview.6.26359.118", releaseLock.Components["dotnet-11-preview-linux-x64"].ResolvedVersion);
         Assert.Equal("5.6.0", releaseLock.Components["roslyn-stable"].ResolvedVersion);
         Assert.Equal(
             releaseLock.Components["roslyn-stable"] with { PatchDigest = null, ImageId = null },
@@ -289,15 +298,18 @@ public sealed class CatalogTests
             releaseLock.Components["netfx48-managed-ref"].PackageContentHash);
         Assert.Equal("runtime", releaseLock.Components["wine-netfx48-linux-x64"].Kind);
         Assert.All(
-            CppCliReleaseComponentIds,
+            CppCliSharedReleaseComponentIds,
             id => Assert.Equal(
                 "sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743",
                 releaseLock.Components[id].Digest));
         Assert.Equal(
+            "sha256:dedd9a2d14337930bbe73870a3b4a814838a96401657dc19f3c4a91fe34b0458",
+            releaseLock.Components["wine-netfx48-linux-x64"].Digest);
+        Assert.Equal(
             "sha256:dfd2473d9faae804d8514e583cec77fe5622c3c955d2e97eeaa3a7952969e3e8",
             releaseLock.Components["msvc-cppcli-prepared-base"].Digest);
         Assert.Equal(
-            "docker://sharplabnext/msvc-cppcli-prepared-base@sha256:dfd2473d9faae804d8514e583cec77fe5622c3c955d2e97eeaa3a7952969e3e8",
+            "docker://localhost:5000/sharplabnext/msvc-cppcli-prepared-base@sha256:dfd2473d9faae804d8514e583cec77fe5622c3c955d2e97eeaa3a7952969e3e8",
             releaseLock.Components["msvc-cppcli-prepared-base"].SourceUri);
     }
 
@@ -427,7 +439,7 @@ public sealed class CatalogTests
     }
 
     [Fact]
-    public void LifecycleRejectsVisibleLegacyAndInvalidReplacement()
+    public void LifecycleAllowsExplicitlyVisibleLegacyButRejectsInvalidReplacement()
     {
         var referenceSet = new ReferenceSetManifest
         {
@@ -458,7 +470,7 @@ public sealed class CatalogTests
 
         var errors = CatalogValidator.Validate(catalog);
 
-        Assert.Contains(errors, static error => error.Contains("must be hidden", StringComparison.Ordinal));
+        Assert.DoesNotContain(errors, static error => error.Contains("must be hidden", StringComparison.Ordinal));
         Assert.Contains(errors, static error => error.Contains("cannot replace itself", StringComparison.Ordinal));
     }
 }

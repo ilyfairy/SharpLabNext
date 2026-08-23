@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Formats.Tar;
 using System.Globalization;
@@ -163,11 +164,27 @@ public sealed partial class RuntimeJobExecutor(
     ServiceIdentity serviceIdentity,
     ILogger<RuntimeJobExecutor> logger)
 {
+    internal const string CapabilityHangReadyMarker = "SLN-CAPABILITY-HANG-READY-V1";
+    private static readonly byte[] CapabilityHangReadyMarkerBytes =
+        Encoding.UTF8.GetBytes(CapabilityHangReadyMarker);
     // Runtime child/frame and JIT-summary JSON are SharpLabNext-owned
     // interaction protocols. They use the same strict PascalCase wire shape
     // as the business contracts; external Docker/LSP protocols have separate
     // serializers at their own boundaries.
     private static readonly JsonSerializerOptions JsonOptions = CreateRuntimeJsonOptions();
+    private static readonly IReadOnlyList<string> MeasurementKeeperEntrypoint = ["/bin/sh", "-c"];
+    private static readonly IReadOnlyList<string> MeasurementKeeperCommand =
+    [
+        // Docker Desktop does not reliably forward SIGTERM to a bare `exec sleep`
+        // process. Keep PID 1 in a blocking shell builtin instead: this gives
+        // the supervisor a deterministic 143 exit without adding a child to the
+        // measured cgroup (the helper deliberately requires exactly one live
+        // keeper). Runtime workloads can create descendants under PID 1, so
+        // reap every SIGCHLD before the sidecar snapshots the cgroup; otherwise
+        // Wine's short-lived helper processes remain as zombies and count
+        // against the strict PID contract.
+        "trap 'while wait 2>/dev/null; do :; done' CHLD; trap 'exit 143' TERM INT; IFS= read -r _"
+    ];
 
     private static JsonSerializerOptions CreateRuntimeJsonOptions()
     {
@@ -190,6 +207,31 @@ public sealed partial class RuntimeJobExecutor(
         RuntimeJobMeasurementRegistration measurement) =>
         QueueRunCore(operation, request, runtimeSessionId: null, measurement);
 
+    internal bool QueueRunForCapabilityProbe(
+        OperationStart operation,
+        RunRequest request,
+        RuntimeJobMeasurementRegistration measurement,
+        TimeSpan runtimeDeadlineAfterMarker)
+    {
+        if (runtimeDeadlineAfterMarker <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(runtimeDeadlineAfterMarker),
+                "The post-marker runtime deadline must be positive.");
+        }
+        if (measurement.CollectResources)
+        {
+            throw new InvalidOperationException(
+                "Capability probe post-marker deadlines cannot be combined with resource measurements.");
+        }
+        return QueueRunCore(
+            operation,
+            request,
+            runtimeSessionId: null,
+            measurement,
+            runtimeDeadlineAfterMarker);
+    }
+
     internal bool QueueJitForMeasurement(
         OperationStart operation,
         JitRequest request,
@@ -200,12 +242,18 @@ public sealed partial class RuntimeJobExecutor(
         OperationStart operation,
         RunRequest request,
         string? runtimeSessionId,
-        RuntimeJobMeasurementRegistration? measurement)
+        RuntimeJobMeasurementRegistration? measurement,
+        TimeSpan? runtimeDeadlineAfterMarker = null)
     {
         measurement?.BindCancellation(operation.CancellationToken);
         var queued = scheduler.TryQueue(
             operation,
-            () => ExecuteRunAsync(operation, request, runtimeSessionId, measurement));
+            () => ExecuteRunAsync(
+                operation,
+                request,
+                runtimeSessionId,
+                measurement,
+                runtimeDeadlineAfterMarker));
         if (!queued)
         {
             measurement?.Reject(
@@ -238,7 +286,8 @@ public sealed partial class RuntimeJobExecutor(
         OperationStart operation,
         RunRequest request,
         string? runtimeSessionId,
-        RuntimeJobMeasurementRegistration? measurement) =>
+        RuntimeJobMeasurementRegistration? measurement,
+        TimeSpan? runtimeDeadlineAfterMarker = null) =>
         ExecuteAsync(
             operation,
             request.RuntimeProfileId,
@@ -253,7 +302,8 @@ public sealed partial class RuntimeJobExecutor(
             request.Options.Stdin,
             request.Options.Instrumentation,
             runtimeSessionId,
-            measurement);
+            measurement,
+            runtimeDeadlineAfterMarker);
 
     private Task ExecuteJitAsync(
         OperationStart operation,
@@ -289,15 +339,18 @@ public sealed partial class RuntimeJobExecutor(
         string? stdin,
         RunInstrumentation? instrumentation,
         string? runtimeSessionId,
-        RuntimeJobMeasurementRegistration? measurement)
+        RuntimeJobMeasurementRegistration? measurement,
+        TimeSpan? runtimeDeadlineAfterMarker = null)
     {
         if (measurement is not null && runtimeSessionId is not null)
             throw new InvalidOperationException("Performance measurements require a one-shot runtime job.");
         measurement?.MarkExecutionStarted();
         var stopwatch = Stopwatch.StartNew();
         string? containerId = null;
+        string? measurementSidecarContainerId = null;
         string? materializerContainerId = null;
         string? workspaceVolumeName = null;
+        string? measurementVolumeName = null;
         string? leaseToken = null;
         RuntimeSessionLease? sessionLease = null;
         RuntimeSessionAdmissionLease? oneShotAdmission = null;
@@ -308,15 +361,28 @@ public sealed partial class RuntimeJobExecutor(
         string? implementation = null;
         RuntimeFrameCapture? capture = null;
         IRuntimeContainerResourceMonitor? resourceMonitor = null;
+        RuntimeContainerMeasurement? runtimeMeasurement = null;
+        var postCompletionSampleCheckpoint = 0;
         RuntimeContainerResourceUsage? resourceUsage = null;
+        Stream? attachedOutput = null;
         OperationResult? measurementResult = null;
         string? measurementFailureCode = null;
         string? measurementFailureMessage = null;
         var cleanupSucceeded = true;
         var telemetryOutcome = SharpLabNextTelemetryOutcome.Failed;
+        CancellationTokenSource? runtimeExecution = null;
         try
         {
             profile = GetProfile(runtimeProfileId);
+            var measurementContext = measurement?.CollectResources == true
+                ? measurement.Context ?? throw new InvalidOperationException(
+                    "Resource measurements require a trusted helper registration.")
+                : null;
+            if (runtimeDeadlineAfterMarker is not null && measurementContext is not null)
+            {
+                throw new InvalidOperationException(
+                    "Capability probe post-marker deadlines cannot be combined with resource measurements.");
+            }
             ValidateCapability(profile, kind == RuntimeJobKind.Run ? "run" : "jit-asm");
             var isolationKind = ResolveIsolationKind(profile);
             var policy = GetPolicy(securityPolicyId);
@@ -357,6 +423,7 @@ public sealed partial class RuntimeJobExecutor(
                 policy.MaximumArtifactBytes,
                 stdin,
                 isolationKind,
+                includeReady: true,
                 execution.Token);
 
             command = createCommand(profile, descriptor);
@@ -414,15 +481,22 @@ public sealed partial class RuntimeJobExecutor(
                         isolationKind,
                         _options.ContainerLabel,
                         _options.ResourceScope,
-                        execution.Token).ConfigureAwait(false);
+                        createMeasurementControl: measurement?.CollectResources == true,
+                        cancellationToken: execution.Token).ConfigureAwait(false);
                     workspaceVolumeName = materialization.VolumeName;
+                    measurementVolumeName = materialization.MeasurementVolumeName;
                     materializerContainerId = materialization.MaterializerContainerId;
+                    if (measurement?.CollectResources == true && measurementVolumeName is null)
+                    {
+                        throw new InvalidOperationException(
+                            "A measured runtime has no isolated measurement volume.");
+                    }
                     var spec = new RuntimeContainerSpec(
                         CreateContainerName(kind),
                         operation.Handle.OperationId,
                         serviceIdentity.ReleaseId,
                         profile.Image,
-                        command,
+                        measurementContext is null ? command : MeasurementKeeperCommand,
                         environment,
                         policy,
                         _options.ContainerLabel,
@@ -430,7 +504,8 @@ public sealed partial class RuntimeJobExecutor(
                         workspaceVolumeName,
                         CaptureTraceParent(),
                         isolationKind,
-                        profile.Container.WinePrefixPath);
+                        profile.Container.WinePrefixPath,
+                        measurementContext is null ? null : MeasurementKeeperEntrypoint);
                     containerId = await docker.CreateContainerAsync(spec, execution.Token).ConfigureAwait(false);
                 }
                 SharpLabNextTelemetry.Metrics.RecordContainerPhase(
@@ -454,19 +529,27 @@ public sealed partial class RuntimeJobExecutor(
                     ? $"Reused session-isolated container {containerId}."
                     : $"Created isolated container {containerId}.",
                 0.35));
-            DateTimeOffset? logSinceUtc = sessionLease is null ? null : DateTimeOffset.UtcNow;
             var startStopwatch = Stopwatch.StartNew();
+            RuntimeContainerExit exit;
             try
             {
-                await docker.StartContainerAsync(containerId, execution.Token);
-                measurement?.MarkContainerStarted();
-                if (measurement?.CollectResources == true)
+                if (measurementContext is null)
+                {
+                    attachedOutput = await docker.AttachContainerOutputAsync(
+                        containerId,
+                        execution.Token).ConfigureAwait(false);
+                }
+                if (measurementContext is not null)
                 {
                     try
                     {
                         resourceMonitor = await docker.StartContainerResourceMonitorAsync(
                             containerId,
                             execution.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (execution.IsCancellationRequested)
+                    {
+                        throw;
                     }
                     catch (Exception exception)
                     {
@@ -475,6 +558,8 @@ public sealed partial class RuntimeJobExecutor(
                         throw;
                     }
                 }
+                await docker.StartContainerAsync(containerId, execution.Token);
+                measurement?.MarkContainerStarted();
                 SharpLabNextTelemetry.Metrics.RecordContainerPhase(
                     SharpLabNextContainerPhase.Start,
                     runtimeProfileId,
@@ -490,38 +575,328 @@ public sealed partial class RuntimeJobExecutor(
                     SharpLabNextTelemetryOutcome.Failed);
                 throw;
             }
-            if (sessionLease is null)
-            {
-                if (await RemoveQuietlyAsync(materializerContainerId).ConfigureAwait(false))
-                    materializerContainerId = null;
-            }
             Append(operation, new ProgressOperationEventPayload("runtime", "Runtime child started.", 0.5));
 
-            await using var logs = logSinceUtc is { } sinceUtc
-                ? await docker.OpenContainerLogsSinceAsync(containerId, sinceUtc, execution.Token).ConfigureAwait(false)
-                : await docker.OpenContainerLogsAsync(containerId, execution.Token).ConfigureAwait(false);
             capture = new RuntimeFrameCapture();
-            await CaptureFramesAsync(
-                operation,
-                logs,
-                capture,
-                policy.MaximumOutputBytes,
-                kind,
-                instrumentation,
-                execution.Token);
-            var exit = await docker.WaitContainerAsync(containerId, execution.Token).ConfigureAwait(false);
-            if (resourceMonitor is not null)
+            if (measurementContext is null)
             {
+                Action? hangReadyObserver = measurement is not null
+                    ? measurement.MarkProbeReady
+                    : null;
+                var runtimeToken = execution.Token;
+                if (runtimeDeadlineAfterMarker is { } postMarkerDeadline)
+                {
+                    runtimeExecution = CancellationTokenSource.CreateLinkedTokenSource(
+                        operation.CancellationToken,
+                        execution.Token);
+                    var runtimeTimer = runtimeExecution;
+                    var timeoutArmed = 0;
+                    var markReady = hangReadyObserver;
+                    hangReadyObserver = () =>
+                    {
+                        markReady?.Invoke();
+                        if (Interlocked.Exchange(ref timeoutArmed, 1) == 0)
+                            runtimeTimer.CancelAfter(postMarkerDeadline);
+                    };
+                    runtimeToken = runtimeExecution.Token;
+                }
+                if (sessionLease is null &&
+                    await RemoveQuietlyAsync(materializerContainerId).ConfigureAwait(false))
+                {
+                    materializerContainerId = null;
+                }
+
+                var output = attachedOutput ?? throw new InvalidOperationException(
+                    "The runtime output stream was not attached before container start.");
+                attachedOutput = null;
+                await using (output.ConfigureAwait(false))
+                {
+                    await CaptureFramesAsync(
+                        operation,
+                        output,
+                        capture,
+                        policy.MaximumOutputBytes,
+                        kind,
+                        instrumentation,
+                        runtimeToken,
+                        hangReadyObserver);
+                }
+                exit = await docker.WaitContainerAsync(containerId, runtimeToken).ConfigureAwait(false);
+            }
+            else
+            {
+                var monitor = resourceMonitor ?? throw new InvalidOperationException(
+                    "A measured runtime has no resource monitor.");
+                var measurementVolume = measurementVolumeName ?? throw new InvalidOperationException(
+                    "A measured runtime has no isolated measurement control volume.");
+                if (!StringComparer.Ordinal.Equals(
+                        measurementContext.MeasurementHelper.Image.Reference,
+                        _options.MeasurementHelperImage) ||
+                    !StringComparer.Ordinal.Equals(
+                        measurementContext.MeasurementHelper.Image.ImageId,
+                        _options.MeasurementHelperImageId) ||
+                    !StringComparer.Ordinal.Equals(
+                        measurementContext.MeasurementHelper.Implementation,
+                        RuntimePerformancePreflightCoordinator.MeasurementHelperImplementation) ||
+                    !StringComparer.Ordinal.Equals(
+                        measurementContext.MeasurementHelper.Entrypoint,
+                        RuntimePerformancePreflightCoordinator.MeasurementHelperEntrypoint) ||
+                    !StringComparer.Ordinal.Equals(
+                        measurementContext.MeasurementHelper.SourceRevision,
+                        _options.PromotionPreflightSourceRevision) ||
+                    !StringComparer.Ordinal.Equals(
+                        measurementContext.MeasurementHelper.ContentSha256,
+                        RuntimePerformancePreflightCoordinator.MeasurementHelperContentSha256))
+                {
+                    throw MeasurementProtocolFailure(
+                        "The registered measurement helper no longer matches Supervisor configuration.");
+                }
+
+                var targetExitTask = docker.WaitContainerAsync(containerId, execution.Token);
                 try
                 {
-                    resourceUsage = await StopResourceMonitorAsync(resourceMonitor).ConfigureAwait(false);
-                    resourceMonitor = null;
+                    await AwaitMeasurementPhaseAsync(
+                        monitor.WaitForFirstSampleAsync(execution.Token),
+                        targetExitTask,
+                        "positive stats baseline",
+                        execution.Token).ConfigureAwait(false);
+
+                    var running = await AwaitMeasurementPhaseAsync(
+                        docker.InspectRunningContainerAsync(containerId, execution.Token),
+                        targetExitTask,
+                        "target PID inspection",
+                        execution.Token).ConfigureAwait(false);
+                    if (!running.Running || running.HostPid <= 0 ||
+                        !StringComparer.Ordinal.Equals(running.ContainerId, containerId))
+                    {
+                        throw MeasurementProtocolFailure(
+                            "The measured keeper did not expose a trusted running host PID.");
+                    }
+
+                    var token = Guid.NewGuid().ToString("N");
+                    measurementSidecarContainerId = await AwaitMeasurementPhaseAsync(
+                        docker.CreateRuntimeMeasurementSidecarAsync(
+                            new RuntimeMeasurementSidecarSpec(
+                                operation.Handle.OperationId,
+                                serviceIdentity.ReleaseId,
+                                measurementContext.MeasurementHelper.Image.ImageId,
+                                containerId,
+                                running.HostPid,
+                                token,
+                                measurementVolume,
+                                _options.ContainerLabel,
+                                _options.ResourceScope,
+                                CaptureTraceParent()),
+                            execution.Token),
+                        targetExitTask,
+                        "measurement sidecar creation",
+                        execution.Token).ConfigureAwait(false);
+                    await AwaitMeasurementPhaseAsync(
+                        docker.StartContainerAsync(measurementSidecarContainerId, execution.Token),
+                        targetExitTask,
+                        "measurement sidecar start",
+                        execution.Token).ConfigureAwait(false);
+                    var sidecarExitTask = docker.WaitContainerAsync(
+                        measurementSidecarContainerId,
+                        execution.Token);
+                    await AwaitMeasurementPhaseAsync(
+                        docker.WaitForRuntimeMeasurementArmedAsync(
+                            measurementSidecarContainerId,
+                            token,
+                            containerId,
+                            execution.Token),
+                        targetExitTask,
+                        sidecarExitTask,
+                        "measurement sidecar armed record",
+                        execution.Token).ConfigureAwait(false);
+
+                    if (await RemoveQuietlyAsync(materializerContainerId).ConfigureAwait(false))
+                        materializerContainerId = null;
+
+                    var runtimeUser = RuntimeContainerIsolation.ResolveWorkspaceOwner(isolationKind).User;
+                    var execCommand = new[] { measurementContext.RuntimeEntrypoint }
+                        .Concat(command)
+                        .ToArray();
+                    IReadOnlyDictionary<string, string>? execEnvironment =
+                        isolationKind is RuntimeContainerIsolationKind.WineRoot or RuntimeContainerIsolationKind.WineNonRoot
+                            ? new Dictionary<string, string>(StringComparer.Ordinal)
+                            {
+                                // Keep the cleanup mode off the keeper's
+                                // container-wide environment. It is a
+                                // workload-exec concern; enabling it on PID1
+                                // would fork the keeper and break the strict
+                                // one-process measurement contract.
+                                ["SHARPLABNEXT_WINE_CLEANUP"] = "1"
+                            }
+                            : null;
+                    var execId = await AwaitMeasurementPhaseAsync(
+                        docker.CreateContainerExecAsync(
+                            containerId,
+                            new RuntimeExecSpec(execCommand, runtimeUser, "/workspace", execEnvironment),
+                            execution.Token),
+                        targetExitTask,
+                        sidecarExitTask,
+                        "runtime Exec creation",
+                        execution.Token).ConfigureAwait(false);
+                    await using (var execOutput = await AwaitMeasurementPhaseAsync(
+                        docker.StartContainerExecAsync(execId, execution.Token),
+                        targetExitTask,
+                        sidecarExitTask,
+                        "runtime Exec start",
+                        execution.Token).ConfigureAwait(false))
+                    {
+                        await AwaitMeasurementPhaseAsync(
+                            CaptureFramesAsync(
+                                operation,
+                                execOutput,
+                                capture,
+                                policy.MaximumOutputBytes,
+                                kind,
+                                instrumentation,
+                                execution.Token),
+                            targetExitTask,
+                            sidecarExitTask,
+                            "runtime Exec frame capture",
+                            execution.Token).ConfigureAwait(false);
+                    }
+
+                    var execInspection = await AwaitMeasurementPhaseAsync(
+                        docker.InspectContainerExecAsync(execId, execution.Token),
+                        targetExitTask,
+                        sidecarExitTask,
+                        "runtime Exec inspection",
+                        execution.Token).ConfigureAwait(false);
+                    var execExitCode = execInspection.ExitCode;
+                    var protocolExitCode = capture.Exit?.ExitCode;
+                    if (execInspection.Running || execExitCode is null || protocolExitCode is null ||
+                        execExitCode.Value != protocolExitCode.Value)
+                    {
+                        throw MeasurementProtocolFailure(
+                            "The runtime Exec and framed protocol exit states do not match.");
+                    }
+
+                    var afterExec = await AwaitMeasurementPhaseAsync(
+                        docker.InspectRunningContainerAsync(containerId, execution.Token),
+                        targetExitTask,
+                        sidecarExitTask,
+                        "post-Exec keeper inspection",
+                        execution.Token).ConfigureAwait(false);
+                    if (!afterExec.Running || afterExec.HostPid != running.HostPid)
+                    {
+                        throw MeasurementProtocolFailure(
+                            "The measured keeper was not running after workload completion.");
+                    }
+
+                    await AwaitMeasurementPhaseAsync(
+                        docker.UploadRuntimeMeasurementSignalAsync(
+                            measurementSidecarContainerId,
+                            token,
+                            containerId,
+                            RuntimeMeasurementSignalKind.Capture,
+                            execution.Token),
+                        targetExitTask,
+                        sidecarExitTask,
+                        "measurement capture signal",
+                        execution.Token).ConfigureAwait(false);
+                    runtimeMeasurement = await AwaitMeasurementPhaseAsync(
+                        docker.WaitForRuntimeMeasurementAsync(
+                            measurementSidecarContainerId,
+                            token,
+                            containerId,
+                            execution.Token),
+                        targetExitTask,
+                        sidecarExitTask,
+                        "cgroup completion record",
+                        execution.Token).ConfigureAwait(false);
+                    postCompletionSampleCheckpoint = monitor.SampleCount;
+                    await AwaitMeasurementPhaseAsync(
+                        monitor.WaitForSampleAfterAsync(
+                            postCompletionSampleCheckpoint,
+                            execution.Token),
+                        targetExitTask,
+                        sidecarExitTask,
+                        "post-completion stats sample",
+                        execution.Token).ConfigureAwait(false);
+                    if (monitor.SampleCount <= postCompletionSampleCheckpoint)
+                    {
+                        throw MeasurementProtocolFailure(
+                            "Docker stats did not produce a positive sample after completion.");
+                    }
+                    await AwaitMeasurementPhaseAsync(
+                        docker.UploadRuntimeMeasurementSignalAsync(
+                            measurementSidecarContainerId,
+                            token,
+                            containerId,
+                            RuntimeMeasurementSignalKind.Finish,
+                            execution.Token),
+                        targetExitTask,
+                        sidecarExitTask,
+                        "measurement finish signal",
+                        execution.Token,
+                        allowSidecarExitAfterPhase: true).ConfigureAwait(false);
+                    var sidecarExit = await AwaitMeasurementPhaseAsync(
+                        sidecarExitTask,
+                        targetExitTask,
+                        "measurement sidecar exit",
+                        execution.Token).ConfigureAwait(false);
+                    if (sidecarExit.StatusCode != 0 || sidecarExit.OomKilled ||
+                        !string.IsNullOrWhiteSpace(sidecarExit.Error))
+                    {
+                        throw MeasurementProtocolFailure(
+                            "The measurement sidecar did not exit cleanly after the finish signal.");
+                    }
+                    if (await RemoveQuietlyAsync(measurementSidecarContainerId).ConfigureAwait(false))
+                        measurementSidecarContainerId = null;
+
+                    await docker.StopContainerAsync(
+                        containerId,
+                        TimeSpan.FromSeconds(1),
+                        execution.Token).ConfigureAwait(false);
+                    var keeperExit = await targetExitTask.ConfigureAwait(false);
+                    if (keeperExit.StatusCode != 143 || keeperExit.OomKilled ||
+                        !string.IsNullOrWhiteSpace(keeperExit.Error))
+                    {
+                        throw MeasurementProtocolFailure(
+                            "The measured keeper did not exit cleanly after Supervisor stopped it.");
+                    }
+                    exit = new RuntimeContainerExit(execExitCode.Value, OomKilled: false, Error: null);
+                }
+                catch (OperationCanceledException) when (execution.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (RuntimeJobFailureException)
+                {
+                    throw;
                 }
                 catch (Exception exception)
                 {
+                    throw MeasurementProtocolFailure(
+                        $"The measured runtime protocol failed: {exception.Message}");
+                }
+
+                try
+                {
+                    var completionMeasurement = runtimeMeasurement ?? throw MeasurementProtocolFailure(
+                        "The measurement sidecar did not publish a completion record.");
+                    resourceUsage = await StopResourceMonitorAsync(monitor).ConfigureAwait(false);
+                    resourceMonitor = null;
+                    resourceUsage = resourceUsage with
+                    {
+                        PeakMemoryBytes = Math.Max(
+                            resourceUsage.PeakMemoryBytes,
+                            completionMeasurement.PeakMemoryBytes),
+                        CompletionPeakMemoryBytes = completionMeasurement.PeakMemoryBytes,
+                        PostCompletionSampleCount = checked(
+                            resourceUsage.SampleCount - postCompletionSampleCheckpoint)
+                    };
+                }
+                catch (Exception exception)
+                {
+                    cleanupSucceeded = false;
+                    resourceMonitor = null;
                     measurementFailureCode = "resource-monitor-stop-failed";
                     measurementFailureMessage = exception.Message;
-                    resourceMonitor = null;
                     throw;
                 }
             }
@@ -547,7 +922,7 @@ public sealed partial class RuntimeJobExecutor(
             sessionReusable = sessionLease is not null
                 ? await StopSessionContainerQuietlyAsync(containerId).ConfigureAwait(false)
                 : false;
-            if (sessionLease is null)
+            if (sessionLease is null && measurement?.CollectResources != true)
                 await KillQuietlyAsync(containerId);
             stopwatch.Stop();
             if (profile is not null)
@@ -569,7 +944,7 @@ public sealed partial class RuntimeJobExecutor(
             sessionReusable = sessionLease is not null
                 ? await StopSessionContainerQuietlyAsync(containerId).ConfigureAwait(false)
                 : false;
-            if (sessionLease is null)
+            if (sessionLease is null && measurement?.CollectResources != true)
                 await KillQuietlyAsync(containerId);
             stopwatch.Stop();
             if (profile is not null)
@@ -594,7 +969,7 @@ public sealed partial class RuntimeJobExecutor(
             sessionReusable = sessionLease is not null
                 ? await StopSessionContainerQuietlyAsync(containerId).ConfigureAwait(false)
                 : false;
-            if (sessionLease is null)
+            if (sessionLease is null && measurement?.CollectResources != true)
                 await KillQuietlyAsync(containerId);
             stopwatch.Stop();
             if (profile is not null)
@@ -627,15 +1002,32 @@ public sealed partial class RuntimeJobExecutor(
         }
         finally
         {
+            runtimeExecution?.Dispose();
             stopwatch.Stop();
+            if (attachedOutput is not null)
+            {
+                try
+                {
+                    await attachedOutput.DisposeAsync().ConfigureAwait(false);
+                }
+                catch (Exception exception)
+                {
+                    cleanupSucceeded = false;
+                    measurementFailureCode ??= "runtime-output-detach-failed";
+                    measurementFailureMessage ??= exception.Message;
+                }
+            }
             if (resourceMonitor is not null)
             {
                 try
                 {
                     resourceUsage = await StopResourceMonitorAsync(resourceMonitor).ConfigureAwait(false);
+                    resourceMonitor = null;
                 }
                 catch (Exception exception)
                 {
+                    cleanupSucceeded = false;
+                    resourceMonitor = null;
                     measurementFailureCode ??= "resource-monitor-stop-failed";
                     measurementFailureMessage ??= exception.Message;
                 }
@@ -656,9 +1048,11 @@ public sealed partial class RuntimeJobExecutor(
             {
                 try
                 {
+                    cleanupSucceeded &= await RemoveQuietlyAsync(measurementSidecarContainerId);
                     cleanupSucceeded &= await RemoveQuietlyAsync(containerId);
                     cleanupSucceeded &= await RemoveQuietlyAsync(materializerContainerId);
                     cleanupSucceeded &= await RemoveWorkspaceVolumeQuietlyAsync(workspaceVolumeName);
+                    cleanupSucceeded &= await RemoveWorkspaceVolumeQuietlyAsync(measurementVolumeName);
                 }
                 finally
                 {
@@ -731,6 +1125,7 @@ public sealed partial class RuntimeJobExecutor(
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 var remaining = await docker.ListManagedContainersAsync(
                     _options.ContainerLabel,
+                    _options.ResourceScope,
                     timeout.Token).ConfigureAwait(false);
                 containerRemoved = remaining.All(container =>
                     !StringComparer.Ordinal.Equals(container.Id, containerId));
@@ -899,11 +1294,7 @@ public sealed partial class RuntimeJobExecutor(
             string.IsNullOrWhiteSpace(framework.Name) ||
             string.IsNullOrWhiteSpace(framework.MinimumVersion) ||
             !frameworkNames.Add(framework.Name) ||
-            !profile.AcceptedFrameworks.Any(accepted =>
-                RuntimeProfileValidation.AcceptsFramework(
-                    accepted,
-                    framework.Name,
-                    framework.MinimumVersion)));
+            !AcceptsFramework(profile, acceptedRuntimeFamilies, framework));
         if (incompatibleFramework)
         {
             throw new RuntimeJobFailureException(
@@ -938,6 +1329,41 @@ public sealed partial class RuntimeJobExecutor(
                 "The selected runtime does not provide the artifact's required feature tags.",
                 retryable: false);
         }
+    }
+
+    private static bool AcceptsFramework(
+        RuntimeProfileOptions profile,
+        IReadOnlyList<string> acceptedRuntimeFamilies,
+        FrameworkRequirement framework)
+    {
+        if (profile.AcceptedFrameworks.Any(accepted =>
+            RuntimeProfileValidation.AcceptsFramework(
+                accepted,
+                framework.Name,
+                framework.MinimumVersion)))
+        {
+            return true;
+        }
+
+        if (!acceptedRuntimeFamilies.Contains("coreclr", StringComparer.Ordinal) ||
+            profile.Family is not ("coreclr" or "coreclr-wine") ||
+            !string.Equals(framework.Name, "Microsoft.NETCore.App", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        // User assemblies are loaded into the selected runtime's isolated
+        // runner process, so a newer CoreCLR can intentionally exercise an
+        // older target framework without relying on the app's runtimeconfig.
+        return RuntimeProfileValidation.AcceptsFramework(
+            new RuntimeFrameworkCompatibilityDefinition
+            {
+                Name = "Microsoft.NETCore.App",
+                MinimumVersion = "2.0.0",
+                MaximumVersion = profile.RuntimeVersion
+            },
+            framework.Name,
+            framework.MinimumVersion);
     }
 
     internal static void ValidateCapability(RuntimeProfileOptions profile, string capability)
@@ -997,6 +1423,7 @@ public sealed partial class RuntimeJobExecutor(
         long maximumBytes,
         string? stdin,
         RuntimeContainerIsolationKind isolationKind,
+        bool includeReady,
         CancellationToken cancellationToken)
     {
         var declaredSize = descriptor.Entries.Sum(static entry => entry.Size);
@@ -1018,6 +1445,15 @@ public sealed partial class RuntimeJobExecutor(
             foreach (var entry in descriptor.Entries)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var normalizedPath = ArtifactPath.Normalize(entry.Path);
+                if (IsSupervisorWorkspacePath(normalizedPath))
+                {
+                    throw new RuntimeJobFailureException(
+                        "artifact-path-reserved",
+                        WorkerErrorCategory.IncompatibleArtifact,
+                        "The artifact uses a Supervisor-reserved workspace path.",
+                        retryable: false);
+                }
                 await using var source = await artifactStore.OpenArtifactFileReadAsync(
                     descriptor.Manifest.ArtifactId,
                     entry.Path,
@@ -1037,7 +1473,7 @@ public sealed partial class RuntimeJobExecutor(
                 WriteArchiveEntry(
                     writer,
                     writtenDirectories,
-                    entry.Path,
+                    normalizedPath,
                     data,
                     workspaceOwner.Uid,
                     workspaceOwner.Gid);
@@ -1054,17 +1490,27 @@ public sealed partial class RuntimeJobExecutor(
                     workspaceOwner.Gid);
             }
 
-            WriteArchiveEntry(
-                writer,
-                writtenDirectories,
-                ".sharplabnext/ready",
-                new MemoryStream("ready\n"u8.ToArray(), writable: false),
-                workspaceOwner.Uid,
-                workspaceOwner.Gid);
+            if (includeReady)
+            {
+                WriteArchiveEntry(
+                    writer,
+                    writtenDirectories,
+                    ".sharplabnext/ready",
+                    new MemoryStream("ready\n"u8.ToArray(), writable: false),
+                    workspaceOwner.Uid,
+                    workspaceOwner.Gid);
+            }
         }
 
         archive.Position = 0;
         return archive;
+    }
+
+    internal static bool IsSupervisorWorkspacePath(string path)
+    {
+        var normalized = ArtifactPath.Normalize(path);
+        return StringComparer.Ordinal.Equals(normalized, ".sharplabnext") ||
+            normalized.StartsWith(".sharplabnext/", StringComparison.Ordinal);
     }
 
     internal static void WriteArchiveEntry(
@@ -1110,7 +1556,8 @@ public sealed partial class RuntimeJobExecutor(
         long maximumOutputBytes,
         RuntimeJobKind kind,
         RunInstrumentation? instrumentation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action? hangReadyObserver = null)
     {
         var reader = new RuntimeFrameLogReader(logs);
         long previousSequence = 0;
@@ -1127,6 +1574,9 @@ public sealed partial class RuntimeJobExecutor(
             {
                 case RuntimeFrameKind.Stdout:
                     capture.Stdout.Write(frame.Payload.Span);
+                    if (hangReadyObserver is not null &&
+                        capture.ObserveCapabilityMarker(CapabilityHangReadyMarkerBytes))
+                        hangReadyObserver?.Invoke();
                     EmitOutput(operation, capture, frame.Payload, OutputChannel.Stdout, maximumOutputBytes);
                     break;
                 case RuntimeFrameKind.Stderr:
@@ -1323,6 +1773,10 @@ public sealed partial class RuntimeJobExecutor(
             jitOperation?.ImplementationId,
             RuntimeOperationImplementationIds.MonoJitInspector,
             StringComparison.Ordinal);
+        var usesDesktopClrJitInspector = string.Equals(
+            jitOperation?.ImplementationId,
+            RuntimeOperationImplementationIds.DesktopClrJitInspector,
+            StringComparison.Ordinal);
         var outputPath = ToRuntimeTemporaryPath(
             jitOperation?.PathStyle ?? RuntimeOperationPathStyles.Unix,
             "sharplabnext-jit.asm");
@@ -1330,7 +1784,7 @@ public sealed partial class RuntimeJobExecutor(
         {
             ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1"
         };
-        if (!usesCheckedJitBridge && !usesMonoJitInspector)
+        if (!usesCheckedJitBridge && !usesMonoJitInspector && !usesDesktopClrJitInspector)
         {
             // The runtime entrypoint removes these files before every JIT process
             // start. A reusable container keeps its /tmp tmpfs across stop/start,
@@ -1342,6 +1796,13 @@ public sealed partial class RuntimeJobExecutor(
             environment["DOTNET_JitDisasmWithCodeBytes"] = "1";
             environment["COMPlus_JitStdOutFile"] = outputPath;
             environment["SHARPLABNEXT_JIT_OUTPUT_PATH"] = outputPath;
+        }
+        else if (usesDesktopClrJitInspector)
+        {
+            // WineRunner owns the bounded Desktop CLR capture. A stopped
+            // reusable container retains /tmp, so the entrypoint must remove
+            // both the final capture and an interrupted temporary write.
+            environment["SHARPLABNEXT_JIT_RESET_OUTPUT"] = "1";
         }
 
         if (profile.Container.EnvironmentKind == RuntimeContainerEnvironmentKinds.Wine)
@@ -1406,18 +1867,18 @@ public sealed partial class RuntimeJobExecutor(
                 $"JIT source mapping kind '{mappingKind}' is not supported.");
         }
 
-        if (request.Options.TieringPolicyId == "tier0-diffable")
+        if (!usesDesktopClrJitInspector && request.Options.TieringPolicyId == "tier0-diffable")
         {
             environment["COMPlus_TieredCompilation"] = "0";
             environment["COMPlus_JitDisasmDiffable"] = "0";
         }
-        else if (request.Options.TieringPolicyId == "tier1")
+        else if (!usesDesktopClrJitInspector && request.Options.TieringPolicyId == "tier1")
         {
             environment["COMPlus_TieredCompilation"] = "1";
             environment["COMPlus_TC_QuickJit"] = "0";
         }
 
-        if (request.Options.PgoPolicyId == "disabled")
+        if (!usesDesktopClrJitInspector && request.Options.PgoPolicyId == "disabled")
         {
             environment["COMPlus_TieredPGO"] = "0";
         }
@@ -1437,9 +1898,35 @@ public sealed partial class RuntimeJobExecutor(
         if (string.IsNullOrWhiteSpace(methodFilter))
             return "*";
 
-        return methodFilter.IndexOfAny(['*', '?']) >= 0
-            ? methodFilter
-            : $"*{methodFilter}*";
+        // CoreCLR's JitDisasm grammar separates the declaring type and method
+        // with a colon. The managed inspector intentionally keeps receiving
+        // the original dotted filter, so only the native JIT filter is
+        // normalized here. This matters on newer runtimes (notably .NET 10),
+        // where a dotted fully-qualified method silently produces no listing.
+        var normalized = NormalizeCoreClrJitFilter(methodFilter);
+        return normalized.IndexOfAny(['*', '?']) >= 0
+            ? normalized
+            : $"*{normalized}*";
+    }
+
+    private static string NormalizeCoreClrJitFilter(string methodFilter)
+    {
+        // A caller may already use the CoreCLR Type:Method form. Preserve it
+        // and retain explicit wildcard semantics for filters such as
+        // Namespace.Type.*.
+        if (methodFilter.Contains(':', StringComparison.Ordinal))
+            return methodFilter;
+
+        // Reflection renders constructors as Type..ctor/Type..cctor. The
+        // second dot belongs to the method name, so keep it after replacing
+        // the type/method separator (Type:.ctor).
+        var constructorSeparator = methodFilter.LastIndexOf("..", StringComparison.Ordinal);
+        var separator = constructorSeparator >= 0
+            ? constructorSeparator
+            : methodFilter.LastIndexOf('.');
+        return separator > 0 && separator < methodFilter.Length - 1
+            ? string.Concat(methodFilter.AsSpan(0, separator), ":", methodFilter.AsSpan(separator + 1))
+            : methodFilter;
     }
 
     private static RunResult CreateRunResult(
@@ -1674,8 +2161,12 @@ public sealed partial class RuntimeJobExecutor(
             profile.Rid,
             profile.Architecture);
 
-    private static JitIdentity JitIdentity(RuntimeProfileOptions profile, JitOptions options) =>
-        new(
+    private static JitIdentity JitIdentity(RuntimeProfileOptions profile, JitOptions options)
+    {
+        var desktopClr = StringComparer.Ordinal.Equals(
+            profile.Operations?.Jit?.ImplementationId,
+            RuntimeOperationImplementationIds.DesktopClrJitInspector);
+        return new(
             profile.RuntimeVersion,
             profile.RuntimeCommit,
             profile.JitVersion,
@@ -1684,10 +2175,15 @@ public sealed partial class RuntimeJobExecutor(
             profile.Rid,
             profile.Architecture,
             profile.CpuFeatureProfile,
-            options.TieringPolicyId,
-            options.PgoPolicyId,
-            options.ProviderId,
-            "prepare-method+jitdisasm");
+            desktopClr ? "not-applicable" : options.TieringPolicyId,
+            desktopClr ? "not-applicable" : options.PgoPolicyId,
+            desktopClr
+                ? RuntimeOperationImplementationIds.DesktopClrJitInspector
+                : options.ProviderId,
+            desktopClr
+                ? "prepare-method+rtl-lookup-function-entry+iced"
+                : "prepare-method+jitdisasm");
+    }
 
     private void Append(OperationStart operation, OperationEventPayload payload) =>
         operations.Append(operation.Handle.OperationId, payload, DateTimeOffset.UtcNow);
@@ -1817,6 +2313,159 @@ public sealed partial class RuntimeJobExecutor(
         }
     }
 
+    private static Task AwaitMeasurementPhaseAsync(
+        Task phase,
+        Task<RuntimeContainerExit> targetExit,
+        string phaseName,
+        CancellationToken cancellationToken) =>
+        AwaitMeasurementPhaseAsync(
+            phase,
+            targetExit,
+            sidecarExit: null,
+            phaseName,
+            cancellationToken);
+
+    private static async Task AwaitMeasurementPhaseAsync(
+        Task phase,
+        Task<RuntimeContainerExit> targetExit,
+        Task<RuntimeContainerExit>? sidecarExit,
+        string phaseName,
+        CancellationToken cancellationToken,
+        bool allowSidecarExitAfterPhase = false)
+    {
+        var completed = await (sidecarExit is null
+                ? Task.WhenAny(phase, targetExit)
+                : Task.WhenAny(phase, targetExit, sidecarExit))
+            .WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (ReferenceEquals(completed, targetExit) || targetExit.IsCompleted)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ObserveFault(phase);
+            throw await CreateEarlyTargetExitFailureAsync(targetExit, phaseName).ConfigureAwait(false);
+        }
+        if (sidecarExit is not null && ReferenceEquals(completed, sidecarExit) &&
+            !(allowSidecarExitAfterPhase && phase.IsCompletedSuccessfully))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ObserveFault(phase);
+            throw await CreateEarlySidecarExitFailureAsync(sidecarExit, phaseName).ConfigureAwait(false);
+        }
+
+        await phase.ConfigureAwait(false);
+        if (targetExit.IsCompleted)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw await CreateEarlyTargetExitFailureAsync(targetExit, phaseName).ConfigureAwait(false);
+        }
+        if (!allowSidecarExitAfterPhase && sidecarExit?.IsCompleted == true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw await CreateEarlySidecarExitFailureAsync(sidecarExit, phaseName).ConfigureAwait(false);
+        }
+    }
+
+    private static Task<T> AwaitMeasurementPhaseAsync<T>(
+        Task<T> phase,
+        Task<RuntimeContainerExit> targetExit,
+        string phaseName,
+        CancellationToken cancellationToken) =>
+        AwaitMeasurementPhaseAsync(
+            phase,
+            targetExit,
+            sidecarExit: null,
+            phaseName,
+            cancellationToken);
+
+    private static async Task<T> AwaitMeasurementPhaseAsync<T>(
+        Task<T> phase,
+        Task<RuntimeContainerExit> targetExit,
+        Task<RuntimeContainerExit>? sidecarExit,
+        string phaseName,
+        CancellationToken cancellationToken,
+        bool allowSidecarExitAfterPhase = false)
+    {
+        var completed = await (sidecarExit is null
+                ? Task.WhenAny(phase, targetExit)
+                : Task.WhenAny(phase, targetExit, sidecarExit))
+            .WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (ReferenceEquals(completed, targetExit) || targetExit.IsCompleted)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ObserveFault(phase);
+            throw await CreateEarlyTargetExitFailureAsync(targetExit, phaseName).ConfigureAwait(false);
+        }
+        if (sidecarExit is not null && ReferenceEquals(completed, sidecarExit) &&
+            !(allowSidecarExitAfterPhase && phase.IsCompletedSuccessfully))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ObserveFault(phase);
+            throw await CreateEarlySidecarExitFailureAsync(sidecarExit, phaseName).ConfigureAwait(false);
+        }
+
+        var result = await phase.ConfigureAwait(false);
+        if (targetExit.IsCompleted)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw await CreateEarlyTargetExitFailureAsync(targetExit, phaseName).ConfigureAwait(false);
+        }
+        if (!allowSidecarExitAfterPhase && sidecarExit?.IsCompleted == true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw await CreateEarlySidecarExitFailureAsync(sidecarExit, phaseName).ConfigureAwait(false);
+        }
+        return result;
+    }
+
+    private static async Task<RuntimeJobFailureException> CreateEarlyTargetExitFailureAsync(
+        Task<RuntimeContainerExit> targetExit,
+        string phaseName)
+    {
+        try
+        {
+            var exit = await targetExit.ConfigureAwait(false);
+            return MeasurementProtocolFailure(
+                $"The measured keeper exited during {phaseName} " +
+                $"(status {exit.StatusCode}, OOM {exit.OomKilled}, error '{exit.Error ?? string.Empty}').");
+        }
+        catch (Exception exception)
+        {
+            return MeasurementProtocolFailure(
+                $"The measured keeper wait failed during {phaseName}: {exception.Message}");
+        }
+    }
+
+    private static async Task<RuntimeJobFailureException> CreateEarlySidecarExitFailureAsync(
+        Task<RuntimeContainerExit> sidecarExit,
+        string phaseName)
+    {
+        try
+        {
+            var exit = await sidecarExit.ConfigureAwait(false);
+            return MeasurementProtocolFailure(
+                $"The measurement sidecar exited during {phaseName} " +
+                $"(status {exit.StatusCode}, OOM {exit.OomKilled}, error '{exit.Error ?? string.Empty}').");
+        }
+        catch (Exception exception)
+        {
+            return MeasurementProtocolFailure(
+                $"The measurement sidecar wait failed during {phaseName}: {exception.Message}");
+        }
+    }
+
+    private static void ObserveFault(Task task) =>
+        _ = task.ContinueWith(
+            static completed => _ = completed.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+    private static RuntimeJobFailureException MeasurementProtocolFailure(string message) =>
+        new(
+            "runtime-measurement-protocol-failed",
+            WorkerErrorCategory.Unavailable,
+            message,
+            retryable: false);
+
     private static string CreateContainerName(RuntimeJobKind kind) =>
         $"sln-{kind.ToString().ToLowerInvariant()}-{Guid.NewGuid():N}";
 
@@ -1845,6 +2494,42 @@ public sealed partial class RuntimeJobExecutor(
         public List<RuntimeFlowPayload> FlowPayloads { get; } = [];
         public MemoryStream JitAssembly { get; } = new();
         public MemoryStream JitSummary { get; } = new();
+        public bool HangReadyMarkerObserved { get; private set; }
+        private int _markerScanOffset;
+
+        public bool ObserveCapabilityMarker(ReadOnlySpan<byte> marker)
+        {
+            if (HangReadyMarkerObserved || marker.IsEmpty || Stdout.Length > int.MaxValue)
+                return false;
+
+            var output = Stdout.GetBuffer().AsSpan(0, checked((int)Stdout.Length));
+            // Re-scan only the small overlap needed for a marker split across
+            // frames. This keeps marker recognition linear in captured output
+            // instead of repeatedly walking the complete stdout buffer.
+            var scanStart = Math.Max(0, _markerScanOffset - marker.Length - 1);
+            for (var offset = scanStart; offset <= output.Length - marker.Length; offset++)
+            {
+                if (!output.Slice(offset, marker.Length).SequenceEqual(marker))
+                    continue;
+
+                var startsLine = offset == 0 || output[offset - 1] is (byte)'\r' or (byte)'\n';
+                var end = offset + marker.Length;
+                // A frame boundary is not a line boundary. If the marker is
+                // the final bytes currently captured, defer recognition until
+                // a later frame supplies the required newline.
+                var endsLine = end < output.Length &&
+                    (output[end] is (byte)'\r' or (byte)'\n');
+                if (startsLine && endsLine)
+                {
+                    HangReadyMarkerObserved = true;
+                    return true;
+                }
+            }
+
+            _markerScanOffset = output.Length;
+
+            return false;
+        }
 
         public void RecordFrame(RuntimeFrameKind kind)
         {
@@ -1951,7 +2636,10 @@ public sealed partial class RuntimeContainerReaper(
         try
         {
             var cutoff = DateTimeOffset.UtcNow.AddSeconds(-_options.StaleContainerSeconds);
-            var containers = await docker.ListManagedContainersAsync(_options.ContainerLabel, cancellationToken);
+            var containers = await docker.ListManagedContainersAsync(
+                _options.ContainerLabel,
+                _options.ResourceScope,
+                cancellationToken);
             foreach (var container in containers.Where(container => container.CreatedAtUtc < cutoff))
             {
                 await docker.KillContainerAsync(container.Id, cancellationToken);
@@ -1960,7 +2648,10 @@ public sealed partial class RuntimeContainerReaper(
                 LogStaleContainerRemoved(logger, container.Id, container.State);
             }
 
-            var volumes = await docker.ListManagedWorkspaceVolumesAsync(_options.ContainerLabel, cancellationToken);
+            var volumes = await docker.ListManagedWorkspaceVolumesAsync(
+                _options.ContainerLabel,
+                _options.ResourceScope,
+                cancellationToken);
             foreach (var volume in volumes.Where(volume => volume.CreatedAtUtc < cutoff))
             {
                 await docker.RemoveWorkspaceVolumeAsync(volume.Name, cancellationToken);

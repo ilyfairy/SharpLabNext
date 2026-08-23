@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
 ARG BASE_IMAGE
 ARG ROOT_IMAGE
@@ -355,6 +355,7 @@ cleanup
 trap - EXIT
 SH
 
+ARG SOURCE_REVISION
 RUN <<'SH'
 set -euo pipefail
 
@@ -364,6 +365,9 @@ fail_verify() {
     printf '[framework-verify] failed=%s\n' "$1" >&2
     exit 1
 }
+
+[[ "${SOURCE_REVISION}" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]] \
+    || fail_verify source-revision
 
 manifest=/usr/local/share/sharplabnext/runtime-framework-installers.json
 printf '%s  %s\n' "${INSTALLER_MANIFEST_SHA256}" "${manifest}" | sha256sum --check --status - \
@@ -413,6 +417,8 @@ SH
 
 LABEL org.opencontainers.image.title="SharpLabNext Operator Wine .NET Framework Matrix" \
       org.opencontainers.image.version="${FRAMEWORK_VERSION}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      io.sharplabnext.source.revision="${SOURCE_REVISION}" \
       io.sharplabnext.runtime.framework=".NETFramework,Version=v${FRAMEWORK_VERSION}" \
       io.sharplabnext.runtime.framework-version="${FRAMEWORK_VERSION}" \
       io.sharplabnext.operator-only="true" \

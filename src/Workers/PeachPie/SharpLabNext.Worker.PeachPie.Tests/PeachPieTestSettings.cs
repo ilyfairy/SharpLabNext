@@ -1,6 +1,7 @@
 using System.Globalization;
 using SharpLabNext.Contracts;
 using SharpLabNext.LanguageWorker.Sdk;
+using SharpLabNext.Testing;
 using SharpLabNext.WorkerHost;
 
 namespace SharpLabNext.Worker.PeachPie.Tests;
@@ -144,8 +145,8 @@ internal static class PeachPieTestSettings
             ["PeachPie:BuildProcess:MemoryPollIntervalMilliseconds"] = "25",
             ["ReferenceSets:net10-ref:Path"] = GetReferencePath(),
             ["ReferenceSets:net10-ref:TargetFramework"] = "net10.0",
-            ["ReferenceSets:net10-ref:FrameworkVersion"] = "10.0.9",
-            ["ReferenceSets:net10-ref:Digest"] = "development-net10-ref"
+            ["ReferenceSets:net10-ref:FrameworkVersion"] = TestReferenceSets.Net10.Version,
+            ["ReferenceSets:net10-ref:Digest"] = TestReferenceSets.Net10.Digest
         };
 
     public static void ApplyProcessEnvironment(string root)
@@ -179,8 +180,8 @@ internal static class PeachPieTestSettings
             "net10-ref",
             GetReferencePath(),
             "net10.0",
-            "10.0.9",
-            "development-net10-ref")
+            TestReferenceSets.Net10.Version,
+            TestReferenceSets.Net10.Digest)
     ];
 
     private static string GetMonoUnixNativeLibraryPath() => Path.Combine(
@@ -190,26 +191,7 @@ internal static class PeachPieTestSettings
         "native",
         PeachPieToolchain.MonoUnixNativeLibraryName);
 
-    private static string GetReferencePath()
-    {
-        var explicitPath = Environment.GetEnvironmentVariable("SHARPLABNEXT_NET10_REF_PATH");
-        if (!string.IsNullOrWhiteSpace(explicitPath) && Directory.Exists(explicitPath))
-            return explicitPath;
-        var roots = new[]
-        {
-            Environment.GetEnvironmentVariable("DOTNET_ROOT"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet"),
-            "/usr/share/dotnet",
-            "/usr/local/share/dotnet"
-        };
-        foreach (var root in roots.Where(static value => !string.IsNullOrWhiteSpace(value)))
-        {
-            var candidate = Path.Combine(root!, "packs", "Microsoft.NETCore.App.Ref", "10.0.9", "ref", "net10.0");
-            if (Directory.Exists(candidate))
-                return candidate;
-        }
-        throw new InvalidOperationException("The .NET 10.0.9 reference pack was not found.");
-    }
+    private static string GetReferencePath() => TestReferenceSets.Net10.Path;
 
     private static string FindRepositoryRoot()
     {

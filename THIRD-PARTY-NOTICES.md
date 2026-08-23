@@ -35,6 +35,14 @@ Initial implementation references:
   private bundle may contain them only when the operator has independently
   obtained the software, accepted the applicable Microsoft terms, and is
   authorized to use and transfer that bundle within the intended environment.
+- Wine 9.0 userspace is assembled from the exact Ubuntu package closure in the
+  reviewed `wine-coreclr-userspace` component. Wine is LGPL-2.1-or-later; the
+  corresponding exact source material, package inventory, and required notices
+  are retained by the offline bundle. The Wine/Xvfb dependency closure includes
+  Xorg components under MIT-style terms; their exact Debian/Ubuntu copyright
+  records are retained with that inventory. Neither userspace nor notices are
+  taken from private, ignored, temporary, host-produced, or copied `/usr`
+  images.
 - FsAutoComplete, Apache-2.0. Architectural reference only; not currently bundled.
 - FSharp.Compiler.Service 43.12.204, MIT.
 - FSharp.Core 10.1.204, MIT. Bundled as an exact support assembly in executable F# artifact bundles.

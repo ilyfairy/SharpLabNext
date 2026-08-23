@@ -223,6 +223,7 @@ public sealed class ProfileCandidateDeploymentVerifierTests
                 Path.Combine(repositoryRoot, "profiles", "catalog", "catalog.json"),
                 cancellationToken);
             var releaseLock = CreateLock();
+            template = RestrictSelectableRuntimesToLock(template, releaseLock);
             const string candidateDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
             var material = await CandidateReleaseMaterializer.WriteAsync(
                 root,
@@ -734,6 +735,61 @@ public sealed class ProfileCandidateDeploymentVerifierTests
             SourceUri = $"https://example.test/runtime/{version}.tar.gz",
             Sha512 = new string('e', 128)
         };
+
+        private static CatalogDocument RestrictSelectableRuntimesToLock(
+            CatalogDocument catalog,
+            ReleaseLockDocument releaseLock)
+        {
+            var referenceSetIds = catalog.ReferenceSets
+                .Where(referenceSet => HasComponent(releaseLock, referenceSet.Id, "reference-set") ||
+                                       IsResolvedBySyntheticChannel(referenceSet.Id))
+                .Select(static referenceSet => referenceSet.Id)
+                .ToHashSet(StringComparer.Ordinal);
+            return catalog with
+            {
+                Toolchains = catalog.Toolchains
+                    .Select(toolchain => toolchain with
+                    {
+                        AllowedReferenceSetIds = toolchain.AllowedReferenceSetIds
+                            .Where(referenceSetIds.Contains)
+                            .ToArray()
+                    })
+                    .ToArray(),
+                ReferenceSets = catalog.ReferenceSets
+                    .Where(referenceSet => referenceSetIds.Contains(referenceSet.Id))
+                    .ToArray(),
+                Runtimes = catalog.Runtimes
+                    .Select(runtime => HasComponent(releaseLock, runtime.Id, "runtime")
+                        ? runtime
+                        : runtime with
+                        {
+                            Availability = new ComponentAvailability
+                            {
+                                Installed = false,
+                                Health = "unavailable",
+                                Reason = "Not represented by this synthetic release lock."
+                            }
+                        })
+                    .ToArray(),
+                Compatibility = catalog.Compatibility
+                    .Where(rule => rule.Kind != CompatibilityRuleKind.ToolchainReferenceSet ||
+                                   referenceSetIds.Contains(rule.ToId))
+                    .ToArray(),
+                Presets = catalog.Presets
+                    .Where(preset => referenceSetIds.Contains(preset.ReferenceSetId))
+                    .ToArray()
+            };
+        }
+
+        private static bool HasComponent(
+            ReleaseLockDocument releaseLock,
+            string id,
+            string kind) =>
+            releaseLock.Components.TryGetValue(id, out var component) &&
+            string.Equals(component.Kind, kind, StringComparison.Ordinal);
+
+        private static bool IsResolvedBySyntheticChannel(string referenceSetId) =>
+            referenceSetId is "net10-ref" or "net11-preview-ref";
 
         private static string Serialize<T>(T value) => JsonSerializer.Serialize(value, WireJsonOptions);
 

@@ -20,6 +20,7 @@
   </Folder>
   <Folder Name="/src/RuntimeJobs/">
     <Project Path="src/RuntimeJobs/SharpLabNext.CheckedJitBridge/SharpLabNext.CheckedJitBridge.csproj" />
+    <Project Path="src/RuntimeJobs/SharpLabNext.DesktopClrJitInspector/SharpLabNext.DesktopClrJitInspector.csproj" />
     <Project Path="src/RuntimeJobs/SharpLabNext.JitInspector/SharpLabNext.JitInspector.csproj" />
     <Project Path="src/RuntimeJobs/SharpLabNext.LegacyJitInspector/SharpLabNext.LegacyJitInspector.csproj" />
     <Project Path="src/RuntimeJobs/SharpLabNext.MonoJitInspector/SharpLabNext.MonoJitInspector.csproj" />
@@ -119,6 +120,9 @@
     <Project Path="samples/Languages/SharpLabNext.SampleLanguage.Worker/SharpLabNext.SampleLanguage.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/" />
+  <Folder Name="/tests/Shared/">
+    <Project Path="tests/Shared/SharpLabNext.Testing/SharpLabNext.Testing.csproj" />
+  </Folder>
   <Folder Name="/tests/Compatibility/">
     <Project Path="tests/Compatibility/SharpLabNext.CompatibilityTests/SharpLabNext.CompatibilityTests.csproj" />
   </Folder>
@@ -138,6 +142,7 @@
     <Project Path="tests/Security/SharpLabNext.SecurityTests/SharpLabNext.SecurityTests.csproj" />
   </Folder>
   <Folder Name="/tests/Unit/">
+    <Project Path="tests/Unit/SharpLabNext.DesktopClrJitInspector.Tests/SharpLabNext.DesktopClrJitInspector.Tests.csproj" />
     <Project Path="tests/Unit/SharpLabNext.Observability.Tests/SharpLabNext.Observability.Tests.csproj" />
     <Project Path="tests/Unit/SharpLabNext.UnitTests/SharpLabNext.UnitTests.csproj" />
   </Folder>

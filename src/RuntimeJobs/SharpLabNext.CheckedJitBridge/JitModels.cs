@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
 
 namespace SharpLabNext.CheckedJitBridge;
@@ -48,13 +49,32 @@ internal sealed class JitMethodResult
     public List<JitLinkedRange> LinkedRanges { get; set; }
 
     public string MappingSource { get; set; }
+
+    // EvidenceRanges is the bounded, PDB-verifiable representation consumed by
+    // capability promotion. Keep it separate from LinkedRanges so the public
+    // JIT result wire shape remains focused on source/output editor ranges.
+    public IReadOnlyList<JitEvidenceRange> EvidenceRanges => LinkedRanges
+        .Select(static range => range.EvidenceRange)
+        .OfType<JitEvidenceRange>()
+        .ToArray();
 }
 
 internal sealed record JitLinkedRange(
     string SourceFilePath,
     JitTextRange SourceRange,
     JitTextRange OutputRange,
-    string Precision);
+    string Precision,
+    [property: JsonIgnore] JitEvidenceRange? EvidenceRange = null);
+
+internal sealed record JitEvidenceRange(
+    int IlOffset,
+    int NativeStartOffset,
+    int NativeEndOffset,
+    string Document,
+    int StartLine,
+    int StartColumn,
+    int EndLine,
+    int EndColumn);
 
 internal sealed record JitTextRange(
     int StartLine,

@@ -66,16 +66,16 @@ public sealed class GatewayLanguageSessionTests
     {
         const string internalServiceToken = "shared-internal-service-token-for-language-tests";
         var catalog = await GatewayTestCatalog.LoadRepositoryAsync(TestContext.Current.CancellationToken);
+        var workerEnvironment = new Dictionary<string, string?>
+        {
+            ["ASPNETCORE_ENVIRONMENT"] = "Development",
+            ["RoslynWorker__ReleaseId"] = catalog.ReleaseId
+        };
+        GatewayTestCatalog.AddRoslynStableReferenceSets(workerEnvironment, catalog);
         await using var worker = await DotNetWebServiceProcess.StartAsync(
             "src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable.csproj",
             "/health/ready",
-            new Dictionary<string, string?>
-            {
-                ["ASPNETCORE_ENVIRONMENT"] = "Development",
-                ["RoslynWorker__ReleaseId"] = catalog.ReleaseId,
-                ["ReferenceSets__net10-ref__Path"] = FindNet10ReferencePath(),
-                ["ReferenceSets__net11-preview-ref__Path"] = FindNet11ReferencePath()
-            },
+            workerEnvironment,
             TestContext.Current.CancellationToken,
             configuration: "Release",
             noBuild: true,
@@ -448,47 +448,4 @@ public sealed class GatewayLanguageSessionTests
         Assert.Contains(response.StatusCode, new[] { HttpStatusCode.NoContent, HttpStatusCode.NotFound });
     }
 
-    private static string FindNet10ReferencePath()
-    {
-        var roots = new[]
-        {
-            Environment.GetEnvironmentVariable("DOTNET_ROOT"),
-            Environment.GetEnvironmentVariable("DOTNET_ROOT_X64"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet"),
-            "/usr/share/dotnet"
-        };
-        foreach (var root in roots.Where(static root => !string.IsNullOrWhiteSpace(root)))
-        {
-            var path = Path.Combine(root!, "packs", "Microsoft.NETCore.App.Ref", "10.0.9", "ref", "net10.0");
-            if (Directory.Exists(path))
-                return path;
-        }
-
-        throw new DirectoryNotFoundException("The .NET 10.0.9 reference pack was not found.");
-    }
-
-    private static string FindNet11ReferencePath()
-    {
-        var roots = new[]
-        {
-            Environment.GetEnvironmentVariable("DOTNET_ROOT"),
-            Environment.GetEnvironmentVariable("DOTNET_ROOT_X64"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet"),
-            "/usr/share/dotnet"
-        };
-        foreach (var root in roots.Where(static root => !string.IsNullOrWhiteSpace(root)))
-        {
-            var path = Path.Combine(
-                root!,
-                "packs",
-                "Microsoft.NETCore.App.Ref",
-                "11.0.0-preview.5.26302.115",
-                "ref",
-                "net11.0");
-            if (Directory.Exists(path))
-                return path;
-        }
-
-        throw new DirectoryNotFoundException("The .NET 11 preview reference pack was not found.");
-    }
 }

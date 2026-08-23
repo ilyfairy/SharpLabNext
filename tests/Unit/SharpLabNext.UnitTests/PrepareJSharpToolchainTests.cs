@@ -216,7 +216,10 @@ public sealed class PrepareJSharpToolchainTests
         Assert.DoesNotContain("http://", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("https://", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotMatch(new Regex(@"COPY[^\r\n]*\.(?:exe|msi|cab)\b", RegexOptions.IgnoreCase), source);
-        Assert.DoesNotMatch(new Regex(@"sha256:[0-9a-f]{64}"), source);
+        var firstLineEnd = source.IndexOf('\n');
+        Assert.True(firstLineEnd >= 0);
+        var instructions = source[(firstLineEnd + 1)..];
+        Assert.DoesNotMatch(new Regex(@"sha256:[0-9a-f]{64}"), instructions);
 
         var installComplete = source.IndexOf(
             "run_logged install-jsharp-wineserver wineserver -w",

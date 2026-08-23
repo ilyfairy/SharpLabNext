@@ -72,9 +72,27 @@ public sealed class CompatibilityAuditorTests
             entry.RuntimeId == "wine-netfx48-linux-x64" &&
             entry.OutputId == "run" &&
             entry.Disposition == CompatibilityDisposition.Supported);
+        Assert.Contains(report.Matrix, static entry =>
+            entry.ToolchainId == "roslyn-stable-netfx48" &&
+            entry.ReferenceSetId == "netfx48-managed-ref" &&
+            entry.RuntimeId == "mono-6.12-linux-x64" &&
+            entry.OutputId == "jit-asm" &&
+            entry.Disposition == CompatibilityDisposition.Supported);
+        Assert.Contains(report.Matrix, static entry =>
+            entry.ToolchainId == "roslyn-stable-netfx48" &&
+            entry.ReferenceSetId == "netfx48-managed-ref" &&
+            entry.OutputId == "jit-asm" &&
+            entry.RuntimeId == "wine-netfx48-linux-x64" &&
+            entry.Disposition == CompatibilityDisposition.Supported);
+        Assert.Contains(report.Matrix, static entry =>
+            entry.ToolchainId == "roslyn-stable-netfx48" &&
+            entry.ReferenceSetId == "netfx20-managed-ref" &&
+            entry.OutputId == "jit-asm" &&
+            entry.RuntimeId == "wine-netfx48-linux-x64" &&
+            entry.Disposition == CompatibilityDisposition.Rejected);
         Assert.DoesNotContain(report.Matrix, static entry =>
             entry.ToolchainId == "roslyn-stable-netfx48" &&
-            entry.OutputId is "jit-asm" or "execution-flow" or "run-il" or "il-verify" &&
+            entry.OutputId is "execution-flow" or "run-il" or "il-verify" &&
             entry.Disposition == CompatibilityDisposition.Supported);
         Assert.DoesNotContain(report.Matrix, static entry =>
             entry.ToolchainId == "msvc-cppcli-netfx48" &&

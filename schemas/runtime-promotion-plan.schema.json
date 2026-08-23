@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "required": [
     "schemaVersion",
+    "candidateTarget",
     "profileId",
     "profileSha256",
     "matrixTargetId",
@@ -16,7 +17,9 @@
     "componentIdentity",
     "runtimeIdentity",
     "sourceRevision",
-    "createdAtUtc",
+    "sourceTree",
+    "buildInputs",
+    "buildInputsSha256",
     "producer",
     "securityPolicyId",
     "capabilities",
@@ -27,6 +30,7 @@
   ],
   "properties": {
     "schemaVersion": { "const": 1 },
+    "candidateTarget": { "$ref": "#/$defs/id" },
     "profileId": { "$ref": "#/$defs/id" },
     "profileSha256": { "$ref": "#/$defs/sha256" },
     "matrixTargetId": { "$ref": "#/$defs/id" },
@@ -35,12 +39,12 @@
     "resolvedVersion": { "$ref": "#/$defs/nonEmpty" },
     "image": { "$ref": "#/$defs/image" },
     "componentIdentity": { "$ref": "#/$defs/componentIdentity" },
+    "wineOperator": { "$ref": "#/$defs/wineOperator" },
     "runtimeIdentity": { "$ref": "#/$defs/runtimeIdentity" },
     "sourceRevision": { "$ref": "#/$defs/gitCommit" },
-    "createdAtUtc": {
-      "type": "string",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,7})?Z$"
-    },
+    "sourceTree": { "$ref": "#/$defs/gitCommit" },
+    "buildInputs": { "$ref": "#/$defs/buildInputs" },
+    "buildInputsSha256": { "$ref": "#/$defs/sha256" },
     "producer": { "$ref": "#/$defs/producer" },
     "securityPolicyId": { "$ref": "#/$defs/id" },
     "capabilities": {
@@ -57,7 +61,7 @@
     "jitLibraryPath": {
       "type": "string",
       "maxLength": 4096,
-      "pattern": "^/(?!.*(?:^|/)\\.\\.(?:/|$))(?:[A-Za-z0-9._-]+/)*(?:libclrjit\\.so|clrjit\\.dll)$"
+      "pattern": "^(?:/usr/bin/mono-sgen|/(?!.*(?:^|/)\\.\\.(?:/|$))(?:[A-Za-z0-9._-]+/)*(?:libclrjit\\.so|clrjit\\.dll))$"
     },
     "preflightProfile": { "$ref": "#/$defs/preflightProfile" },
     "performance": { "$ref": "#/$defs/performance" }
@@ -71,6 +75,23 @@
     },
     "nonEmpty": { "type": "string", "minLength": 1, "maxLength": 2048 },
     "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "sourceUri": {
+      "type": "string",
+      "maxLength": 2048,
+      "oneOf": [
+        {
+          "allOf": [
+            { "format": "uri" },
+            {
+              "pattern": "^https://(?![^/?#\\s]*@)[^/?#\\s]+(?:[/?][^#\\s]*)?$"
+            }
+          ]
+        },
+        {
+          "pattern": "^docker://(?:(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]+)?)/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?@sha256:[0-9a-f]{64}$"
+        }
+      ]
+    },
     "sourceDigest": {
       "type": "string",
       "pattern": "^(?:sha256:[0-9a-f]{64}|sha512:[0-9a-f]{128})$"
@@ -103,14 +124,33 @@
       "additionalProperties": false,
       "required": ["sourceUri", "sourceDigest"],
       "properties": {
-        "sourceUri": {
-          "type": "string",
-          "maxLength": 2048,
-          "pattern": "^(?:https://[^\\s]+|docker://[^@\\s]+@sha256:[0-9a-f]{64})$"
-        },
+        "sourceUri": { "$ref": "#/$defs/sourceUri" },
         "sourceDigest": { "$ref": "#/$defs/sourceDigest" }
       }
     },
+    "wineOperator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receiptPath", "receiptSha256", "signaturePath", "signatureSha256", "keyId", "reference", "imageId", "sizeBytes", "sourceRevision", "sourceTree", "lineageKind"],
+      "properties": {
+        "receiptPath": { "$ref": "#/$defs/operatorReceiptPath" },
+        "receiptSha256": { "$ref": "#/$defs/sha256" },
+        "signaturePath": { "$ref": "#/$defs/operatorSignaturePath" },
+        "signatureSha256": { "$ref": "#/$defs/sha256" },
+        "keyId": { "$ref": "#/$defs/sha256" },
+        "reference": { "$ref": "#/$defs/imageReference" },
+        "imageId": { "$ref": "#/$defs/sha256" },
+        "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 17179869184 },
+        "sourceRevision": { "$ref": "#/$defs/gitCommit" },
+        "sourceTree": { "$ref": "#/$defs/gitCommit" },
+        "lineageKind": { "enum": ["direct", "framework-row", "framework-parent"] },
+        "intermediaryReference": { "$ref": "#/$defs/imageReference" },
+        "intermediaryImageId": { "$ref": "#/$defs/sha256" },
+        "intermediarySizeBytes": { "type": "integer", "minimum": 1, "maximum": 17179869184 }
+      }
+    },
+    "operatorReceiptPath": { "type": "string", "pattern": "^profiles/runtime-operator-receipts/wine-coreclr-(?:[0-9a-f]{40}|[0-9a-f]{64})\\.json$" },
+    "operatorSignaturePath": { "type": "string", "pattern": "^profiles/runtime-operator-receipts/wine-coreclr-(?:[0-9a-f]{40}|[0-9a-f]{64})\\.json\\.sig$" },
     "runtimeIdentity": {
       "type": "object",
       "additionalProperties": false,
@@ -129,6 +169,12 @@
         "id": { "const": "sharplabnext-runtime-preflight-v1" },
         "sourceRevision": { "$ref": "#/$defs/gitCommit" }
       }
+    },
+    "buildInputs": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^[\\x20-\\x7e]+$" },
+      "minProperties": 1,
+      "maxProperties": 64
     },
     "operationHelper": {
       "type": "object",

@@ -28,12 +28,39 @@ namespace SharpLabNext.UnitTests;
 
 public sealed class RuntimeSupervisorTests
 {
+    private const string RuntimeMeasurementToken = "0123456789abcdef0123456789abcdef";
+    private const string RuntimeTargetContainerId =
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    private const string RuntimeMeasurementSidecarId =
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    private const string RuntimeExecId =
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    private const string RuntimeMeasurementHelperReference =
+        "registry.example/sharplabnext/runtime-supervisor@sha256:" +
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+    private const string RuntimeMeasurementHelperImageId =
+        "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+    private const string RuntimePreflightSourceRevision = "dddddddddddddddddddddddddddddddddddddddd";
+
     private static readonly JsonSerializerOptions RuntimeProfilePreflightJsonOptions =
         new(JsonSerializerDefaults.Web)
         {
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             PropertyNameCaseInsensitive = false
         };
+
+    [Fact]
+    public void MeasurementHelperContractMatchesReviewedSourceBytes()
+    {
+        var sourcePath = Path.Combine(
+            FindRepositoryRoot(),
+            "deploy",
+            "docker",
+            "runtime-measurement-helper.sh");
+        var digest = $"sha256:{Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(sourcePath)))}";
+
+        Assert.Equal(RuntimeMeasurementHelperContract.ContentSha256, digest);
+    }
 
     [Fact]
     public void PromotionPreflightLoadsOneDigestBoundLocalProfile()
@@ -142,7 +169,7 @@ public sealed class RuntimeSupervisorTests
             policy.Id == "runtime-job-wine-netfx");
         Assert.Equal(1024L * 1024 * 1024, winePolicy.MemoryBytes);
         Assert.Equal(1_000_000_000, winePolicy.NanoCpus);
-        Assert.Equal(64, winePolicy.PidsLimit);
+        Assert.Equal(128, winePolicy.PidsLimit);
         Assert.Equal(30, winePolicy.MaximumDurationSeconds);
         Assert.Equal(64L * 1024 * 1024, winePolicy.MaximumArtifactBytes);
         Assert.Equal(1L * 1024 * 1024, winePolicy.MaximumOutputBytes);
@@ -245,7 +272,7 @@ public sealed class RuntimeSupervisorTests
     }
 
     [Fact]
-    public async Task RuntimeContainerUsesBoundedLocalLogsAndDockerLogsApiRemainsReadable()
+    public async Task RuntimeContainerUsesBoundedLocalDiagnosticLogs()
     {
         using var handler = new RecordingDockerHandler();
         using var docker = CreateDockerClient(handler);
@@ -263,12 +290,8 @@ public sealed class RuntimeSupervisorTests
             "workspace-1");
 
         var containerId = await docker.CreateContainerAsync(spec, TestContext.Current.CancellationToken);
-        await using var logs = await docker.OpenContainerLogsAsync(
-            containerId,
-            TestContext.Current.CancellationToken);
-        using var reader = new StreamReader(logs, Encoding.UTF8);
 
-        Assert.Equal("runtime output", await reader.ReadToEndAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(RecordingDockerHandler.ContainerId, containerId);
         var createRequest = Assert.Single(
             handler.Requests,
             static request => request.Method == HttpMethod.Post &&
@@ -284,10 +307,248 @@ public sealed class RuntimeSupervisorTests
             "noexec",
             body.RootElement.GetProperty("HostConfig").GetProperty("Tmpfs").GetProperty("/tmp").GetString(),
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RuntimeContainerLiveOutputUsesPreStartAttachWithoutRetainedLogs()
+    {
+        using var handler = new RecordingDockerHandler();
+        using var docker = CreateDockerClient(handler);
+
+        await using var output = await docker.AttachContainerOutputAsync(
+            RecordingDockerHandler.ContainerId,
+            TestContext.Current.CancellationToken);
+        using var copy = new MemoryStream();
+        await output.CopyToAsync(copy, TestContext.Current.CancellationToken);
+
+        Assert.Equal("runtime output"u8.ToArray(), copy.ToArray());
+        Assert.Contains(
+            handler.Requests,
+            request => request.Method == HttpMethod.Post &&
+                       request.Path ==
+                       $"/v1.47/containers/{RecordingDockerHandler.ContainerId}/attach?logs=false&stream=true&stdin=false&stdout=true&stderr=true");
+    }
+
+    [Fact]
+    public async Task RuntimeContainerKeepsArtifactWorkspaceReadOnlyAndNeverMountsMeasurementControl()
+    {
+        using var handler = new RecordingDockerHandler();
+        using var docker = CreateDockerClient(handler);
+        var spec = new RuntimeContainerSpec(
+            "runtime-measured-test",
+            "operation-1",
+            "release-1",
+            "runtime-image:test",
+            ["/runtime/entrypoint"],
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new RuntimeSecurityPolicyOptions(),
+            "com.sharplabnext.runtime-job",
+            "candidate-scope-1",
+            "workspace-1",
+            Entrypoint: ["/bin/sh", "-c"]);
+
+        await docker.CreateContainerAsync(spec, TestContext.Current.CancellationToken);
+
+        var createRequest = Assert.Single(
+            handler.Requests,
+            static request => request.Method == HttpMethod.Post &&
+                              request.Path.StartsWith("/v1.47/containers/create?", StringComparison.Ordinal));
+        using var body = JsonDocument.Parse(createRequest.Body!);
+        var mounts = body.RootElement
+            .GetProperty("HostConfig")
+            .GetProperty("Mounts")
+            .EnumerateArray()
+            .ToArray();
+        var workspace = Assert.Single(mounts);
+        Assert.Equal("workspace-1", workspace.GetProperty("Source").GetString());
+        Assert.Equal("/workspace", workspace.GetProperty("Target").GetString());
+        Assert.True(workspace.GetProperty("ReadOnly").GetBoolean());
+        Assert.Equal("/bin/sh", body.RootElement.GetProperty("Entrypoint")[0].GetString());
+        Assert.Equal("-c", body.RootElement.GetProperty("Entrypoint")[1].GetString());
+        Assert.True(body.RootElement.GetProperty("OpenStdin").GetBoolean());
+        Assert.DoesNotContain(
+            mounts,
+            static mount => mount.GetProperty("Target").GetString() == "/measurement");
+    }
+
+    [Fact]
+    public async Task RuntimeMeasurementSidecarUsesPrivatePidHostCgroupNamespaceAndExactTargetBind()
+    {
+        using var handler = new RecordingDockerHandler();
+        handler.CreateContainerIds.Enqueue(RuntimeMeasurementSidecarId);
+        using var docker = CreateDockerClient(handler);
+
+        var sidecarId = await docker.CreateRuntimeMeasurementSidecarAsync(
+            new RuntimeMeasurementSidecarSpec(
+                "operation-1",
+                "release-1",
+                $"sha256:{new string('f', 64)}",
+                RuntimeTargetContainerId,
+                4242,
+                RuntimeMeasurementToken,
+                "sln-measure-0123456789abcdef0123456789abcdef",
+                "com.sharplabnext.runtime-job",
+                "candidate-scope-1"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(RuntimeMeasurementSidecarId, sidecarId);
+        var request = Assert.Single(
+            handler.Requests,
+            static value => value.Method == HttpMethod.Post &&
+                             value.Path.StartsWith("/v1.47/containers/create?name=sln-measurement-", StringComparison.Ordinal));
+        using var body = JsonDocument.Parse(request.Body!);
+        Assert.Equal(
+            ["/usr/local/bin/sharplabnext-runtime-measurement"],
+            body.RootElement.GetProperty("Entrypoint").EnumerateArray().Select(static value => value.GetString()!).ToArray());
+        Assert.Equal(
+            [RuntimeMeasurementToken, RuntimeTargetContainerId],
+            body.RootElement.GetProperty("Cmd").EnumerateArray().Select(static value => value.GetString()!).ToArray());
+        Assert.Equal("1654:1654", body.RootElement.GetProperty("User").GetString());
+        var host = body.RootElement.GetProperty("HostConfig");
+        Assert.Equal("none", host.GetProperty("NetworkMode").GetString());
+        Assert.Equal("host", host.GetProperty("CgroupnsMode").GetString());
+        Assert.False(host.TryGetProperty("PidMode", out _));
+        Assert.True(body.RootElement.GetProperty("NetworkDisabled").GetBoolean());
+        Assert.True(host.GetProperty("ReadonlyRootfs").GetBoolean());
+        Assert.Equal("ALL", Assert.Single(host.GetProperty("CapDrop").EnumerateArray()).GetString());
+        var mounts = host.GetProperty("Mounts").EnumerateArray().ToArray();
+        Assert.Equal(2, mounts.Length);
+        var control = Assert.Single(mounts, static mount => mount.GetProperty("Target").GetString() == "/measurement");
+        Assert.Equal("sln-measure-0123456789abcdef0123456789abcdef", control.GetProperty("Source").GetString());
+        Assert.False(control.GetProperty("ReadOnly").GetBoolean());
+        var cgroup = Assert.Single(mounts, static mount => mount.GetProperty("Target").GetString() == "/run/sharplabnext-target-cgroup");
+        Assert.Equal("/proc/4242/cgroup", cgroup.GetProperty("Source").GetString());
+        Assert.True(cgroup.GetProperty("ReadOnly").GetBoolean());
+        Assert.Equal(
+            RuntimeTargetContainerId,
+            body.RootElement.GetProperty("Labels").GetProperty("com.sharplabnext.target-container-id").GetString());
+    }
+
+    [Fact]
+    public async Task RuntimeMeasurementExecUsesEntrypointCommandIdentityAndMultiplexedFrames()
+    {
+        using var handler = new RecordingDockerHandler();
+        handler.ExecStartResponses.Enqueue(CreateDockerMultiplexedFrame(1, "stdout"u8.ToArray()));
+        using var docker = CreateDockerClient(handler);
+
+        var execId = await docker.CreateContainerExecAsync(
+            RuntimeTargetContainerId,
+            new RuntimeExecSpec(
+                ["/opt/sharplabnext/runtime-entrypoint.sh", "/usr/share/dotnet/dotnet", "probe"],
+                "1654:1654",
+                "/workspace",
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["SHARPLABNEXT_WINE_CLEANUP"] = "1"
+                }),
+            TestContext.Current.CancellationToken);
+        await using var stream = await docker.StartContainerExecAsync(
+            execId,
+            TestContext.Current.CancellationToken);
+        using var output = new MemoryStream();
+        await stream.CopyToAsync(output, TestContext.Current.CancellationToken);
+        var inspection = await docker.InspectContainerExecAsync(
+            execId,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(RuntimeExecId, execId);
+        Assert.Equal("stdout"u8.ToArray(), output.ToArray());
+        Assert.False(inspection.Running);
+        Assert.Equal(0, inspection.ExitCode);
+        var create = Assert.Single(
+            handler.Requests,
+            static request => request.Method == HttpMethod.Post && request.Path.EndsWith("/exec", StringComparison.Ordinal));
+        using var body = JsonDocument.Parse(create.Body!);
+        Assert.Equal("1654:1654", body.RootElement.GetProperty("User").GetString());
+        Assert.Equal("/workspace", body.RootElement.GetProperty("WorkingDir").GetString());
+        Assert.True(body.RootElement.GetProperty("AttachStdout").GetBoolean());
+        Assert.True(body.RootElement.GetProperty("AttachStderr").GetBoolean());
+        Assert.Equal(
+            ["SHARPLABNEXT_WINE_CLEANUP=1"],
+            body.RootElement.GetProperty("Env").EnumerateArray()
+                .Select(static value => value.GetString()!)
+                .ToArray());
+        Assert.Equal(
+            ["/opt/sharplabnext/runtime-entrypoint.sh", "/usr/share/dotnet/dotnet", "probe"],
+            body.RootElement.GetProperty("Cmd").EnumerateArray().Select(static value => value.GetString()!).ToArray());
+        Assert.Contains(
+            handler.Requests,
+            request => request.Method == HttpMethod.Post &&
+                       request.Path == $"/v1.47/exec/{RuntimeExecId}/start");
         Assert.Contains(
             handler.Requests,
             request => request.Method == HttpMethod.Get &&
-                       request.Path == $"/v1.47/containers/{containerId}/logs?stdout=true&stderr=true&follow=true&timestamps=false");
+                       request.Path == $"/v1.47/exec/{RuntimeExecId}/json");
+    }
+
+    [Theory]
+    [InlineData(RuntimeMeasurementSignalKind.Capture, "capture")]
+    [InlineData(RuntimeMeasurementSignalKind.Finish, "finish")]
+    public async Task RuntimeMeasurementSignalUploadsAtomicTemporaryCanonicalTar(
+        RuntimeMeasurementSignalKind signalKind,
+        string signalName)
+    {
+        using var handler = new RecordingDockerHandler();
+        using var docker = CreateDockerClient(handler);
+
+        await docker.UploadRuntimeMeasurementSignalAsync(
+            RuntimeMeasurementSidecarId,
+            RuntimeMeasurementToken,
+            RuntimeTargetContainerId,
+            signalKind,
+            TestContext.Current.CancellationToken);
+
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Put, request.Method);
+        Assert.Equal(
+            $"/v1.47/containers/{RuntimeMeasurementSidecarId}/archive?path=%2Fmeasurement&copyUIDGID=true",
+            request.Path);
+        Assert.NotNull(request.BodyBytes);
+        var entry = await ReadSingleTarEntryAsync(request.BodyBytes!, TestContext.Current.CancellationToken);
+        Assert.Equal($"{signalName}-{RuntimeMeasurementToken}.upload", entry.Name);
+        Assert.Equal(
+            $"sharplabnext-runtime-measurement-signal-v1\n{RuntimeMeasurementToken}\n{RuntimeTargetContainerId}\n{signalName}\n",
+            Encoding.ASCII.GetString(entry.Payload));
+        Assert.Equal(1654, entry.Uid);
+        Assert.Equal(1654, entry.Gid);
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, entry.Mode);
+    }
+
+    [Fact]
+    public async Task ManagedResourceListingBindsManagementLabelAndResourceScopeTogether()
+    {
+        using var handler = new RecordingDockerHandler
+        {
+            ManagedContainersPayload =
+                $"[{{\"Id\":\"{RuntimeTargetContainerId}\",\"State\":\"running\"}}]",
+            ManagedVolumesPayload =
+                "{\"Volumes\":[{\"Name\":\"sln-measure-0123456789abcdef0123456789abcdef\"}]}"
+        };
+        using var docker = CreateDockerClient(handler);
+
+        var containers = await docker.ListManagedContainersAsync(
+            "com.sharplabnext.runtime-job",
+            "scope-a",
+            TestContext.Current.CancellationToken);
+        var volumes = await docker.ListManagedWorkspaceVolumesAsync(
+            "com.sharplabnext.runtime-job",
+            "scope-a",
+            TestContext.Current.CancellationToken);
+
+        Assert.Single(containers);
+        Assert.Equal(RuntimeTargetContainerId, containers[0].Id);
+        Assert.Single(volumes);
+        Assert.Equal("sln-measure-0123456789abcdef0123456789abcdef", volumes[0].Name);
+        var containerRequest = Assert.Single(
+            handler.Requests,
+            static request => request.Method == HttpMethod.Get && request.Path.StartsWith("/v1.47/containers/json?", StringComparison.Ordinal));
+        var volumeRequest = Assert.Single(
+            handler.Requests,
+            static request => request.Method == HttpMethod.Get && request.Path.StartsWith("/v1.47/volumes?", StringComparison.Ordinal));
+        Assert.Contains("com.sharplabnext.runtime-job%3Dtrue", containerRequest.Path, StringComparison.Ordinal);
+        Assert.Contains("com.sharplabnext.resource-scope%3Dscope-a", containerRequest.Path, StringComparison.Ordinal);
+        Assert.Contains("com.sharplabnext.runtime-job%3Dworkspace", volumeRequest.Path, StringComparison.Ordinal);
+        Assert.Contains("com.sharplabnext.resource-scope%3Dscope-a", volumeRequest.Path, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -640,22 +901,34 @@ public sealed class RuntimeSupervisorTests
     }
 
     [Fact]
-    public async Task RuntimeContainerLogsUseDockerUnixTimestampSessionRestartCursor()
+    public void CoreClrRuntimeCanLoadOlderButNotNewerTargetFrameworkArtifacts()
     {
-        using var handler = new RecordingDockerHandler();
-        using var docker = CreateDockerClient(handler);
-        var sinceUtc = new DateTimeOffset(2026, 7, 13, 6, 56, 8, TimeSpan.Zero).AddTicks(1006209);
+        var profile = Assert.Single(ValidOptions().Profiles);
+        var manifest = Manifest(metadata: null, derived: false) with
+        {
+            ReferenceSetId = "net5-ref",
+            TargetFramework = "net5.0",
+            RuntimeRequirement = new ArtifactRuntimeRequirement(
+                "coreclr",
+                [new FrameworkRequirement("Microsoft.NETCore.App", "5.0.0")],
+                "anycpu",
+                [])
+        };
 
-        await using var logs = await docker.OpenContainerLogsSinceAsync(
-            RecordingDockerHandler.ContainerId,
-            sinceUtc,
-            TestContext.Current.CancellationToken);
+        RuntimeJobExecutor.ValidateCompatibility(manifest, profile);
 
-        Assert.Contains(
-            handler.Requests,
-            request => request.Path.Contains(
-                "since=1783925768.100620900",
-                StringComparison.Ordinal));
+        var newer = manifest with
+        {
+            ReferenceSetId = "net11-preview-ref",
+            TargetFramework = "net11.0",
+            RuntimeRequirement = manifest.RuntimeRequirement with
+            {
+                Frameworks = [new FrameworkRequirement("Microsoft.NETCore.App", "11.0.0")]
+            }
+        };
+        var exception = Assert.Throws<RuntimeJobFailureException>(() =>
+            RuntimeJobExecutor.ValidateCompatibility(newer, profile));
+        Assert.Equal("incompatible-framework", exception.Code);
     }
 
     [Fact]
@@ -707,6 +980,52 @@ public sealed class RuntimeSupervisorTests
             request => request.Method == HttpMethod.Get &&
                        request.Path ==
                        $"/v1.47/containers/{RecordingDockerHandler.ContainerId}/stats?stream=false&one-shot=true");
+    }
+
+    [Fact]
+    public async Task RuntimeContainerResourceMonitorReportsOversizedFirstSampleWithoutCancellation()
+    {
+        using var handler = new RecordingDockerHandler
+        {
+            StatsPayload = new string('x', (1024 * 1024) + 1)
+        };
+        using var docker = CreateDockerClient(handler);
+        await using var monitor = await docker.StartContainerResourceMonitorAsync(
+            RecordingDockerHandler.ContainerId,
+            TestContext.Current.CancellationToken);
+
+        var exception = await Assert.ThrowsAsync<DockerEngineException>(() =>
+            monitor.WaitForFirstSampleAsync(CancellationToken.None).WaitAsync(
+                TimeSpan.FromSeconds(5),
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains("oversized container-stats sample", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RuntimeContainerResourceMonitorRejectsNaturalEndBeforeCheckpointSample()
+    {
+        using var handler = new RecordingDockerHandler
+        {
+            StatsPayload = "{\"memory_stats\":{\"usage\":4096,\"max_usage\":8192}}"
+        };
+        using var docker = CreateDockerClient(handler);
+        await using var monitor = await docker.StartContainerResourceMonitorAsync(
+            RecordingDockerHandler.ContainerId,
+            TestContext.Current.CancellationToken);
+        await monitor.WaitForFirstSampleAsync(TestContext.Current.CancellationToken);
+        var checkpoint = monitor.SampleCount;
+
+        var exception = await Assert.ThrowsAsync<DockerEngineException>(() =>
+            monitor.WaitForSampleAfterAsync(
+                checkpoint,
+                TestContext.Current.CancellationToken).WaitAsync(
+                    TimeSpan.FromSeconds(5),
+                    TestContext.Current.CancellationToken));
+
+        Assert.Contains("container-stats", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("ended before", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("sample", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -848,6 +1167,17 @@ public sealed class RuntimeSupervisorTests
         }
     }
 
+    [Theory]
+    [InlineData(".sharplabnext", true)]
+    [InlineData(".sharplabnext/ready", true)]
+    [InlineData(".sharplabnext/stdin.txt", true)]
+    [InlineData(".sharplabnext-user/file", false)]
+    [InlineData("app.dll", false)]
+    public void RuntimeWorkspaceRecognizesSupervisorReservedPaths(string path, bool expected)
+    {
+        Assert.Equal(expected, RuntimeJobExecutor.IsSupervisorWorkspacePath(path));
+    }
+
     [Fact]
     public async Task WorkspaceMaterializerStartsTmpfsKeeperBeforeUploadingArchive()
     {
@@ -864,9 +1194,10 @@ public sealed class RuntimeSupervisorTests
             RuntimeContainerIsolationKind.Standard,
             "com.sharplabnext.runtime-job",
             "candidate-scope-1",
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(RecordingDockerHandler.ContainerId, materialization.MaterializerContainerId);
+        Assert.Null(materialization.MeasurementVolumeName);
         Assert.Collection(
             handler.Requests,
             request =>
@@ -898,6 +1229,9 @@ public sealed class RuntimeSupervisorTests
                 var hostConfig = body.RootElement.GetProperty("HostConfig");
                 Assert.False(hostConfig.TryGetProperty("Init", out _));
                 Assert.Equal("none", hostConfig.GetProperty("LogConfig").GetProperty("Type").GetString());
+                var mount = Assert.Single(hostConfig.GetProperty("Mounts").EnumerateArray());
+                Assert.Equal("/workspace", mount.GetProperty("Target").GetString());
+                Assert.False(mount.GetProperty("ReadOnly").GetBoolean());
             },
             request =>
             {
@@ -918,6 +1252,75 @@ public sealed class RuntimeSupervisorTests
     }
 
     [Fact]
+    public async Task PerformanceWorkspaceUsesASeparateBoundedMeasurementVolume()
+    {
+        using var handler = new RecordingDockerHandler();
+        using var docker = CreateDockerClient(handler);
+        await using var archive = new MemoryStream("tar payload"u8.ToArray());
+
+        var materialization = await docker.MaterializeWorkspaceAsync(
+            "operation-1",
+            "release-1",
+            "runtime-image:test",
+            archive,
+            new RuntimeSecurityPolicyOptions(),
+            RuntimeContainerIsolationKind.Standard,
+            "com.sharplabnext.runtime-job",
+            "candidate-scope-1",
+            createMeasurementControl: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.NotNull(materialization.MeasurementVolumeName);
+        Assert.NotEqual(materialization.VolumeName, materialization.MeasurementVolumeName);
+        var volumeRequests = handler.Requests
+            .Where(static request => request.Method == HttpMethod.Post &&
+                                     request.Path == "/v1.47/volumes/create")
+            .ToArray();
+        Assert.Equal(2, volumeRequests.Length);
+        using var workspaceVolume = JsonDocument.Parse(volumeRequests[0].Body!);
+        using var measurementVolume = JsonDocument.Parse(volumeRequests[1].Body!);
+        Assert.Equal(
+            materialization.VolumeName,
+            workspaceVolume.RootElement.GetProperty("Name").GetString());
+        Assert.Equal(
+            materialization.MeasurementVolumeName,
+            measurementVolume.RootElement.GetProperty("Name").GetString());
+        Assert.Equal(
+            "noexec,nosuid,nodev,size=65536,uid=1654,gid=1654,mode=0700",
+            measurementVolume.RootElement
+                .GetProperty("DriverOpts")
+                .GetProperty("o")
+                .GetString());
+        var measurementLabels = measurementVolume.RootElement.GetProperty("Labels");
+        Assert.Equal(
+            "workspace",
+            measurementLabels.GetProperty("com.sharplabnext.runtime-job").GetString());
+        Assert.Equal(
+            "true",
+            measurementLabels.GetProperty("com.sharplabnext.measurement-control").GetString());
+
+        var createRequest = Assert.Single(
+            handler.Requests,
+            static request => request.Method == HttpMethod.Post &&
+                              request.Path.StartsWith(
+                                  "/v1.47/containers/create?name=sln-materialize-",
+                                  StringComparison.Ordinal));
+        using var materializer = JsonDocument.Parse(createRequest.Body!);
+        var mounts = materializer.RootElement
+            .GetProperty("HostConfig")
+            .GetProperty("Mounts")
+            .EnumerateArray()
+            .ToArray();
+        var workspace = Assert.Single(mounts);
+        Assert.Equal(materialization.VolumeName, workspace.GetProperty("Source").GetString());
+        Assert.Equal("/workspace", workspace.GetProperty("Target").GetString());
+        Assert.False(workspace.GetProperty("ReadOnly").GetBoolean());
+        Assert.DoesNotContain(
+            mounts,
+            static mount => mount.GetProperty("Target").GetString() == "/measurement");
+    }
+
+    [Fact]
     public async Task WineWorkspaceMaterializerAndVolumeAreRootOwned()
     {
         using var handler = new RecordingDockerHandler();
@@ -933,7 +1336,7 @@ public sealed class RuntimeSupervisorTests
             RuntimeContainerIsolationKind.WineRoot,
             "com.sharplabnext.runtime-job",
             "candidate-scope-1",
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         using var volume = JsonDocument.Parse(handler.Requests[0].Body!);
         Assert.Contains(
@@ -966,7 +1369,7 @@ public sealed class RuntimeSupervisorTests
             RuntimeContainerIsolationKind.WineNonRoot,
             "com.sharplabnext.runtime-job",
             "candidate-scope-1",
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         using var volume = JsonDocument.Parse(handler.Requests[0].Body!);
         Assert.Contains(
@@ -1032,7 +1435,7 @@ public sealed class RuntimeSupervisorTests
         await Assert.ThrowsAsync<DockerEngineException>(() => docker.UploadArchiveAsync(
             RecordingDockerHandler.ContainerId,
             archive,
-            TestContext.Current.CancellationToken));
+            cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.True(archive.CanRead);
         Assert.True(archive.CanSeek);
@@ -1041,11 +1444,209 @@ public sealed class RuntimeSupervisorTests
         await docker.UploadArchiveAsync(
             RecordingDockerHandler.ContainerId,
             archive,
-            TestContext.Current.CancellationToken);
+            destinationPath: "/measurement",
+            cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(
             ["retryable tar payload", "retryable tar payload"],
             handler.Requests.Select(static request => request.Body));
+        Assert.Equal(
+            [
+                $"/v1.47/containers/{RecordingDockerHandler.ContainerId}/archive?path=%2Fworkspace",
+                $"/v1.47/containers/{RecordingDockerHandler.ContainerId}/archive?path=%2Fmeasurement&copyUIDGID=true"
+            ],
+            handler.Requests.Select(static request => request.Path));
+    }
+
+    [Theory]
+    [InlineData("/tmp")]
+    [InlineData("/etc")]
+    public async Task ArchiveUploadRejectsDestinationsOutsideReviewedWritableMounts(
+        string destinationPath)
+    {
+        using var handler = new RecordingDockerHandler();
+        using var docker = CreateDockerClient(handler);
+        await using var archive = new MemoryStream("signal"u8.ToArray());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => docker.UploadArchiveAsync(
+            RecordingDockerHandler.ContainerId,
+            archive,
+            destinationPath,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Empty(handler.Requests);
+    }
+
+    [Theory]
+    [InlineData("cgroup-v1")]
+    [InlineData("cgroup-v2")]
+    public async Task RuntimeMeasurementPollsAndAcceptsOneCanonicalSidecarCompletion(
+        string cgroupKind)
+    {
+        using var handler = new RecordingDockerHandler();
+        handler.ArchiveReadResponses.Enqueue(new HttpResponseMessage(HttpStatusCode.NotFound));
+        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(
+            CreateRuntimeMeasurementArchive(
+                $"completion-{RuntimeMeasurementToken}",
+                CreateRuntimeMeasurementPayload(
+                    "sharplabnext-runtime-measurement-sidecar-v1",
+                    cgroupKind,
+                    peakMemoryBytes: "8192"))));
+        using var docker = CreateDockerClient(handler);
+
+        var measurement = await docker.WaitForRuntimeMeasurementAsync(
+            RuntimeMeasurementSidecarId,
+            RuntimeMeasurementToken,
+            RuntimeTargetContainerId,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(cgroupKind, measurement.CgroupKind);
+        Assert.Equal(8192, measurement.PeakMemoryBytes);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.All(
+            handler.Requests,
+            request =>
+            {
+                Assert.Equal(HttpMethod.Get, request.Method);
+                Assert.Equal(
+                    $"/v1.47/containers/{RuntimeMeasurementSidecarId}/archive?" +
+                    $"path=%2Fmeasurement%2Fcompletion-{RuntimeMeasurementToken}",
+                    request.Path);
+            });
+    }
+
+    [Fact]
+    public async Task RuntimeMeasurementAcceptsCanonicalArmedRecordBoundToTarget()
+    {
+        using var handler = new RecordingDockerHandler();
+        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(
+            CreateRuntimeMeasurementArchive(
+                $"armed-{RuntimeMeasurementToken}",
+                CreateRuntimeMeasurementPayload(
+                    "sharplabnext-runtime-measurement-sidecar-armed-v1",
+                    "cgroup-v2"))));
+        using var docker = CreateDockerClient(handler);
+
+        await docker.WaitForRuntimeMeasurementArmedAsync(
+            RuntimeMeasurementSidecarId,
+            RuntimeMeasurementToken,
+            RuntimeTargetContainerId,
+            TestContext.Current.CancellationToken);
+
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(
+            $"/v1.47/containers/{RuntimeMeasurementSidecarId}/archive?" +
+            $"path=%2Fmeasurement%2Farmed-{RuntimeMeasurementToken}",
+            request.Path);
+    }
+
+    [Theory]
+    [InlineData("wrong-token")]
+    [InlineData("wrong-target")]
+    [InlineData("wrong-header")]
+    [InlineData("wrong-cgroup")]
+    public async Task RuntimeMeasurementRejectsMalformedArmedRecord(string scenario)
+    {
+        using var handler = new RecordingDockerHandler();
+        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(
+            CreateRuntimeMeasurementArchive(
+                $"armed-{RuntimeMeasurementToken}",
+                CreateInvalidRuntimeMeasurementArmedPayload(scenario))));
+        using var docker = CreateDockerClient(handler);
+
+        await Assert.ThrowsAsync<DockerEngineException>(() =>
+            docker.WaitForRuntimeMeasurementArmedAsync(
+                RuntimeMeasurementSidecarId,
+                RuntimeMeasurementToken,
+                RuntimeTargetContainerId,
+                TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData("duplicate", "unexpected additional entry")]
+    [InlineData("symbolic-link", "one canonical regular measurement file")]
+    [InlineData("hard-link", "one canonical regular measurement file")]
+    [InlineData("additional", "unexpected additional entry")]
+    [InlineData("wrong-name", "one canonical regular measurement file")]
+    [InlineData("wrong-uid", "one canonical regular measurement file")]
+    [InlineData("wrong-gid", "one canonical regular measurement file")]
+    [InlineData("wrong-mode", "one canonical regular measurement file")]
+    [InlineData("empty", "one canonical regular measurement file")]
+    [InlineData("oversized", "one canonical regular measurement file")]
+    public async Task RuntimeMeasurementRejectsNoncanonicalArchiveShape(
+        string scenario,
+        string expectedMessage)
+    {
+        using var handler = new RecordingDockerHandler();
+        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(
+            CreateRuntimeMeasurementArchive(
+                $"completion-{RuntimeMeasurementToken}",
+                CreateRuntimeMeasurementPayload(
+                    "sharplabnext-runtime-measurement-sidecar-v1",
+                    "cgroup-v2",
+                    peakMemoryBytes: "8192"),
+                scenario)));
+        using var docker = CreateDockerClient(handler);
+
+        var exception = await Assert.ThrowsAsync<DockerEngineException>(() =>
+            docker.WaitForRuntimeMeasurementAsync(
+                RuntimeMeasurementSidecarId,
+                RuntimeMeasurementToken,
+                RuntimeTargetContainerId,
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains(expectedMessage, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("wrong-token", "malformed or noncanonical")]
+    [InlineData("wrong-target", "malformed or noncanonical")]
+    [InlineData("wrong-header", "malformed or noncanonical")]
+    [InlineData("wrong-cgroup", "malformed or noncanonical")]
+    [InlineData("zero-peak", "malformed or noncanonical")]
+    [InlineData("leading-zero-peak", "malformed or noncanonical")]
+    [InlineData("overflow-peak", "malformed or noncanonical")]
+    [InlineData("crlf", "not canonical ASCII")]
+    [InlineData("missing-final-lf", "malformed or noncanonical")]
+    [InlineData("extra-line", "malformed or noncanonical")]
+    [InlineData("non-ascii", "not canonical ASCII")]
+    public async Task RuntimeMeasurementRejectsMalformedOrNoncanonicalPayload(
+        string scenario,
+        string expectedMessage)
+    {
+        using var handler = new RecordingDockerHandler();
+        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(
+            CreateRuntimeMeasurementArchive(
+                $"completion-{RuntimeMeasurementToken}",
+                CreateInvalidRuntimeMeasurementPayload(scenario))));
+        using var docker = CreateDockerClient(handler);
+
+        var exception = await Assert.ThrowsAsync<DockerEngineException>(() =>
+            docker.WaitForRuntimeMeasurementAsync(
+                RuntimeMeasurementSidecarId,
+                RuntimeMeasurementToken,
+                RuntimeTargetContainerId,
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains(expectedMessage, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("0123456789abcdef")]
+    [InlineData("0123456789ABCDEF0123456789ABCDEF")]
+    [InlineData("0123456789abcdef0123456789abcdeg")]
+    public async Task RuntimeMeasurementRejectsInvalidTokenBeforeDockerRequest(string token)
+    {
+        using var handler = new RecordingDockerHandler();
+        using var docker = CreateDockerClient(handler);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => docker.WaitForRuntimeMeasurementAsync(
+            RuntimeMeasurementSidecarId,
+            token,
+            RuntimeTargetContainerId,
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(handler.Requests);
     }
 
     [Fact]
@@ -1378,6 +1979,7 @@ public sealed class RuntimeSupervisorTests
             document["producer"]!["planSha256"]!.GetValue<string>()));
         Assert.Equal(8, fixture.Docker.RuntimeContainerCreates);
         Assert.Equal(8, fixture.Docker.RuntimeContainerCreates - fixture.Docker.ActiveContainers.Count);
+        Assert.All(fixture.Docker.CreatedSpecs, static spec => Assert.Null(spec.Entrypoint));
         Assert.All(response.Documents, static document =>
         {
             Assert.NotNull(document["lifecycle"]?["outputOverflow"]);
@@ -1385,6 +1987,76 @@ public sealed class RuntimeSupervisorTests
             Assert.NotNull(document["lifecycle"]?["cancellation"]);
             Assert.NotNull(document["lifecycle"]?["processTreeCleanup"]);
         });
+    }
+
+    [Fact]
+    public async Task RuntimeCapabilityTimeoutProbeStartsItsDeadlineAfterSlowContainerStartup()
+    {
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
+            ["run"],
+            RuntimeJitSourceMappingKinds.None);
+        fixture.Docker.StartupDelay = TimeSpan.FromMilliseconds(300);
+
+        var response = await fixture.Coordinator.ProduceAsync(
+            fixture.CreateRequest(),
+            TestContext.Current.CancellationToken);
+
+        var run = Assert.Single(response.Documents);
+        Assert.Equal("passed", run["lifecycle"]!["timeout"]!["result"]!.GetValue<string>());
+        Assert.Equal("timeout", run["lifecycle"]!["timeout"]!["terminalStatus"]!.GetValue<string>());
+        Assert.Empty(fixture.Docker.ActiveContainers);
+    }
+
+    [Fact]
+    public async Task RuntimeCapabilityTimeoutProbeStartsItsDeadlineAfterSlowProbeInitialization()
+    {
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
+            ["run"],
+            RuntimeJitSourceMappingKinds.None);
+        fixture.Docker.HangReadyDelay = TimeSpan.FromMilliseconds(300);
+
+        var response = await fixture.Coordinator.ProduceAsync(
+            fixture.CreateRequest(),
+            TestContext.Current.CancellationToken);
+
+        var run = Assert.Single(response.Documents);
+        Assert.Equal("passed", run["lifecycle"]!["timeout"]!["result"]!.GetValue<string>());
+        Assert.Equal("timeout", run["lifecycle"]!["timeout"]!["terminalStatus"]!.GetValue<string>());
+        Assert.Empty(fixture.Docker.ActiveContainers);
+    }
+
+    [Fact]
+    public async Task RuntimeCapabilityCancellationProbeWaitsForReadyMarker()
+    {
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
+            ["run"],
+            RuntimeJitSourceMappingKinds.None);
+        fixture.Docker.StartupDelay = TimeSpan.FromMilliseconds(300);
+
+        var response = await fixture.Coordinator.ProduceAsync(
+            fixture.CreateRequest(),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("passed", Assert.Single(response.Documents)["result"]!.GetValue<string>());
+        Assert.True(fixture.Docker.HangWaitCancellationCount >= 2);
+        Assert.Empty(fixture.Docker.ActiveContainers);
+    }
+
+    [Fact]
+    public async Task RuntimeCapabilityTimeoutProbeRejectsMissingReadyMarkerAfterCleanup()
+    {
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
+            ["run"],
+            RuntimeJitSourceMappingKinds.None);
+        fixture.Docker.OmitHangReadyMarker = true;
+
+        var exception = await Assert.ThrowsAsync<RuntimeCapabilityPreflightException>(() =>
+            fixture.Coordinator.ProduceAsync(
+                fixture.CreateRequest(),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("capability-timeout-marker-missing", exception.Code);
+        Assert.Empty(fixture.Docker.ActiveContainers);
     }
 
     [Theory]
@@ -1594,7 +2266,7 @@ public sealed class RuntimeSupervisorTests
         var fakeDocker = new SessionDockerClient
         {
             ContainerLogBytes = await CompletedRunFramesAsync(),
-            ResourceUsage = new RuntimeContainerResourceUsage(73400320, 4)
+            ResourceUsage = new RuntimeContainerResourceUsage(73400320, 2)
         };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
@@ -1609,15 +2281,483 @@ public sealed class RuntimeSupervisorTests
 
         Assert.Equal(RuntimePerformanceScenarios.Run, sample.Scenario);
         Assert.Equal(73400320, sample.Sample.PeakMemoryBytes);
-        Assert.Equal(4, sample.ResourceSampleCount);
+        Assert.Equal(8192, sample.Sample.CompletionPeakMemoryBytes);
+        Assert.Equal(2, sample.ResourceSampleCount);
+        Assert.Equal(1, sample.PostCompletionResourceSampleCount);
         Assert.True(sample.Sample.LatencyMilliseconds > 0);
         Assert.Equal(fixture.Options.Profiles[0].Image, sample.Image.Reference);
         Assert.Equal(fixture.Options.Profiles[0].RuntimeImageId, sample.Image.ImageId);
         Assert.Equal(fixture.Options.SecurityPolicies[0].MemoryBytes, sample.Environment.MemoryLimitBytes);
-        Assert.Equal(["runtime-1"], fakeDocker.ResourceMonitorStarts);
-        Assert.Contains("runtime-1", fakeDocker.RemovedContainers);
+        Assert.Equal([RuntimeTargetContainerId], fakeDocker.ResourceMonitorStarts);
+        var lifecyclePhases = new[]
+        {
+            $"create-target:{RuntimeTargetContainerId}",
+            $"monitor:{RuntimeTargetContainerId}",
+            $"start-attempt:{RuntimeTargetContainerId}",
+            $"start:{RuntimeTargetContainerId}",
+            $"sample:{RuntimeTargetContainerId}",
+            $"inspect-target:{RuntimeTargetContainerId}",
+            $"create-sidecar:{RuntimeMeasurementSidecarId}",
+            $"start-attempt:{RuntimeMeasurementSidecarId}",
+            $"start:{RuntimeMeasurementSidecarId}",
+            $"wait-sidecar:{RuntimeMeasurementSidecarId}",
+            $"armed:{RuntimeMeasurementSidecarId}",
+            "remove:materializer-1",
+            $"create-exec:{RuntimeExecId}",
+            $"start-exec:{RuntimeExecId}",
+            $"inspect-exec:{RuntimeExecId}",
+            $"signal:capture:{RuntimeMeasurementSidecarId}",
+            $"completion:{RuntimeMeasurementSidecarId}",
+            $"post-sample:{RuntimeTargetContainerId}",
+            $"signal:finish:{RuntimeMeasurementSidecarId}",
+            $"remove:{RuntimeMeasurementSidecarId}",
+            $"stop:{RuntimeTargetContainerId}",
+            $"monitor-stop:{RuntimeTargetContainerId}",
+            $"monitor-dispose:{RuntimeTargetContainerId}",
+            $"remove:{RuntimeTargetContainerId}"
+        };
+        var previous = -1;
+        foreach (var phase in lifecyclePhases)
+        {
+            var current = fakeDocker.RuntimeLifecycle.IndexOf(phase);
+            Assert.True(current > previous, $"Missing or out-of-order phase '{phase}': " +
+                string.Join(", ", fakeDocker.RuntimeLifecycle));
+            previous = current;
+        }
+        Assert.Equal([true], fakeDocker.MeasurementControlRequests);
+        var spec = Assert.Single(fakeDocker.CreatedSpecs);
+        Assert.Equal("workspace-1", spec.WorkspaceVolumeName);
+        Assert.Equal(["/bin/sh", "-c"], spec.Entrypoint);
+        Assert.Equal(
+            ["trap 'while wait 2>/dev/null; do :; done' CHLD; trap 'exit 143' TERM INT; IFS= read -r _"],
+            spec.Command);
+        Assert.Single(fakeDocker.MeasurementSidecarSpecs);
+        var execSpec = Assert.Single(fakeDocker.ContainerExecSpecs).Spec;
+        Assert.Equal("/workspace", execSpec.WorkingDirectory);
+        Assert.Equal("1654:1654", execSpec.User);
+        Assert.Equal("/opt/sharplabnext/runtime-entrypoint.sh", execSpec.Command[0]);
+        Assert.Equal("/usr/share/dotnet/dotnet", execSpec.Command[1]);
+        Assert.Equal(2, fakeDocker.MeasurementSignals.Count);
+        Assert.Equal(RuntimeMeasurementSignalKind.Capture, fakeDocker.MeasurementSignals[0].Kind);
+        Assert.Equal(RuntimeMeasurementSignalKind.Finish, fakeDocker.MeasurementSignals[1].Kind);
+        Assert.Single(fakeDocker.UploadedArchives);
+        Assert.Equal(["/workspace"], fakeDocker.UploadDestinations);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
         Assert.Contains("materializer-1", fakeDocker.RemovedContainers);
-        Assert.Contains("workspace-1", fakeDocker.RemovedVolumes);
+        Assert.Contains(RuntimeMeasurementSidecarId, fakeDocker.RemovedContainers);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
+    }
+
+    [Fact]
+    public async Task MeasuredWineCleanupIsExecScopedAndNeverPollutesTheKeeper()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            ContainerLogBytes = await CompletedRunFramesAsync(),
+            ResourceUsage = new RuntimeContainerResourceUsage(73400320, 2)
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker, wine: true);
+
+        _ = await fixture.Coordinator.MeasureAsync(
+            new RuntimePerformanceSampleRequest(
+                fixture.Options.Profiles[0].Id,
+                fixture.Options.PromotionPreflightPlanSha256!,
+                fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                fixture.Options.SecurityPolicies[0].Id,
+                RuntimePerformanceScenarios.Run),
+            TestContext.Current.CancellationToken);
+
+        var containerSpec = Assert.Single(fakeDocker.CreatedSpecs);
+        Assert.DoesNotContain(
+            "SHARPLABNEXT_WINE_CLEANUP",
+            containerSpec.Environment.Keys,
+            StringComparer.Ordinal);
+        var execSpec = Assert.Single(fakeDocker.ContainerExecSpecs).Spec;
+        Assert.Equal(
+            "1",
+            Assert.Single(execSpec.Environment!).Value);
+        Assert.Equal(
+            "SHARPLABNEXT_WINE_CLEANUP",
+            Assert.Single(execSpec.Environment!).Key);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceRejectsTargetExitBeforeBaselineAndCleansEveryResource()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            ContainerLogBytes = await CompletedRunFramesAsync(),
+            TargetExitsBeforeBaseline = true
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
+            fixture.Coordinator.MeasureAsync(
+                new RuntimePerformanceSampleRequest(
+                    fixture.Options.Profiles[0].Id,
+                    fixture.Options.PromotionPreflightPlanSha256!,
+                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    fixture.Options.SecurityPolicies[0].Id,
+                    RuntimePerformanceScenarios.Run),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
+        Assert.Empty(fakeDocker.MeasurementSidecarSpecs);
+        Assert.Empty(fakeDocker.ContainerExecSpecs);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+        Assert.Contains("materializer-1", fakeDocker.RemovedContainers);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
+    }
+
+    [Theory]
+    [InlineData(nameof(SessionDockerClient.SidecarExitsBeforeArmed))]
+    [InlineData(nameof(SessionDockerClient.SidecarExitsDuringExec))]
+    [InlineData(nameof(SessionDockerClient.SidecarExitsBeforeCompletion))]
+    public async Task RuntimePerformanceRejectsMeasurementSidecarEarlyExitAtEveryHandshakePhase(string phase)
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            ContainerLogBytes = await CompletedRunFramesAsync()
+        };
+        typeof(SessionDockerClient).GetProperty(phase)!.SetValue(fakeDocker, true);
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
+            fixture.Coordinator.MeasureAsync(
+                new RuntimePerformanceSampleRequest(
+                    fixture.Options.Profiles[0].Id,
+                    fixture.Options.PromotionPreflightPlanSha256!,
+                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    fixture.Options.SecurityPolicies[0].Id,
+                    RuntimePerformanceScenarios.Run),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
+        Assert.Contains(RuntimeMeasurementSidecarId, fakeDocker.RemovedContainers);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
+        if (phase == nameof(SessionDockerClient.SidecarExitsBeforeArmed))
+            Assert.Empty(fakeDocker.ContainerExecSpecs);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceRejectsExecAndProtocolExitMismatch()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            ContainerLogBytes = await CompletedRunFramesAsync(),
+            ExecInspection = new RuntimeContainerExecInspection(RuntimeExecId, Running: false, ExitCode: 1)
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
+            fixture.Coordinator.MeasureAsync(
+                new RuntimePerformanceSampleRequest(
+                    fixture.Options.Profiles[0].Id,
+                    fixture.Options.PromotionPreflightPlanSha256!,
+                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    fixture.Options.SecurityPolicies[0].Id,
+                    RuntimePerformanceScenarios.Run),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
+        Assert.DoesNotContain(
+            fakeDocker.MeasurementSignals,
+            signal => signal.Kind == RuntimeMeasurementSignalKind.Capture);
+        Assert.Contains(RuntimeMeasurementSidecarId, fakeDocker.RemovedContainers);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceRejectsKeeperPidDriftAfterExec()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            ContainerLogBytes = await CompletedRunFramesAsync()
+        };
+        fakeDocker.RunningInspections.Enqueue(
+            new RuntimeRunningContainerInspection(RuntimeTargetContainerId, 4242, Running: true));
+        fakeDocker.RunningInspections.Enqueue(
+            new RuntimeRunningContainerInspection(RuntimeTargetContainerId, 9999, Running: true));
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
+            fixture.Coordinator.MeasureAsync(
+                new RuntimePerformanceSampleRequest(
+                    fixture.Options.Profiles[0].Id,
+                    fixture.Options.PromotionPreflightPlanSha256!,
+                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    fixture.Options.SecurityPolicies[0].Id,
+                    RuntimePerformanceScenarios.Run),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
+        Assert.DoesNotContain(
+            fakeDocker.MeasurementSignals,
+            signal => signal.Kind == RuntimeMeasurementSignalKind.Capture);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceRejectsNonzeroSidecarExitAfterFinish()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            ContainerLogBytes = await CompletedRunFramesAsync(),
+            MeasurementSidecarExit = new RuntimeContainerExit(1, false, "helper failed")
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
+            fixture.Coordinator.MeasureAsync(
+                new RuntimePerformanceSampleRequest(
+                    fixture.Options.Profiles[0].Id,
+                    fixture.Options.PromotionPreflightPlanSha256!,
+                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    fixture.Options.SecurityPolicies[0].Id,
+                    RuntimePerformanceScenarios.Run),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
+        Assert.Contains(
+            fakeDocker.MeasurementSignals,
+            signal => signal.Kind == RuntimeMeasurementSignalKind.Finish);
+        Assert.Contains(RuntimeMeasurementSidecarId, fakeDocker.RemovedContainers);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceRejectsKeeperThatDoesNotExitWithSupervisorStopStatus()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            ContainerLogBytes = await CompletedRunFramesAsync(),
+            MeasuredKeeperStopExit = new RuntimeContainerExit(0, false, null)
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
+            fixture.Coordinator.MeasureAsync(
+                new RuntimePerformanceSampleRequest(
+                    fixture.Options.Profiles[0].Id,
+                    fixture.Options.PromotionPreflightPlanSha256!,
+                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    fixture.Options.SecurityPolicies[0].Id,
+                    RuntimePerformanceScenarios.Run),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceRejectsMissingPostCompletionStatsSample()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            ContainerLogBytes = await CompletedRunFramesAsync(),
+            SuppressPostCompletionSample = true
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
+            fixture.Coordinator.MeasureAsync(
+                new RuntimePerformanceSampleRequest(
+                    fixture.Options.Profiles[0].Id,
+                    fixture.Options.PromotionPreflightPlanSha256!,
+                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    fixture.Options.SecurityPolicies[0].Id,
+                    RuntimePerformanceScenarios.Run),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
+        Assert.DoesNotContain(
+            fakeDocker.MeasurementSignals,
+            signal => signal.Kind == RuntimeMeasurementSignalKind.Finish);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceSampleAttachesMonitorBeforeStartingTheRuntimeContainer()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            ContainerLogBytes = await CompletedRunFramesAsync(),
+            NextResourceMonitorStartException = new DockerEngineException("stats attach failed")
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
+            fixture.Coordinator.MeasureAsync(
+                new RuntimePerformanceSampleRequest(
+                    fixture.Options.Profiles[0].Id,
+                    fixture.Options.PromotionPreflightPlanSha256!,
+                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    fixture.Options.SecurityPolicies[0].Id,
+                    RuntimePerformanceScenarios.Run),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("resource-monitor-start-failed", exception.Code);
+        Assert.Contains($"monitor:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains("remove:materializer-1", fakeDocker.RuntimeLifecycle);
+        Assert.DoesNotContain($"start:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.DoesNotContain(RuntimeTargetContainerId, fakeDocker.StartedContainers);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceSampleStopsAndDisposesAttachedMonitorWhenRuntimeStartFails()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            ContainerLogBytes = await CompletedRunFramesAsync(),
+            NextStartContainerException = new DockerEngineException("runtime start failed")
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
+            fixture.Coordinator.MeasureAsync(
+                new RuntimePerformanceSampleRequest(
+                    fixture.Options.Profiles[0].Id,
+                    fixture.Options.PromotionPreflightPlanSha256!,
+                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    fixture.Options.SecurityPolicies[0].Id,
+                    RuntimePerformanceScenarios.Run),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("runtime-job-failed", exception.Code);
+        Assert.Equal([$"monitor:{RuntimeTargetContainerId}"], fakeDocker.ResourceMonitorStops);
+        Assert.Equal([$"monitor:{RuntimeTargetContainerId}"], fakeDocker.ResourceMonitorDisposals);
+        Assert.Contains($"monitor:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains($"start-attempt:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains($"monitor-stop:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains($"monitor-dispose:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains("remove:materializer-1", fakeDocker.RuntimeLifecycle);
+        Assert.DoesNotContain(RuntimeTargetContainerId, fakeDocker.StartedContainers);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceSampleKeepsRuntimeGatedWhenFirstStatsSampleFails()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            ContainerLogBytes = await CompletedRunFramesAsync(),
+            NextResourceMonitorFirstSampleException = new DockerEngineException(
+                "first stats sample failed")
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
+            fixture.Coordinator.MeasureAsync(
+                new RuntimePerformanceSampleRequest(
+                    fixture.Options.Profiles[0].Id,
+                    fixture.Options.PromotionPreflightPlanSha256!,
+                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    fixture.Options.SecurityPolicies[0].Id,
+                    RuntimePerformanceScenarios.Run),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
+        Assert.Contains($"monitor:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains($"start:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains($"sample:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains($"monitor-stop:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains($"monitor-dispose:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains("remove:materializer-1", fakeDocker.RuntimeLifecycle);
+        Assert.Single(fakeDocker.UploadedArchives);
+        Assert.DoesNotContain("start-", fakeDocker.UploadedArchives[0], StringComparison.Ordinal);
+        Assert.Equal(["/workspace"], fakeDocker.UploadDestinations);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceCancellationDuringStatsAttachPreservesCancellationAndCleanup()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            BlockResourceMonitorAttachUntilCancellation = true,
+            ContainerLogBytes = await CompletedRunFramesAsync()
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+        var (operation, measurement) = fixture.QueueRunForMeasurement(
+            DateTimeOffset.UtcNow.AddMinutes(1));
+
+        await fakeDocker.ResourceMonitorAttachEntered.Task.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
+        fixture.Operations.Cancel(
+            operation.Handle.OperationId,
+            "cancel-during-stats-attach",
+            DateTimeOffset.UtcNow);
+        var completion = await measurement.Completion.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("operation-cancelled", completion.FailureCode);
+        Assert.Equal(
+            RunTerminalStatus.Cancelled,
+            Assert.IsType<RunResult>(completion.Result).Status);
+        Assert.True(completion.CleanupSucceeded);
+        Assert.Contains($"monitor:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains("remove:materializer-1", fakeDocker.RuntimeLifecycle);
+        Assert.DoesNotContain(RuntimeTargetContainerId, fakeDocker.StartedContainers);
+        Assert.Empty(fakeDocker.ResourceMonitorStops);
+        Assert.Empty(fakeDocker.ResourceMonitorDisposals);
+        Assert.Single(fakeDocker.UploadedArchives);
+        Assert.DoesNotContain(
+            "start-",
+            fakeDocker.UploadedArchives[0],
+            StringComparison.Ordinal);
+        Assert.Equal(["/workspace"], fakeDocker.UploadDestinations);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceDeadlineDuringFirstStatsSamplePreservesTimeoutAndCleanup()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            BlockResourceMonitorFirstSampleUntilCancellation = true,
+            ContainerLogBytes = await CompletedRunFramesAsync()
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+        var (_, measurement) = fixture.QueueRunForMeasurement(
+            DateTimeOffset.UtcNow.AddSeconds(2));
+
+        await fakeDocker.ResourceMonitorFirstSampleEntered.Task.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
+        var completion = await measurement.Completion.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("operation-timeout", completion.FailureCode);
+        Assert.Equal(
+            RunTerminalStatus.Timeout,
+            Assert.IsType<RunResult>(completion.Result).Status);
+        Assert.True(completion.CleanupSucceeded);
+        Assert.Equal([$"monitor:{RuntimeTargetContainerId}"], fakeDocker.ResourceMonitorStops);
+        Assert.Equal([$"monitor:{RuntimeTargetContainerId}"], fakeDocker.ResourceMonitorDisposals);
+        Assert.Contains($"monitor:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains($"start:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains($"sample:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains($"monitor-stop:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains($"monitor-dispose:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
+        Assert.Contains("remove:materializer-1", fakeDocker.RuntimeLifecycle);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.StartedContainers);
+        Assert.DoesNotContain(RuntimeTargetContainerId, fakeDocker.KilledContainers);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+        Assert.Single(fakeDocker.UploadedArchives);
+        Assert.DoesNotContain(
+            "start-",
+            fakeDocker.UploadedArchives[0],
+            StringComparison.Ordinal);
+        Assert.Equal(["/workspace"], fakeDocker.UploadDestinations);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
     }
 
     [Fact]
@@ -1644,9 +2784,9 @@ public sealed class RuntimeSupervisorTests
         Assert.Equal(RuntimeJitSourceMappingKinds.None, sample.SourceMappingKind);
         Assert.Equal(0, sample.DistinctSequencePointRangeCount);
         Assert.Equal(2, fixture.ArtifactStore.PublishedContentRefs.Count);
-        Assert.Contains("Program.Main", Assert.Single(fakeDocker.CreatedSpecs).Command);
-        Assert.Contains("runtime-1", fakeDocker.RemovedContainers);
-        Assert.Contains("workspace-1", fakeDocker.RemovedVolumes);
+        Assert.Contains("Program.Main", Assert.Single(fakeDocker.ContainerExecSpecs).Spec.Command);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
     }
 
     [Fact]
@@ -1672,8 +2812,8 @@ public sealed class RuntimeSupervisorTests
                 TestContext.Current.CancellationToken));
 
         Assert.Equal("performance-mapping-unavailable", exception.Code);
-        Assert.Contains("runtime-1", fakeDocker.RemovedContainers);
-        Assert.Contains("workspace-1", fakeDocker.RemovedVolumes);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
     }
 
     [Fact]
@@ -1700,6 +2840,7 @@ public sealed class RuntimeSupervisorTests
         Assert.Equal(RuntimePerformanceScenarios.Mapping, sample.Scenario);
         Assert.Equal(RuntimeJitSourceMappingKinds.LinuxProfiler, sample.SourceMappingKind);
         Assert.Equal(2, sample.DistinctSequencePointRangeCount);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
     }
 
     [Fact]
@@ -1723,8 +2864,8 @@ public sealed class RuntimeSupervisorTests
                 TestContext.Current.CancellationToken));
 
         Assert.Equal("resource-monitor-stop-failed", exception.Code);
-        Assert.Contains("runtime-1", fakeDocker.RemovedContainers);
-        Assert.Contains("workspace-1", fakeDocker.RemovedVolumes);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
     }
 
     [Fact]
@@ -1748,8 +2889,8 @@ public sealed class RuntimeSupervisorTests
                 TestContext.Current.CancellationToken));
 
         Assert.Equal("performance-cleanup-failed", exception.Code);
-        Assert.Contains("remove-failed:runtime-1", fakeDocker.CleanupLifecycle);
-        Assert.Contains("workspace-1", fakeDocker.RemovedVolumes);
+        Assert.Contains($"remove-failed:{RuntimeTargetContainerId}", fakeDocker.CleanupLifecycle);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
     }
 
     [Fact]
@@ -1772,6 +2913,7 @@ public sealed class RuntimeSupervisorTests
         Assert.Equal("performance-queue-rejected", exception.Code);
         Assert.Empty(fakeDocker.StartedContainers);
         Assert.Empty(fakeDocker.ResourceMonitorStarts);
+        Assert.Empty(fakeDocker.MeasurementControlRequests);
     }
 
     [Fact]
@@ -1786,7 +2928,13 @@ public sealed class RuntimeSupervisorTests
                 536870912,
                 "linux",
                 "amd64",
-                [immutableReference])
+                [immutableReference],
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["org.opencontainers.image.revision"] = RuntimePreflightSourceRevision,
+                    ["io.sharplabnext.source.revision"] = RuntimePreflightSourceRevision
+                },
+                ["/opt/sharplabnext/runtime-entrypoint.sh"])
         };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
@@ -1803,6 +2951,126 @@ public sealed class RuntimeSupervisorTests
         Assert.Equal("performance-image-identity-mismatch", exception.Code);
         Assert.Empty(fakeDocker.StartedContainers);
         Assert.Empty(fakeDocker.ResourceMonitorStarts);
+        Assert.Empty(fakeDocker.MeasurementControlRequests);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceSampleRejectsHelperWithoutBothSourceRevisionLabels()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            MeasurementHelperImageInspection = new RuntimeImageInspection(
+                RuntimeMeasurementHelperReference,
+                RuntimeMeasurementHelperImageId,
+                128L * 1024 * 1024,
+                "linux",
+                "amd64",
+                [RuntimeMeasurementHelperReference],
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["org.opencontainers.image.revision"] = RuntimePreflightSourceRevision
+                })
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
+            fixture.Coordinator.MeasureAsync(
+                new RuntimePerformanceSampleRequest(
+                    fixture.Options.Profiles[0].Id,
+                    fixture.Options.PromotionPreflightPlanSha256!,
+                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    fixture.Options.SecurityPolicies[0].Id,
+                    RuntimePerformanceScenarios.Run),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("performance-helper-image-identity-mismatch", exception.Code);
+        Assert.Empty(fakeDocker.StartedContainers);
+        Assert.Empty(fakeDocker.MeasurementSidecarSpecs);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceSampleRejectsHelperImageReusedAsCandidate()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            MeasurementHelperImageInspection = new RuntimeImageInspection(
+                RuntimeMeasurementHelperReference,
+                $"sha256:{new string('a', 64)}",
+                128L * 1024 * 1024,
+                "linux",
+                "amd64",
+                [RuntimeMeasurementHelperReference],
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["org.opencontainers.image.revision"] = RuntimePreflightSourceRevision,
+                    ["io.sharplabnext.source.revision"] = RuntimePreflightSourceRevision
+                })
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+        fixture.Options.MeasurementHelperImageId = $"sha256:{new string('a', 64)}";
+
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
+            fixture.Coordinator.MeasureAsync(
+                new RuntimePerformanceSampleRequest(
+                    fixture.Options.Profiles[0].Id,
+                    fixture.Options.PromotionPreflightPlanSha256!,
+                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    fixture.Options.SecurityPolicies[0].Id,
+                    RuntimePerformanceScenarios.Run),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("performance-helper-image-not-distinct", exception.Code);
+        Assert.Empty(fakeDocker.StartedContainers);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceSampleRejectsHelperContentDrift()
+    {
+        var fakeDocker = new SessionDockerClient
+        {
+            MeasurementHelperContentSha256 = $"sha256:{new string('9', 64)}"
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
+            fixture.Coordinator.MeasureAsync(
+                new RuntimePerformanceSampleRequest(
+                    fixture.Options.Profiles[0].Id,
+                    fixture.Options.PromotionPreflightPlanSha256!,
+                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    fixture.Options.SecurityPolicies[0].Id,
+                    RuntimePerformanceScenarios.Run),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("performance-helper-content-mismatch", exception.Code);
+        Assert.Empty(fakeDocker.StartedContainers);
+    }
+
+    [Fact]
+    public async Task RuntimePerformanceSampleRejectsHelperFromWrongRepository()
+    {
+        const string wrongReference =
+            "registry.example/sharplabnext/not-supervisor@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        var fakeDocker = new SessionDockerClient
+        {
+            MeasurementHelperImageReference = wrongReference
+        };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
+        fixture.Options.MeasurementHelperImage = wrongReference;
+        fakeDocker.MeasurementHelperImageReference = wrongReference;
+
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
+            fixture.Coordinator.MeasureAsync(
+                new RuntimePerformanceSampleRequest(
+                    fixture.Options.Profiles[0].Id,
+                    fixture.Options.PromotionPreflightPlanSha256!,
+                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    fixture.Options.SecurityPolicies[0].Id,
+                    RuntimePerformanceScenarios.Run),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("performance-helper-image-identity-mismatch", exception.Code);
+        Assert.Empty(fakeDocker.StartedContainers);
     }
 
     [Fact]
@@ -1825,10 +3093,10 @@ public sealed class RuntimeSupervisorTests
                     RuntimePerformanceScenarios.Run),
                 TestContext.Current.CancellationToken));
 
-        Assert.Equal("operation-timeout", exception.Code);
-        Assert.Contains("runtime-1", fakeDocker.KilledContainers);
-        Assert.Contains("runtime-1", fakeDocker.RemovedContainers);
-        Assert.Contains("workspace-1", fakeDocker.RemovedVolumes);
+        Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
+        Assert.DoesNotContain(RuntimeTargetContainerId, fakeDocker.KilledContainers);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
     }
 
     [Fact]
@@ -1852,8 +3120,8 @@ public sealed class RuntimeSupervisorTests
                 TestContext.Current.CancellationToken));
 
         Assert.Equal("performance-cleanup-failed", exception.Code);
-        Assert.Contains("runtime-1", fakeDocker.RemovedContainers);
-        Assert.Contains("workspace-1", fakeDocker.RemovedVolumes);
+        Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
+        Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
     }
 
     [Fact]
@@ -2161,8 +3429,12 @@ public sealed class RuntimeSupervisorTests
     [InlineData(null, "*")]
     [InlineData("", "*")]
     [InlineData("Main", "*Main*")]
-    [InlineData("Program.*", "Program.*")]
-    public void JitEnvironmentUsesSubstringSemanticsForPlainMethodFilters(
+    [InlineData("Program.*", "Program:*")]
+    [InlineData("SharpLabNext.RuntimeCapabilityProbe.Program.MultipleSequencePoints", "*SharpLabNext.RuntimeCapabilityProbe.Program:MultipleSequencePoints*")]
+    [InlineData("Program:Main", "*Program:Main*")]
+    [InlineData("Program..ctor", "*Program:.ctor*")]
+    [InlineData("Program..cctor", "*Program:.cctor*")]
+    public void JitEnvironmentUsesCoreClrMethodFilterGrammar(
         string? methodFilter,
         string expectedDisasmFilter)
     {
@@ -2385,7 +3657,7 @@ public sealed class RuntimeSupervisorTests
     }
 
     [Fact]
-    public void RuntimeEntrypointClearsReusableJitFilesBeforeExec()
+    public void RuntimeEntrypointRetainsDirectPidOneReadyGateWithoutMeasurementProtocol()
     {
         var script = File.ReadAllText(
             Path.Combine(FindRepositoryRoot(), "deploy", "docker", "runtime-entrypoint.sh"));
@@ -2394,12 +3666,17 @@ public sealed class RuntimeSupervisorTests
             "if [ \"${SHARPLABNEXT_JIT_RESET_OUTPUT:-0}\" = \"1\" ]; then",
             script,
             StringComparison.Ordinal);
+        Assert.Contains("ready=/workspace/.sharplabnext/ready", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("sharplabnext-runtime-measurement", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("/measurement", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("/sys/fs/cgroup", script, StringComparison.Ordinal);
         Assert.Contains("/tmp/sharplabnext-jit.asm", script, StringComparison.Ordinal);
         Assert.Contains("/tmp/sharplabnext-jit.map", script, StringComparison.Ordinal);
         Assert.Contains("/tmp/sharplabnext-jit-rich.map", script, StringComparison.Ordinal);
+        var waitIndex = script.IndexOf("while [ ! -f \"$ready\" ]", StringComparison.Ordinal);
         var cleanupIndex = script.IndexOf("rm -f", StringComparison.Ordinal);
         var execIndex = script.IndexOf("exec \"$@\"", StringComparison.Ordinal);
-        Assert.True(cleanupIndex >= 0 && cleanupIndex < execIndex);
+        Assert.True(waitIndex >= 0 && waitIndex < cleanupIndex && cleanupIndex < execIndex);
     }
 
     [Fact]
@@ -2507,6 +3784,28 @@ public sealed class RuntimeSupervisorTests
         Assert.Null(await reader.ReadAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public void DockerResponseStreamDisposesResponseWhenInnerDisposeFails()
+    {
+        using var response = new TrackingHttpResponseMessage();
+        var stream = new DockerEngineClient.DockerResponseStream(response, new ThrowingSyncDisposeStream());
+
+        Assert.Throws<InvalidOperationException>(stream.Dispose);
+
+        Assert.True(response.DisposeCalled);
+    }
+
+    [Fact]
+    public async Task DockerResponseStreamDisposesResponseWhenInnerDisposeAsyncFails()
+    {
+        using var response = new TrackingHttpResponseMessage();
+        var stream = new DockerEngineClient.DockerResponseStream(response, new ThrowingAsyncDisposeStream());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.DisposeAsync());
+
+        Assert.True(response.DisposeCalled);
+    }
+
     [Theory]
     [InlineData("anycpu", "x64", true)]
     [InlineData("AnyCPU", "arm64", true)]
@@ -2604,6 +3903,8 @@ public sealed class RuntimeSupervisorTests
                 [$"{RuntimePromotionPreflightOptions.SectionName}:Enabled"] = "true",
                 [$"{RuntimePromotionPreflightOptions.SectionName}:PlanSha256"] = planSha256,
                 [$"{RuntimePromotionPreflightOptions.SectionName}:SourceRevision"] = sourceRevision,
+                [$"{RuntimePromotionPreflightOptions.SectionName}:MeasurementHelperImage"] = RuntimeMeasurementHelperReference,
+                [$"{RuntimePromotionPreflightOptions.SectionName}:MeasurementHelperImageId"] = RuntimeMeasurementHelperImageId,
                 [$"{RuntimePromotionPreflightOptions.SectionName}:ProfilePath"] = path,
                 [$"{RuntimePromotionPreflightOptions.SectionName}:ProfileSha256"] =
                     profileSha256 ?? observedProfileSha256
@@ -2854,6 +4155,210 @@ public sealed class RuntimeSupervisorTests
             root);
         return new DockerEngineClient(ValidOptions(), sandbox, handler);
     }
+
+    private static HttpResponseMessage CreateArchiveResponse(byte[] archive) =>
+        new(HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent(archive)
+        };
+
+    private static byte[] CreateDockerMultiplexedFrame(byte streamType, byte[] payload)
+    {
+        var frame = new byte[8 + payload.Length];
+        frame[0] = streamType;
+        BinaryPrimitives.WriteInt32BigEndian(frame.AsSpan(4), payload.Length);
+        payload.CopyTo(frame.AsSpan(8));
+        return frame;
+    }
+
+    private static async Task<TarEntrySnapshot> ReadSingleTarEntryAsync(
+        byte[] archive,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = new MemoryStream(archive, writable: false);
+        using var reader = new TarReader(stream, leaveOpen: true);
+        var entry = await reader.GetNextEntryAsync(copyData: true, cancellationToken)
+            ?? throw new InvalidOperationException("The archive did not contain an entry.");
+        using var payload = new MemoryStream();
+        if (entry.DataStream is not null)
+            await entry.DataStream.CopyToAsync(payload, cancellationToken);
+        Assert.Null(await reader.GetNextEntryAsync(copyData: false, cancellationToken));
+        return new TarEntrySnapshot(
+            entry.Name,
+            payload.ToArray(),
+            entry.Uid,
+            entry.Gid,
+            entry.Mode);
+    }
+
+    private static byte[] CreateRuntimeMeasurementArchive(
+        string expectedName,
+        byte[] payload,
+        string scenario = "valid")
+    {
+        var entryName = scenario == "wrong-name" ? "completion-unexpected" : expectedName;
+        var entryType = scenario switch
+        {
+            "symbolic-link" => TarEntryType.SymbolicLink,
+            "hard-link" => TarEntryType.HardLink,
+            _ => TarEntryType.RegularFile
+        };
+        var entryPayload = scenario switch
+        {
+            "empty" => [],
+            "oversized" => new byte[513],
+            _ => payload
+        };
+        var uid = scenario == "wrong-uid" ? 1655 : 1654;
+        var gid = scenario == "wrong-gid" ? 1655 : 1654;
+        var mode = scenario == "wrong-mode"
+            ? UnixFileMode.UserRead | UnixFileMode.GroupRead
+            : UnixFileMode.UserRead | UnixFileMode.UserWrite;
+
+        using var archive = new MemoryStream();
+        using (var writer = new TarWriter(archive, leaveOpen: true))
+        {
+            WriteRuntimeMeasurementEntry(
+                writer,
+                entryName,
+                entryPayload,
+                entryType,
+                uid,
+                gid,
+                mode);
+            if (scenario == "duplicate")
+            {
+                WriteRuntimeMeasurementEntry(
+                    writer,
+                    expectedName,
+                    payload,
+                    TarEntryType.RegularFile,
+                    1654,
+                    1654,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+            else if (scenario == "additional")
+            {
+                WriteRuntimeMeasurementEntry(
+                    writer,
+                    "unexpected",
+                    "unexpected"u8.ToArray(),
+                    TarEntryType.RegularFile,
+                    1654,
+                    1654,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+        }
+        return archive.ToArray();
+    }
+
+    private sealed record TarEntrySnapshot(
+        string Name,
+        byte[] Payload,
+        long Uid,
+        long Gid,
+        UnixFileMode Mode);
+
+    private static void WriteRuntimeMeasurementEntry(
+        TarWriter writer,
+        string name,
+        byte[] payload,
+        TarEntryType entryType,
+        int uid,
+        int gid,
+        UnixFileMode mode)
+    {
+        using var data = entryType == TarEntryType.RegularFile
+            ? new MemoryStream(payload, writable: false)
+            : null;
+        var entry = new PaxTarEntry(entryType, name)
+        {
+            Gid = gid,
+            Uid = uid,
+            Mode = mode,
+            ModificationTime = DateTimeOffset.UnixEpoch
+        };
+        if (data is not null)
+            entry.DataStream = data;
+        else
+            entry.LinkName = "target";
+        writer.WriteEntry(entry);
+    }
+
+    private static byte[] CreateRuntimeMeasurementPayload(
+        string header,
+        string cgroupKind,
+        string? peakMemoryBytes = null,
+        string token = RuntimeMeasurementToken,
+        string targetContainerId = RuntimeTargetContainerId) => Encoding.ASCII.GetBytes(
+            $"{header}\n{token}\n{targetContainerId}\n{cgroupKind}\n" +
+            (peakMemoryBytes is null ? string.Empty : $"{peakMemoryBytes}\n"));
+
+    private static byte[] CreateInvalidRuntimeMeasurementPayload(string scenario)
+    {
+        var canonical = Encoding.ASCII.GetString(CreateRuntimeMeasurementPayload(
+            "sharplabnext-runtime-measurement-sidecar-v1",
+            "cgroup-v2",
+            peakMemoryBytes: "8192"));
+        return scenario switch
+        {
+            "wrong-token" => CreateRuntimeMeasurementPayload(
+                "sharplabnext-runtime-measurement-sidecar-v1",
+                "cgroup-v2",
+                peakMemoryBytes: "8192",
+                token: new string('f', 32)),
+            "wrong-target" => CreateRuntimeMeasurementPayload(
+                "sharplabnext-runtime-measurement-sidecar-v1",
+                "cgroup-v2",
+                peakMemoryBytes: "8192",
+                targetContainerId: new string('e', 64)),
+            "wrong-header" => CreateRuntimeMeasurementPayload(
+                "sharplabnext-runtime-measurement-v1",
+                "cgroup-v2",
+                peakMemoryBytes: "8192"),
+            "wrong-cgroup" => CreateRuntimeMeasurementPayload(
+                "sharplabnext-runtime-measurement-sidecar-v1",
+                "cgroup-v3",
+                peakMemoryBytes: "8192"),
+            "zero-peak" => CreateRuntimeMeasurementPayload(
+                "sharplabnext-runtime-measurement-sidecar-v1",
+                "cgroup-v2",
+                peakMemoryBytes: "0"),
+            "leading-zero-peak" => CreateRuntimeMeasurementPayload(
+                "sharplabnext-runtime-measurement-sidecar-v1",
+                "cgroup-v2",
+                peakMemoryBytes: "08192"),
+            "overflow-peak" => CreateRuntimeMeasurementPayload(
+                "sharplabnext-runtime-measurement-sidecar-v1",
+                "cgroup-v2",
+                peakMemoryBytes: "9223372036854775808"),
+            "crlf" => Encoding.ASCII.GetBytes(canonical.Replace("\n", "\r\n", StringComparison.Ordinal)),
+            "missing-final-lf" => Encoding.ASCII.GetBytes(canonical[..^1]),
+            "extra-line" => Encoding.ASCII.GetBytes(canonical + "extra\n"),
+            "non-ascii" => Encoding.UTF8.GetBytes('\u00e9' + canonical[1..]),
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario, null)
+        };
+    }
+
+    private static byte[] CreateInvalidRuntimeMeasurementArmedPayload(string scenario) =>
+        scenario switch
+        {
+            "wrong-token" => CreateRuntimeMeasurementPayload(
+                "sharplabnext-runtime-measurement-sidecar-armed-v1",
+                "cgroup-v2",
+                token: new string('f', 32)),
+            "wrong-target" => CreateRuntimeMeasurementPayload(
+                "sharplabnext-runtime-measurement-sidecar-armed-v1",
+                "cgroup-v2",
+                targetContainerId: new string('e', 64)),
+            "wrong-header" => CreateRuntimeMeasurementPayload(
+                "sharplabnext-runtime-measurement-sidecar-v1",
+                "cgroup-v2"),
+            "wrong-cgroup" => CreateRuntimeMeasurementPayload(
+                "sharplabnext-runtime-measurement-sidecar-armed-v1",
+                "cgroup-v3"),
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario, null)
+        };
 
     private static int CapabilityPdbProbe(int value)
     {
@@ -3373,6 +4878,11 @@ public sealed class RuntimeSupervisorTests
                 (RuntimeFrameKind.Exit, userExceptionExit)),
             ["output-overflow"] = await CreateRuntimeFramesAsync(
                 (RuntimeFrameKind.Stdout, Enumerable.Repeat((byte)'x', maximumOutputBytes + 1).ToArray())),
+            ["hang"] = await CreateRuntimeFramesAsync(
+                (RuntimeFrameKind.Stdout, Encoding.UTF8.GetBytes(
+                    RuntimeJobExecutor.CapabilityHangReadyMarker[..12])),
+                (RuntimeFrameKind.Stdout, Encoding.UTF8.GetBytes(
+                    RuntimeJobExecutor.CapabilityHangReadyMarker[12..] + "\n"))),
             ["process-tree"] = await CreateRuntimeFramesAsync((RuntimeFrameKind.Exit, completed)),
             ["inspection"] = await CreateRuntimeFramesAsync(
                 (RuntimeFrameKind.Inspection, RuntimeStructuredPayloadCodec.Serialize(
@@ -3483,16 +4993,27 @@ public sealed class RuntimeSupervisorTests
 
     private static RuntimePerformanceFixture CreateRuntimePerformanceFixture(
         SessionDockerClient fakeDocker,
-        string sourceMappingKind = RuntimeJitSourceMappingKinds.None)
+        string sourceMappingKind = RuntimeJitSourceMappingKinds.None,
+        bool wine = false)
     {
         var options = ValidOptions();
         options.PromotionPreflightPlanSha256 = $"sha256:{new string('f', 64)}";
         options.PromotionPreflightProfileSha256 = $"sha256:{new string('e', 64)}";
-        options.PromotionPreflightSourceRevision = new string('d', 40);
+        options.PromotionPreflightSourceRevision = RuntimePreflightSourceRevision;
+        options.MeasurementHelperImage = RuntimeMeasurementHelperReference;
+        options.MeasurementHelperImageId = RuntimeMeasurementHelperImageId;
         options.SessionReuseEnabled = false;
         var profile = Assert.Single(options.Profiles);
         profile.Image = $"registry.example/sharplabnext/runtime@sha256:{new string('b', 64)}";
         profile.RuntimeImageId = $"sha256:{new string('a', 64)}";
+        if (wine)
+        {
+            profile.Container.IsolationKind = RuntimeContainerIsolationKinds.Wine;
+            profile.Container.EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine;
+            profile.Container.WinePrefixPath = "/opt/wine-dotnet";
+        }
+        fakeDocker.RuntimeImageReference = profile.Image;
+        fakeDocker.MeasurementHelperImageReference = RuntimeMeasurementHelperReference;
         profile.Operations = new RuntimeProfileOperations
         {
             Run = new RuntimeRunOperationDefinition
@@ -3585,6 +5106,8 @@ public sealed class RuntimeSupervisorTests
             coordinator,
             scheduler,
             artifactStore,
+            operations,
+            executor,
             options);
     }
 
@@ -3672,7 +5195,8 @@ public sealed class RuntimeSupervisorTests
         HttpMethod Method,
         string Path,
         string? Body,
-        string? ContentType);
+        string? ContentType,
+        byte[]? BodyBytes = null);
 
     private sealed class PromotionPreflightProfileFixture(
         string root,
@@ -3699,12 +5223,56 @@ public sealed class RuntimeSupervisorTests
         RuntimePerformancePreflightCoordinator coordinator,
         BoundedOperationScheduler scheduler,
         RuntimeArtifactStoreClient artifactStore,
+        OperationStore operations,
+        RuntimeJobExecutor executor,
         RuntimeSupervisorOptions options) : IAsyncDisposable
     {
         public RuntimePerformancePreflightCoordinator Coordinator { get; } = coordinator;
         public BoundedOperationScheduler Scheduler { get; } = scheduler;
         public RuntimeArtifactStoreClient ArtifactStore { get; } = artifactStore;
+        public OperationStore Operations { get; } = operations;
         public RuntimeSupervisorOptions Options { get; } = options;
+
+        public (OperationStart Operation, RuntimeJobMeasurementRegistration Measurement)
+            QueueRunForMeasurement(DateTimeOffset deadlineUtc)
+        {
+            var nonce = Guid.NewGuid().ToString("N");
+            var requestId = $"perf-test-{nonce}";
+            var operation = Operations.Start(
+                requestId,
+                $"runtime-performance-test-{nonce}",
+                OperationKind.Run,
+                requestId,
+                DateTimeOffset.UtcNow);
+            var measurement = new RuntimeJobMeasurementRegistration(new RuntimeJobMeasurementContext(
+                "/opt/sharplabnext/runtime-entrypoint.sh",
+                new RuntimePerformanceMeasurementHelperIdentity(
+                    RuntimePerformancePreflightCoordinator.MeasurementHelperImplementation,
+                    new RuntimePerformanceImageIdentity(
+                        RuntimeMeasurementHelperReference,
+                        RuntimeMeasurementHelperImageId,
+                        128L * 1024 * 1024),
+                    RuntimePerformancePreflightCoordinator.MeasurementHelperEntrypoint,
+                    RuntimePreflightSourceRevision,
+                    RuntimePerformancePreflightCoordinator.MeasurementHelperContentSha256)));
+            var queued = executor.QueueRunForMeasurement(
+                operation,
+                new RunRequest(
+                    requestId,
+                    $"runtime-performance-test-{nonce}",
+                    "runtime-performance-preflight",
+                    ArtifactStore.Descriptor.Manifest.ArtifactId,
+                    Options.Profiles[0].Id,
+                    new RunOptions(
+                        [],
+                        null,
+                        RunInstrumentation.None,
+                        Options.SecurityPolicies[0].Id),
+                    deadlineUtc),
+                measurement);
+            Assert.True(queued);
+            return (operation, measurement);
+        }
 
         public ValueTask DisposeAsync() => Scheduler.DisposeAsync();
     }
@@ -3862,10 +5430,15 @@ public sealed class RuntimeSupervisorTests
     {
         private readonly Dictionary<string, RuntimeContainerSpec> _specs = new(StringComparer.Ordinal);
         private readonly HashSet<string> _activeContainers = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _attachedContainers = new(StringComparer.Ordinal);
         private long _nextId;
 
         public int RuntimeContainerCreates { get; private set; }
         public string? CorruptInspectedRole { get; set; }
+        public TimeSpan StartupDelay { get; set; }
+        public TimeSpan HangReadyDelay { get; set; }
+        public bool OmitHangReadyMarker { get; set; }
+        public int HangWaitCancellationCount { get; private set; }
         public HashSet<string> ActiveContainers => _activeContainers;
         public List<IReadOnlyList<RuntimeImageFileRequest>> ImageFileRequests { get; } = [];
         public List<RuntimeContainerSpec> CreatedSpecs { get; } = [];
@@ -3918,9 +5491,11 @@ public sealed class RuntimeSupervisorTests
             RuntimeContainerIsolationKind isolationKind,
             string managementLabel,
             string resourceScope,
+            bool createMeasurementControl = false,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            Assert.False(createMeasurementControl);
             var materializerId = NextContainerId();
             _activeContainers.Add(materializerId);
             return Task.FromResult(new RuntimeWorkspaceMaterialization(
@@ -3944,18 +5519,75 @@ public sealed class RuntimeSupervisorTests
         public Task UploadArchiveAsync(
             string containerId,
             Stream archive,
+            string destinationPath = "/workspace",
             CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task StartContainerAsync(
+        public Task<RuntimeRunningContainerInspection> InspectRunningContainerAsync(
+            string containerId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<string> CreateRuntimeMeasurementSidecarAsync(
+            RuntimeMeasurementSidecarSpec spec,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<string> CreateContainerExecAsync(
+            string containerId,
+            RuntimeExecSpec spec,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<Stream> StartContainerExecAsync(
+            string execId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<RuntimeContainerExecInspection> InspectContainerExecAsync(
+            string execId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task WaitForRuntimeMeasurementArmedAsync(
+            string sidecarContainerId,
+            string token,
+            string targetContainerId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<Stream> AttachContainerOutputAsync(
+            string containerId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Assert.Contains(containerId, _activeContainers);
+            Assert.True(_attachedContainers.Add(containerId));
+            var spec = _specs[containerId];
+            Stream stream = new MemoryStream(SelectFrames(spec), writable: false);
+            if (spec.Command.Contains("hang", StringComparer.Ordinal) && HangReadyDelay > TimeSpan.Zero)
+                stream = new DelayedFirstReadStream(stream, HangReadyDelay);
+            return Task.FromResult(stream);
+        }
+
+        public async Task StartContainerAsync(
             string containerId,
             CancellationToken cancellationToken = default)
         {
             Assert.Contains(containerId, _activeContainers);
-            return Task.CompletedTask;
+            Assert.True(_attachedContainers.Remove(containerId));
+            if (StartupDelay > TimeSpan.Zero)
+                await Task.Delay(StartupDelay, cancellationToken);
         }
 
         public Task<IRuntimeContainerResourceMonitor> StartContainerResourceMonitorAsync(
             string containerId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<RuntimeContainerMeasurement> WaitForRuntimeMeasurementAsync(
+            string sidecarContainerId,
+            string token,
+            string targetContainerId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task UploadRuntimeMeasurementSignalAsync(
+            string sidecarContainerId,
+            string token,
+            string targetContainerId,
+            RuntimeMeasurementSignalKind signalKind,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task StopContainerAsync(
@@ -3963,24 +5595,23 @@ public sealed class RuntimeSupervisorTests
             TimeSpan timeout,
             CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task<Stream> OpenContainerLogsAsync(
-            string containerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<Stream>(new MemoryStream(SelectFrames(_specs[containerId]), writable: false));
-
-        public Task<Stream> OpenContainerLogsSinceAsync(
-            string containerId,
-            DateTimeOffset sinceUtc,
-            CancellationToken cancellationToken = default) =>
-            OpenContainerLogsAsync(containerId, cancellationToken);
-
         public async Task<RuntimeContainerExit> WaitContainerAsync(
             string containerId,
             CancellationToken cancellationToken = default)
         {
             var spec = _specs[containerId];
             if (spec.Command.Contains("hang", StringComparer.Ordinal))
-                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            {
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    HangWaitCancellationCount++;
+                    throw;
+                }
+            }
             return spec.Command.Contains("user-exception", StringComparer.Ordinal)
                 ? new RuntimeContainerExit(1, false, null)
                 : new RuntimeContainerExit(0, false, null);
@@ -4004,6 +5635,7 @@ public sealed class RuntimeSupervisorTests
 
         public Task<IReadOnlyList<ManagedRuntimeContainer>> ListManagedContainersAsync(
             string managementLabel,
+            string resourceScope,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ManagedRuntimeContainer>>(_activeContainers
                 .Select(static id => new ManagedRuntimeContainer(id, DateTimeOffset.UtcNow, "running"))
@@ -4011,6 +5643,7 @@ public sealed class RuntimeSupervisorTests
 
         public Task<IReadOnlyList<ManagedWorkspaceVolume>> ListManagedWorkspaceVolumesAsync(
             string managementLabel,
+            string resourceScope,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ManagedWorkspaceVolume>>([]);
 
@@ -4027,15 +5660,66 @@ public sealed class RuntimeSupervisorTests
                          "success-security",
                          "user-exception",
                          "output-overflow",
+                         "hang",
                          "process-tree",
                          "inspection",
                          "execution-flow"
                      })
             {
                 if (spec.Command.Contains(name, StringComparer.Ordinal))
+                {
+                    if (name == "hang" && OmitHangReadyMarker)
+                        return frames["empty"];
                     return frames[name];
+                }
             }
             return frames["empty"];
+        }
+
+        private sealed class DelayedFirstReadStream(Stream inner, TimeSpan delay) : Stream
+        {
+            private int _delayed;
+
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => throw new NotSupportedException();
+            public override long Position
+            {
+                get => throw new NotSupportedException();
+                set => throw new NotSupportedException();
+            }
+
+            public override void Flush() => throw new NotSupportedException();
+            public override int Read(byte[] buffer, int offset, int count) =>
+                ReadAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+
+            public override async ValueTask<int> ReadAsync(
+                Memory<byte> buffer,
+                CancellationToken cancellationToken = default)
+            {
+                if (Interlocked.Exchange(ref _delayed, 1) == 0)
+                    await Task.Delay(delay, cancellationToken);
+                return await inner.ReadAsync(buffer, cancellationToken);
+            }
+
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing)
+                    inner.Dispose();
+                base.Dispose(disposing);
+            }
+
+            public override async ValueTask DisposeAsync()
+            {
+                await inner.DisposeAsync();
+                await base.DisposeAsync();
+                GC.SuppressFinalize(this);
+            }
         }
     }
 
@@ -4055,26 +5739,91 @@ public sealed class RuntimeSupervisorTests
 
         public string? ImageInspectionPayload { get; set; }
 
+        public Queue<HttpResponseMessage> ArchiveReadResponses { get; } = new();
+
+        public Queue<string> CreateContainerIds { get; } = new();
+
+        public Queue<byte[]> ExecStartResponses { get; } = new();
+
+        public int ExecExitCode { get; set; }
+
+        public string? ManagedContainersPayload { get; set; }
+
+        public string? ManagedVolumesPayload { get; set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
-            var body = request.Content is null
+            var bodyBytes = request.Content is null
                 ? null
-                : await request.Content.ReadAsStringAsync(cancellationToken);
+                : await request.Content.ReadAsByteArrayAsync(cancellationToken);
+            var body = bodyBytes is null ? null : Encoding.UTF8.GetString(bodyBytes);
             Requests.Add(new RecordedDockerRequest(
                 request.Method,
                 request.RequestUri!.PathAndQuery,
                 body,
-                request.Content?.Headers.ContentType?.MediaType));
+                request.Content?.Headers.ContentType?.MediaType,
+                bodyBytes));
 
             if (request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath.EndsWith("/volumes/create", StringComparison.Ordinal))
                 return new HttpResponseMessage(HttpStatusCode.Created) { Content = new StringContent("{}") };
             if (request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath.EndsWith("/containers/create", StringComparison.Ordinal))
             {
+                var id = CreateContainerIds.Count > 0 ? CreateContainerIds.Dequeue() : ContainerId;
                 return new HttpResponseMessage(HttpStatusCode.Created)
                 {
-                    Content = new StringContent($"{{\"Id\":\"{ContainerId}\"}}", Encoding.UTF8, "application/json")
+                    Content = new StringContent($"{{\"Id\":\"{id}\"}}", Encoding.UTF8, "application/json")
+                };
+            }
+            if (request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath.EndsWith("/attach", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(CreateDockerMultiplexedFrame(
+                        1,
+                        "runtime output"u8.ToArray()))
+                };
+            }
+            if (request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath.Contains("/exec/", StringComparison.Ordinal) &&
+                request.RequestUri.AbsolutePath.EndsWith("/start", StringComparison.Ordinal))
+            {
+                var payload = ExecStartResponses.Count > 0
+                    ? ExecStartResponses.Dequeue()
+                    : ""u8.ToArray();
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(payload)
+                };
+            }
+            if (request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath.EndsWith("/exec", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.Created)
+                {
+                    Content = new StringContent($"{{\"Id\":\"{RuntimeExecId}\"}}", Encoding.UTF8, "application/json")
+                };
+            }
+            if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath.Contains("/exec/", StringComparison.Ordinal) &&
+                request.RequestUri.AbsolutePath.EndsWith("/json", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        $"{{\"ID\":\"{RuntimeExecId}\",\"Running\":false,\"ExitCode\":{ExecExitCode}}}",
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+            if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath.EndsWith("/json", StringComparison.Ordinal) &&
+                request.RequestUri.AbsolutePath.Contains("/containers/", StringComparison.Ordinal) &&
+                !request.RequestUri.AbsolutePath.EndsWith("/containers/json", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        $"{{\"Id\":\"{ContainerId}\",\"State\":{{\"Running\":true,\"Pid\":4242}}}}",
+                        Encoding.UTF8,
+                        "application/json")
                 };
             }
             if (request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath.EndsWith("/start", StringComparison.Ordinal))
@@ -4083,16 +5832,27 @@ public sealed class RuntimeSupervisorTests
                 return new HttpResponseMessage(StopStatusCode);
             if (request.Method == HttpMethod.Put && request.RequestUri.AbsolutePath.EndsWith("/archive", StringComparison.Ordinal))
                 return new HttpResponseMessage(ArchiveStatusCode);
-            if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath.EndsWith("/logs", StringComparison.Ordinal))
+            if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath.EndsWith("/archive", StringComparison.Ordinal))
             {
-                var payload = "runtime output"u8.ToArray();
-                var frame = new byte[8 + payload.Length];
-                frame[0] = 1;
-                BinaryPrimitives.WriteInt32BigEndian(frame.AsSpan(4), payload.Length);
-                payload.CopyTo(frame.AsSpan(8));
+                return ArchiveReadResponses.Count > 0
+                    ? ArchiveReadResponses.Dequeue()
+                    : new HttpResponseMessage(HttpStatusCode.NotFound);
+            }
+            if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath == "/v1.47/containers/json")
+            {
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new ByteArrayContent(frame)
+                    Content = new StringContent(ManagedContainersPayload ?? "[]", Encoding.UTF8, "application/json")
+                };
+            }
+            if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath == "/v1.47/volumes")
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        ManagedVolumesPayload ?? "{\"Volumes\":[]}",
+                        Encoding.UTF8,
+                        "application/json")
                 };
             }
             if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath.EndsWith("/stats", StringComparison.Ordinal))
@@ -4119,6 +5879,36 @@ public sealed class RuntimeSupervisorTests
             }
 
             throw new InvalidOperationException($"Unexpected Docker request: {request.Method} {request.RequestUri.PathAndQuery}");
+        }
+    }
+
+    private sealed class TrackingHttpResponseMessage : HttpResponseMessage
+    {
+        public bool DisposeCalled { get; private set; }
+
+        protected override void Dispose(bool disposing)
+        {
+            DisposeCalled = true;
+            base.Dispose(disposing);
+        }
+    }
+
+    private sealed class ThrowingSyncDisposeStream : MemoryStream
+    {
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                throw new InvalidOperationException("Expected inner stream disposal failure.");
+            base.Dispose(disposing);
+        }
+    }
+
+    private sealed class ThrowingAsyncDisposeStream : MemoryStream
+    {
+        public override async ValueTask DisposeAsync()
+        {
+            await base.DisposeAsync();
+            throw new InvalidOperationException("Expected inner stream disposal failure.");
         }
     }
 
@@ -4191,11 +5981,18 @@ public sealed class RuntimeSupervisorTests
 
     private sealed class SessionDockerClient : IDockerEngineClient
     {
+        private readonly HashSet<string> _attachedContainers = new(StringComparer.Ordinal);
+        private TaskCompletionSource<RuntimeContainerExit>? _measuredTargetExit;
+        private TaskCompletionSource<RuntimeContainerExit>? _measurementSidecarExit;
+        private string? _measurementToken;
+
         public int RuntimeContainerCreates { get; private set; }
 
         public List<RuntimeContainerSpec> CreatedSpecs { get; } = [];
 
         public List<string> UploadedArchives { get; } = [];
+
+        public List<string> UploadDestinations { get; } = [];
 
         public List<string> StartedContainers { get; } = [];
 
@@ -4213,9 +6010,22 @@ public sealed class RuntimeSupervisorTests
 
         public List<string> CleanupLifecycle { get; } = [];
 
-        public List<DateTimeOffset> LogSinceCursors { get; } = [];
-
         public List<string> ResourceMonitorStarts { get; } = [];
+
+        public List<string> ResourceMonitorStops { get; } = [];
+
+        public List<string> ResourceMonitorDisposals { get; } = [];
+
+        public List<string> RuntimeLifecycle { get; } = [];
+
+        public List<bool> MeasurementControlRequests { get; } = [];
+
+        public List<RuntimeMeasurementSidecarSpec> MeasurementSidecarSpecs { get; } = [];
+
+        public List<(string ContainerId, RuntimeExecSpec Spec)> ContainerExecSpecs { get; } = [];
+
+        public List<(string SidecarId, string Token, string TargetId, RuntimeMeasurementSignalKind Kind)>
+            MeasurementSignals { get; } = [];
 
         public Exception? NextUploadArchiveException { get; set; }
 
@@ -4235,9 +6045,57 @@ public sealed class RuntimeSupervisorTests
 
         public Exception? NextResourceMonitorStartException { get; set; }
 
+        public Exception? NextResourceMonitorFirstSampleException { get; set; }
+
         public Exception? NextResourceMonitorStopException { get; set; }
 
+        public Exception? NextRuntimeMeasurementException { get; set; }
+
+        public Exception? NextRuntimeMeasurementArmedException { get; set; }
+
+        public Exception? NextContainerExecException { get; set; }
+
+        public Exception? NextContainerExecStartException { get; set; }
+
+        public Exception? NextContainerExecInspectException { get; set; }
+
+        public Exception? NextSidecarStartException { get; set; }
+
+        public bool TargetExitsBeforeBaseline { get; set; }
+
+        public bool TargetExitsDuringExec { get; set; }
+
+        public bool SidecarExitsBeforeArmed { get; set; }
+
+        public bool SidecarExitsDuringExec { get; set; }
+
+        public bool SidecarExitsBeforeCompletion { get; set; }
+
+        public bool SuppressPostCompletionSample { get; set; }
+
+        public bool BlockResourceMonitorAttachUntilCancellation { get; set; }
+
+        public bool BlockResourceMonitorFirstSampleUntilCancellation { get; set; }
+
+        public TaskCompletionSource ResourceMonitorAttachEntered { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ResourceMonitorFirstSampleEntered { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
         public RuntimeContainerResourceUsage ResourceUsage { get; set; } = new(4096, 1);
+
+        public RuntimeContainerMeasurement RuntimeMeasurement { get; set; } =
+            new("cgroup-v2", 8192);
+
+        public RuntimeContainerExecInspection ExecInspection { get; set; } =
+            new(RuntimeExecId, Running: false, ExitCode: 0);
+
+        public Queue<RuntimeRunningContainerInspection> RunningInspections { get; } = new();
+
+        public RuntimeContainerExit MeasuredKeeperStopExit { get; set; } = new(143, false, null);
+
+        public RuntimeContainerExit MeasurementSidecarExit { get; set; } = new(0, false, null);
 
         public byte[] ContainerLogBytes { get; set; } = [];
 
@@ -4245,18 +6103,77 @@ public sealed class RuntimeSupervisorTests
 
         public RuntimeImageInspection? ImageInspection { get; set; }
 
+        public RuntimeImageInspection? MeasurementHelperImageInspection { get; set; }
+
+        public string? RuntimeImageReference { get; set; }
+
+        public string? MeasurementHelperImageReference { get; set; }
+
+        public string MeasurementHelperContentSha256 { get; set; } =
+            RuntimeMeasurementHelperContract.ContentSha256;
+
         public Task<bool> PingAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
 
         public Task<RuntimeImageInspection> InspectImageAsync(
             string immutableReference,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(ImageInspection ?? new RuntimeImageInspection(
+            CancellationToken cancellationToken = default)
+        {
+            if (StringComparer.Ordinal.Equals(immutableReference, MeasurementHelperImageReference))
+            {
+                return Task.FromResult(MeasurementHelperImageInspection ?? new RuntimeImageInspection(
+                    immutableReference,
+                    RuntimeMeasurementHelperImageId,
+                    128L * 1024 * 1024,
+                    "linux",
+                    "amd64",
+                    [immutableReference],
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["org.opencontainers.image.revision"] = RuntimePreflightSourceRevision,
+                        ["io.sharplabnext.source.revision"] = RuntimePreflightSourceRevision
+                    }));
+            }
+
+            Assert.True(
+                RuntimeImageReference is null ||
+                StringComparer.Ordinal.Equals(immutableReference, RuntimeImageReference));
+            return Task.FromResult(ImageInspection ?? new RuntimeImageInspection(
                 immutableReference,
                 $"sha256:{new string('a', 64)}",
                 536870912,
                 "linux",
                 "amd64",
-                [immutableReference]));
+                [immutableReference],
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["org.opencontainers.image.revision"] = RuntimePreflightSourceRevision,
+                    ["io.sharplabnext.source.revision"] = RuntimePreflightSourceRevision
+                },
+                ["/opt/sharplabnext/runtime-entrypoint.sh"]));
+        }
+
+        public Task<IReadOnlyList<RuntimeImageFileInspection>> InspectImageFilesAsync(
+            string imageId,
+            IReadOnlyList<RuntimeImageFileRequest> requestedFiles,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<RuntimeImageFileInspection>>(
+                requestedFiles.Select(file =>
+                {
+                    var digest = StringComparer.Ordinal.Equals(
+                        file.Path,
+                        RuntimeMeasurementHelperContract.Entrypoint)
+                        ? MeasurementHelperContentSha256
+                        : $"sha256:{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(file.Path)))}";
+                    return new RuntimeImageFileInspection(
+                        file.Role,
+                        file.Path,
+                        digest,
+                        10_365,
+                        "script",
+                        "shell");
+                }).ToArray());
+        }
 
         public Task<string> CreateContainerAsync(
             RuntimeContainerSpec spec,
@@ -4264,6 +6181,13 @@ public sealed class RuntimeSupervisorTests
         {
             RuntimeContainerCreates++;
             CreatedSpecs.Add(spec);
+            if (spec.Entrypoint is not null)
+            {
+                Assert.Equal(["/bin/sh", "-c"], spec.Entrypoint);
+                _measuredTargetExit = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                RuntimeLifecycle.Add($"create-target:{RuntimeTargetContainerId}");
+                return Task.FromResult(RuntimeTargetContainerId);
+            }
             return Task.FromResult($"runtime-{RuntimeContainerCreates}");
         }
 
@@ -4276,19 +6200,28 @@ public sealed class RuntimeSupervisorTests
             RuntimeContainerIsolationKind isolationKind,
             string managementLabel,
             string resourceScope,
+            bool createMeasurementControl = false,
             CancellationToken cancellationToken = default)
         {
+            MeasurementControlRequests.Add(createMeasurementControl);
             StartedContainers.Add("materializer-1");
             WorkspaceLifecycle.Add("start:materializer-1");
+            UploadDestinations.Add("/workspace");
             await RecordArchiveAsync(archive, cancellationToken);
-            return new RuntimeWorkspaceMaterialization("workspace-1", "materializer-1");
+            return new RuntimeWorkspaceMaterialization(
+                "workspace-1",
+                "materializer-1",
+                createMeasurementControl ? "measurement-1" : null);
         }
 
         public Task UploadArchiveAsync(
             string containerId,
             Stream archive,
+            string destinationPath = "/workspace",
             CancellationToken cancellationToken = default)
         {
+            UploadDestinations.Add(destinationPath);
+            RuntimeLifecycle.Add($"upload:{containerId}");
             var beforeUpload = BeforeNextUploadArchive;
             BeforeNextUploadArchive = null;
             beforeUpload?.Invoke();
@@ -4299,30 +6232,207 @@ public sealed class RuntimeSupervisorTests
                 : Task.FromException(exception);
         }
 
-        public Task StartContainerAsync(string containerId, CancellationToken cancellationToken = default)
-        {
-            var exception = NextStartContainerException;
-            NextStartContainerException = null;
-            if (exception is not null)
-                return Task.FromException(exception);
-            StartedContainers.Add(containerId);
-            WorkspaceLifecycle.Add($"start:{containerId}");
-            return Task.CompletedTask;
-        }
-
-        public Task<IRuntimeContainerResourceMonitor> StartContainerResourceMonitorAsync(
+        public Task<RuntimeRunningContainerInspection> InspectRunningContainerAsync(
             string containerId,
             CancellationToken cancellationToken = default)
         {
+            Assert.Equal(RuntimeTargetContainerId, containerId);
+            RuntimeLifecycle.Add($"inspect-target:{containerId}");
+            return Task.FromResult(RunningInspections.Count > 0
+                ? RunningInspections.Dequeue()
+                : new RuntimeRunningContainerInspection(containerId, 4242, Running: true));
+        }
+
+        public Task<string> CreateRuntimeMeasurementSidecarAsync(
+            RuntimeMeasurementSidecarSpec spec,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.Equal(RuntimeTargetContainerId, spec.TargetContainerId);
+            Assert.Equal(4242, spec.TargetHostPid);
+            Assert.Equal("measurement-1", spec.MeasurementVolumeName);
+            Assert.Equal(RuntimeMeasurementHelperImageId, spec.Image);
+            Assert.Matches("^[0-9a-f]{32}$", spec.Token);
+            _measurementToken = spec.Token;
+            _measurementSidecarExit = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            MeasurementSidecarSpecs.Add(spec);
+            RuntimeLifecycle.Add($"create-sidecar:{RuntimeMeasurementSidecarId}");
+            return Task.FromResult(RuntimeMeasurementSidecarId);
+        }
+
+        public Task<string> CreateContainerExecAsync(
+            string containerId,
+            RuntimeExecSpec spec,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.Equal(RuntimeTargetContainerId, containerId);
+            ContainerExecSpecs.Add((containerId, spec));
+            RuntimeLifecycle.Add($"create-exec:{RuntimeExecId}");
+            var exception = NextContainerExecException;
+            NextContainerExecException = null;
+            return exception is null
+                ? Task.FromResult(RuntimeExecId)
+                : Task.FromException<string>(exception);
+        }
+
+        public Task<Stream> StartContainerExecAsync(
+            string execId,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.Equal(RuntimeExecId, execId);
+            RuntimeLifecycle.Add($"start-exec:{execId}");
+            if (TargetExitsDuringExec)
+                _measuredTargetExit?.TrySetResult(new RuntimeContainerExit(1, false, "target exited"));
+            if (SidecarExitsDuringExec)
+                _measurementSidecarExit?.TrySetResult(new RuntimeContainerExit(1, false, "sidecar exited"));
+            var exception = NextContainerExecStartException;
+            NextContainerExecStartException = null;
+            return exception is null
+                ? Task.FromResult<Stream>(new MemoryStream(ContainerLogBytes, writable: false))
+                : Task.FromException<Stream>(exception);
+        }
+
+        public Task<RuntimeContainerExecInspection> InspectContainerExecAsync(
+            string execId,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.Equal(RuntimeExecId, execId);
+            RuntimeLifecycle.Add($"inspect-exec:{execId}");
+            var exception = NextContainerExecInspectException;
+            NextContainerExecInspectException = null;
+            return exception is null
+                ? Task.FromResult(ExecInspection)
+                : Task.FromException<RuntimeContainerExecInspection>(exception);
+        }
+
+        public Task WaitForRuntimeMeasurementArmedAsync(
+            string sidecarContainerId,
+            string token,
+            string targetContainerId,
+            CancellationToken cancellationToken = default)
+        {
+            AssertMeasurementBinding(sidecarContainerId, token, targetContainerId);
+            RuntimeLifecycle.Add($"armed:{sidecarContainerId}");
+            var exception = NextRuntimeMeasurementArmedException;
+            NextRuntimeMeasurementArmedException = null;
+            return exception is null ? Task.CompletedTask : Task.FromException(exception);
+        }
+
+        public Task<RuntimeContainerMeasurement> WaitForRuntimeMeasurementAsync(
+            string sidecarContainerId,
+            string token,
+            string targetContainerId,
+            CancellationToken cancellationToken = default)
+        {
+            AssertMeasurementBinding(sidecarContainerId, token, targetContainerId);
+            RuntimeLifecycle.Add($"completion:{sidecarContainerId}");
+            if (SidecarExitsBeforeCompletion)
+                _measurementSidecarExit?.TrySetResult(new RuntimeContainerExit(1, false, "sidecar exited"));
+            var exception = NextRuntimeMeasurementException;
+            NextRuntimeMeasurementException = null;
+            return exception is null
+                ? Task.FromResult(RuntimeMeasurement)
+                : Task.FromException<RuntimeContainerMeasurement>(exception);
+        }
+
+        public Task UploadRuntimeMeasurementSignalAsync(
+            string sidecarContainerId,
+            string token,
+            string targetContainerId,
+            RuntimeMeasurementSignalKind signalKind,
+            CancellationToken cancellationToken = default)
+        {
+            AssertMeasurementBinding(sidecarContainerId, token, targetContainerId);
+            MeasurementSignals.Add((sidecarContainerId, token, targetContainerId, signalKind));
+            RuntimeLifecycle.Add($"signal:{signalKind.ToString().ToLowerInvariant()}:{sidecarContainerId}");
+            if (signalKind == RuntimeMeasurementSignalKind.Finish)
+                _measurementSidecarExit?.TrySetResult(MeasurementSidecarExit);
+            return Task.CompletedTask;
+        }
+
+        private void AssertMeasurementBinding(
+            string sidecarContainerId,
+            string token,
+            string targetContainerId)
+        {
+            Assert.Equal(RuntimeMeasurementSidecarId, sidecarContainerId);
+            Assert.Equal(RuntimeTargetContainerId, targetContainerId);
+            Assert.Equal(_measurementToken, token);
+        }
+
+        public Task<Stream> AttachContainerOutputAsync(
+            string containerId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Assert.True(_attachedContainers.Add(containerId));
+            RuntimeLifecycle.Add($"attach:{containerId}");
+            return Task.FromResult<Stream>(new MemoryStream(ContainerLogBytes, writable: false));
+        }
+
+        public Task StartContainerAsync(string containerId, CancellationToken cancellationToken = default)
+        {
+            if (containerId.StartsWith("runtime-", StringComparison.Ordinal))
+                Assert.True(_attachedContainers.Remove(containerId));
+            RuntimeLifecycle.Add($"start-attempt:{containerId}");
+            var exception = containerId == RuntimeMeasurementSidecarId
+                ? NextSidecarStartException
+                : NextStartContainerException;
+            if (containerId == RuntimeMeasurementSidecarId)
+                NextSidecarStartException = null;
+            else
+                NextStartContainerException = null;
+            if (exception is not null)
+                return Task.FromException(exception);
+            StartedContainers.Add(containerId);
+            RuntimeLifecycle.Add($"start:{containerId}");
+            WorkspaceLifecycle.Add($"start:{containerId}");
+            if (containerId == RuntimeMeasurementSidecarId && SidecarExitsBeforeArmed)
+                _measurementSidecarExit?.TrySetResult(new RuntimeContainerExit(1, false, "sidecar exited"));
+            return Task.CompletedTask;
+        }
+
+        public async Task<IRuntimeContainerResourceMonitor> StartContainerResourceMonitorAsync(
+            string containerId,
+            CancellationToken cancellationToken = default)
+        {
+            RuntimeLifecycle.Add($"monitor:{containerId}");
             var exception = NextResourceMonitorStartException;
             NextResourceMonitorStartException = null;
             if (exception is not null)
-                return Task.FromException<IRuntimeContainerResourceMonitor>(exception);
+                throw exception;
+            if (BlockResourceMonitorAttachUntilCancellation)
+            {
+                ResourceMonitorAttachEntered.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                throw new InvalidOperationException("The blocked stats attach completed without cancellation.");
+            }
             ResourceMonitorStarts.Add(containerId);
+            var firstSampleException = NextResourceMonitorFirstSampleException;
+            NextResourceMonitorFirstSampleException = null;
             var stopException = NextResourceMonitorStopException;
             NextResourceMonitorStopException = null;
-            return Task.FromResult<IRuntimeContainerResourceMonitor>(
-                new SessionResourceMonitor(ResourceUsage, stopException));
+            return new SessionResourceMonitor(
+                ResourceUsage,
+                firstSampleException,
+                stopException,
+                BlockResourceMonitorFirstSampleUntilCancellation,
+                SuppressPostCompletionSample,
+                () =>
+                {
+                    RuntimeLifecycle.Add($"sample:{containerId}");
+                    ResourceMonitorFirstSampleEntered.TrySetResult();
+                },
+                () => RuntimeLifecycle.Add($"post-sample:{containerId}"),
+                () =>
+                {
+                    ResourceMonitorStops.Add($"monitor:{containerId}");
+                    RuntimeLifecycle.Add($"monitor-stop:{containerId}");
+                },
+                () =>
+                {
+                    ResourceMonitorDisposals.Add($"monitor:{containerId}");
+                    RuntimeLifecycle.Add($"monitor-dispose:{containerId}");
+                });
         }
 
         public Task StopContainerAsync(
@@ -4337,27 +6447,32 @@ public sealed class RuntimeSupervisorTests
                 return Task.FromException(exception);
             StoppedContainers.Add(containerId);
             WorkspaceLifecycle.Add($"stop:{containerId}");
+            RuntimeLifecycle.Add($"stop:{containerId}");
+            if (containerId == RuntimeTargetContainerId)
+                _measuredTargetExit?.TrySetResult(MeasuredKeeperStopExit);
             return Task.CompletedTask;
-        }
-
-        public Task<Stream> OpenContainerLogsAsync(
-            string containerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<Stream>(new MemoryStream(ContainerLogBytes, writable: false));
-
-        public Task<Stream> OpenContainerLogsSinceAsync(
-            string containerId,
-            DateTimeOffset sinceUtc,
-            CancellationToken cancellationToken = default)
-        {
-            LogSinceCursors.Add(sinceUtc);
-            return Task.FromResult<Stream>(new MemoryStream(ContainerLogBytes, writable: false));
         }
 
         public Task<RuntimeContainerExit> WaitContainerAsync(
             string containerId,
             CancellationToken cancellationToken = default)
         {
+            if (containerId == RuntimeTargetContainerId && _measuredTargetExit is not null)
+            {
+                RuntimeLifecycle.Add($"wait-target:{containerId}");
+                var measuredException = NextWaitContainerException;
+                NextWaitContainerException = null;
+                if (measuredException is not null)
+                    return Task.FromException<RuntimeContainerExit>(measuredException);
+                if (TargetExitsBeforeBaseline)
+                    _measuredTargetExit.TrySetResult(new RuntimeContainerExit(1, false, "target exited"));
+                return _measuredTargetExit.Task.WaitAsync(cancellationToken);
+            }
+            if (containerId == RuntimeMeasurementSidecarId && _measurementSidecarExit is not null)
+            {
+                RuntimeLifecycle.Add($"wait-sidecar:{containerId}");
+                return _measurementSidecarExit.Task.WaitAsync(cancellationToken);
+            }
             var exception = NextWaitContainerException;
             NextWaitContainerException = null;
             if (exception is not null)
@@ -4381,7 +6496,10 @@ public sealed class RuntimeSupervisorTests
         public Task RemoveContainerAsync(string containerId, CancellationToken cancellationToken = default)
         {
             RemoveContainerAttempts.Add(containerId);
-            if (FailRuntimeContainerRemoval && containerId.StartsWith("runtime-", StringComparison.Ordinal))
+            if (FailRuntimeContainerRemoval &&
+                (containerId.StartsWith("runtime-", StringComparison.Ordinal) ||
+                 StringComparer.Ordinal.Equals(containerId, RuntimeTargetContainerId) ||
+                 StringComparer.Ordinal.Equals(containerId, RuntimeMeasurementSidecarId)))
             {
                 CleanupLifecycle.Add($"remove-failed:{containerId}");
                 return Task.FromException(new HttpRequestException("Runtime container removal failed."));
@@ -4395,6 +6513,7 @@ public sealed class RuntimeSupervisorTests
             }
             RemovedContainers.Add(containerId);
             CleanupLifecycle.Add($"remove:{containerId}");
+            RuntimeLifecycle.Add($"remove:{containerId}");
             return Task.CompletedTask;
         }
 
@@ -4407,11 +6526,13 @@ public sealed class RuntimeSupervisorTests
 
         public Task<IReadOnlyList<ManagedRuntimeContainer>> ListManagedContainersAsync(
             string managementLabel,
+            string resourceScope,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ManagedRuntimeContainer>>([]);
 
         public Task<IReadOnlyList<ManagedWorkspaceVolume>> ListManagedWorkspaceVolumesAsync(
             string managementLabel,
+            string resourceScope,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ManagedWorkspaceVolume>>([]);
 
@@ -4425,14 +6546,73 @@ public sealed class RuntimeSupervisorTests
 
         private sealed class SessionResourceMonitor(
             RuntimeContainerResourceUsage usage,
-            Exception? stopException) : IRuntimeContainerResourceMonitor
+            Exception? firstSampleException,
+            Exception? stopException,
+            bool blockFirstSampleUntilCancellation,
+            bool suppressPostCompletionSample,
+            Action onFirstSample,
+            Action onPostSample,
+            Action onStop,
+            Action onDispose) : IRuntimeContainerResourceMonitor
         {
-            public Task<RuntimeContainerResourceUsage> StopAsync(
-                CancellationToken cancellationToken = default) => stopException is null
-                ? Task.FromResult(usage)
-                : Task.FromException<RuntimeContainerResourceUsage>(stopException);
+            private int _sampleWaited;
+            private int _sampleCount;
+            private int _stopped;
+            private int _disposed;
 
-            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+            public int SampleCount => Volatile.Read(ref _sampleCount);
+
+            public async Task WaitForSampleAfterAsync(
+                int checkpoint,
+                CancellationToken cancellationToken = default)
+            {
+                ArgumentOutOfRangeException.ThrowIfNegative(checkpoint);
+                if (checkpoint == 0 && Interlocked.Exchange(ref _sampleWaited, 1) == 0)
+                {
+                    onFirstSample();
+                    if (blockFirstSampleUntilCancellation)
+                    {
+                        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                        throw new InvalidOperationException(
+                            "The blocked first stats sample completed without cancellation.");
+                    }
+                    if (firstSampleException is not null)
+                        throw firstSampleException;
+                }
+                else
+                {
+                    onPostSample();
+                    if (suppressPostCompletionSample)
+                        return;
+                }
+
+                Volatile.Write(ref _sampleCount, checked(checkpoint + 1));
+            }
+
+            public async Task WaitForFirstSampleAsync(CancellationToken cancellationToken = default)
+            {
+                await WaitForSampleAfterAsync(0, cancellationToken);
+            }
+
+            public Task<RuntimeContainerResourceUsage> StopAsync(
+                CancellationToken cancellationToken = default)
+            {
+                if (Interlocked.Exchange(ref _stopped, 1) == 0)
+                    onStop();
+                return stopException is null
+                    ? Task.FromResult(usage with
+                    {
+                        SampleCount = Math.Max(usage.SampleCount, SampleCount)
+                    })
+                    : Task.FromException<RuntimeContainerResourceUsage>(stopException);
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                    onDispose();
+                return ValueTask.CompletedTask;
+            }
         }
     }
 }

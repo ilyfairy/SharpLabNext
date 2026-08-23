@@ -1,12 +1,15 @@
 using SharpLabNext.Worker.FSharp.Compiler;
 using SharpLabNext.ArtifactStore.Client;
+using SharpLabNext.Testing;
 using SharpLabNext.WorkerHost;
 
 namespace SharpLabNext.Worker.FSharp.Tests;
 
 internal static class FSharpTestSettings
 {
-    public const string Net11PreviewVersion = "11.0.0-preview.5.26302.115";
+    public static string Net10Version => TestReferenceSets.Net10.Version;
+
+    public static string Net11PreviewVersion => TestReferenceSets.Net11.Version;
 
     public static FSharpWorkerSettings Create(string workRoot, FSharpAstLimits? astLimits = null) => new(
         new FSharpWorkerIdentity(
@@ -26,7 +29,7 @@ internal static class FSharpTestSettings
             TimeSpan.FromHours(1)),
         workRoot,
         [
-            new FSharpReferenceSetDefinition("net10-ref", GetNet10ReferencePath(), "net10.0", "10.0.9"),
+            new FSharpReferenceSetDefinition("net10-ref", GetNet10ReferencePath(), "net10.0", Net10Version),
             new FSharpReferenceSetDefinition(
                 "net11-preview-ref",
                 GetNet11PreviewReferencePath(),
@@ -48,29 +51,8 @@ internal static class FSharpTestSettings
     }
 
     public static string GetNet10ReferencePath()
-        => GetReferencePath("SHARPLABNEXT_NET10_REF_PATH", "10.0.9", "net10.0");
+        => TestReferenceSets.Net10.Path;
 
     public static string GetNet11PreviewReferencePath()
-        => GetReferencePath("SHARPLABNEXT_NET11_REF_PATH", Net11PreviewVersion, "net11.0");
-
-    private static string GetReferencePath(string environmentVariable, string version, string targetFramework)
-    {
-        var explicitPath = Environment.GetEnvironmentVariable(environmentVariable);
-        if (!string.IsNullOrWhiteSpace(explicitPath) && Directory.Exists(explicitPath))
-            return explicitPath;
-        var roots = new[]
-        {
-            Environment.GetEnvironmentVariable("DOTNET_ROOT"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet"),
-            "/usr/share/dotnet",
-            "/usr/local/share/dotnet"
-        };
-        foreach (var root in roots.Where(static value => !string.IsNullOrWhiteSpace(value)))
-        {
-            var candidate = Path.Combine(root!, "packs", "Microsoft.NETCore.App.Ref", version, "ref", targetFramework);
-            if (Directory.Exists(candidate))
-                return candidate;
-        }
-        throw new InvalidOperationException($"The .NET {version} reference pack was not found.");
-    }
+        => TestReferenceSets.Net11.Path;
 }

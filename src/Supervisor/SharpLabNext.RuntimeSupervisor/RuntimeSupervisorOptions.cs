@@ -3,6 +3,27 @@ using SharpLabNext.RuntimeProfile.Sdk;
 
 namespace SharpLabNext.RuntimeSupervisor;
 
+internal static class RuntimeManagedLabelPolicy
+{
+    private static readonly HashSet<string> ReservedManagementLabels =
+    [
+        "com.sharplabnext.job-id",
+        "com.sharplabnext.operation-id",
+        "com.sharplabnext.release-id",
+        "com.sharplabnext.resource-scope",
+        "com.sharplabnext.created-at",
+        "com.sharplabnext.materializer",
+        "com.sharplabnext.traceparent",
+        "com.sharplabnext.measurement-control",
+        "com.sharplabnext.measurement-sidecar",
+        "com.sharplabnext.target-container-id",
+        "com.sharplabnext.runtime-measurement-probe"
+    ];
+
+    public static bool IsReservedManagementLabel(string value) =>
+        ReservedManagementLabels.Contains(value);
+}
+
 public sealed class RuntimeSupervisorOptions
 {
     public const string SectionName = "RuntimeSupervisor";
@@ -34,6 +55,10 @@ public sealed class RuntimeSupervisorOptions
     public string? PromotionPreflightProfileSha256 { get; set; }
 
     public string? PromotionPreflightSourceRevision { get; set; }
+
+    public string? MeasurementHelperImage { get; set; }
+
+    public string? MeasurementHelperImageId { get; set; }
 
     public RuntimeSandboxOptions Sandbox { get; set; } = new();
 
@@ -108,6 +133,16 @@ public sealed class RuntimeSupervisorOptionsValidator : IValidateOptions<Runtime
             failures.Add("RuntimeSupervisor:ResourceScope must be a stable label value of at most 128 characters.");
         }
 
+        if (string.IsNullOrWhiteSpace(options.ContainerLabel) ||
+            options.ContainerLabel.Length > 128 ||
+            options.ContainerLabel.Any(static character =>
+                !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '-' or '_' or '/')) ||
+            RuntimeManagedLabelPolicy.IsReservedManagementLabel(options.ContainerLabel))
+        {
+            failures.Add(
+                "RuntimeSupervisor:ContainerLabel must be a valid non-reserved Docker label key.");
+        }
+
         ValidatePositive(options.ArtifactLeaseSeconds, nameof(options.ArtifactLeaseSeconds), failures);
         ValidatePositive(options.ReaperIntervalSeconds, nameof(options.ReaperIntervalSeconds), failures);
         ValidatePositive(options.StaleContainerSeconds, nameof(options.StaleContainerSeconds), failures);
@@ -118,18 +153,22 @@ public sealed class RuntimeSupervisorOptionsValidator : IValidateOptions<Runtime
         {
             options.PromotionPreflightPlanSha256,
             options.PromotionPreflightProfileSha256,
-            options.PromotionPreflightSourceRevision
+            options.PromotionPreflightSourceRevision,
+            options.MeasurementHelperImage,
+            options.MeasurementHelperImageId
         };
         if (promotionBindings.Any(static value => value is null) &&
             promotionBindings.Any(static value => value is not null))
         {
             failures.Add(
-                "Runtime promotion preflight plan/profile digests and source revision must be configured together.");
+                "Runtime promotion preflight plan/profile/helper identities and source revision must be configured together.");
         }
         if (options.PromotionPreflightPlanSha256 is not null &&
             (!RuntimeProfileValidation.IsSha256(options.PromotionPreflightPlanSha256) ||
              !RuntimeProfileValidation.IsSha256(options.PromotionPreflightProfileSha256) ||
              !IsGitCommit(options.PromotionPreflightSourceRevision) ||
+             !IsRepositoryDigest(options.MeasurementHelperImage) ||
+             !RuntimeProfileValidation.IsSha256(options.MeasurementHelperImageId) ||
              options.Profiles.Count != 1 || !options.RequireDigestPinnedImages ||
              options.SessionReuseEnabled))
         {
@@ -166,9 +205,15 @@ public sealed class RuntimeSupervisorOptionsValidator : IValidateOptions<Runtime
         var maximumJobDuration = options.SecurityPolicies.Count == 0
             ? 0
             : options.SecurityPolicies.Max(static policy => policy.MaximumDurationSeconds);
-        if (options.SessionReuseEnabled &&
-            options.SessionMaximumAgeSeconds + maximumJobDuration + options.ReaperIntervalSeconds >=
+        if ((long)maximumJobDuration + options.ReaperIntervalSeconds >=
             options.StaleContainerSeconds)
+        {
+            failures.Add(
+                "RuntimeSupervisor:StaleContainerSeconds must exceed the maximum job duration plus one reaper interval.");
+        }
+        else if (options.SessionReuseEnabled &&
+                 (long)options.SessionMaximumAgeSeconds + maximumJobDuration + options.ReaperIntervalSeconds >=
+                 options.StaleContainerSeconds)
         {
             failures.Add(
                 "RuntimeSupervisor:SessionMaximumAgeSeconds must leave enough time for one job and one reaper interval before StaleContainerSeconds.");
@@ -182,6 +227,16 @@ public sealed class RuntimeSupervisorOptionsValidator : IValidateOptions<Runtime
     private static bool IsGitCommit(string? value) => value is { Length: 40 or 64 } &&
         value.All(static character =>
             char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
+
+    private static bool IsRepositoryDigest(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Any(char.IsWhiteSpace))
+            return false;
+        const string marker = "@sha256:";
+        var separator = value.LastIndexOf(marker, StringComparison.Ordinal);
+        return separator > 0 && separator + marker.Length + 64 == value.Length &&
+            RuntimeProfileValidation.IsSha256(value[(separator + 1)..]);
+    }
 
     private static void ValidateDistinctIds(IEnumerable<string> ids, string description, List<string> failures)
     {

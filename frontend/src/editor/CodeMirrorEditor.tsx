@@ -269,7 +269,16 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
     }
     const sourceAssociationMouseDown = (event: MouseEvent) => {
       sourceAssociationPointerDown = null
-      if (event.button !== 0 || event.detail > 1) return
+      if (
+        event.button !== 0 ||
+        event.detail > 1 ||
+        event.shiftKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
+      ) {
+        return
+      }
       const selection = view.state.selection.main
       if (selection.empty) return
       const position = positionAtMouseEvent(event)

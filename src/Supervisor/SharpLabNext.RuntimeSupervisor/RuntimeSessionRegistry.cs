@@ -130,7 +130,7 @@ public sealed partial class RuntimeSessionRegistry(
                     await docker.UploadArchiveAsync(
                         resource.MaterializerContainerId,
                         archive,
-                        cancellationToken).ConfigureAwait(false);
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception)
                 {
@@ -246,7 +246,8 @@ public sealed partial class RuntimeSessionRegistry(
             request.IsolationKind,
             request.ManagementLabel,
             request.ResourceScope,
-            cancellationToken).ConfigureAwait(false);
+            createMeasurementControl: false,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
         string? containerId = null;
         try
         {

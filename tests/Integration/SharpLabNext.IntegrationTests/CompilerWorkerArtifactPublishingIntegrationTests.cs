@@ -23,16 +23,16 @@ public sealed class CompilerWorkerArtifactPublishingIntegrationTests
             TestContext.Current.CancellationToken);
         try
         {
+            var workerEnvironment = new Dictionary<string, string?>
+            {
+                ["FSharpWorker__WorkRoot"] = workRoot,
+                ["FSharpWorker__DevelopmentArtifactEnvelope__Enabled"] = "false",
+                ["ArtifactStore__BaseUrl"] = artifactStore.HttpClient.BaseAddress!.AbsoluteUri
+            };
+            referenceSets.AddToEnvironment(workerEnvironment, "net10-ref", "net11-preview-ref");
             await using var worker = await StartWorkerAsync(
                 "src/Workers/FSharp/SharpLabNext.Worker.FSharp/SharpLabNext.Worker.FSharp.csproj",
-                new Dictionary<string, string?>
-                {
-                    ["FSharpWorker__WorkRoot"] = workRoot,
-                    ["FSharpWorker__DevelopmentArtifactEnvelope__Enabled"] = "false",
-                    ["ArtifactStore__BaseUrl"] = artifactStore.HttpClient.BaseAddress!.AbsoluteUri,
-                    ["ReferenceSets__net10-ref__Path"] = referenceSets.PathFor("net10-ref"),
-                    ["ReferenceSets__net11-preview-ref__Path"] = referenceSets.PathFor("net11-preview-ref")
-                });
+                workerEnvironment);
             var request = CreateRequest(
                 "fsharp",
                 "fsharp-stable",
@@ -75,14 +75,15 @@ public sealed class CompilerWorkerArtifactPublishingIntegrationTests
             TestContext.Current.CancellationToken);
         try
         {
+            var workerEnvironment = new Dictionary<string, string?>
+            {
+                ["PeachPie__WorkRoot"] = workRoot,
+                ["ArtifactStore__BaseUrl"] = artifactStore.HttpClient.BaseAddress!.AbsoluteUri
+            };
+            referenceSets.AddToEnvironment(workerEnvironment, "net10-ref");
             await using var worker = await StartWorkerAsync(
                 "src/Workers/PeachPie/SharpLabNext.Worker.PeachPie/SharpLabNext.Worker.PeachPie.csproj",
-                new Dictionary<string, string?>
-                {
-                    ["PeachPie__WorkRoot"] = workRoot,
-                    ["ArtifactStore__BaseUrl"] = artifactStore.HttpClient.BaseAddress!.AbsoluteUri,
-                    ["ReferenceSets__net10-ref__Path"] = referenceSets.PathFor("net10-ref")
-                });
+                workerEnvironment);
             var request = CreateRequest(
                 "php",
                 "peachpie-stable",
@@ -138,16 +139,16 @@ public sealed class CompilerWorkerArtifactPublishingIntegrationTests
             TestContext.Current.CancellationToken);
         try
         {
+            var workerEnvironment = new Dictionary<string, string?>
+            {
+                ["IlWorker__WorkRoot"] = workRoot,
+                ["IlWorker__DevelopmentArtifactEnvelope__Enabled"] = "false",
+                ["ArtifactStore__BaseUrl"] = artifactStore.HttpClient.BaseAddress!.AbsoluteUri
+            };
+            referenceSets.AddToEnvironment(workerEnvironment, "net10-ref", "net11-preview-ref");
             await using var worker = await StartWorkerAsync(
                 "src/Workers/IL/SharpLabNext.Worker.IL/SharpLabNext.Worker.IL.csproj",
-                new Dictionary<string, string?>
-                {
-                    ["IlWorker__WorkRoot"] = workRoot,
-                    ["IlWorker__DevelopmentArtifactEnvelope__Enabled"] = "false",
-                    ["ArtifactStore__BaseUrl"] = artifactStore.HttpClient.BaseAddress!.AbsoluteUri,
-                    ["ReferenceSets__net10-ref__Path"] = referenceSets.PathFor("net10-ref"),
-                    ["ReferenceSets__net11-preview-ref__Path"] = referenceSets.PathFor("net11-preview-ref")
-                });
+                workerEnvironment);
             var request = CreateRequest(
                 "il",
                 "mobius-ilasm-stable",

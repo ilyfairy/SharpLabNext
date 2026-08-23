@@ -27,6 +27,21 @@ function isVisible(item: unknown): boolean {
   return item.visibility !== 'hidden'
 }
 
+function compareVersionLabelsDescending(left: string, right: string): number {
+  const versionPart = (label: string) => {
+    const platformSeparator = label.indexOf('/')
+    return platformSeparator < 0 ? label : label.slice(0, platformSeparator)
+  }
+  const leftParts = versionPart(left).match(/\d+/g)?.map(Number) ?? []
+  const rightParts = versionPart(right).match(/\d+/g)?.map(Number) ?? []
+  const length = Math.max(leftParts.length, rightParts.length)
+  for (let index = 0; index < length; index += 1) {
+    const difference = (rightParts[index] ?? 0) - (leftParts[index] ?? 0)
+    if (difference !== 0) return difference
+  }
+  return left.localeCompare(right)
+}
+
 export const fallbackLanguage: LanguageManifest = {
   id: 'csharp',
   displayName: 'C#',
@@ -43,9 +58,12 @@ function isRuleKind(kind: CompatibilityRuleKind, expected: CompatibilityRuleKind
   return kind === expected
 }
 
-function containsAll(available: readonly string[], required: readonly string[]): boolean {
-  const values = new Set(available)
-  return required.every((value) => values.has(value))
+function containsAll(
+  available: readonly string[] | undefined,
+  required: readonly string[] | undefined,
+): boolean {
+  const values = new Set(available ?? [])
+  return (required ?? []).every((value) => values.has(value))
 }
 
 function requiredMetadataTags(
@@ -135,6 +153,18 @@ export function referenceSetById(
   )
 }
 
+export function referenceSetDisplayName(referenceSet: ReferenceSetManifest): string {
+  const displayName = referenceSet.displayName
+  if (displayName.startsWith('.NET Framework ')) {
+    return displayName.replace(/^\.NET Framework v?/, '.NET Framework v')
+  }
+  if (!/^\d/.test(displayName)) return displayName
+  if (referenceSet.targetFramework.startsWith('netcoreapp')) return `.NET Core ${displayName}`
+  if (referenceSet.runtimeFamily.includes('netfx')) return `.NET Framework v${displayName}`
+  if (referenceSet.targetFramework.startsWith('net')) return `.NET ${displayName}`
+  return displayName
+}
+
 export function outputById(catalog: CatalogDocument, outputId: string): OutputManifest | undefined {
   return catalog.outputs.find((output) => output.id === outputId)
 }
@@ -163,18 +193,23 @@ export function referenceSetOptionsFor(
   const toolchain = toolchainById(catalog, toolchainId)
   if (!toolchain) return []
 
-  return catalog.referenceSets.filter(
-    (referenceSet) =>
-      isVisible(referenceSet) &&
-      toolchain.allowedReferenceSetIds.includes(referenceSet.id) &&
-      catalog.compatibility.some(
-        (rule) =>
-          isRuleKind(rule.kind, 'toolchain-reference-set') &&
-          rule.allowed &&
-          rule.fromId === toolchain.id &&
-          rule.toId === referenceSet.id,
-      ),
-  )
+  return catalog.referenceSets
+    .filter(
+      (referenceSet) =>
+        isVisible(referenceSet) &&
+        toolchain.allowedReferenceSetIds.includes(referenceSet.id) &&
+        catalog.compatibility.some(
+          (rule) =>
+            isRuleKind(rule.kind, 'toolchain-reference-set') &&
+            rule.allowed &&
+            rule.fromId === toolchain.id &&
+            rule.toId === referenceSet.id,
+        ),
+    )
+    .sort((left, right) => {
+      const versionOrder = compareVersionLabelsDescending(left.displayName, right.displayName)
+      return versionOrder !== 0 ? versionOrder : left.id.localeCompare(right.id)
+    })
 }
 
 function needsArtifactProcessor(catalog: CatalogDocument, output: OutputManifest): boolean {
@@ -211,6 +246,137 @@ function runtimeCapabilitiesFor(output: OutputManifest): string[] {
   )
 }
 
+interface ReferenceFramework {
+  name: string
+  version: number[]
+}
+
+function parseFrameworkVersion(value: string | undefined): number[] | null {
+  if (!value) return null
+  const numericPart = value.split(/[-+]/, 1)[0]
+  if (!numericPart || !/^\d+(?:\.\d+){0,3}$/.test(numericPart)) return null
+  return numericPart.split('.').map(Number)
+}
+
+function referenceFrameworkFor(referenceSet: ReferenceSetManifest): ReferenceFramework | null {
+  const targetFramework = referenceSet.targetFramework
+  let name: string
+  let version: string
+
+  if (targetFramework.startsWith('netcoreapp')) {
+    name = 'Microsoft.NETCore.App'
+    version = targetFramework.slice('netcoreapp'.length)
+  } else if (targetFramework.startsWith('netframework')) {
+    name = '.NETFramework'
+    version = targetFramework.slice('netframework'.length)
+  } else if (targetFramework.startsWith('net')) {
+    name =
+      referenceSet.runtimeFamily === 'netfx-clr-wine' ? '.NETFramework' : 'Microsoft.NETCore.App'
+    version = targetFramework.slice(3)
+    if (name === '.NETFramework' && !version.includes('.')) version = [...version].join('.')
+  } else {
+    return null
+  }
+
+  const parsed = parseFrameworkVersion(version)
+  return parsed ? { name, version: parsed } : null
+}
+
+function versionMatchesTargetFramework(version: number[], target: number[]): boolean {
+  return version.length >= target.length && target.every((part, index) => version[index] === part)
+}
+
+function compareAtTargetFrameworkPrecision(target: number[], bound: number[]): number {
+  if (bound.length < target.length) return -1
+  for (let index = 0; index < target.length; index += 1) {
+    const difference = (target[index] ?? 0) - (bound[index] ?? 0)
+    if (difference !== 0) return difference
+  }
+  return 0
+}
+
+function acceptsReferenceFramework(
+  accepted: NonNullable<RuntimeManifest['acceptedFrameworks']>[number],
+  reference: ReferenceFramework,
+): boolean {
+  if (accepted.name !== reference.name) return false
+
+  const hasExactVersion = Boolean(accepted.exactVersion)
+  const hasRange = Boolean(accepted.minimumVersion || accepted.maximumVersion)
+  if (hasExactVersion === hasRange) return false
+  if (hasExactVersion) {
+    const exact = parseFrameworkVersion(accepted.exactVersion)
+    return exact !== null && versionMatchesTargetFramework(exact, reference.version)
+  }
+
+  const minimum = parseFrameworkVersion(accepted.minimumVersion)
+  const maximum = parseFrameworkVersion(accepted.maximumVersion)
+  return (
+    minimum !== null &&
+    maximum !== null &&
+    compareAtTargetFrameworkPrecision(reference.version, minimum) >= 0 &&
+    compareAtTargetFrameworkPrecision(reference.version, maximum) <= 0
+  )
+}
+
+function hasCompatibleRuntimeContract(
+  referenceSet: ReferenceSetManifest,
+  runtime: RuntimeManifest,
+): boolean {
+  if (
+    runtime.acceptedRuntimeFamilies?.length &&
+    !runtime.acceptedRuntimeFamilies.includes(referenceSet.runtimeFamily)
+  ) {
+    return false
+  }
+
+  const referenceFramework = referenceFrameworkFor(referenceSet)
+  if (!referenceFramework) return !runtime.acceptedFrameworks?.length
+  if (
+    referenceSet.runtimeFamily === 'coreclr' &&
+    referenceFramework.name === 'Microsoft.NETCore.App' &&
+    (runtime.family === 'coreclr' || runtime.family === 'coreclr-wine')
+  ) {
+    const runtimeVersion = parseFrameworkVersion(runtime.resolvedVersion)
+    if (
+      runtimeVersion !== null &&
+      compareAtTargetFrameworkPrecision(referenceFramework.version, runtimeVersion) <= 0
+    ) {
+      return true
+    }
+  }
+  if (runtime.acceptedFrameworks?.length) {
+    return runtime.acceptedFrameworks.some((accepted) =>
+      acceptsReferenceFramework(accepted, referenceFramework),
+    )
+  }
+
+  const resolvedVersion = parseFrameworkVersion(runtime.resolvedVersion)
+  return (
+    referenceSet.runtimeFamily !== 'coreclr' ||
+    runtime.family !== 'coreclr' ||
+    (resolvedVersion !== null &&
+      versionMatchesTargetFramework(resolvedVersion, referenceFramework.version))
+  )
+}
+
+function runtimeVersionSpecificity(
+  referenceSet: ReferenceSetManifest,
+  runtime: RuntimeManifest,
+): number {
+  const referenceFramework = referenceFrameworkFor(referenceSet)
+  const runtimeVersion = parseFrameworkVersion(runtime.resolvedVersion)
+  if (
+    !referenceFramework ||
+    !runtimeVersion ||
+    !versionMatchesTargetFramework(runtimeVersion, referenceFramework.version)
+  ) {
+    return Number.MAX_SAFE_INTEGER
+  }
+
+  return runtimeVersion.length - referenceFramework.version.length
+}
+
 function isRuntimeCompatible(
   catalog: CatalogDocument,
   toolchain: ToolchainManifest,
@@ -233,6 +399,7 @@ function isRuntimeCompatible(
   return (
     hasEdge &&
     runtime.acceptedArtifactFormats.includes(artifactFormat) &&
+    hasCompatibleRuntimeContract(referenceSet, runtime) &&
     containsAll(runtime.providedMetadataFeatureTags, toolchain.metadataFeatureTags) &&
     containsAll(runtime.providedRuntimeFeatureTags, referenceSet.requiredRuntimeFeatureTags) &&
     containsAll(runtime.providedMetadataFeatureTags, referenceSet.metadataFeatureTags) &&
@@ -343,28 +510,47 @@ export function runtimeOptionsFor(
 
   const reachableFormats = reachableArtifactFormats(catalog, toolchain, referenceSet)
 
-  return catalog.runtimes.filter(
-    (runtime) =>
-      isVisible(runtime) &&
-      runtime.acceptedArtifactFormats.some(
-        (artifactFormat) =>
-          reachableFormats.has(artifactFormat) &&
-          (!output ||
-            output.acceptedArtifactFormats.length === 0 ||
-            output.acceptedArtifactFormats.includes(artifactFormat)) &&
-          isRuntimeCompatible(catalog, toolchain, referenceSet, artifactFormat, runtime, output) &&
-          (!output ||
-            !needsArtifactProcessor(catalog, output) ||
-            findOutputProcessor(
+  return catalog.runtimes
+    .filter(
+      (runtime) =>
+        isVisible(runtime) &&
+        runtime.acceptedArtifactFormats.some(
+          (artifactFormat) =>
+            reachableFormats.has(artifactFormat) &&
+            (!output ||
+              output.acceptedArtifactFormats.length === 0 ||
+              output.acceptedArtifactFormats.includes(artifactFormat)) &&
+            isRuntimeCompatible(
               catalog,
               toolchain,
               referenceSet,
-              output,
-              reachableFormats,
               artifactFormat,
-            ) !== undefined),
-      ),
-  )
+              runtime,
+              output,
+            ) &&
+            (!output ||
+              !needsArtifactProcessor(catalog, output) ||
+              findOutputProcessor(
+                catalog,
+                toolchain,
+                referenceSet,
+                output,
+                reachableFormats,
+                artifactFormat,
+              ) !== undefined),
+        ),
+    )
+    .sort((left, right) => {
+      const specificityOrder =
+        runtimeVersionSpecificity(referenceSet, left) -
+        runtimeVersionSpecificity(referenceSet, right)
+      if (specificityOrder !== 0) return specificityOrder
+      const leftFamilyOrder = left.family === referenceSet.runtimeFamily ? 0 : 1
+      const rightFamilyOrder = right.family === referenceSet.runtimeFamily ? 0 : 1
+      if (leftFamilyOrder !== rightFamilyOrder) return leftFamilyOrder - rightFamilyOrder
+      const versionOrder = compareVersionLabelsDescending(left.displayName, right.displayName)
+      return versionOrder !== 0 ? versionOrder : left.id.localeCompare(right.id)
+    })
 }
 
 export function normalizeSelectionIntent(

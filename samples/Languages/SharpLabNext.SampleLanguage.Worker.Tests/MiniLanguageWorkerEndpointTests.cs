@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using SharpLabNext.Contracts;
@@ -8,6 +9,7 @@ using SharpLabNext.LanguageWorker.Conformance;
 using SharpLabNext.LanguageWorker.Sdk;
 using SharpLabNext.Observability;
 using SharpLabNext.SampleLanguage.Worker;
+using SharpLabNext.Testing;
 
 namespace SharpLabNext.SampleLanguage.Worker.Tests;
 
@@ -18,7 +20,15 @@ public sealed class MiniLanguageWorkerEndpointTests : IClassFixture<WebApplicati
 
     public MiniLanguageWorkerEndpointTests(WebApplicationFactory<global::Program> factory)
     {
-        _factory = factory.WithWebHostBuilder(static _ => { });
+        _factory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("ReferenceSets:net10-ref:Path", TestReferenceSets.Net10.Path);
+            builder.UseSetting("ReferenceSets:net10-ref:FrameworkVersion", TestReferenceSets.Net10.Version);
+            builder.UseSetting("ReferenceSets:net10-ref:Digest", TestReferenceSets.Net10.Digest);
+            builder.UseSetting("ReferenceSets:net11-preview-ref:Path", TestReferenceSets.Net11.Path);
+            builder.UseSetting("ReferenceSets:net11-preview-ref:FrameworkVersion", TestReferenceSets.Net11.Version);
+            builder.UseSetting("ReferenceSets:net11-preview-ref:Digest", TestReferenceSets.Net11.Digest);
+        });
     }
 
     [Fact]

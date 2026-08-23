@@ -1,10 +1,14 @@
 using System.Diagnostics;
+using System.ComponentModel;
+using System.Formats.Tar;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Crypto.Signers;
 using Microsoft.Extensions.Configuration;
 using SharpLabNext.BundleBuilder;
 using SharpLabNext.Catalog;
@@ -17,12 +21,23 @@ namespace SharpLabNext.UnitTests;
 public sealed class BundleBuilderTests
 {
     private const string TestSourceRevision = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-    private static readonly string[] DependencyInventoryAllowedLicenses = ["Apache-2.0", "MIT"];
+    private static readonly string[] DependencyInventoryAllowedLicenses = ["Apache-2.0", "LGPL-2.1+", "MIT"];
     private static readonly string[] DependencyInventoryDeniedPrefixes = ["GPL-"];
     private static readonly string[] MaintainedIdentityProperties =
         ["kind", "resolvedVersion", "commit", "digest", "sourceUri"];
     private static readonly JsonSerializerOptions RuntimeProfileFixtureJsonOptions =
         new(JsonSerializerDefaults.Web);
+    private static readonly IReadOnlyDictionary<string, byte[]> TestWineSourceFiles =
+        new Dictionary<string, byte[]>(StringComparer.Ordinal)
+        {
+            ["wine_9.0~repack-4build3.dsc"] = Encoding.UTF8.GetBytes("test wine dsc"),
+            ["wine_9.0~repack.orig.tar.xz"] = Encoding.UTF8.GetBytes("test wine orig"),
+            ["wine_9.0~repack-4build3.debian.tar.xz"] = Encoding.UTF8.GetBytes("test wine debian")
+        };
+    private static readonly Dictionary<string, byte[]> TestOperatingSystemSourceFiles =
+        new(StringComparer.Ordinal);
+    private static readonly byte[] TestWineNoticeArchive = CreateTestWineNoticeArchive();
+    private static readonly WineRuntimePackageManifest TestWineManifest = CreateTestWineManifest();
 
     [Fact]
     public async Task BuilderCreatesPinnedOfflineBundleFromSelectableCatalogComponents()
@@ -106,12 +121,105 @@ public sealed class BundleBuilderTests
             Assert.Contains(result.Images, static image => image.Id == "const-generics-linux-x64");
             Assert.Contains(result.Images, static image => image.Id == "wine-netfx48-linux-x64");
             Assert.Contains(result.Images, static image => image.Id == "wine-jsharp20-linux-x64");
-            Assert.Equal(23, result.Images.Count);
+            Assert.Equal(54, result.Images.Count);
             Assert.True(File.Exists(Path.Combine(output, "images.tar")));
             Assert.True(File.Exists(Path.Combine(output, "checksums.sha256")));
             Assert.True(File.Exists(Path.Combine(output, "sbom", "release.spdx.json")));
             Assert.True(File.Exists(Path.Combine(output, "sbom", "release.cdx.json")));
             Assert.True(File.Exists(Path.Combine(output, "sbom", "dependencies.json")));
+            Assert.Equal(
+                JsonSerializer.SerializeToUtf8Bytes(TestWineManifest, RuntimeProfileFixtureJsonOptions),
+                await File.ReadAllBytesAsync(
+                    Path.Combine(output, "sbom", "runtime-wine-packages.json"),
+                    TestContext.Current.CancellationToken));
+            var wineSourceRoot = Path.Combine(
+                output,
+                "sources",
+                "ubuntu",
+                "20260810T000000Z",
+                "pool",
+                "universe",
+                "w",
+                "wine");
+            foreach (var (fileName, expectedBytes) in TestWineSourceFiles)
+            {
+                Assert.Equal(
+                    expectedBytes,
+                    await File.ReadAllBytesAsync(
+                        Path.Combine(wineSourceRoot, fileName),
+                        TestContext.Current.CancellationToken));
+            }
+            using (var wineSourceManifestDocument = JsonDocument.Parse(await File.ReadAllTextAsync(
+                       Path.Combine(output, "sources", "manifest.json"),
+                       TestContext.Current.CancellationToken)))
+            {
+                var wineMaterial = Assert.Single(
+                    wineSourceManifestDocument.RootElement.GetProperty("components").EnumerateArray(),
+                    static component =>
+                        component.GetProperty("packageManager").GetString() == "apt-source" &&
+                        component.GetProperty("name").GetString() == "wine");
+                Assert.Equal(
+                    "sources/ubuntu/20260810T000000Z/pool/universe/w/wine",
+                    wineMaterial.GetProperty("materialPath").GetString());
+            }
+            using (var wineDependencyDocument = JsonDocument.Parse(await File.ReadAllTextAsync(
+                       Path.Combine(output, "sbom", "dependencies.json"),
+                       TestContext.Current.CancellationToken)))
+            {
+                Assert.DoesNotContain(
+                    wineDependencyDocument.RootElement.GetProperty("components").EnumerateArray(),
+                    static component =>
+                        component.GetProperty("packageManager").GetString() == "apt-source");
+            }
+            using (var spdx = JsonDocument.Parse(await File.ReadAllTextAsync(
+                       Path.Combine(output, "sbom", "release.spdx.json"),
+                       TestContext.Current.CancellationToken)))
+            {
+                var osPackages = spdx.RootElement.GetProperty("packages").EnumerateArray()
+                    .Where(static package => package.TryGetProperty("SPDXID", out var spdxId) &&
+                        spdxId.GetString() is { } value &&
+                        value.StartsWith("SPDXRef-OS-apt-", StringComparison.Ordinal))
+                    .ToArray();
+                Assert.Equal(228, osPackages.Length);
+                Assert.All(osPackages, static package =>
+                {
+                    Assert.Equal("NOASSERTION", package.GetProperty("licenseDeclared").GetString());
+                    Assert.Equal("NOASSERTION", package.GetProperty("licenseConcluded").GetString());
+                });
+            }
+            using (var cycloneDx = JsonDocument.Parse(await File.ReadAllTextAsync(
+                       Path.Combine(output, "sbom", "release.cdx.json"),
+                       TestContext.Current.CancellationToken)))
+            {
+                var osPackages = cycloneDx.RootElement.GetProperty("components").EnumerateArray()
+                    .Where(static component => component.TryGetProperty("properties", out var properties) &&
+                        properties.EnumerateArray()
+                        .Any(static property =>
+                            property.TryGetProperty("name", out var name) &&
+                            property.TryGetProperty("value", out var value) &&
+                            name.GetString() == "sharplabnext:scope" &&
+                            value.GetString() == "os-package"))
+                    .ToArray();
+                Assert.Equal(228, osPackages.Length);
+                Assert.All(osPackages, static package => Assert.False(package.TryGetProperty("licenses", out _)));
+            }
+            using (var wineProvenance = JsonDocument.Parse(await File.ReadAllTextAsync(
+                       Path.Combine(output, "provenance", "release.slsa.json"),
+                       TestContext.Current.CancellationToken)))
+            {
+                var resolvedMaterials = wineProvenance.RootElement
+                    .GetProperty("predicate")
+                    .GetProperty("buildDefinition")
+                    .GetProperty("resolvedDependencies")
+                    .EnumerateArray()
+                    .ToArray();
+                Assert.Equal(
+                    228,
+                    resolvedMaterials.Count(static dependency => dependency.GetProperty("uri").GetString()!
+                        .StartsWith("pkg:deb/ubuntu/", StringComparison.Ordinal)));
+                Assert.Contains(resolvedMaterials, static dependency => dependency.GetProperty("uri").GetString() ==
+                    $"https://github.com/sharplabnext/SharpLabNext/blob/{TestSourceRevision}/profiles/runtime-wine-packages.json");
+            }
             Assert.True(File.Exists(Path.Combine(output, "provenance", "release.slsa.json")));
             Assert.True(File.Exists(Path.Combine(
                 output,
@@ -147,7 +255,107 @@ public sealed class BundleBuilderTests
             Assert.True(File.Exists(Path.Combine(output, "smoke.sh")));
             Assert.True(File.Exists(Path.Combine(output, "deployment-common.ps1")));
             Assert.True(File.Exists(Path.Combine(output, "deployment-common.sh")));
+            Assert.True(File.Exists(Path.Combine(output, "deploy.sh")));
             Assert.True(File.Exists(Path.Combine(output, "profile-update-status.json")));
+            foreach (var jsonPath in Directory.EnumerateFiles(output, "*.json", SearchOption.AllDirectories))
+            {
+                var jsonBytes = await File.ReadAllBytesAsync(
+                    jsonPath,
+                    TestContext.Current.CancellationToken);
+                if (jsonPath.StartsWith(
+                        Path.Combine(output, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, "source") +
+                        Path.DirectorySeparatorChar,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    // These are intentionally exact retained source bytes, not normalized generated JSON.
+                    continue;
+                }
+                Assert.False(jsonBytes.AsSpan().StartsWith("\uFEFF"u8));
+                Assert.DoesNotContain((byte)'\r', jsonBytes);
+            }
+            var promotionManifestPath = Path.Combine(
+                output,
+                ReleaseBundleBuilder.PromotionEvidenceDirectoryName,
+                "manifest.json");
+            var promotionManifestBytes = await File.ReadAllBytesAsync(
+                promotionManifestPath,
+                TestContext.Current.CancellationToken);
+            Assert.False(promotionManifestBytes.AsSpan().StartsWith("\uFEFF"u8));
+            Assert.DoesNotContain((byte)'\r', promotionManifestBytes);
+            using var promotionManifest = JsonDocument.Parse(promotionManifestBytes);
+            var promotedRuntimeIds = promotionManifest.RootElement
+                .GetProperty("promotedRuntimeIds")
+                .EnumerateArray()
+                .Select(static item => item.GetString())
+                .ToArray();
+            var expectedPromotedRuntimeCount = PromotionFixtures.Value.ImagesByReference.Count;
+            Assert.Equal(expectedPromotedRuntimeCount, promotedRuntimeIds.Length);
+            Assert.Equal(expectedPromotedRuntimeCount, promotedRuntimeIds.Distinct(StringComparer.Ordinal).Count());
+            var promotionEntries = promotionManifest.RootElement
+                .GetProperty("entries")
+                .EnumerateArray()
+                .ToArray();
+            foreach (var runtimeId in promotedRuntimeIds)
+            {
+                Assert.NotNull(runtimeId);
+                var kinds = promotionEntries
+                    .Where(entry => entry.GetProperty("runtimeIds")
+                        .EnumerateArray()
+                        .Select(static value => value.GetString())
+                        .Contains(runtimeId, StringComparer.Ordinal))
+                    .Select(entry => entry.GetProperty("kind").GetString())
+                    .ToHashSet(StringComparer.Ordinal);
+                Assert.Contains("plan", kinds);
+                Assert.Contains("preflight-profile", kinds);
+                Assert.Contains("receipt", kinds);
+                Assert.Contains("capability-evidence", kinds);
+                Assert.Contains("performance-evidence", kinds);
+            }
+            foreach (var entry in promotionEntries)
+            {
+                var bundlePath = entry.GetProperty("bundlePath").GetString();
+                Assert.NotNull(bundlePath);
+                var copiedBytes = await File.ReadAllBytesAsync(
+                    Path.Combine(
+                        output,
+                        ReleaseBundleBuilder.PromotionEvidenceDirectoryName,
+                        bundlePath!.Replace('/', Path.DirectorySeparatorChar)),
+                    TestContext.Current.CancellationToken);
+                Assert.Equal(entry.GetProperty("sizeBytes").GetInt64(), copiedBytes.LongLength);
+                Assert.Equal(
+                    entry.GetProperty("sha256").GetString(),
+                    "sha256:" + Convert.ToHexStringLower(SHA256.HashData(copiedBytes)));
+            }
+            const string promotedFixtureRuntimeId = "dotnet-10-linux-x64";
+            var candidateBinding = Assert.Single(
+                promotionEntries,
+                static entry =>
+                    entry.GetProperty("kind").GetString() == "candidate-profile" &&
+                    entry.GetProperty("runtimeIds").EnumerateArray()
+                        .Any(static runtimeId => runtimeId.GetString() == promotedFixtureRuntimeId));
+            var planBinding = Assert.Single(
+                promotionEntries,
+                static entry =>
+                    entry.GetProperty("kind").GetString() == "plan" &&
+                    entry.GetProperty("runtimeIds").EnumerateArray()
+                        .Any(static runtimeId => runtimeId.GetString() == promotedFixtureRuntimeId));
+            using (var signedPlan = JsonDocument.Parse(await File.ReadAllBytesAsync(
+                       Path.Combine(
+                           output,
+                           ReleaseBundleBuilder.PromotionEvidenceDirectoryName,
+                           planBinding.GetProperty("bundlePath").GetString()!
+                               .Replace('/', Path.DirectorySeparatorChar)),
+                       TestContext.Current.CancellationToken)))
+            {
+                Assert.Equal(
+                    signedPlan.RootElement.GetProperty("profileSha256").GetString(),
+                    candidateBinding.GetProperty("sha256").GetString());
+            }
+            var promotionVerificationManifest = await File.ReadAllBytesAsync(
+                Path.Combine(output, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, "manifest.tsv"),
+                TestContext.Current.CancellationToken);
+            Assert.False(promotionVerificationManifest.AsSpan().StartsWith("\uFEFF"u8));
+            Assert.DoesNotContain((byte)'\r', promotionVerificationManifest);
             var bundledNotices = await File.ReadAllTextAsync(
                 Path.Combine(output, "THIRD-PARTY-NOTICES.md"),
                 TestContext.Current.CancellationToken);
@@ -343,6 +551,9 @@ public sealed class BundleBuilderTests
             var installShell = await File.ReadAllTextAsync(
                 Path.Combine(output, "install.sh"),
                 TestContext.Current.CancellationToken);
+            var deployShell = await File.ReadAllTextAsync(
+                Path.Combine(output, "deploy.sh"),
+                TestContext.Current.CancellationToken);
             var installPowerShell = await File.ReadAllTextAsync(
                 Path.Combine(output, "install.ps1"),
                 TestContext.Current.CancellationToken);
@@ -359,6 +570,18 @@ public sealed class BundleBuilderTests
                 Path.Combine(output, "verify.ps1"),
                 TestContext.Current.CancellationToken);
             Assert.Contains("--pull never --no-build", commonShell, StringComparison.Ordinal);
+            Assert.Contains("${HOME:?HOME is required}/sharplabnext", deployShell, StringComparison.Ordinal);
+            Assert.Contains("$install_root/secrets/internal-service-token", deployShell, StringComparison.Ordinal);
+            Assert.Contains("openssl rand -base64 48", deployShell, StringComparison.Ordinal);
+            Assert.Contains("DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)", deployShell, StringComparison.Ordinal);
+            Assert.Contains("--skip-artifact-backup", deployShell, StringComparison.Ordinal);
+            Assert.Contains("--current-only", deployShell, StringComparison.Ordinal);
+            Assert.Contains("$install_root/$deploy_pointer_name", deployShell, StringComparison.Ordinal);
+            Assert.Contains("docker ps -aq --filter", deployShell, StringComparison.Ordinal);
+            Assert.Contains("docker image rm", deployShell, StringComparison.Ordinal);
+            Assert.DoesNotContain("docker system prune", deployShell, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("ssh", deployShell, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("scp", deployShell, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("readiness checks", installShell, StringComparison.Ordinal);
             Assert.Contains("install_release_assets", installShell, StringComparison.Ordinal);
             Assert.Contains("validate_container_secret_file", installShell, StringComparison.Ordinal);
@@ -578,28 +801,7 @@ public sealed class BundleBuilderTests
                 FakeDockerCli.ArtifactsIlAssemblerImageId,
                 FakeDockerCli.ArtifactsDefaultImageId,
                 FakeDockerCli.ArtifactsConstGenericsImageId);
-            const string profilePrefix = "RuntimeSupervisorProfileOverlay__Profiles";
             Assert.Contains("RuntimeSupervisorProfileOverlay__Enabled: \"true\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__0__Image: \"{FakeDockerCli.ImageId}\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__1__Image: \"{FakeDockerCli.ImageId}\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__0__Capabilities__3: \"execution-flow\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__0__Operations__Run__ImplementationId: \"sharplabnext-runner-v1\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__0__Operations__Run__Command__Executable: \"dotnet\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__0__Operations__Jit__ImplementationId: \"sharplabnext-jit-inspector-v1\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__0__Operations__Jit__SourceMappingKind: \"linux-profiler\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__0__Layout__RunnerAssemblyPath: \"/opt/sharplabnext/SharpLabNext.Runner.dll\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__3__Id: \"wine-netfx48-linux-x64\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__3__RuntimeCommit: \"not-applicable\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__3__JitVersion: \"not-applicable\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__3__JitCommit: \"not-applicable\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__3__Container__WinePrefixPath: \"/opt/wine-dotnet\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__3__Operations__Run__ImplementationId: \"sharplabnext-wine-runner-v1\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__3__Operations__Run__PathStyle: \"wine-z\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__4__Id: \"wine-jsharp20-linux-x64\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__4__Architecture: \"x64\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__4__RuntimeCommit: \"not-applicable\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__4__JitVersion: \"not-applicable\"", compose, StringComparison.Ordinal);
-            Assert.Contains($"{profilePrefix}__4__JitCommit: \"not-applicable\"", compose, StringComparison.Ordinal);
             Assert.Contains("RuntimeSupervisorProfileOverlay__SecurityPolicies__0__Id: \"runtime-job-default\"", compose, StringComparison.Ordinal);
             Assert.Contains("RuntimeSupervisorProfileOverlay__SecurityPolicies__1__Id: \"runtime-job-wine-jsharp20\"", compose, StringComparison.Ordinal);
             Assert.Contains("RuntimeSupervisorProfileOverlay__SecurityPolicies__2__Id: \"runtime-job-wine-netfx\"", compose, StringComparison.Ordinal);
@@ -612,8 +814,41 @@ public sealed class BundleBuilderTests
                 .GetSection(RuntimeSupervisorProfileOverlayOptions.SectionName)
                 .Bind(generatedProfileOverlay);
             Assert.True(generatedProfileOverlay.Enabled);
-            Assert.Equal(5, generatedProfileOverlay.Profiles.Count);
+            Assert.Equal(36, generatedProfileOverlay.Profiles.Count);
             Assert.Equal(3, generatedProfileOverlay.SecurityPolicies.Count);
+            var dotnet10Profile = generatedProfileOverlay.Profiles.Single(static profile =>
+                profile.Id == "dotnet-10-linux-x64");
+            var dotnet10Promotion = PromotionFixtures.Value.ImagesByReference.Values.Single(static image =>
+                image.RuntimeId == "dotnet-10-linux-x64");
+            Assert.Equal(dotnet10Promotion.ImageId, dotnet10Profile.Image);
+            Assert.Equal(dotnet10Promotion.ImageId, dotnet10Profile.RuntimeImageId);
+            Assert.Contains("execution-flow", dotnet10Profile.Capabilities, StringComparer.Ordinal);
+            Assert.Equal("sharplabnext-runner-v1", dotnet10Profile.Operations?.Run?.ImplementationId);
+            Assert.Equal("linux-profiler", dotnet10Profile.Operations?.Jit?.SourceMappingKind);
+            var wineProfile = generatedProfileOverlay.Profiles.Single(static profile =>
+                profile.Id == "wine-netfx48-linux-x64");
+            Assert.Equal("not-applicable", wineProfile.RuntimeCommit);
+            Assert.Equal("not-applicable", wineProfile.JitVersion);
+            Assert.Equal("not-applicable", wineProfile.JitCommit);
+            using var sourceWineProfile = JsonDocument.Parse(await File.ReadAllTextAsync(
+                Path.Combine(repositoryRoot, "profiles", "runtimes", "wine-netfx48-linux-x64.json"),
+                TestContext.Current.CancellationToken));
+            Assert.Equal(
+                sourceWineProfile.RootElement.GetProperty("container").GetProperty("winePrefixPath").GetString(),
+                wineProfile.Container.WinePrefixPath);
+            var sourceWineRun = sourceWineProfile.RootElement.GetProperty("operations").GetProperty("run");
+            Assert.Equal(
+                sourceWineRun.GetProperty("implementationId").GetString(),
+                wineProfile.Operations?.Run?.ImplementationId);
+            Assert.Equal(
+                sourceWineRun.GetProperty("pathStyle").GetString(),
+                wineProfile.Operations?.Run?.PathStyle);
+            var jsharpProfile = generatedProfileOverlay.Profiles.Single(static profile =>
+                profile.Id == "wine-jsharp20-linux-x64");
+            Assert.Equal("x64", jsharpProfile.Architecture);
+            Assert.Equal("not-applicable", jsharpProfile.RuntimeCommit);
+            Assert.Equal("not-applicable", jsharpProfile.JitVersion);
+            Assert.Equal("not-applicable", jsharpProfile.JitCommit);
             var configuredSupervisor = new RuntimeSupervisorOptions
             {
                 RequireDigestPinnedImages = true,
@@ -640,7 +875,8 @@ public sealed class BundleBuilderTests
                 TestContext.Current.CancellationToken));
             var lockedComponents = lockDocument.RootElement.GetProperty("components");
             Assert.Equal(
-                FakeDockerCli.ImageId,
+                PromotionFixtures.Value.ImagesByReference.Values.Single(static image =>
+                    image.RuntimeId == "dotnet-10-linux-x64").ImageId,
                 lockedComponents.GetProperty("dotnet-10-linux-x64")
                     .GetProperty("imageId")
                     .GetString());
@@ -700,6 +936,9 @@ public sealed class BundleBuilderTests
                     .GetProperty("imageId")
                     .GetString());
             Assert.Equal(result.Images.Count, docker.SavedReferences.Count);
+            Assert.Equal(
+                result.Images.Select(static image => image.ImageId).Order(StringComparer.Ordinal),
+                docker.SavedReferences.Order(StringComparer.Ordinal));
             using var bundle = JsonDocument.Parse(await File.ReadAllTextAsync(
                 Path.Combine(output, "bundle.json"),
                 TestContext.Current.CancellationToken));
@@ -711,10 +950,10 @@ public sealed class BundleBuilderTests
             var runtimeImage = bundle.RootElement.GetProperty("images").EnumerateArray().Single(static image =>
                 image.GetProperty("id").GetString() == "dotnet-10-linux-x64");
             Assert.Equal(
-                "901ca941248413c79832d2fdbd709da0c4386353",
+                dotnet10Promotion.RuntimeCommit,
                 runtimeImage.GetProperty("runtimeCommit").GetString());
             Assert.Equal(
-                "901ca941248413c79832d2fdbd709da0c4386353",
+                dotnet10Promotion.JitCommit,
                 runtimeImage.GetProperty("jitCommit").GetString());
             var netFxWorkerImage = bundle.RootElement.GetProperty("images").EnumerateArray().Single(static image =>
                 image.GetProperty("id").GetString() == "worker-roslyn-netfx48");
@@ -784,15 +1023,22 @@ public sealed class BundleBuilderTests
             Assert.False(result.ContainsImages);
             Assert.False(File.Exists(Path.Combine(output, "images.tar")));
             Assert.Empty(docker.SavedReferences);
-            Assert.All(result.Images, image => Assert.StartsWith(
-                "registry.example.test/private/",
-                image.SourceReference,
-                StringComparison.Ordinal));
+            Assert.All(
+                result.Images.Where(static image => !image.SourceReference.Contains('@')),
+                image => Assert.StartsWith(
+                    "registry.example.test/private/",
+                    image.SourceReference,
+                    StringComparison.Ordinal));
+            Assert.All(
+                result.Images.Where(static image => image.SourceReference.Contains('@')),
+                image => Assert.Equal(
+                    PromotionFixtures.Value.ImagesByReference[image.SourceReference].Reference,
+                    image.SourceReference));
             using var bundle = JsonDocument.Parse(await File.ReadAllTextAsync(
                 Path.Combine(output, "bundle.json"),
                 TestContext.Current.CancellationToken));
             Assert.False(bundle.RootElement.GetProperty("containsImages").GetBoolean());
-            Assert.Equal(23, bundle.RootElement.GetProperty("images").GetArrayLength());
+            Assert.Equal(54, bundle.RootElement.GetProperty("images").GetArrayLength());
         }
         finally
         {
@@ -801,6 +1047,550 @@ public sealed class BundleBuilderTests
                 Directory.Delete(output, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public async Task PowerShellVerifierRejectsMissingAndUnchecksummedPromotionEvidence()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var repositoryRoot = FindRepositoryRoot();
+        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-promotion-evidence-verify-{Guid.NewGuid():N}");
+        var bundle = Path.Combine(testRoot, "bundle");
+        var fakeBin = Path.Combine(testRoot, "bin");
+        Directory.CreateDirectory(fakeBin);
+        try
+        {
+            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundle, "promotion-evidence");
+            await File.WriteAllTextAsync(
+                Path.Combine(fakeBin, "docker.cmd"),
+                "@echo off\r\n" +
+                "setlocal EnableDelayedExpansion\r\n" +
+                "set last=\r\n" +
+                "for %%a in (%*) do set last=%%~a\r\n" +
+                "echo %* | %SystemRoot%\\System32\\findstr.exe /C:\"image inspect\" >nul && (echo !last!& exit /b 0)\r\n" +
+                "echo %* | %SystemRoot%\\System32\\findstr.exe /C:\"compose\" >nul && exit /b 0\r\n" +
+                "exit /b 0\r\n",
+                TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(
+                Path.Combine(fakeBin, "openssl.cmd"),
+                "@echo off\r\nexit /b 0\r\n",
+                TestContext.Current.CancellationToken);
+            var environment = new Dictionary<string, string>
+            {
+                ["PATH"] = string.Concat(fakeBin, ";", Environment.GetEnvironmentVariable("PATH"))
+            };
+            var verify = Path.Combine(bundle, "verify.ps1");
+            var initial = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", verify, "-AllowUnsigned"],
+                environment);
+            Assert.True(
+                initial.ExitCode == 0,
+                $"Initial offline verification failed. stdout: {initial.StandardOutput}{Environment.NewLine}stderr: {initial.StandardError}");
+
+            var materializeScript = Path.Combine(testRoot, "materialize-installed.ps1");
+            await File.WriteAllTextAsync(
+                materializeScript,
+                "param([string]$Bundle, [string]$InstallRoot, [string]$ReleaseId)\n" +
+                ". (Join-Path $Bundle 'deployment-common.ps1')\n" +
+                "Install-ReleaseAssets $Bundle $InstallRoot $ReleaseId | Out-Null\n",
+                TestContext.Current.CancellationToken);
+            var installedRoot = Path.Combine(testRoot, "installed", "releases", "promotion-evidence");
+            var materializeInstalled = await RunAsync(
+                "pwsh",
+                [
+                    "-NoProfile",
+                    "-File",
+                    materializeScript,
+                    bundle,
+                    Path.Combine(testRoot, "installed"),
+                    "promotion-evidence"
+                ],
+                environment);
+            Assert.True(
+                materializeInstalled.ExitCode == 0,
+                $"Installed-copy materialization failed. stdout: {materializeInstalled.StandardOutput}{Environment.NewLine}stderr: {materializeInstalled.StandardError}");
+            var installedUnsigned = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", Path.Combine(installedRoot, "verify.ps1"), "-AllowUnsigned", "-InstalledCopy"],
+                environment);
+            Assert.True(
+                installedUnsigned.ExitCode == 0,
+                $"Unsigned installed-copy verification failed. stdout: {installedUnsigned.StandardOutput}{Environment.NewLine}stderr: {installedUnsigned.StandardError}");
+
+            var deploymentChecksumPath = Path.Combine(installedRoot, "deployment.sha256");
+            var deploymentChecksumBytes = await File.ReadAllBytesAsync(
+                deploymentChecksumPath,
+                TestContext.Current.CancellationToken);
+            await File.AppendAllTextAsync(
+                deploymentChecksumPath,
+                "invalid installed deployment line\n",
+                TestContext.Current.CancellationToken);
+            var tamperedDeploymentManifest = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", Path.Combine(installedRoot, "verify.ps1"), "-AllowUnsigned", "-InstalledCopy"],
+                environment);
+            Assert.NotEqual(0, tamperedDeploymentManifest.ExitCode);
+            Assert.Contains(
+                "deployment checksum manifest",
+                tamperedDeploymentManifest.StandardOutput + tamperedDeploymentManifest.StandardError,
+                StringComparison.OrdinalIgnoreCase);
+            await File.WriteAllBytesAsync(
+                deploymentChecksumPath,
+                deploymentChecksumBytes,
+                TestContext.Current.CancellationToken);
+
+            var incomingDeploymentChecksum = Path.Combine(bundle, "deployment.sha256");
+            File.Copy(deploymentChecksumPath, incomingDeploymentChecksum);
+            var incomingWithDeploymentManifest = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", verify, "-AllowUnsigned"],
+                environment);
+            Assert.NotEqual(0, incomingWithDeploymentManifest.ExitCode);
+            Assert.Contains(
+                "unchecksummed",
+                incomingWithDeploymentManifest.StandardOutput + incomingWithDeploymentManifest.StandardError,
+                StringComparison.OrdinalIgnoreCase);
+            File.Delete(incomingDeploymentChecksum);
+
+            var originalBundleBytes = await File.ReadAllBytesAsync(
+                Path.Combine(bundle, "bundle.json"),
+                TestContext.Current.CancellationToken);
+            var originalChecksumBytes = await File.ReadAllBytesAsync(
+                Path.Combine(bundle, "checksums.sha256"),
+                TestContext.Current.CancellationToken);
+            var publicKeyBytes = "installed-copy test public key"u8.ToArray();
+            await File.WriteAllBytesAsync(
+                Path.Combine(bundle, "signing-public-key.pem"),
+                publicKeyBytes,
+                TestContext.Current.CancellationToken);
+            var signedBundle = JsonNode.Parse(originalBundleBytes)
+                ?? throw new InvalidOperationException("Installed-copy test bundle is empty.");
+            signedBundle["hasSignature"] = true;
+            signedBundle["signatureAlgorithm"] = "ed25519";
+            signedBundle["signatureKeyId"] = "installed-copy-test";
+            signedBundle["signingPublicKeySha256"] = Convert.ToHexStringLower(SHA256.HashData(publicKeyBytes));
+            await File.WriteAllTextAsync(
+                Path.Combine(bundle, "bundle.json"),
+                signedBundle.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
+                TestContext.Current.CancellationToken);
+            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(
+                Path.Combine(bundle, "checksums.sha256.sig"),
+                "test signature",
+                TestContext.Current.CancellationToken);
+            var signedInstallBase = Path.Combine(testRoot, "installed-signed");
+            var signedInstalledRoot = Path.Combine(signedInstallBase, "releases", "promotion-evidence");
+            var materializeSigned = await RunAsync(
+                "pwsh",
+                [
+                    "-NoProfile",
+                    "-File",
+                    materializeScript,
+                    bundle,
+                    signedInstallBase,
+                    "promotion-evidence"
+                ],
+                environment);
+            Assert.True(
+                materializeSigned.ExitCode == 0,
+                $"Signed installed-copy materialization failed. stdout: {materializeSigned.StandardOutput}{Environment.NewLine}stderr: {materializeSigned.StandardError}");
+            var installedSigned = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", Path.Combine(signedInstalledRoot, "verify.ps1"), "-TrustBundledPublicKey", "-InstalledCopy"],
+                environment);
+            Assert.True(
+                installedSigned.ExitCode == 0,
+                $"Signed installed-copy verification failed. stdout: {installedSigned.StandardOutput}{Environment.NewLine}stderr: {installedSigned.StandardError}");
+            File.Delete(Path.Combine(bundle, "checksums.sha256.sig"));
+            File.Delete(Path.Combine(bundle, "signing-public-key.pem"));
+            await File.WriteAllBytesAsync(
+                Path.Combine(bundle, "bundle.json"),
+                originalBundleBytes,
+                TestContext.Current.CancellationToken);
+            await File.WriteAllBytesAsync(
+                Path.Combine(bundle, "checksums.sha256"),
+                originalChecksumBytes,
+                TestContext.Current.CancellationToken);
+
+            using var document = JsonDocument.Parse(await File.ReadAllBytesAsync(
+                Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, "manifest.json"),
+                TestContext.Current.CancellationToken));
+            var entryPath = document.RootElement.GetProperty("entries")[0]
+                .GetProperty("bundlePath").GetString()
+                ?? throw new InvalidOperationException("Promotion evidence fixture has no bundle path.");
+            var evidencePath = Path.Combine(
+                bundle,
+                ReleaseBundleBuilder.PromotionEvidenceDirectoryName,
+                entryPath.Replace('/', Path.DirectorySeparatorChar));
+            var original = await File.ReadAllBytesAsync(evidencePath, TestContext.Current.CancellationToken);
+            File.Delete(evidencePath);
+            var missing = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", verify, "-AllowUnsigned"],
+                environment);
+            Assert.NotEqual(0, missing.ExitCode);
+            Assert.Contains("Missing bundle file", missing.StandardOutput + missing.StandardError, StringComparison.Ordinal);
+
+            await File.WriteAllBytesAsync(evidencePath, original, TestContext.Current.CancellationToken);
+            foreach (var requiredKind in new[] { "performance-policy", "active-profile" })
+            {
+                var requiredPath = document.RootElement.GetProperty("entries")
+                    .EnumerateArray()
+                    .First(entry => entry.GetProperty("kind").GetString() == requiredKind)
+                    .GetProperty("bundlePath").GetString()
+                    ?? throw new InvalidOperationException($"Promotion evidence fixture has no {requiredKind} path.");
+                var requiredFile = Path.Combine(
+                    bundle,
+                    ReleaseBundleBuilder.PromotionEvidenceDirectoryName,
+                    requiredPath.Replace('/', Path.DirectorySeparatorChar));
+                var requiredBytes = await File.ReadAllBytesAsync(requiredFile, TestContext.Current.CancellationToken);
+                File.Delete(requiredFile);
+                var requiredMissing = await RunAsync(
+                    "pwsh",
+                    ["-NoProfile", "-File", verify, "-AllowUnsigned"],
+                    environment);
+                Assert.NotEqual(0, requiredMissing.ExitCode);
+                Assert.Contains("Missing bundle file", requiredMissing.StandardOutput + requiredMissing.StandardError, StringComparison.Ordinal);
+                await File.WriteAllBytesAsync(requiredFile, requiredBytes, TestContext.Current.CancellationToken);
+            }
+
+            var tsvPath = Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, "manifest.tsv");
+            var tsv = await File.ReadAllTextAsync(tsvPath, TestContext.Current.CancellationToken);
+            var promotedLine = tsv.Split('\n')[4];
+            var firstRuntimeId = promotedLine.Split('\t')[1].Split(',')[0];
+            await File.WriteAllTextAsync(
+                tsvPath,
+                tsv.Replace(promotedLine, promotedLine + "," + firstRuntimeId, StringComparison.Ordinal),
+                TestContext.Current.CancellationToken);
+            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
+            var duplicated = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", verify, "-AllowUnsigned"],
+                environment);
+            Assert.NotEqual(0, duplicated.ExitCode);
+            Assert.Contains("verification manifests disagree", duplicated.StandardOutput + duplicated.StandardError, StringComparison.OrdinalIgnoreCase);
+            await File.WriteAllTextAsync(tsvPath, tsv, TestContext.Current.CancellationToken);
+
+            var reorderedLines = tsv.Split('\n');
+            (reorderedLines[5], reorderedLines[6]) = (reorderedLines[6], reorderedLines[5]);
+            await File.WriteAllTextAsync(
+                tsvPath,
+                string.Join('\n', reorderedLines),
+                TestContext.Current.CancellationToken);
+            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
+            var reordered = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", verify, "-AllowUnsigned"],
+                environment);
+            Assert.NotEqual(0, reordered.ExitCode);
+            Assert.Contains("verification manifests disagree", reordered.StandardOutput + reordered.StandardError, StringComparison.OrdinalIgnoreCase);
+            await File.WriteAllTextAsync(tsvPath, tsv, TestContext.Current.CancellationToken);
+
+            await File.WriteAllTextAsync(
+                tsvPath,
+                tsv.TrimEnd('\n'),
+                TestContext.Current.CancellationToken);
+            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
+            var missingTerminalLf = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", verify, "-AllowUnsigned"],
+                environment);
+            Assert.NotEqual(0, missingTerminalLf.ExitCode);
+            Assert.Contains("verification manifests disagree", missingTerminalLf.StandardOutput + missingTerminalLf.StandardError, StringComparison.OrdinalIgnoreCase);
+            await File.WriteAllTextAsync(tsvPath, tsv, TestContext.Current.CancellationToken);
+
+            var manifestPath = Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, "manifest.json");
+            var manifestBytes = await File.ReadAllBytesAsync(manifestPath, TestContext.Current.CancellationToken);
+            var originalManifest = JsonNode.Parse(manifestBytes)?.AsObject()
+                ?? throw new InvalidOperationException("Promotion evidence fixture manifest is invalid.");
+            Assert.Equal(tsv, CreatePromotionEvidenceVerificationManifest(originalManifest, manifestBytes));
+            const string retainedMatrixPath = "profiles/runtime-matrix.json";
+            var retainedMatrixFile = Path.Combine(
+                bundle,
+                ReleaseBundleBuilder.PromotionEvidenceDirectoryName,
+                "source",
+                retainedMatrixPath.Replace('/', Path.DirectorySeparatorChar));
+            var retainedMatrixBytes = await File.ReadAllBytesAsync(
+                retainedMatrixFile,
+                TestContext.Current.CancellationToken);
+            var forgedMatrix = JsonNode.Parse(retainedMatrixBytes)?.AsObject()
+                ?? throw new InvalidOperationException("Promotion runtime matrix fixture is invalid.");
+            var forgedTarget = forgedMatrix["coreClr"]?.AsArray()
+                .Select(static item => item!.AsObject())
+                .Single(static item => item["id"]!.GetValue<string>() == "dotnet-10")
+                ?? throw new InvalidOperationException("Promotion runtime matrix fixture has no dotnet-10 row.");
+            var forgedCapability = forgedTarget["linuxCapability"]!.AsObject();
+            forgedCapability["promotionState"] = "blocked";
+            forgedCapability.Remove("promotionReceipt");
+            var forgedMatrixBytes = Encoding.UTF8.GetBytes(
+                (forgedMatrix.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n")
+                .ReplaceLineEndings("\n"));
+            await ReplacePromotionEvidenceSourcesAndRechecksumAsync(
+                bundle,
+                new Dictionary<string, byte[]>(StringComparer.Ordinal)
+                {
+                    [retainedMatrixPath] = forgedMatrixBytes
+                });
+            var matrixForgery = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", verify, "-AllowUnsigned"],
+                environment);
+            Assert.NotEqual(0, matrixForgery.ExitCode);
+            var matrixForgeryOutput = matrixForgery.StandardOutput + matrixForgery.StandardError;
+            Assert.True(
+                matrixForgeryOutput.Contains("derived from runtime matrix", StringComparison.OrdinalIgnoreCase),
+                matrixForgeryOutput);
+            await ReplacePromotionEvidenceSourcesAndRechecksumAsync(
+                bundle,
+                new Dictionary<string, byte[]>(StringComparer.Ordinal)
+                {
+                    [retainedMatrixPath] = retainedMatrixBytes
+                });
+            await File.WriteAllBytesAsync(manifestPath, manifestBytes, TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(tsvPath, tsv, TestContext.Current.CancellationToken);
+            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
+
+            await File.WriteAllBytesAsync(manifestPath, [0xEF, 0xBB, 0xBF, .. manifestBytes], TestContext.Current.CancellationToken);
+            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
+            var bom = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", verify, "-AllowUnsigned"],
+                environment);
+            Assert.NotEqual(0, bom.ExitCode);
+            Assert.Contains("without BOM", bom.StandardOutput + bom.StandardError, StringComparison.OrdinalIgnoreCase);
+            await File.WriteAllBytesAsync(manifestPath, manifestBytes, TestContext.Current.CancellationToken);
+
+            await File.WriteAllTextAsync(
+                tsvPath,
+                tsv.Replace("manifestJsonSha256\tsha256:", "manifestJsonSha256\tsha256:0", StringComparison.Ordinal),
+                TestContext.Current.CancellationToken);
+            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
+            var mismatched = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", verify, "-AllowUnsigned"],
+                environment);
+            Assert.NotEqual(0, mismatched.ExitCode);
+            Assert.Contains("verification manifests disagree", mismatched.StandardOutput + mismatched.StandardError, StringComparison.OrdinalIgnoreCase);
+            await File.WriteAllTextAsync(tsvPath, tsv, TestContext.Current.CancellationToken);
+            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
+
+            var tsvBytes = await File.ReadAllBytesAsync(tsvPath, TestContext.Current.CancellationToken);
+            await File.WriteAllBytesAsync(tsvPath, [0xEF, 0xBB, 0xBF, .. tsvBytes], TestContext.Current.CancellationToken);
+            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
+            var tsvBom = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", verify, "-AllowUnsigned"],
+                environment);
+            Assert.NotEqual(0, tsvBom.ExitCode);
+            Assert.Contains("without BOM", tsvBom.StandardOutput + tsvBom.StandardError, StringComparison.OrdinalIgnoreCase);
+            await File.WriteAllBytesAsync(tsvPath, tsvBytes, TestContext.Current.CancellationToken);
+            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
+
+            await File.WriteAllTextAsync(
+                Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, "unexpected.txt"),
+                "unexpected",
+                TestContext.Current.CancellationToken);
+            var extra = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", verify, "-AllowUnsigned"],
+                environment);
+            Assert.NotEqual(0, extra.ExitCode);
+            Assert.Contains("unchecksummed", extra.StandardOutput + extra.StandardError, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(testRoot))
+                Directory.Delete(testRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PosixVerifierVerifiesInstalledBundleAndRejectsRechecksummedPromotionTrustMutations()
+    {
+        if (!OperatingSystem.IsLinux() || !await HasPosixVerifierPrerequisitesAsync())
+            return;
+
+        var repositoryRoot = FindRepositoryRoot();
+        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-posix-promotion-verify-{Guid.NewGuid():N}");
+        var bundle = Path.Combine(testRoot, "bundle");
+        var fakeBin = Path.Combine(testRoot, "bin");
+        var environment = new Dictionary<string, string>
+        {
+            ["PATH"] = string.Concat(fakeBin, ":", Environment.GetEnvironmentVariable("PATH"))
+        };
+        Directory.CreateDirectory(fakeBin);
+        try
+        {
+            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundle, "promotion-evidence");
+            await WriteExecutableAsync(
+                Path.Combine(fakeBin, "docker"),
+                """
+                #!/usr/bin/env sh
+                set -eu
+                if [ "${1:-}" = image ] && [ "${2:-}" = inspect ]; then
+                  for argument in "$@"; do
+                    case "$argument" in sha256:*) printf '%s\n' "$argument"; exit 0;; esac
+                  done
+                fi
+                if [ "${1:-}" = compose ]; then exit 0; fi
+                exit 0
+                """);
+
+            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
+            var initial = await RunAsync(
+                "sh",
+                [Path.Combine(bundle, "verify.sh"), "--allow-unsigned"],
+                environment);
+            Assert.True(
+                initial.ExitCode == 0,
+                $"Initial POSIX offline verification failed. stdout: {initial.StandardOutput}{Environment.NewLine}stderr: {initial.StandardError}");
+
+            var installer = Path.Combine(testRoot, "install.sh");
+            await WriteExecutableAsync(
+                installer,
+                """
+                #!/usr/bin/env sh
+                set -eu
+                . "$1"
+                install_release_assets "$2" "$3" "$4" >/dev/null
+                """);
+            var installRoot = Path.Combine(testRoot, "installed");
+            var materialize = await RunAsync(
+                "sh",
+                [installer, Path.Combine(bundle, "deployment-common.sh"), bundle, installRoot, "promotion-evidence"],
+                environment);
+            Assert.True(
+                materialize.ExitCode == 0,
+                $"POSIX installed-copy materialization failed. stdout: {materialize.StandardOutput}{Environment.NewLine}stderr: {materialize.StandardError}");
+            var installed = await RunAsync(
+                "sh",
+                [Path.Combine(installRoot, "releases", "promotion-evidence", "verify.sh"), "--allow-unsigned", "--installed-copy"],
+                environment);
+            Assert.True(
+                installed.ExitCode == 0,
+                $"POSIX installed-copy verification failed. stdout: {installed.StandardOutput}{Environment.NewLine}stderr: {installed.StandardError}");
+
+            var promotionRoot = Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, "source");
+            var candidatePath = "profiles/runtimes/candidates/dotnet-10-linux-x64.json";
+            var candidateBundle = Path.Combine(testRoot, "candidate-tampered");
+            CopyDirectory(bundle, candidateBundle);
+            var candidateBytes = await File.ReadAllBytesAsync(
+                Path.Combine(promotionRoot, candidatePath.Replace('/', Path.DirectorySeparatorChar)),
+                TestContext.Current.CancellationToken);
+            await ReplacePromotionEvidenceSourcesAndRechecksumAsync(
+                candidateBundle,
+                new Dictionary<string, byte[]>(StringComparer.Ordinal)
+                {
+                    [candidatePath] = [.. candidateBytes, (byte)' ']
+                });
+            var candidateTampered = await RunAsync(
+                "sh",
+                [Path.Combine(candidateBundle, "verify.sh"), "--allow-unsigned"],
+                environment);
+            Assert.NotEqual(0, candidateTampered.ExitCode);
+            Assert.Contains(
+                "Promotion retained source digest mismatch",
+                candidateTampered.StandardOutput + candidateTampered.StandardError,
+                StringComparison.Ordinal);
+
+            var signatureBundle = Path.Combine(testRoot, "signature-tampered");
+            CopyDirectory(bundle, signatureBundle);
+            await CreateRechecksummedPlanSignatureMutationAsync(signatureBundle);
+            var signatureTampered = await RunAsync(
+                "sh",
+                [Path.Combine(signatureBundle, "verify.sh"), "--allow-unsigned"],
+                environment);
+            Assert.NotEqual(0, signatureTampered.ExitCode);
+            Assert.Contains(
+                "Promotion plan dotnet-10-linux-x64 signature verification failed",
+                signatureTampered.StandardOutput + signatureTampered.StandardError,
+                StringComparison.Ordinal);
+
+            var familyBundle = Path.Combine(testRoot, "family-tampered");
+            CopyDirectory(bundle, familyBundle);
+            await CreateRechecksummedPlanFamilyMutationAsync(familyBundle);
+            var familyTampered = await RunAsync(
+                "sh",
+                [Path.Combine(familyBundle, "verify.sh"), "--allow-unsigned"],
+                environment);
+            Assert.NotEqual(0, familyTampered.ExitCode);
+            Assert.Contains(
+                "missing its required Wine operator binding",
+                familyTampered.StandardOutput + familyTampered.StandardError,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(testRoot))
+                Directory.Delete(testRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PosixVerifierDoesNotMaskPromotionJsonFailuresInPipelines()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var script = await File.ReadAllTextAsync(
+            Path.Combine(
+                repositoryRoot,
+                "src",
+                "Tools",
+                "SharpLabNext.BundleBuilder",
+                "DeploymentScripts",
+                "verify.sh"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Contains("jq -se", script, StringComparison.Ordinal);
+        Assert.Contains("\"$receipt_file\" > \"$promotion_checks\"", script, StringComparison.Ordinal);
+        Assert.Contains("done < \"$promotion_checks\"", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "promotion-evidence/manifest.json > \"$promotion_actual_triples_unsorted\"",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("verify_canonical_ed25519_signature", script, StringComparison.Ordinal);
+        Assert.Contains("plan-signature-public-key", script, StringComparison.Ordinal);
+        Assert.Contains("operator-receipt-signature", script, StringComparison.Ordinal);
+        Assert.Contains("candidate-profile", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"$receipt_file\" | while", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("promotion-evidence/manifest.json | sort", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OfflineVerifiersDeriveWineOperatorRequirementsFromTheSignedPlanFamily()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var deploymentScripts = Path.Combine(
+            repositoryRoot,
+            "src",
+            "Tools",
+            "SharpLabNext.BundleBuilder",
+            "DeploymentScripts");
+        var powerShell = await File.ReadAllTextAsync(
+            Path.Combine(deploymentScripts, "verify.ps1"),
+            TestContext.Current.CancellationToken);
+        var posix = await File.ReadAllTextAsync(
+            Path.Combine(deploymentScripts, "verify.sh"),
+            TestContext.Current.CancellationToken);
+
+        foreach (var script in new[] { powerShell, posix })
+        {
+            Assert.Contains("coreclr-wine", script, StringComparison.Ordinal);
+            Assert.Contains("netfx-clr-wine", script, StringComparison.Ordinal);
+            Assert.Contains("missing its required Wine operator binding", script, StringComparison.Ordinal);
+            Assert.Contains("missing required Wine operator evidence", script, StringComparison.Ordinal);
+            Assert.Contains("must not declare a Wine operator binding", script, StringComparison.Ordinal);
+            Assert.Contains("must not retain Wine operator evidence", script, StringComparison.Ordinal);
+        }
+
+        Assert.True(
+            powerShell.IndexOf("$requiresWineOperator = switch", StringComparison.Ordinal) <
+            powerShell.IndexOf("if ($requiresWineOperator)", StringComparison.Ordinal));
+        Assert.True(
+            posix.IndexOf("family=$(jq -er '.family' \"$plan_file\")", StringComparison.Ordinal) <
+            posix.IndexOf("if [ \"$requires_wine_operator\" = true ]", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1430,6 +2220,380 @@ public sealed class BundleBuilderTests
     }
 
     [Fact]
+    public async Task CurrentOnlyRetentionRejectsNestedLinksBeforeAnyDeletion()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-current-only-links-{Guid.NewGuid():N}");
+        var installRoot = Path.Combine(testRoot, "installed");
+        var releasesRoot = Path.Combine(installRoot, "releases");
+        var candidateRoot = Path.Combine(releasesRoot, "candidate");
+        var rollbackRoot = Path.Combine(candidateRoot, "rollback");
+        var previousRoot = Path.Combine(releasesRoot, "previous");
+        var additionalPreviousRoot = Path.Combine(releasesRoot, "additional");
+        var outsideRoot = Path.Combine(testRoot, "outside");
+        var nestedLink = Path.Combine(additionalPreviousRoot, "nested-link");
+        Directory.CreateDirectory(rollbackRoot);
+        Directory.CreateDirectory(previousRoot);
+        Directory.CreateDirectory(additionalPreviousRoot);
+        Directory.CreateDirectory(outsideRoot);
+        await File.WriteAllTextAsync(
+            Path.Combine(rollbackRoot, "artifact.txt"),
+            "retained",
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(previousRoot, "bundle.json"),
+            "retained",
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(installRoot, "current-release"),
+            "candidate\n",
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(installRoot, "previous-release"),
+            "previous\n",
+            TestContext.Current.CancellationToken);
+
+        try
+        {
+            ProcessResult result;
+            if (OperatingSystem.IsWindows())
+            {
+                var junction = await RunAsync(
+                    "cmd.exe",
+                    ["/d", "/c", "mklink", "/J", nestedLink, outsideRoot],
+                    new Dictionary<string, string>());
+                Assert.True(
+                    junction.ExitCode == 0,
+                    $"Could not create the test junction. stdout: {junction.StandardOutput}{Environment.NewLine}stderr: {junction.StandardError}");
+                var wrapper = Path.Combine(testRoot, "current-only-link-test.ps1");
+                await File.WriteAllTextAsync(
+                    wrapper,
+                    "param([string]$Common, [string]$Root)\n" +
+                    ". $Common\n" +
+                    "Remove-CurrentOnlyPreviousRelease $Root 'candidate' 'previous' 'additional'\n",
+                    TestContext.Current.CancellationToken);
+                result = await RunAsync(
+                    "pwsh",
+                    [
+                        "-NoProfile",
+                        "-File",
+                        wrapper,
+                        Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "deployment-common.ps1"),
+                        installRoot
+                    ],
+                    new Dictionary<string, string>());
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                Directory.CreateSymbolicLink(nestedLink, outsideRoot);
+                var wrapper = Path.Combine(testRoot, "current-only-link-test.sh");
+                await WriteExecutableAsync(
+                    wrapper,
+                    """
+                    #!/usr/bin/env sh
+                    set -eu
+                    . "$1"
+                    remove_current_only_previous_release "$2" candidate previous additional
+                    """);
+                result = await RunAsync(
+                    "sh",
+                    [
+                        wrapper,
+                        Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "deployment-common.sh"),
+                        installRoot
+                    ],
+                    new Dictionary<string, string>());
+            }
+            else
+            {
+                return;
+            }
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains(
+                OperatingSystem.IsWindows() ? "reparse point" : "symlink",
+                result.StandardError,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("candidate", ReadPointer(installRoot, "current-release"));
+            Assert.Equal("previous", ReadPointer(installRoot, "previous-release"));
+            Assert.True(Directory.Exists(rollbackRoot));
+            Assert.True(Directory.Exists(previousRoot));
+            Assert.True(Directory.Exists(additionalPreviousRoot));
+        }
+        finally
+        {
+            if (Directory.Exists(nestedLink))
+            {
+                Directory.Delete(nestedLink);
+            }
+            if (Directory.Exists(testRoot))
+            {
+                Directory.Delete(testRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task CurrentOnlyRetentionRejectsLinkedCurrentPointerBeforeAnyDeletion()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-current-only-pointer-{Guid.NewGuid():N}");
+        var installRoot = Path.Combine(testRoot, "installed");
+        var releasesRoot = Path.Combine(installRoot, "releases");
+        var candidateRoot = Path.Combine(releasesRoot, "candidate");
+        var rollbackRoot = Path.Combine(candidateRoot, "rollback");
+        var previousRoot = Path.Combine(releasesRoot, "previous");
+        var additionalPreviousRoot = Path.Combine(releasesRoot, "additional");
+        var currentPointer = Path.Combine(installRoot, "current-release");
+        var outsideRoot = Path.Combine(testRoot, "outside-pointer");
+        Directory.CreateDirectory(rollbackRoot);
+        Directory.CreateDirectory(previousRoot);
+        Directory.CreateDirectory(additionalPreviousRoot);
+        Directory.CreateDirectory(outsideRoot);
+        await File.WriteAllTextAsync(
+            Path.Combine(installRoot, "previous-release"),
+            "previous\n",
+            TestContext.Current.CancellationToken);
+
+        try
+        {
+            ProcessResult result;
+            if (OperatingSystem.IsWindows())
+            {
+                var junction = await RunAsync(
+                    "cmd.exe",
+                    ["/d", "/c", "mklink", "/J", currentPointer, outsideRoot],
+                    new Dictionary<string, string>());
+                Assert.True(
+                    junction.ExitCode == 0,
+                    $"Could not create the current-pointer junction. stdout: {junction.StandardOutput}{Environment.NewLine}stderr: {junction.StandardError}");
+                var wrapper = Path.Combine(testRoot, "current-only-pointer-test.ps1");
+                await File.WriteAllTextAsync(
+                    wrapper,
+                    "param([string]$Common, [string]$Root)\n" +
+                    ". $Common\n" +
+                    "Remove-CurrentOnlyPreviousRelease $Root 'candidate' 'previous' 'additional'\n",
+                    TestContext.Current.CancellationToken);
+                result = await RunAsync(
+                    "pwsh",
+                    [
+                        "-NoProfile",
+                        "-File",
+                        wrapper,
+                        Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "deployment-common.ps1"),
+                        installRoot
+                    ],
+                    new Dictionary<string, string>());
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                Directory.CreateSymbolicLink(currentPointer, outsideRoot);
+                var wrapper = Path.Combine(testRoot, "current-only-pointer-test.sh");
+                await WriteExecutableAsync(
+                    wrapper,
+                    """
+                    #!/usr/bin/env sh
+                    set -eu
+                    . "$1"
+                    remove_current_only_previous_release "$2" candidate previous additional
+                    """);
+                result = await RunAsync(
+                    "sh",
+                    [
+                        wrapper,
+                        Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "deployment-common.sh"),
+                        installRoot
+                    ],
+                    new Dictionary<string, string>());
+            }
+            else
+            {
+                return;
+            }
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("regular non-link file", result.StandardError, StringComparison.OrdinalIgnoreCase);
+            Assert.True(Directory.Exists(currentPointer));
+            Assert.True(Directory.Exists(outsideRoot));
+            Assert.Equal("previous", ReadPointer(installRoot, "previous-release"));
+            Assert.True(Directory.Exists(rollbackRoot));
+            Assert.True(Directory.Exists(previousRoot));
+            Assert.True(Directory.Exists(additionalPreviousRoot));
+        }
+        finally
+        {
+            if (Directory.Exists(currentPointer))
+                Directory.Delete(currentPointer);
+            if (Directory.Exists(testRoot))
+                Directory.Delete(testRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PosixCurrentOnlyRetentionRejectsMountPointBeforePointerSwitchOrDeletion()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var repositoryRoot = FindRepositoryRoot();
+        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext current-only mount {Guid.NewGuid():N}");
+        var installRoot = Path.Combine(testRoot, "installed");
+        var releasesRoot = Path.Combine(installRoot, "releases");
+        var candidateRoot = Path.Combine(releasesRoot, "candidate");
+        var rollbackRoot = Path.Combine(candidateRoot, "rollback");
+        var previousRoot = Path.Combine(releasesRoot, "previous");
+        var additionalPreviousRoot = Path.Combine(releasesRoot, "additional");
+        var nestedMount = Path.Combine(additionalPreviousRoot, "nested-mount");
+        var mountInfo = Path.Combine(testRoot, "mountinfo");
+        Directory.CreateDirectory(rollbackRoot);
+        Directory.CreateDirectory(previousRoot);
+        Directory.CreateDirectory(nestedMount);
+        await File.WriteAllTextAsync(
+            Path.Combine(installRoot, "current-release"),
+            "previous\n",
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(installRoot, "previous-release"),
+            "additional\n",
+            TestContext.Current.CancellationToken);
+        var encodedMount = nestedMount
+            .Replace("\\", "\\134", StringComparison.Ordinal)
+            .Replace(" ", "\\040", StringComparison.Ordinal)
+            .Replace("\t", "\\011", StringComparison.Ordinal)
+            .Replace("\n", "\\012", StringComparison.Ordinal);
+        await File.WriteAllTextAsync(
+            mountInfo,
+            $"1 0 0:1 / / rw - rootfs rootfs rw\n2 1 0:1 / {encodedMount} rw - none none rw\n",
+            TestContext.Current.CancellationToken);
+        var wrapper = Path.Combine(testRoot, "current-only-mount-test.sh");
+        await WriteExecutableAsync(
+            wrapper,
+            """
+            #!/usr/bin/env sh
+            set -eu
+            . "$1"
+            assert_current_only_retention_plan "$2" candidate previous additional previous additional "$3"
+            atomic_pointer "$2/previous-release" previous
+            atomic_pointer "$2/current-release" candidate
+            remove_current_only_previous_release "$2" candidate previous additional "$3"
+            """);
+
+        try
+        {
+            var result = await RunAsync(
+                "sh",
+                [
+                    wrapper,
+                    Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "deployment-common.sh"),
+                    installRoot,
+                    mountInfo
+                ],
+                new Dictionary<string, string>());
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("mount point", result.StandardError, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("previous", ReadPointer(installRoot, "current-release"));
+            Assert.Equal("additional", ReadPointer(installRoot, "previous-release"));
+            Assert.True(Directory.Exists(rollbackRoot));
+            Assert.True(Directory.Exists(previousRoot));
+            Assert.True(Directory.Exists(additionalPreviousRoot));
+            Assert.True(Directory.Exists(nestedMount));
+        }
+        finally
+        {
+            if (Directory.Exists(testRoot))
+                Directory.Delete(testRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ReleasePointerPairRestoresOriginalPreviousWhenCurrentUpdateFails()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-pointer-pair-{Guid.NewGuid():N}");
+        var installRoot = Path.Combine(testRoot, "installed");
+        Directory.CreateDirectory(installRoot);
+        await File.WriteAllTextAsync(
+            Path.Combine(installRoot, "current-release"),
+            "old-current\n",
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(installRoot, "previous-release"),
+            "old-previous\n",
+            TestContext.Current.CancellationToken);
+
+        try
+        {
+            ProcessResult result;
+            if (OperatingSystem.IsWindows())
+            {
+                var wrapper = Path.Combine(testRoot, "pointer-pair-failure.ps1");
+                await File.WriteAllTextAsync(
+                    wrapper,
+                    "param([string]$Common, [string]$Root)\n" +
+                    ". $Common\n" +
+                    "$script:OriginalSetReleasePointer = ${function:Set-ReleasePointer}\n" +
+                    "function Set-ReleasePointer([string]$InstallRoot, [string]$Name, [string]$Value) {\n" +
+                    "  if ($Name -ceq 'current-release') { throw 'Injected current pointer failure.' }\n" +
+                    "  & $script:OriginalSetReleasePointer $InstallRoot $Name $Value\n" +
+                    "}\n" +
+                    "Set-ReleasePointerPair $Root 'candidate' 'old-current' 'old-previous'\n",
+                    TestContext.Current.CancellationToken);
+                result = await RunAsync(
+                    "pwsh",
+                    [
+                        "-NoProfile",
+                        "-File",
+                        wrapper,
+                        Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "deployment-common.ps1"),
+                        installRoot
+                    ],
+                    new Dictionary<string, string>());
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                var wrapper = Path.Combine(testRoot, "pointer-pair-failure.sh");
+                await WriteExecutableAsync(
+                    wrapper,
+                    """
+                    #!/usr/bin/env sh
+                    set -eu
+                    . "$1"
+                    atomic_pointer() {
+                      target=$1
+                      value=$2
+                      case "$target" in */current-release) echo 'Injected current pointer failure.' >&2; return 73;; esac
+                      printf '%s\n' "$value" > "$target"
+                    }
+                    set_release_pointer_pair "$2" candidate old-current old-previous
+                    """);
+                result = await RunAsync(
+                    "sh",
+                    [
+                        wrapper,
+                        Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "deployment-common.sh"),
+                        installRoot
+                    ],
+                    new Dictionary<string, string>());
+            }
+            else
+            {
+                return;
+            }
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("Injected current pointer failure", result.StandardError, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("old-current", ReadPointer(installRoot, "current-release"));
+            Assert.Equal("old-previous", ReadPointer(installRoot, "previous-release"));
+        }
+        finally
+        {
+            if (Directory.Exists(testRoot))
+                Directory.Delete(testRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ShellInstallerRestoresFailedCandidateAndRollsBackSuccessfulUpgrade()
     {
         if (!OperatingSystem.IsLinux())
@@ -1441,6 +2605,8 @@ public sealed class BundleBuilderTests
         var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-install-{Guid.NewGuid():N}");
         var bundleA = Path.Combine(testRoot, "bundle-a");
         var bundleB = Path.Combine(testRoot, "bundle-b");
+        var bundleC = Path.Combine(testRoot, "bundle-c");
+        var bundleD = Path.Combine(testRoot, "bundle-d");
         var installRoot = Path.Combine(testRoot, "installed");
         var fakeBin = Path.Combine(testRoot, "bin");
         var internalServiceToken = Path.Combine(testRoot, "internal-service-token");
@@ -1449,6 +2615,8 @@ public sealed class BundleBuilderTests
         {
             await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleA, "development");
             await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleB, "candidate");
+            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleC, "current-only");
+            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleD, "stale");
             await File.WriteAllTextAsync(
                 internalServiceToken,
                 "test-internal-service-token",
@@ -1467,6 +2635,12 @@ public sealed class BundleBuilderTests
                 set -eu
                 if [ "${1:-}" = image ] && [ "${2:-}" = inspect ]; then
                   case " $* " in *"Config.User"*) echo 1654:1654; exit 0;; esac
+                  for argument in "$@"; do
+                    case "$argument" in
+                      sha256:*) printf '%s\n' "$argument"; exit 0;;
+                      *@sha256:*) printf 'sha256:%s\n' "${argument##*@sha256:}"; exit 0;;
+                    esac
+                  done
                   case " $* " in
                     *" {{FakeDockerCli.RoslynNetFx48ImageId}} "*) echo {{FakeDockerCli.RoslynNetFx48ImageId}} ;;
                     *" {{FakeDockerCli.RoslynStableImageId}} "*) echo {{FakeDockerCli.RoslynStableImageId}} ;;
@@ -1500,6 +2674,11 @@ public sealed class BundleBuilderTests
                   exit 0
                 fi
                 case " $* " in
+                  *" up -d "*)
+                    if [ "${SHARPLABNEXT_FAKE_TAMPER_ROLLBACK:-}" = "${SHARPLABNEXT_RELEASE_ID:-}" ]; then
+                      printf 'tampered\n' >> "$SHARPLABNEXT_HOME/releases/$SHARPLABNEXT_RELEASE_ID/rollback/artifact-data/artifact.txt"
+                    fi
+                    ;;
                   *" config --services "*) echo gateway ;;
                   *" ps --status running --services "*) echo gateway ;;
                   *" ps --all -q artifact-store "*) echo fake-artifact-store ;;
@@ -1524,7 +2703,7 @@ public sealed class BundleBuilderTests
             };
             var first = await RunAsync(
                 "sh",
-                [Path.Combine(bundleA, "install.sh"), "--allow-unsigned", "--skip-artifact-backup", "--ready-timeout-seconds", "3"],
+                [Path.Combine(bundleA, "deploy.sh"), "--allow-unsigned", "--ready-timeout-seconds", "3"],
                 environment);
             Assert.True(
                 first.ExitCode == 0,
@@ -1591,6 +2770,121 @@ public sealed class BundleBuilderTests
             Assert.Equal(0, rollback.ExitCode);
             Assert.Equal("development", ReadPointer(installRoot, "current-release"));
             Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
+
+            environment["SHARPLABNEXT_FAKE_FAIL_RELEASE"] = "current-only";
+            var failedCurrentOnly = await RunAsync(
+                "sh",
+                [Path.Combine(bundleC, "install.sh"), "--allow-unsigned", "--skip-artifact-backup", "--current-only", "--ready-timeout-seconds", "1"],
+                environment);
+            Assert.NotEqual(0, failedCurrentOnly.ExitCode);
+            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
+            Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
+            Assert.True(Directory.Exists(Path.Combine(installRoot, "releases", "development")));
+            Assert.True(Directory.Exists(Path.Combine(installRoot, "releases", "candidate")));
+            Assert.True(Directory.Exists(Path.Combine(installRoot, "releases", "candidate", "rollback")));
+
+            environment.Remove("SHARPLABNEXT_FAKE_FAIL_RELEASE");
+            var releaseDirectoriesBeforeRetention = Directory.GetDirectories(Path.Combine(installRoot, "releases"))
+                .Select(Path.GetFileName)
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+            var tamperedPredecessorPath = Path.Combine(
+                installRoot,
+                "releases",
+                "candidate",
+                "compose.generated.yaml");
+            var predecessorBytes = await File.ReadAllBytesAsync(
+                tamperedPredecessorPath,
+                TestContext.Current.CancellationToken);
+            await File.AppendAllTextAsync(
+                tamperedPredecessorPath,
+                "\n# tampered predecessor\n",
+                TestContext.Current.CancellationToken);
+            var tamperedPredecessor = await RunAsync(
+                "sh",
+                [Path.Combine(bundleC, "install.sh"), "--allow-unsigned", "--skip-artifact-backup", "--current-only", "--ready-timeout-seconds", "3"],
+                environment);
+            Assert.NotEqual(0, tamperedPredecessor.ExitCode);
+            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
+            Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
+            Assert.Equal(
+                releaseDirectoriesBeforeRetention,
+                Directory.GetDirectories(Path.Combine(installRoot, "releases"))
+                    .Select(Path.GetFileName)
+                    .Order(StringComparer.Ordinal));
+            await File.WriteAllBytesAsync(
+                tamperedPredecessorPath,
+                predecessorBytes,
+                TestContext.Current.CancellationToken);
+
+            environment["SHARPLABNEXT_FAKE_TAMPER_ROLLBACK"] = "current-only";
+            var tamperedRollback = await RunAsync(
+                "sh",
+                [Path.Combine(bundleC, "install.sh"), "--allow-unsigned", "--current-only", "--ready-timeout-seconds", "3"],
+                environment);
+            Assert.NotEqual(0, tamperedRollback.ExitCode);
+            Assert.Contains("checksum", tamperedRollback.StandardError, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
+            Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
+            Assert.Equal(
+                releaseDirectoriesBeforeRetention,
+                Directory.GetDirectories(Path.Combine(installRoot, "releases"))
+                    .Select(Path.GetFileName)
+                    .Order(StringComparer.Ordinal));
+            var currentOnlyRollbackArtifact = Path.Combine(
+                installRoot,
+                "releases",
+                "current-only",
+                "rollback",
+                "artifact-data",
+                "artifact.txt");
+            Assert.True(File.Exists(currentOnlyRollbackArtifact));
+            await File.WriteAllTextAsync(
+                currentOnlyRollbackArtifact,
+                "artifact-data\n",
+                TestContext.Current.CancellationToken);
+            environment.Remove("SHARPLABNEXT_FAKE_TAMPER_ROLLBACK");
+
+            var currentOnlyUpgrade = await RunAsync(
+                "sh",
+                [Path.Combine(bundleC, "install.sh"), "--allow-unsigned", "--current-only", "--ready-timeout-seconds", "3"],
+                environment);
+            Assert.Equal(0, currentOnlyUpgrade.ExitCode);
+            Assert.Equal("current-only", ReadPointer(installRoot, "current-release"));
+            Assert.False(File.Exists(Path.Combine(installRoot, "previous-release")));
+            Assert.False(Directory.Exists(Path.Combine(installRoot, "releases", "development")));
+            Assert.False(Directory.Exists(Path.Combine(installRoot, "releases", "candidate")));
+            Assert.False(Directory.Exists(Path.Combine(installRoot, "releases", "current-only", "rollback")));
+
+            var materializeStale = await RunAsync(
+                "sh",
+                [
+                    "-c",
+                    ". \"$1/deployment-common.sh\"; install_release_assets \"$1\" \"$2\" stale >/dev/null",
+                    "sh",
+                    bundleD,
+                    installRoot
+                ],
+                environment);
+            Assert.Equal(0, materializeStale.ExitCode);
+            var staleRelease = Path.Combine(installRoot, "releases", "stale");
+            await File.WriteAllTextAsync(
+                Path.Combine(installRoot, "previous-release"),
+                "stale\n",
+                TestContext.Current.CancellationToken);
+            var currentOnlyReinstall = await RunAsync(
+                "sh",
+                [Path.Combine(bundleC, "install.sh"), "--allow-unsigned", "--skip-artifact-backup", "--current-only", "--ready-timeout-seconds", "3"],
+                environment);
+            Assert.Equal(0, currentOnlyReinstall.ExitCode);
+            Assert.Equal("current-only", ReadPointer(installRoot, "current-release"));
+            Assert.False(File.Exists(Path.Combine(installRoot, "previous-release")));
+            Assert.False(Directory.Exists(staleRelease));
+            Assert.Equal(
+                ["current-only"],
+                Directory.GetDirectories(Path.Combine(installRoot, "releases"))
+                    .Select(Path.GetFileName)
+                    .Order(StringComparer.Ordinal));
         }
         finally
         {
@@ -1613,6 +2907,8 @@ public sealed class BundleBuilderTests
         var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-install-ps-{Guid.NewGuid():N}");
         var bundleA = Path.Combine(testRoot, "bundle-a");
         var bundleB = Path.Combine(testRoot, "bundle-b");
+        var bundleC = Path.Combine(testRoot, "bundle-c");
+        var bundleD = Path.Combine(testRoot, "bundle-d");
         var installRoot = Path.Combine(testRoot, "installed");
         var fakeBin = Path.Combine(testRoot, "bin");
         var statePath = Path.Combine(testRoot, "active-release.txt");
@@ -1623,6 +2919,8 @@ public sealed class BundleBuilderTests
         {
             await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleA, "development");
             await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleB, "candidate");
+            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleC, "current-only");
+            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleD, "stale");
             await File.WriteAllTextAsync(
                 internalServiceToken,
                 "test-internal-service-token",
@@ -1631,7 +2929,19 @@ public sealed class BundleBuilderTests
                 Path.Combine(fakeBin, "docker.cmd"),
                 $$"""
                 @echo off
+                setlocal EnableExtensions EnableDelayedExpansion
                 if "%1"=="image" if "%2"=="inspect" (
+                  set "imageReference=%~5"
+                  if /I "!imageReference:~0,7!"=="sha256:" (
+                    echo !imageReference!
+                    exit /b 0
+                  )
+                  set "arguments=%*"
+                  set "immutableDigest=%arguments:*@sha256:=%"
+                  if not "%immutableDigest%"=="%arguments%" (
+                    echo sha256:%immutableDigest%
+                    exit /b 0
+                  )
                   echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.RoslynNetFx48ImageId}}" >nul && (
                     echo {{FakeDockerCli.RoslynNetFx48ImageId}}
                     exit /b 0
@@ -1703,6 +3013,11 @@ public sealed class BundleBuilderTests
                   echo {{FakeDockerCli.ImageId}}
                   exit /b 0
                 )
+                if "%1"=="cp" (
+                  if not exist "%~3" mkdir "%~3"
+                  > "%~3\artifact.txt" echo artifact-data
+                  exit /b 0
+                )
                 echo %* | %SystemRoot%\System32\findstr.exe /C:"config --services" >nul && (
                   echo gateway
                   exit /b 0
@@ -1711,8 +3026,15 @@ public sealed class BundleBuilderTests
                   echo gateway
                   exit /b 0
                 )
+                echo %* | %SystemRoot%\System32\findstr.exe /C:"ps --all -q artifact-store" >nul && (
+                  echo fake-artifact-store
+                  exit /b 0
+                )
                 echo %* | %SystemRoot%\System32\findstr.exe /C:" up -d " >nul && (
                   > "%SHARPLABNEXT_FAKE_STATE%" echo %SHARPLABNEXT_RELEASE_ID%
+                  if /I "%SHARPLABNEXT_FAKE_TAMPER_ROLLBACK%"=="%SHARPLABNEXT_RELEASE_ID%" (
+                    >> "%SHARPLABNEXT_HOME%\releases\%SHARPLABNEXT_RELEASE_ID%\rollback\artifact-data\artifact.txt" echo tampered
+                  )
                   exit /b 0
                 )
                 echo %* | %SystemRoot%\System32\findstr.exe /C:" down --remove-orphans" >nul && (
@@ -1721,6 +3043,10 @@ public sealed class BundleBuilderTests
                 )
                 exit /b 0
                 """.ReplaceLineEndings("\r\n"),
+                TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(
+                Path.Combine(fakeBin, "openssl.cmd"),
+                "@echo off\r\n\"C:\\Program Files\\Git\\mingw64\\bin\\openssl.exe\" %*\r\n",
                 TestContext.Current.CancellationToken);
 
             await using var server = new FakeReleaseHttpServer(statePath, failPath);
@@ -1736,7 +3062,9 @@ public sealed class BundleBuilderTests
                 "pwsh",
                 ["-NoProfile", "-File", Path.Combine(bundleA, "install.ps1"), "-AllowUnsigned", "-SkipArtifactBackup", "-ReadyTimeoutSeconds", "3", "-SmokeBaseAddress", smokeAddress],
                 environment);
-            Assert.Equal(0, first.ExitCode);
+            Assert.True(
+                first.ExitCode == 0,
+                $"First PowerShell install failed. stdout: {first.StandardOutput}{Environment.NewLine}stderr: {first.StandardError}");
             Assert.Equal("development", ReadPointer(installRoot, "current-release"));
             var directSmoke = await RunAsync(
                 "pwsh",
@@ -1781,6 +3109,130 @@ public sealed class BundleBuilderTests
             Assert.Equal(0, rollback.ExitCode);
             Assert.Equal("development", ReadPointer(installRoot, "current-release"));
             Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
+
+            var previousRollbackRoot = Path.Combine(installRoot, "releases", "candidate", "rollback");
+            var previousRollbackExisted = Directory.Exists(previousRollbackRoot);
+            await File.WriteAllTextAsync(failPath, "current-only", TestContext.Current.CancellationToken);
+            var failedCurrentOnly = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", Path.Combine(bundleC, "install.ps1"), "-AllowUnsigned", "-SkipArtifactBackup", "-CurrentOnly", "-ReadyTimeoutSeconds", "1", "-SmokeBaseAddress", smokeAddress],
+                environment);
+            Assert.NotEqual(0, failedCurrentOnly.ExitCode);
+            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
+            Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
+            Assert.True(Directory.Exists(Path.Combine(installRoot, "releases", "development")));
+            Assert.True(Directory.Exists(Path.Combine(installRoot, "releases", "candidate")));
+            Assert.Equal(previousRollbackExisted, Directory.Exists(previousRollbackRoot));
+
+            File.Delete(failPath);
+            var releaseDirectoriesBeforeRetention = Directory.GetDirectories(Path.Combine(installRoot, "releases"))
+                .Select(Path.GetFileName)
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+            var tamperedPredecessorPath = Path.Combine(
+                installRoot,
+                "releases",
+                "candidate",
+                "compose.generated.yaml");
+            var predecessorBytes = await File.ReadAllBytesAsync(
+                tamperedPredecessorPath,
+                TestContext.Current.CancellationToken);
+            await File.AppendAllTextAsync(
+                tamperedPredecessorPath,
+                "\n# tampered predecessor\n",
+                TestContext.Current.CancellationToken);
+            var tamperedPredecessor = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", Path.Combine(bundleC, "install.ps1"), "-AllowUnsigned", "-SkipArtifactBackup", "-CurrentOnly", "-ReadyTimeoutSeconds", "3", "-SmokeBaseAddress", smokeAddress],
+                environment);
+            Assert.NotEqual(0, tamperedPredecessor.ExitCode);
+            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
+            Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
+            Assert.Equal(
+                releaseDirectoriesBeforeRetention,
+                Directory.GetDirectories(Path.Combine(installRoot, "releases"))
+                    .Select(Path.GetFileName)
+                    .Order(StringComparer.Ordinal));
+            await File.WriteAllBytesAsync(
+                tamperedPredecessorPath,
+                predecessorBytes,
+                TestContext.Current.CancellationToken);
+
+            environment["SHARPLABNEXT_FAKE_TAMPER_ROLLBACK"] = "current-only";
+            var tamperedRollback = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", Path.Combine(bundleC, "install.ps1"), "-AllowUnsigned", "-CurrentOnly", "-ReadyTimeoutSeconds", "3", "-SmokeBaseAddress", smokeAddress],
+                environment);
+            Assert.NotEqual(0, tamperedRollback.ExitCode);
+            Assert.Contains("checksum", tamperedRollback.StandardError, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
+            Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
+            Assert.Equal(
+                releaseDirectoriesBeforeRetention,
+                Directory.GetDirectories(Path.Combine(installRoot, "releases"))
+                    .Select(Path.GetFileName)
+                    .Order(StringComparer.Ordinal));
+            var currentOnlyRollbackArtifact = Path.Combine(
+                installRoot,
+                "releases",
+                "current-only",
+                "rollback",
+                "artifact-data",
+                "artifact.txt");
+            Assert.True(File.Exists(currentOnlyRollbackArtifact));
+            await File.WriteAllTextAsync(
+                currentOnlyRollbackArtifact,
+                "artifact-data\r\n",
+                TestContext.Current.CancellationToken);
+            environment.Remove("SHARPLABNEXT_FAKE_TAMPER_ROLLBACK");
+
+            var currentOnlyUpgrade = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", Path.Combine(bundleC, "install.ps1"), "-AllowUnsigned", "-CurrentOnly", "-ReadyTimeoutSeconds", "3", "-SmokeBaseAddress", smokeAddress],
+                environment);
+            Assert.Equal(0, currentOnlyUpgrade.ExitCode);
+            Assert.Equal("current-only", ReadPointer(installRoot, "current-release"));
+            Assert.False(File.Exists(Path.Combine(installRoot, "previous-release")));
+            Assert.False(Directory.Exists(Path.Combine(installRoot, "releases", "development")));
+            Assert.False(Directory.Exists(Path.Combine(installRoot, "releases", "candidate")));
+            Assert.False(Directory.Exists(Path.Combine(installRoot, "releases", "current-only", "rollback")));
+
+            var materializeStaleScript = Path.Combine(testRoot, "materialize-stale.ps1");
+            await File.WriteAllTextAsync(
+                materializeStaleScript,
+                "param([string]$Bundle, [string]$InstallRoot)\n" +
+                ". (Join-Path $Bundle 'deployment-common.ps1')\n" +
+                "Install-ReleaseAssets $Bundle $InstallRoot 'stale' | Out-Null\n",
+                TestContext.Current.CancellationToken);
+            var materializeStale = await RunAsync(
+                "pwsh",
+                [
+                    "-NoProfile",
+                    "-File",
+                    materializeStaleScript,
+                    bundleD,
+                    installRoot
+                ],
+                environment);
+            Assert.Equal(0, materializeStale.ExitCode);
+            var staleRelease = Path.Combine(installRoot, "releases", "stale");
+            await File.WriteAllTextAsync(
+                Path.Combine(installRoot, "previous-release"),
+                "stale\n",
+                TestContext.Current.CancellationToken);
+            var currentOnlyReinstall = await RunAsync(
+                "pwsh",
+                ["-NoProfile", "-File", Path.Combine(bundleC, "install.ps1"), "-AllowUnsigned", "-SkipArtifactBackup", "-CurrentOnly", "-ReadyTimeoutSeconds", "3", "-SmokeBaseAddress", smokeAddress],
+                environment);
+            Assert.Equal(0, currentOnlyReinstall.ExitCode);
+            Assert.Equal("current-only", ReadPointer(installRoot, "current-release"));
+            Assert.False(File.Exists(Path.Combine(installRoot, "previous-release")));
+            Assert.False(Directory.Exists(staleRelease));
+            Assert.Equal(
+                ["current-only"],
+                Directory.GetDirectories(Path.Combine(installRoot, "releases"))
+                    .Select(Path.GetFileName)
+                    .Order(StringComparer.Ordinal));
         }
         finally
         {
@@ -2217,6 +3669,364 @@ public sealed class BundleBuilderTests
     }
 
     [Fact]
+    public async Task ApplicationDependencyInventoryExcludesWineOperatingSystemPackages()
+    {
+        var repositoryRoot = await CreateDependencyInventoryRepositoryAsync();
+        try
+        {
+            var (_, components) = await DependencyInventory.LoadAsync(
+                repositoryRoot,
+                Path.Combine(repositoryRoot, "profiles", "license-policy.json"),
+                TestContext.Current.CancellationToken);
+
+            Assert.DoesNotContain(components, static component => component.PackageManager == "apt-source");
+        }
+        finally
+        {
+            Directory.Delete(repositoryRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WinePackageInventoryRejectsUnknownFieldsAndUnreviewedClosure()
+    {
+        var repositoryRoot = await CreateDependencyInventoryRepositoryAsync();
+        var manifestPath = Path.Combine(repositoryRoot, "profiles", "runtime-wine-packages.json");
+        try
+        {
+            var reviewedBytes = await File.ReadAllBytesAsync(
+                manifestPath,
+                TestContext.Current.CancellationToken);
+            Action<JsonObject>[] mutations =
+            [
+                static document => document["unexpected"] = true,
+                static document =>
+                    document["sourceOffer"]!["files"]![0]!["sha256"] = new string('f', 64),
+                static document =>
+                    document["sourceOffer"]!["baseUri"] = "https://127.0.0.1/private-wine/",
+                static document => document["component"]!["id"] = "private-wine-userspace",
+                static document => document["directPackages"]![0]!["architecture"] = "i386"
+            ];
+
+            foreach (var mutate in mutations)
+            {
+                var document = JsonNode.Parse(reviewedBytes)!.AsObject();
+                mutate(document);
+                await File.WriteAllTextAsync(
+                    manifestPath,
+                    document.ToJsonString(),
+                    TestContext.Current.CancellationToken);
+
+                await Assert.ThrowsAsync<BundleValidationException>(() =>
+                    WineRuntimePackageManifestLoader.LoadAsync(
+                        repositoryRoot,
+                        TestContext.Current.CancellationToken));
+            }
+        }
+        finally
+        {
+            Directory.Delete(repositoryRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WinePackageInventorySnapshotMustMatchReleaseLockIdentity()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var snapshot = await WineRuntimePackageManifestLoader.LoadSnapshotAsync(
+            repositoryRoot,
+            TestContext.Current.CancellationToken);
+        var releaseLock = await CatalogLoader.LoadReleaseLockAsync(
+            Path.Combine(repositoryRoot, "profiles", "lock.json"),
+            TestContext.Current.CancellationToken);
+
+        WineRuntimePackageManifestLoader.ValidateReleaseLock(snapshot, releaseLock);
+
+        var components = releaseLock.Components.ToDictionary(
+            static pair => pair.Key,
+            static pair => pair.Value,
+            StringComparer.Ordinal);
+        components[snapshot.Manifest.Component.Id] = components[snapshot.Manifest.Component.Id] with
+        {
+            Digest = "sha256:" + new string('0', 64)
+        };
+        var tampered = releaseLock with { Components = components };
+        Assert.Throws<BundleValidationException>(() =>
+            WineRuntimePackageManifestLoader.ValidateReleaseLock(snapshot, tampered));
+    }
+
+    [Fact]
+    public async Task BuilderRejectsRealWineManifestLockDriftBeforeDockerOrSourceDownload()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-wine-lock-{Guid.NewGuid():N}");
+        var lockPath = Path.Combine(testRoot, "lock.json");
+        var output = Path.Combine(testRoot, "bundle");
+        try
+        {
+            Directory.CreateDirectory(testRoot);
+            var releaseLock = JsonNode.Parse(await File.ReadAllTextAsync(
+                Path.Combine(repositoryRoot, "profiles", "lock.json"),
+                TestContext.Current.CancellationToken))!;
+            releaseLock["components"]!["wine-coreclr-userspace"]!["digest"] =
+                "sha256:" + new string('0', 64);
+            await File.WriteAllTextAsync(
+                lockPath,
+                releaseLock.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
+                TestContext.Current.CancellationToken);
+            var command = new BundleBuilderCommand(
+                repositoryRoot,
+                Path.Combine(repositoryRoot, "profiles", "catalog", "catalog.json"),
+                lockPath,
+                Path.Combine(repositoryRoot, "deploy", "images.json"),
+                Path.Combine(repositoryRoot, "profiles", "license-policy.json"),
+                Path.Combine(repositoryRoot, "deploy", "compose.prod.yaml"),
+                Path.Combine(repositoryRoot, "THIRD-PARTY-NOTICES.md"),
+                output,
+                "docker",
+                "openssl",
+                null,
+                null,
+                null,
+                null,
+                MetadataOnly: true,
+                new Dictionary<string, string>());
+            var builder = new ReleaseBundleBuilder(
+                new FakeDockerCli(),
+                sourceInspector: new FakeRepositorySourceInspector(
+                    new RepositorySourceState(true, TestSourceRevision, false)),
+                runtimePromotionSourceInspector: new FakeRuntimePromotionSourceInspector(),
+                externalSourceMaterialFetcher: new FakeExternalSourceMaterialFetcher());
+
+            var exception = await Assert.ThrowsAsync<BundleValidationException>(() => builder.BuildAsync(
+                command,
+                TestContext.Current.CancellationToken));
+
+            Assert.Contains("does not match its release lock identity", exception.Message, StringComparison.Ordinal);
+            Assert.False(Directory.Exists(output));
+        }
+        finally
+        {
+            if (Directory.Exists(testRoot))
+                Directory.Delete(testRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task OperatingSystemSourceClosureWritesTheExactReviewedFilesAndMaterialEntries()
+    {
+        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-wine-source-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(testRoot);
+            var materials = new List<SourceMaterialComponent>();
+            var builder = new ReleaseBundleBuilder(
+                new FakeDockerCli(),
+                externalSourceMaterialFetcher: new FakeExternalSourceMaterialFetcher());
+
+            await builder.WriteOperatingSystemSourcesAsync(
+                TestWineManifest,
+                testRoot,
+                materials,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(162, materials.Count);
+            var material = Assert.Single(materials, static item => item.Name == "wine");
+            Assert.Equal("apt-source", material.PackageManager);
+            Assert.Equal(
+                "sources/ubuntu/20260810T000000Z/pool/universe/w/wine",
+                material.MaterialPath);
+            foreach (var (relativePath, expectedBytes) in TestOperatingSystemSourceFiles)
+            {
+                Assert.Equal(
+                    expectedBytes,
+                    await File.ReadAllBytesAsync(
+                        Path.Combine(
+                            testRoot,
+                            "sources",
+                            "ubuntu",
+                            "20260810T000000Z",
+                            relativePath.Replace('/', Path.DirectorySeparatorChar)),
+                        TestContext.Current.CancellationToken));
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(testRoot))
+                Directory.Delete(testRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task OperatingSystemSourceClosureRejectsRedirectAndTamperedContent()
+    {
+        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-wine-source-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(testRoot);
+            var redirecting = new ReleaseBundleBuilder(
+                new FakeDockerCli(),
+                externalSourceMaterialFetcher: new RedirectingExternalSourceMaterialFetcher());
+            await Assert.ThrowsAsync<BundleValidationException>(() => redirecting.WriteOperatingSystemSourcesAsync(
+                TestWineManifest,
+                testRoot,
+                [],
+                TestContext.Current.CancellationToken));
+            Assert.Empty(Directory.EnumerateFiles(testRoot, "*", SearchOption.AllDirectories));
+
+            var tampered = new ReleaseBundleBuilder(
+                new FakeDockerCli(),
+                externalSourceMaterialFetcher: new TamperedExternalSourceMaterialFetcher());
+            await Assert.ThrowsAsync<BundleValidationException>(() => tampered.WriteOperatingSystemSourcesAsync(
+                TestWineManifest,
+                testRoot,
+                [],
+                TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            if (Directory.Exists(testRoot))
+                Directory.Delete(testRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void OperatingSystemInventoryRejectsMissingBinarySourceIndexAndNoticeEvidence()
+    {
+        var packageMutations = new Func<WineResolvedPackage, WineResolvedPackage>[]
+        {
+            static package => package with { Architecture = string.Empty },
+            static package => package with { Sha256 = new string('0', 63) },
+            static package => package with { SourceVersion = "missing" },
+            static package => package with { ArchiveIndexPath = "main/binary-amd64/other.gz" },
+            static package => package with { CopyrightSha256 = new string('0', 63) },
+            static package => package with
+            {
+                CopyrightPath = "/usr/share/doc/libssl3/copyright (broken symlink target)"
+            }
+        };
+        foreach (var mutate in packageMutations)
+        {
+            var packages = TestWineManifest.ResolvedPackages.ToArray();
+            packages[0] = mutate(packages[0]);
+            var manifest = TestWineManifest with { ResolvedPackages = packages };
+            Assert.Throws<BundleValidationException>(() =>
+                WineRuntimePackageManifestLoader.ValidateResolvedPackagesForBundle(manifest));
+        }
+
+        var sources = TestWineManifest.SourcePackages.ToArray();
+        sources[0] = sources[0] with { Files = sources[0].Files.Skip(1).ToArray() };
+        Assert.Throws<BundleValidationException>(() =>
+            WineRuntimePackageManifestLoader.ValidateResolvedPackagesForBundle(
+                TestWineManifest with { SourcePackages = sources }));
+
+        Assert.Throws<BundleValidationException>(() =>
+            WineRuntimePackageManifestLoader.ValidateResolvedPackagesForBundle(TestWineManifest with
+            {
+                NoticeArchive = TestWineManifest.NoticeArchive with { EntryCount = 2 }
+            }));
+    }
+
+    [Fact]
+    public async Task WineNoticeArchiveIsCopiedFromAnExactFinalImageAndValidated()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sharplabnext-wine-notices-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(root);
+            var manifestBytes = JsonSerializer.SerializeToUtf8Bytes(
+                TestWineManifest,
+                RuntimeProfileFixtureJsonOptions);
+            var digest = "sha256:" + Convert.ToHexStringLower(SHA256.HashData(manifestBytes));
+            var prefix = ReleaseBundleBuilder.ComponentLabelPrefix + "wine-coreclr-userspace.";
+            var image = new InspectedImage(
+                "wine-test",
+                "test/wine@sha256:" + new string('a', 64),
+                FakeDockerCli.WineNetFxRuntimeImageId,
+                "linux",
+                "amd64",
+                1,
+                [],
+                new Dictionary<string, string>
+                {
+                    [prefix + "version"] = TestWineManifest.Component.ResolvedVersion,
+                    [prefix + "digest"] = digest,
+                    [prefix + "source-uri"] = TestWineManifest.Component.SourceUri
+                },
+                null,
+                null,
+                "wine-test",
+                null,
+                "wine-test",
+                null,
+                null);
+            var builder = new ReleaseBundleBuilder(new FakeDockerCli());
+            await builder.WriteWineNoticeArchiveAsync(
+                new WineRuntimePackageManifestSnapshot(TestWineManifest, digest, manifestBytes),
+                [image],
+                root,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(
+                TestWineNoticeArchive,
+                await File.ReadAllBytesAsync(
+                    Path.Combine(root, "notices", "wine-coreclr-copyright-notices.tar"),
+                    TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WineNoticeArchiveRejectsLinksMissingEntriesAndTamperedBytes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sharplabnext-wine-notice-invalid-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(root);
+            var linkArchive = Path.Combine(root, "link.tar");
+            using (var stream = File.Create(linkArchive))
+            using (var writer = new TarWriter(stream, TarEntryFormat.Ustar))
+            {
+                writer.WriteEntry(new UstarTarEntry(TarEntryType.SymbolicLink, "usr/share/doc/test/copyright")
+                {
+                    LinkName = "elsewhere"
+                });
+            }
+            await Assert.ThrowsAsync<BundleValidationException>(() =>
+                ReleaseBundleBuilder.ValidateWineNoticeArchiveAsync(
+                    linkArchive,
+                    TestWineManifest,
+                    TestContext.Current.CancellationToken));
+
+            var emptyArchive = Path.Combine(root, "empty.tar");
+            using (var stream = File.Create(emptyArchive))
+            using (var writer = new TarWriter(stream, TarEntryFormat.Ustar)) { }
+            await Assert.ThrowsAsync<BundleValidationException>(() =>
+                ReleaseBundleBuilder.ValidateWineNoticeArchiveAsync(
+                    emptyArchive,
+                    TestWineManifest,
+                    TestContext.Current.CancellationToken));
+
+            var tamperedArchive = Path.Combine(root, "tampered.tar");
+            var tampered = TestWineNoticeArchive.ToArray();
+            tampered[512] ^= 0xff;
+            await File.WriteAllBytesAsync(tamperedArchive, tampered, TestContext.Current.CancellationToken);
+            await Assert.ThrowsAnyAsync<Exception>(() =>
+                ReleaseBundleBuilder.ValidateWineNoticeArchiveAsync(
+                    tamperedArchive,
+                    TestWineManifest,
+                    TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task BuilderSignsChecksumsWithoutCopyingThePrivateKey()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -2358,6 +4168,11 @@ public sealed class BundleBuilderTests
 
     private static string FindRepositoryRoot()
     {
+        return PromotionFixtures.Value.RepositoryRoot;
+    }
+
+    private static string FindSourceRepositoryRoot()
+    {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
@@ -2369,6 +4184,298 @@ public sealed class BundleBuilderTests
         }
 
         throw new InvalidOperationException("Repository root was not found.");
+    }
+
+    private static WineRuntimePackageManifest CreateTestWineManifest()
+    {
+        const string snapshotUri = "https://snapshot.ubuntu.com/ubuntu/20260810T000000Z/";
+        const string baseUri = snapshotUri + "pool/universe/w/wine/";
+        const string wineVersion = "9.0~repack-4build3";
+        var sourceFiles = TestWineSourceFiles
+            .Select(pair => new WineSourceOfferFile
+            {
+                Path = pair.Key,
+                Sha256 = Convert.ToHexStringLower(SHA256.HashData(pair.Value)),
+                SizeBytes = pair.Value.Length
+            })
+            .OrderBy(static file => file.Path.EndsWith(".dsc", StringComparison.Ordinal) ? 0 :
+                file.Path.EndsWith(".orig.tar.xz", StringComparison.Ordinal) ? 1 : 2)
+            .ToArray();
+        TestOperatingSystemSourceFiles.Clear();
+        var sourcePackages = new List<WineSourcePackage>();
+        for (var sourceIndex = 0; sourceIndex < 160; sourceIndex++)
+        {
+            var name = $"source-{sourceIndex:D3}";
+            var count = sourceIndex < 39 ? 4 : 3;
+            var files = Enumerable.Range(0, count).Select(fileIndex =>
+            {
+                var suffix = fileIndex == 0 ? ".dsc" : $".part-{fileIndex}.tar.xz";
+                var path = $"pool/main/s/{name}/{name}_1.0.0{suffix}";
+                var bytes = Encoding.UTF8.GetBytes($"{name}:{fileIndex}");
+                TestOperatingSystemSourceFiles.Add(path, bytes);
+                return new WineSourcePackageFile
+                {
+                    Path = path,
+                    Sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)),
+                    SizeBytes = bytes.Length
+                };
+            }).ToArray();
+            sourcePackages.Add(CreateSourcePackage(name, "1.0.0", "main", files));
+        }
+        var winePackageFiles = TestWineSourceFiles.Select(pair =>
+        {
+            var path = "pool/universe/w/wine/" + pair.Key;
+            TestOperatingSystemSourceFiles.Add(path, pair.Value);
+            return new WineSourcePackageFile
+            {
+                Path = path,
+                Sha256 = Convert.ToHexStringLower(SHA256.HashData(pair.Value)),
+                SizeBytes = pair.Value.Length
+            };
+        }).OrderBy(static file => file.Path, StringComparer.Ordinal).ToArray();
+        sourcePackages.Add(CreateSourcePackage("wine", wineVersion, "universe", winePackageFiles));
+        var xorgFiles = Enumerable.Range(0, 4).Select(fileIndex =>
+        {
+            var suffix = fileIndex == 0 ? ".dsc" : $".part-{fileIndex}.tar.xz";
+            var path = $"pool/main/x/xorg-server/xorg-server_21.1.12-1ubuntu1.6{suffix}";
+            var bytes = Encoding.UTF8.GetBytes($"xorg:{fileIndex}");
+            TestOperatingSystemSourceFiles.Add(path, bytes);
+            return new WineSourcePackageFile
+            {
+                Path = path,
+                Sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)),
+                SizeBytes = bytes.Length
+            };
+        }).ToArray();
+        sourcePackages.Add(CreateSourcePackage("xorg-server", "2:21.1.12-1ubuntu1.6", "main", xorgFiles));
+        var sortedSources = sourcePackages.OrderBy(static package => package.Name, StringComparer.Ordinal).ToArray();
+
+        var packageIdentities = new[] { (Name: "fonts-wine", Version: wineVersion) }
+            .Concat(Enumerable.Range(0, 224).Select(index => (Name: $"package-{index:D3}", Version: "1.0.0")))
+            .Append((Name: "wine", Version: wineVersion))
+            .Append((Name: "wine64", Version: wineVersion))
+            .Append((Name: "xvfb", Version: "2:21.1.12-1ubuntu1.6"))
+            .ToArray();
+        var resolvedPackages = packageIdentities.Select((identity, index) =>
+        {
+            var source = identity.Name is "fonts-wine" or "wine" or "wine64"
+                ? sortedSources.Single(static package => package.Name == "wine")
+                : identity.Name == "xvfb"
+                    ? sortedSources.Single(static package => package.Name == "xorg-server")
+                    : sortedSources[index % 160];
+            var binaryBytes = Encoding.UTF8.GetBytes($"{identity.Name}@{identity.Version}");
+            return new WineResolvedPackage
+            {
+                Name = identity.Name,
+                Version = identity.Version,
+                Architecture = "amd64",
+                ArchiveSnapshotId = "20260810T000000Z",
+                ArchiveSuite = "noble",
+                ArchiveComponent = "main",
+                ArchiveIndexPath = "main/binary-amd64/Packages.gz",
+                Path = $"pool/main/t/test/{identity.Name}_{identity.Version.Replace(":", "", StringComparison.Ordinal)}_amd64.deb",
+                Sha256 = Convert.ToHexStringLower(SHA256.HashData(binaryBytes)),
+                SizeBytes = binaryBytes.Length,
+                SourcePackage = source.Name,
+                SourceVersion = source.Version,
+                CopyrightPath = "/usr/share/doc/test/copyright",
+                CopyrightSha256 = Convert.ToHexStringLower(SHA256.HashData("test copyright notice"u8.ToArray())),
+                CopyrightSizeBytes = "test copyright notice"u8.Length
+            };
+        }).ToArray();
+        var resolvedBytes = Encoding.UTF8.GetBytes(string.Join(
+            '\n',
+            resolvedPackages.Select(static package => $"{package.Name}={package.Version}")) + "\n");
+        var wineSource = sourceFiles[0];
+        var xorgSource = xorgFiles.Single(static file => file.Path.EndsWith(".dsc", StringComparison.Ordinal));
+        return new WineRuntimePackageManifest
+        {
+            SchemaVersion = 1,
+            Platform = "linux/amd64",
+            BaseImageId = "dotnet-runtime-deps",
+            Component = new WineRuntimePackageComponent
+            {
+                Id = "wine-coreclr-userspace",
+                Kind = "runtime-dependency",
+                ResolvedVersion = "wine-9.0~repack-4build3+xvfb-2:21.1.12-1ubuntu1.6",
+                License = "LGPL-2.1+",
+                SourceUri = snapshotUri
+            },
+            ArchiveSnapshots = CreateTestArchiveSnapshots(),
+            DirectPackages =
+            [
+                new WineDirectPackage
+                {
+                    Name = "wine",
+                    Version = wineVersion,
+                    Architecture = "all",
+                    Path = "pool/universe/w/wine/wine_test_all.deb",
+                    Sha256 = wineSource.Sha256,
+                    SourcePackage = "wine",
+                    License = "LGPL-2.1+",
+                    SourceUri = baseUri + wineSource.Path,
+                    SourceSha256 = wineSource.Sha256,
+                    SourceSizeBytes = wineSource.SizeBytes
+                },
+                new WineDirectPackage
+                {
+                    Name = "wine64",
+                    Version = wineVersion,
+                    Architecture = "amd64",
+                    Path = "pool/universe/w/wine/wine64_test_amd64.deb",
+                    Sha256 = wineSource.Sha256,
+                    SourcePackage = "wine",
+                    License = "LGPL-2.1+",
+                    SourceUri = baseUri + wineSource.Path,
+                    SourceSha256 = wineSource.Sha256,
+                    SourceSizeBytes = wineSource.SizeBytes
+                },
+                new WineDirectPackage
+                {
+                    Name = "fonts-wine",
+                    Version = wineVersion,
+                    Architecture = "all",
+                    Path = "pool/universe/w/wine/fonts-wine_test_all.deb",
+                    Sha256 = wineSource.Sha256,
+                    SourcePackage = "wine",
+                    License = "LGPL-2.1+",
+                    SourceUri = baseUri + wineSource.Path,
+                    SourceSha256 = wineSource.Sha256,
+                    SourceSizeBytes = wineSource.SizeBytes
+                },
+                new WineDirectPackage
+                {
+                    Name = "xvfb",
+                    Version = "2:21.1.12-1ubuntu1.6",
+                    Architecture = "amd64",
+                    Path = "pool/universe/x/xorg-server/xvfb_test_amd64.deb",
+                    Sha256 = xorgSource.Sha256,
+                    SourcePackage = "xorg-server",
+                    License = "MIT",
+                    SourceUri = snapshotUri + xorgSource.Path,
+                    SourceSha256 = xorgSource.Sha256,
+                    SourceSizeBytes = xorgSource.SizeBytes
+                }
+            ],
+            ResolvedPackages = resolvedPackages,
+            SourcePackages = sortedSources,
+            ResolvedPackageListSha256 = $"sha256:{Convert.ToHexStringLower(SHA256.HashData(resolvedBytes))}",
+            SourceOffer = new WineSourceOffer
+            {
+                BaseUri = baseUri,
+                Package = "wine",
+                Version = wineVersion,
+                License = "LGPL-2.1+",
+                Files = sourceFiles
+            },
+            NoticeArchive = new WineNoticeArchive
+            {
+                ImagePath = WineRuntimePackageManifestLoader.RequiredNoticeArchiveImagePath,
+                Sha256 = Convert.ToHexStringLower(SHA256.HashData(TestWineNoticeArchive)),
+                SizeBytes = TestWineNoticeArchive.Length,
+                EntryCount = 1
+            }
+        };
+
+        static WineSourcePackage CreateSourcePackage(
+            string name,
+            string version,
+            string component,
+            IReadOnlyList<WineSourcePackageFile> files) => new()
+        {
+            Name = name,
+            Version = version,
+            ArchiveSnapshotId = "20260810T000000Z",
+            ArchiveSuite = "noble",
+            ArchiveComponent = component,
+            ArchiveIndexPath = $"{component}/source/Sources.gz",
+            Files = files
+        };
+    }
+
+    private static IReadOnlyList<WineArchiveSnapshot> CreateTestArchiveSnapshots()
+    {
+        const string fingerprint = "F6ECB3762474EDA9D21B7022871920D1991BC93C";
+        return
+        [
+            new WineArchiveSnapshot
+            {
+                Purpose = "operator-installation",
+                Id = "20260810T000000Z",
+                Uri = "https://snapshot.ubuntu.com/ubuntu/20260810T000000Z/",
+                Suites =
+                [
+                    Suite("noble", "cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0", 255_850),
+                    Suite("noble-updates", "ef81441269d3a8bdd8cdfe9095de7deb7f1af70d42191f61f1af3c8fb72cfb32", 126_125),
+                    Suite("noble-security", "3cfb1c8d7499c0bac1bfbe1e32675d200f0ca74b18afc4248c45325a073d0fd0", 126_127)
+                ]
+            },
+            new WineArchiveSnapshot
+            {
+                Purpose = "base-image-package-evidence",
+                Id = "20260610T000000Z",
+                Uri = "https://snapshot.ubuntu.com/ubuntu/20260610T000000Z/",
+                Suites =
+                [
+                    Suite("noble-updates", "f51355c88d0b337b45cede930d215a56f806b7c9339e95487b6600ea02c728ce", 126_125)
+                ]
+            }
+        ];
+
+        static WineArchiveSnapshotSuite Suite(string name, string sha256, long sizeBytes) => new()
+        {
+            Name = name,
+            InReleaseSha256 = sha256,
+            InReleaseSizeBytes = sizeBytes,
+            SigningKeyFingerprint = fingerprint,
+            Indexes =
+            [
+                new WineArchiveIndex
+                {
+                    Kind = "binary",
+                    Component = "main",
+                    Architecture = "amd64",
+                    Path = "main/binary-amd64/Packages.gz",
+                    Sha256 = new string('a', 64),
+                    SizeBytes = 1
+                },
+                new WineArchiveIndex
+                {
+                    Kind = "source",
+                    Component = "main",
+                    Path = "main/source/Sources.gz",
+                    Sha256 = new string('b', 64),
+                    SizeBytes = 1
+                },
+                new WineArchiveIndex
+                {
+                    Kind = "source",
+                    Component = "universe",
+                    Path = "universe/source/Sources.gz",
+                    Sha256 = new string('c', 64),
+                    SizeBytes = 1
+                }
+            ]
+        };
+    }
+
+    private static byte[] CreateTestWineNoticeArchive()
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new TarWriter(stream, TarEntryFormat.Ustar, leaveOpen: true))
+        {
+            var entry = new UstarTarEntry(TarEntryType.RegularFile, "usr/share/doc/test/copyright")
+            {
+                DataStream = new MemoryStream("test copyright notice"u8.ToArray(), writable: false),
+                ModificationTime = DateTimeOffset.UnixEpoch,
+                Uid = 0,
+                Gid = 0,
+                UserName = string.Empty,
+                GroupName = string.Empty
+            };
+            writer.WriteEntry(entry);
+        }
+        return stream.ToArray();
     }
 
     private static async Task<string> CreateDependencyInventoryRepositoryAsync()
@@ -2449,6 +4556,9 @@ public sealed class BundleBuilderTests
                 }
             }),
             TestContext.Current.CancellationToken);
+        File.Copy(
+            Path.Combine(FindRepositoryRoot(), "profiles", "runtime-wine-packages.json"),
+            Path.Combine(root, "profiles", "runtime-wine-packages.json"));
         return root;
     }
 
@@ -2518,9 +4628,153 @@ public sealed class BundleBuilderTests
             null,
             MetadataOnly: false,
             new Dictionary<string, string>());
-        await CreateBuilder(new FakeDockerCli()).BuildAsync(
+        await CreateBuilder(new FakeDockerCli(releaseLabelOverride: releaseId)).BuildAsync(
             command,
             TestContext.Current.CancellationToken);
+    }
+
+    private static async Task<bool> HasPosixVerifierPrerequisitesAsync()
+    {
+        foreach (var command in new[] { "sh", "jq", "openssl", "sha256sum" })
+        {
+            try
+            {
+                var result = await RunAsync(command, ["--version"], new Dictionary<string, string>());
+                if (result.ExitCode != 0 && command != "sh")
+                    return false;
+            }
+            catch (Win32Exception)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static async Task CreateRechecksummedPlanSignatureMutationAsync(string bundle)
+    {
+        const string signaturePath = "profiles/runtime-promotion-plans/dotnet-10-linux-x64.json.sig";
+        var sourcePath = Path.Combine(
+            bundle,
+            ReleaseBundleBuilder.PromotionEvidenceDirectoryName,
+            "source",
+            signaturePath.Replace('/', Path.DirectorySeparatorChar));
+        var signature = await File.ReadAllBytesAsync(sourcePath, TestContext.Current.CancellationToken);
+        signature[0] = signature[0] == (byte)'A' ? (byte)'B' : (byte)'A';
+        await ReplacePromotionEvidenceSourcesAndRechecksumAsync(bundle, await UpdatePlanTrustChainAsync(
+            bundle,
+            planBytes: null,
+            signature));
+    }
+
+    private static async Task CreateRechecksummedPlanFamilyMutationAsync(string bundle)
+    {
+        const string planPath = "profiles/runtime-promotion-plans/dotnet-10-linux-x64.json";
+        var sourcePath = Path.Combine(
+            bundle,
+            ReleaseBundleBuilder.PromotionEvidenceDirectoryName,
+            "source",
+            planPath.Replace('/', Path.DirectorySeparatorChar));
+        var plan = JsonNode.Parse(await File.ReadAllBytesAsync(sourcePath, TestContext.Current.CancellationToken))?.AsObject()
+            ?? throw new InvalidOperationException("Promotion plan fixture is invalid.");
+        plan["family"] = "coreclr-wine";
+        var planBytes = Encoding.UTF8.GetBytes(
+            (plan.ToJsonString() + "\n").ReplaceLineEndings("\n"));
+        await ReplacePromotionEvidenceSourcesAndRechecksumAsync(bundle, await UpdatePlanTrustChainAsync(
+            bundle,
+            planBytes,
+            SignPromotionFixturePlan(planBytes)));
+    }
+
+    private static byte[] SignPromotionFixturePlan(byte[] bytes)
+    {
+        var key = new Ed25519PrivateKeyParameters(
+            Enumerable.Range(0, 32).Select(static value => (byte)value).ToArray(), 0);
+        var signer = new Ed25519Signer();
+        signer.Init(true, key);
+        signer.BlockUpdate(bytes, 0, bytes.Length);
+        return Encoding.ASCII.GetBytes(Convert.ToBase64String(signer.GenerateSignature()) + "\n");
+    }
+
+    private static async Task<IReadOnlyDictionary<string, byte[]>> UpdatePlanTrustChainAsync(
+        string bundle,
+        byte[]? planBytes,
+        byte[] signatureBytes)
+    {
+        const string planPath = "profiles/runtime-promotion-plans/dotnet-10-linux-x64.json";
+        const string signaturePath = planPath + ".sig";
+        const string receiptPath = "profiles/runtime-promotion-receipts/dotnet-10-linux-x64.json";
+        const string activePath = "profiles/runtimes/dotnet-10-linux-x64.json";
+        var sourceRoot = Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, "source");
+        if (planBytes is null)
+        {
+            planBytes = await File.ReadAllBytesAsync(
+                Path.Combine(sourceRoot, planPath.Replace('/', Path.DirectorySeparatorChar)),
+                TestContext.Current.CancellationToken);
+        }
+
+        var receiptFile = Path.Combine(sourceRoot, receiptPath.Replace('/', Path.DirectorySeparatorChar));
+        var receipt = JsonNode.Parse(await File.ReadAllBytesAsync(receiptFile, TestContext.Current.CancellationToken))?.AsObject()
+            ?? throw new InvalidOperationException("Promotion receipt fixture is invalid.");
+        receipt["planSha256"] = "sha256:" + Convert.ToHexStringLower(SHA256.HashData(planBytes));
+        receipt["planSignature"]!["sha256"] = "sha256:" + Convert.ToHexStringLower(SHA256.HashData(signatureBytes));
+        var receiptBytes = Encoding.UTF8.GetBytes(
+            (receipt.ToJsonString() + "\n").ReplaceLineEndings("\n"));
+
+        var activeFile = Path.Combine(sourceRoot, activePath.Replace('/', Path.DirectorySeparatorChar));
+        var active = JsonNode.Parse(await File.ReadAllBytesAsync(activeFile, TestContext.Current.CancellationToken))?.AsObject()
+            ?? throw new InvalidOperationException("Promotion active profile fixture is invalid.");
+        active["promotionReceipt"]!["sha256"] = "sha256:" + Convert.ToHexStringLower(SHA256.HashData(receiptBytes));
+        var activeBytes = Encoding.UTF8.GetBytes(
+            (active.ToJsonString() + "\n").ReplaceLineEndings("\n"));
+
+        return new Dictionary<string, byte[]>(StringComparer.Ordinal)
+        {
+            [planPath] = planBytes,
+            [signaturePath] = signatureBytes,
+            [receiptPath] = receiptBytes,
+            [activePath] = activeBytes
+        };
+    }
+
+    private static async Task ReplacePromotionEvidenceSourcesAndRechecksumAsync(
+        string bundle,
+        IReadOnlyDictionary<string, byte[]> replacements)
+    {
+        var promotionRoot = Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName);
+        var sourceRoot = Path.Combine(promotionRoot, "source");
+        var manifestPath = Path.Combine(promotionRoot, "manifest.json");
+        var manifest = JsonNode.Parse(await File.ReadAllBytesAsync(manifestPath, TestContext.Current.CancellationToken))?.AsObject()
+            ?? throw new InvalidOperationException("Promotion evidence fixture manifest is invalid.");
+        foreach (var (relativePath, bytes) in replacements)
+        {
+            var destination = Path.Combine(sourceRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            await File.WriteAllBytesAsync(destination, bytes, TestContext.Current.CancellationToken);
+            var entry = manifest["entries"]?.AsArray().Select(static item => item!.AsObject()).SingleOrDefault(item =>
+                StringComparer.Ordinal.Equals(item["sourcePath"]?.GetValue<string>(), relativePath))
+                ?? throw new InvalidOperationException($"Promotion evidence fixture has no '{relativePath}' entry.");
+            entry["sha256"] = "sha256:" + Convert.ToHexStringLower(SHA256.HashData(bytes));
+            entry["sizeBytes"] = bytes.LongLength;
+        }
+
+        var manifestBytes = Encoding.UTF8.GetBytes(
+            (manifest.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n").ReplaceLineEndings("\n"));
+        await File.WriteAllBytesAsync(manifestPath, manifestBytes, TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(promotionRoot, "manifest.tsv"),
+            CreatePromotionEvidenceVerificationManifest(manifest, manifestBytes),
+            TestContext.Current.CancellationToken);
+        await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
+    }
+
+    private static void CopyDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (var file in Directory.EnumerateFiles(source))
+            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)));
+        foreach (var directory in Directory.EnumerateDirectories(source))
+            CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
     }
 
     private static async Task WriteExecutableAsync(string path, string contents)
@@ -2562,6 +4816,50 @@ public sealed class BundleBuilderTests
         var errorTask = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
         await process.WaitForExitAsync(TestContext.Current.CancellationToken);
         return new ProcessResult(process.ExitCode, await outputTask, await errorTask);
+    }
+
+    private static string CreatePromotionEvidenceVerificationManifest(
+        JsonObject manifest,
+        byte[] manifestBytes)
+    {
+        static string JoinIds(JsonObject entry, string propertyName)
+        {
+            var ids = entry[propertyName]?.AsArray()
+                ?? throw new InvalidOperationException($"Promotion evidence entry has no '{propertyName}'.");
+            return ids.Count == 0
+                ? "-"
+                : string.Join(',', ids.Select(static id => id?.GetValue<string>()
+                    ?? throw new InvalidOperationException("Promotion evidence ID is invalid.")));
+        }
+
+        var runtimeIds = manifest["promotedRuntimeIds"]?.AsArray()
+            ?? throw new InvalidOperationException("Promotion evidence manifest has no runtime IDs.");
+        var lines = new List<string>
+        {
+            "schemaVersion\t" + manifest["schemaVersion"]?.GetValue<int>().ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "buildSourceRevision\t" + manifest["buildSourceRevision"]?.GetValue<string>(),
+            "releaseSourceRevision\t" + manifest["releaseSourceRevision"]?.GetValue<string>(),
+            "manifestJsonSha256\tsha256:" + Convert.ToHexString(SHA256.HashData(manifestBytes)).ToLowerInvariant(),
+            "promotedRuntimeIds\t" + string.Join(',', runtimeIds.Select(static id => id?.GetValue<string>()
+                ?? throw new InvalidOperationException("Promotion evidence runtime ID is invalid.")))
+        };
+        foreach (var entryNode in manifest["entries"]?.AsArray()
+                     ?? throw new InvalidOperationException("Promotion evidence manifest has no entries."))
+        {
+            var entry = entryNode?.AsObject()
+                ?? throw new InvalidOperationException("Promotion evidence entry is invalid.");
+            lines.Add(string.Join(
+                '\t',
+                "entry",
+                entry["kind"]?.GetValue<string>(),
+                JoinIds(entry, "profileIds"),
+                JoinIds(entry, "runtimeIds"),
+                entry["sourcePath"]?.GetValue<string>(),
+                entry["bundlePath"]?.GetValue<string>(),
+                entry["sha256"]?.GetValue<string>(),
+                entry["sizeBytes"]?.GetValue<long>().ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        return string.Join('\n', lines) + "\n";
     }
 
     private static string ReadPointer(string installRoot, string name) =>
@@ -2696,7 +4994,378 @@ public sealed class BundleBuilderTests
             docker,
             signer,
             new FakeRepositorySourceInspector(
-                new RepositorySourceState(true, TestSourceRevision, false)));
+                new RepositorySourceState(true, TestSourceRevision, false)),
+            new FakeRuntimePromotionSourceInspector(),
+            new FakeExternalSourceMaterialFetcher(),
+            new TestWineRuntimePackageManifestSnapshotProvider(),
+            RuntimePromotionTrustTests.CreateTestPlanVerifier());
+
+    private sealed class TestWineRuntimePackageManifestSnapshotProvider
+        : IWineRuntimePackageManifestSnapshotProvider
+    {
+        public Task<WineRuntimePackageManifestSnapshot> LoadValidatedAsync(
+            string repositoryRoot,
+            ReleaseLockDocument releaseLock,
+            CancellationToken cancellationToken)
+        {
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(
+                TestWineManifest,
+                RuntimeProfileFixtureJsonOptions);
+            return Task.FromResult(new WineRuntimePackageManifestSnapshot(
+                TestWineManifest,
+                $"sha256:{Convert.ToHexStringLower(SHA256.HashData(bytes))}",
+                bytes));
+        }
+    }
+
+    private static readonly Lazy<PromotionFixtureData> PromotionFixtures =
+        new(PromotionFixtureData.Load);
+
+    private sealed record PromotionFixtureImage(
+        string RuntimeId,
+        string Reference,
+        string ImageId,
+        long SizeBytes,
+        string BuildSourceRevision,
+        string RuntimeCommit,
+        string JitCommit);
+
+    private sealed record PromotionFixtureHelper(
+        string Reference,
+        string ImageId,
+        long SizeBytes,
+        string BuildSourceRevision);
+
+    private sealed record PromotionFixtureFile(
+        string ImageId,
+        string Path,
+        DockerImageFileInspection Inspection);
+
+    private sealed class PromotionFixtureData(
+        string repositoryRoot,
+        IReadOnlyDictionary<string, PromotionFixtureImage> imagesByReference,
+        IReadOnlyDictionary<string, PromotionFixtureImage> imagesById,
+        IReadOnlyDictionary<string, PromotionFixtureHelper> helpersByReference,
+        IReadOnlyDictionary<string, PromotionFixtureFile> files,
+        IReadOnlyList<string> sourceClosurePaths)
+    {
+        public string RepositoryRoot { get; } = repositoryRoot;
+        public IReadOnlyDictionary<string, PromotionFixtureImage> ImagesByReference { get; } = imagesByReference;
+        public IReadOnlyDictionary<string, PromotionFixtureImage> ImagesById { get; } = imagesById;
+        public IReadOnlyDictionary<string, PromotionFixtureHelper> HelpersByReference { get; } = helpersByReference;
+        public IReadOnlyDictionary<string, PromotionFixtureFile> Files { get; } = files;
+        public IReadOnlyList<string> SourceClosurePaths { get; } = sourceClosurePaths;
+
+        public static PromotionFixtureData Load()
+        {
+            var sourceRoot = FindSourceRepositoryRoot();
+            var root = Path.Combine(Path.GetTempPath(), $"sharplabnext-bundle-promotion-{Guid.NewGuid():N}");
+            CopyRepositorySource(sourceRoot, root);
+            CopyRequiredNpmSourceMaterial(sourceRoot, root);
+            InstallCompletedPromotion(root);
+            var deployment = JsonSerializer.Deserialize<DeploymentImageManifest>(
+                File.ReadAllText(Path.Combine(root, "deploy", "images.json")),
+                RuntimeProfileFixtureJsonOptions)
+                ?? throw new InvalidOperationException("Deployment image fixture is invalid.");
+            var imagesByReference = new Dictionary<string, PromotionFixtureImage>(StringComparer.Ordinal);
+            var imagesById = new Dictionary<string, PromotionFixtureImage>(StringComparer.Ordinal);
+            var helpersByReference = new Dictionary<string, PromotionFixtureHelper>(StringComparer.Ordinal);
+            var files = new Dictionary<string, PromotionFixtureFile>(StringComparer.Ordinal);
+            var closurePaths = new HashSet<string>(StringComparer.Ordinal)
+            {
+                "deploy/images.json",
+                "profiles/catalog/catalog.json",
+                "profiles/lock.json",
+                "profiles/runtime-matrix.json"
+            };
+
+            foreach (var definition in deployment.Images.Where(static image => image.ImmutableReference is not null))
+            {
+                var runtimeId = definition.RuntimeId
+                    ?? throw new InvalidOperationException("Promotion fixture contains a non-runtime immutable image.");
+                using var profile = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+                    root,
+                    "profiles",
+                    "runtimes",
+                    runtimeId + ".json")));
+                var receiptPath = profile.RootElement
+                    .GetProperty("promotionReceipt")
+                    .GetProperty("path")
+                    .GetString()
+                    ?? throw new InvalidOperationException("Promotion fixture profile has no receipt path.");
+                using var receipt = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+                    root,
+                    receiptPath.Replace('/', Path.DirectorySeparatorChar))));
+                var receiptImage = receipt.RootElement.GetProperty("image");
+                var identity = new PromotionFixtureImage(
+                    runtimeId,
+                    receiptImage.GetProperty("reference").GetString()
+                        ?? throw new InvalidOperationException("Promotion receipt has no image reference."),
+                    receiptImage.GetProperty("imageId").GetString()
+                        ?? throw new InvalidOperationException("Promotion receipt has no image ID."),
+                    receiptImage.GetProperty("sizeBytes").GetInt64(),
+                    receipt.RootElement.GetProperty("sourceRevision").GetString()
+                        ?? throw new InvalidOperationException("Promotion receipt has no source revision."),
+                    receipt.RootElement.GetProperty("runtimeIdentity").GetProperty("runtimeCommit").GetString()
+                        ?? throw new InvalidOperationException("Promotion receipt has no runtime commit."),
+                    receipt.RootElement.GetProperty("runtimeIdentity").GetProperty("jitCommit").GetString()
+                        ?? throw new InvalidOperationException("Promotion receipt has no JIT commit."));
+                if (!StringComparer.Ordinal.Equals(identity.Reference, definition.ImmutableReference))
+                    throw new InvalidOperationException("Promotion fixture deployment and receipt references differ.");
+                imagesByReference.Add(identity.Reference, identity);
+                imagesById.Add(identity.ImageId, identity);
+                closurePaths.Add(receiptPath);
+                closurePaths.Add($"profiles/runtimes/{runtimeId}.json");
+                closurePaths.Add($"profiles/runtime-promotion-plans/{runtimeId}.json");
+                closurePaths.Add($"profiles/runtime-promotion-plans/{runtimeId}.json.sig");
+                closurePaths.Add($"profiles/runtime-promotion-plans/{runtimeId}.profile.json");
+
+                if (receipt.RootElement.TryGetProperty("wineOperator", out var wineOperator))
+                {
+                    closurePaths.Add(wineOperator.GetProperty("receiptPath").GetString()
+                        ?? throw new InvalidOperationException("Promotion Wine operator binding has no receipt path."));
+                    closurePaths.Add(wineOperator.GetProperty("signaturePath").GetString()
+                        ?? throw new InvalidOperationException("Promotion Wine operator binding has no signature path."));
+                }
+
+                foreach (var check in receipt.RootElement.GetProperty("checks").EnumerateArray())
+                {
+                    var evidencePath = check.GetProperty("evidencePath").GetString()
+                        ?? throw new InvalidOperationException("Promotion check has no evidence path.");
+                    closurePaths.Add(evidencePath);
+                    AddEvidenceArtifacts(root, evidencePath, identity.ImageId, files);
+                }
+
+                var performancePath = receipt.RootElement.GetProperty("performance")
+                    .GetProperty("evidencePath")
+                    .GetString()
+                    ?? throw new InvalidOperationException("Promotion performance binding has no evidence path.");
+                closurePaths.Add(performancePath);
+                using var performance = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+                    root,
+                    performancePath.Replace('/', Path.DirectorySeparatorChar))));
+                var helperImage = performance.RootElement.GetProperty("measurementHelper").GetProperty("image");
+                var helper = new PromotionFixtureHelper(
+                    helperImage.GetProperty("reference").GetString()
+                        ?? throw new InvalidOperationException("Promotion measurement helper has no reference."),
+                    helperImage.GetProperty("imageId").GetString()
+                        ?? throw new InvalidOperationException("Promotion measurement helper has no image ID."),
+                    helperImage.GetProperty("sizeBytes").GetInt64(),
+                    performance.RootElement.GetProperty("measurementHelper").GetProperty("sourceRevision").GetString()
+                        ?? throw new InvalidOperationException("Promotion measurement helper has no source revision."));
+                helpersByReference.TryAdd(helper.Reference, helper);
+            }
+
+            return new PromotionFixtureData(
+                root,
+                imagesByReference,
+                imagesById,
+                helpersByReference,
+                files,
+                closurePaths.OrderBy(static path => path, StringComparer.Ordinal).ToArray());
+        }
+
+        private static void InstallCompletedPromotion(string root)
+        {
+            var profilePath = Path.Combine(root, "profiles", "runtimes", "dotnet-10-linux-x64.json");
+            var template = JsonSerializer.Deserialize<RuntimeProfileDefinition>(
+                File.ReadAllBytes(profilePath),
+                RuntimeProfileFixtureJsonOptions)
+                ?? throw new InvalidOperationException("Bundle promotion fixture profile is invalid.");
+            var releaseLock = JsonSerializer.Deserialize<ReleaseLockDocument>(
+                File.ReadAllBytes(Path.Combine(root, "profiles", "lock.json")),
+                RuntimeProfileFixtureJsonOptions)
+                ?? throw new InvalidOperationException("Bundle promotion fixture release lock is invalid.");
+            using var promotion = new RuntimePromotionTrustTests.PromotionFixture(
+                profileTemplate: template,
+                componentTemplate: releaseLock.Components[template.Id]);
+            promotion.ExportCompletedPromotionMaterial(root);
+
+            var profile = JsonNode.Parse(File.ReadAllBytes(profilePath))!.AsObject();
+            var receipt = profile["promotionReceipt"]!.AsObject();
+            var immutableReference = profile["image"]!.GetValue<string>();
+            var runtimeImageId = profile["runtimeImageId"]!.GetValue<string>();
+
+            var deploymentPath = Path.Combine(root, "deploy", "images.json");
+            var deployment = JsonNode.Parse(File.ReadAllBytes(deploymentPath))!.AsObject();
+            foreach (var image in deployment["images"]!.AsArray().Select(static item => item!.AsObject()))
+            {
+                if (image["runtimeId"]?.GetValue<string>() is not { } runtimeId)
+                    continue;
+                if (runtimeId == template.Id)
+                {
+                    image["repository"] = immutableReference[..immutableReference.LastIndexOf('@')];
+                    image["immutableReference"] = immutableReference;
+                }
+                else
+                {
+                    image.Remove("immutableReference");
+                }
+            }
+            WriteJson(deploymentPath, deployment);
+
+            var catalogPath = Path.Combine(root, "profiles", "catalog", "catalog.json");
+            var catalog = JsonNode.Parse(File.ReadAllBytes(catalogPath))!.AsObject();
+            var catalogRuntime = catalog["runtimes"]!.AsArray()
+                .Select(static item => item!.AsObject())
+                .Single(item => StringComparer.Ordinal.Equals(
+                    item["id"]!.GetValue<string>(),
+                    template.Id));
+            catalogRuntime["runtimeImageId"] = runtimeImageId;
+            WriteJson(catalogPath, catalog);
+
+            foreach (var runtimePath in Directory.EnumerateFiles(
+                         Path.Combine(root, "profiles", "runtimes"), "*.json", SearchOption.TopDirectoryOnly))
+            {
+                if (StringComparer.Ordinal.Equals(runtimePath, profilePath))
+                    continue;
+                var runtime = JsonNode.Parse(File.ReadAllBytes(runtimePath))!.AsObject();
+                runtime.Remove("promotionReceipt");
+                var image = runtime["image"]?.GetValue<string>();
+                if (image?.Contains("@sha256:", StringComparison.Ordinal) == true)
+                    runtime["image"] = $"sharplabnext/{runtime["id"]!.GetValue<string>()}:test";
+                WriteJson(runtimePath, runtime);
+            }
+
+            var matrixPath = Path.Combine(root, "profiles", "runtime-matrix.json");
+            var matrix = JsonNode.Parse(File.ReadAllBytes(matrixPath))!.AsObject();
+            var dotnet10 = matrix["coreClr"]!.AsArray()
+                .Select(static item => item!.AsObject())
+                .Single(static item => item["id"]!.GetValue<string>() == "dotnet-10");
+            var capability = dotnet10["linuxCapability"]!.AsObject();
+            capability["promotionState"] = "verified";
+            capability.Remove("blockedReason");
+            capability["promotionReceipt"] = receipt.DeepClone();
+            WriteJson(matrixPath, matrix);
+        }
+
+        private static void CopyRepositorySource(string source, string destination)
+        {
+            Directory.CreateDirectory(destination);
+            var pending = new Stack<(string Source, string Destination)>();
+            pending.Push((source, destination));
+            while (pending.Count > 0)
+            {
+                var (currentSource, currentDestination) = pending.Pop();
+                foreach (var file in Directory.EnumerateFiles(currentSource))
+                {
+                    File.Copy(file, Path.Combine(currentDestination, Path.GetFileName(file)));
+                }
+                foreach (var directory in Directory.EnumerateDirectories(currentSource))
+                {
+                    var name = Path.GetFileName(directory);
+                    if (name is ".git" or ".tmp" or "bin" or "obj" or "node_modules" or ".vs")
+                        continue;
+                    var child = Path.Combine(currentDestination, name);
+                    Directory.CreateDirectory(child);
+                    pending.Push((directory, child));
+                }
+            }
+        }
+
+        private static void CopyRequiredNpmSourceMaterial(string sourceRoot, string destinationRoot)
+        {
+            using var packageLock = JsonDocument.Parse(File.ReadAllBytes(
+                Path.Combine(sourceRoot, "frontend", "package-lock.json")));
+            foreach (var package in packageLock.RootElement
+                         .GetProperty("packages")
+                         .EnumerateObject()
+                         .Where(static property =>
+                             property.Name.StartsWith("node_modules/", StringComparison.Ordinal) &&
+                             property.Value.TryGetProperty("license", out var license) &&
+                             license.GetString() is { } value &&
+                             (value.Contains("LGPL-", StringComparison.OrdinalIgnoreCase) ||
+                              value.Contains("MPL-", StringComparison.OrdinalIgnoreCase))))
+            {
+                var relativePackagePath = package.Name["node_modules/".Length..]
+                    .Replace('/', Path.DirectorySeparatorChar);
+                var source = Path.Combine(sourceRoot, "frontend", "node_modules", relativePackagePath);
+                if (!Directory.Exists(source))
+                    continue;
+                var destination = Path.Combine(destinationRoot, "frontend", "node_modules", relativePackagePath);
+                var pending = new Stack<(string Source, string Destination)>();
+                pending.Push((source, destination));
+                while (pending.Count > 0)
+                {
+                    var (currentSource, currentDestination) = pending.Pop();
+                    Directory.CreateDirectory(currentDestination);
+                    foreach (var file in Directory.EnumerateFiles(currentSource))
+                        File.Copy(file, Path.Combine(currentDestination, Path.GetFileName(file)));
+                    foreach (var directory in Directory.EnumerateDirectories(currentSource))
+                    {
+                        var child = Path.Combine(currentDestination, Path.GetFileName(directory));
+                        pending.Push((directory, child));
+                    }
+                }
+            }
+        }
+
+        private static void WriteJson(string path, JsonNode value) =>
+            File.WriteAllText(
+                path,
+                value.ToJsonString(new JsonSerializerOptions { WriteIndented = true })
+                    .ReplaceLineEndings("\n") + "\n");
+
+        private static void AddEvidenceArtifacts(
+            string root,
+            string evidencePath,
+            string imageId,
+            IDictionary<string, PromotionFixtureFile> files)
+        {
+            using var evidence = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+                root,
+                evidencePath.Replace('/', Path.DirectorySeparatorChar))));
+            if (!evidence.RootElement.TryGetProperty("artifacts", out var artifacts))
+                return;
+            foreach (var artifact in artifacts.EnumerateArray())
+            {
+                var path = artifact.GetProperty("path").GetString()
+                    ?? throw new InvalidOperationException("Promotion evidence artifact has no path.");
+                var file = new PromotionFixtureFile(
+                    imageId,
+                    path,
+                    new DockerImageFileInspection(
+                        artifact.GetProperty("sha256").GetString()
+                            ?? throw new InvalidOperationException("Promotion evidence artifact has no SHA-256."),
+                        artifact.GetProperty("sizeBytes").GetInt64()));
+                var key = FileKey(imageId, path);
+                if (files.TryGetValue(key, out var existing) && existing != file)
+                    throw new InvalidOperationException("Promotion fixture has conflicting retained image artifacts.");
+                files[key] = file;
+            }
+        }
+
+        public static string FileKey(string imageId, string path) => imageId + "\n" + path;
+    }
+
+    private sealed class FakeRuntimePromotionSourceInspector : IRuntimePromotionSourceInspector
+    {
+        public Task<bool> IsAncestorAsync(
+            string repositoryRoot,
+            string ancestorRevision,
+            string descendantRevision,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(
+                PromotionFixtures.Value.ImagesByReference.Values
+                    .Select(static image => image.BuildSourceRevision)
+                    .Distinct(StringComparer.Ordinal)
+                    .Single() == ancestorRevision &&
+                TestSourceRevision == descendantRevision);
+
+        public Task<IReadOnlyList<RuntimePromotionSourceChange>> DiffAsync(
+            string repositoryRoot,
+            string ancestorRevision,
+            string descendantRevision,
+            CancellationToken cancellationToken = default)
+        {
+            if (!IsAncestorAsync(repositoryRoot, ancestorRevision, descendantRevision, cancellationToken).Result)
+                throw new InvalidOperationException("Promotion fixture was asked for an unrelated source closure.");
+            return Task.FromResult<IReadOnlyList<RuntimePromotionSourceChange>>(
+                PromotionFixtures.Value.SourceClosurePaths
+                    .Select(static path => new RuntimePromotionSourceChange("M", path))
+                    .ToArray());
+        }
+    }
 
     private sealed class FakeDockerCli(
         string sourceRevision = TestSourceRevision,
@@ -2708,7 +5377,8 @@ public sealed class BundleBuilderTests
         string? omittedReferenceSetId = null,
         string? componentIdOverride = null,
         string? componentVersionOverride = null,
-        bool omitComponentLabels = false) : IDockerCli
+        bool omitComponentLabels = false,
+        string? releaseLabelOverride = null) : IDockerCli
     {
         private static readonly JsonSerializerOptions FixtureJsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -2754,73 +5424,80 @@ public sealed class BundleBuilderTests
             string reference,
             CancellationToken cancellationToken)
         {
-            var tagSeparator = reference.LastIndexOf(':');
-            var releaseId = tagSeparator < 0 ? "development" : reference[(tagSeparator + 1)..];
-            var runtimeCommit = runtimeCommitOverride ?? (reference.Contains("runtime-dotnet10", StringComparison.Ordinal)
-                ? "901ca941248413c79832d2fdbd709da0c4386353"
-                : reference.Contains("runtime-dotnet11", StringComparison.Ordinal)
-                    ? "f7b4c5716faaee8fb8a289aed29118cad955c45f"
-                    : reference.Contains("runtime-const-generics", StringComparison.Ordinal)
-                        ? "79f7f1408b2c811904c983419b45139e654f1e46"
-                        : TestSourceRevision);
+            if (PromotionFixtures.Value.HelpersByReference.TryGetValue(reference, out var helper))
+            {
+                return Task.FromResult(new DockerImageInspection(
+                    helper.ImageId,
+                    "linux",
+                    "amd64",
+                    helper.SizeBytes,
+                    [helper.Reference],
+                    new Dictionary<string, string>
+                    {
+                        [RepositorySourceProvenanceResolver.ImageLabel] = helper.BuildSourceRevision,
+                        ["org.opencontainers.image.revision"] = helper.BuildSourceRevision
+                    }));
+            }
+
+            var definition = FindDeploymentDefinition(reference);
+            var promoted = definition.ImmutableReference is not null &&
+                StringComparer.Ordinal.Equals(reference, definition.ImmutableReference);
+            var promotion = promoted
+                ? PromotionFixtures.Value.ImagesByReference[reference]
+                : null;
+            var releaseId = promotion is null
+                ? ReleaseIdFromTaggedReference(reference)
+                : releaseLabelOverride ?? CatalogReleaseId();
+            var runtimeCommit = runtimeCommitOverride ?? promotion?.RuntimeCommit ?? RuntimeCommit(definition);
+            var jitCommit = runtimeCommitOverride ?? promotion?.JitCommit ?? RuntimeJitCommit(definition);
             var labels = new Dictionary<string, string>
             {
                 ["org.opencontainers.image.version"] = releaseId,
-                ["org.opencontainers.image.revision"] = "test-revision",
-                [RepositorySourceProvenanceResolver.ImageLabel] = sourceRevision,
+                ["org.opencontainers.image.revision"] = promotion?.BuildSourceRevision ?? sourceRevision,
+                [RepositorySourceProvenanceResolver.ImageLabel] = promotion?.BuildSourceRevision ?? sourceRevision,
                 [ReleaseBundleBuilder.RuntimeCommitLabel] = runtimeCommit,
-                [ReleaseBundleBuilder.JitCommitLabel] = runtimeCommit
+                [ReleaseBundleBuilder.JitCommitLabel] = jitCommit
             };
+            if (promotion is not null)
+            {
+                labels["io.sharplabnext.source.context"] = "committed";
+                labels["com.sharplabnext.runtime-candidate.promotion-eligible"] = "true";
+            }
             if (!omitReferenceSetLabels)
             {
-                labels[ReleaseBundleBuilder.ReferenceSetLabelPrefix + "net10-ref"] =
-                    referenceSetDigestOverride ??
-                    "sha512-rWQyRVuTET24XM2aUdxbWPmhRgd5mIypan61IN8BOCfZoQbqP5VX5EjRDcxLwF3RzzIkxTyeh0SbVuGLt93xGw==";
-                labels[ReleaseBundleBuilder.ReferenceSetLabelPrefix + "net11-preview-ref"] =
-                    "sha512-16anh5wbcRpV0Dm2nZHURKka5JSL1VjMIlG4xD2NwYfXaI4ZSUknKttRhjH1TE1V70+d/XbwgbAfmCI7GNLK6A==";
-                labels[ReleaseBundleBuilder.ReferenceSetLabelPrefix + "const-generics-ref"] =
-                    "sha256:00f0f9fcfc083e931004ceaa914633990ad7e389ce8d21012b97af5844f501b4";
-                labels[ReleaseBundleBuilder.ReferenceSetLabelPrefix + "netfx48-ref"] =
-                    LockedComponentDigest("netfx48-ref");
-                foreach (var referenceSetId in new[]
-                         {
-                             "netfx20-managed-ref",
-                             "netfx30-managed-ref",
-                             "netfx35-managed-ref",
-                             "netfx40-managed-ref",
-                             "netfx45-managed-ref",
-                             "netfx451-managed-ref",
-                             "netfx452-managed-ref",
-                             "netfx46-managed-ref",
-                             "netfx461-managed-ref",
-                             "netfx462-managed-ref",
-                             "netfx47-managed-ref",
-                             "netfx471-managed-ref",
-                             "netfx472-managed-ref"
-                         })
+                foreach (var referenceSetId in LockedReferenceSetIds())
                 {
-                    if (!string.Equals(referenceSetId, omittedReferenceSetId, StringComparison.Ordinal))
+                    if (string.Equals(referenceSetId, omittedReferenceSetId, StringComparison.Ordinal))
+                        continue;
+
+                    var digest = referenceSetId switch
                     {
-                        labels[ReleaseBundleBuilder.ReferenceSetLabelPrefix + referenceSetId] =
-                            LockedComponentDigest(referenceSetId);
-                    }
-                }
-                labels[ReleaseBundleBuilder.ReferenceSetLabelPrefix + "netfx48-managed-ref"] =
-                    netFxManagedReferenceSetDigestOverride ?? LockedComponentDigest("netfx48-managed-ref");
-                labels[ReleaseBundleBuilder.ReferenceSetLabelPrefix + "jsharp20-ref"] =
-                    LockedComponentDigest("jsharp20-ref");
-                if (artifactsDefaultReferenceSetDigestOverride is not null &&
-                    reference.Contains("worker-artifacts-default:", StringComparison.Ordinal))
-                {
-                    labels[ReleaseBundleBuilder.ReferenceSetLabelPrefix + "netfx20-managed-ref"] =
-                        artifactsDefaultReferenceSetDigestOverride;
+                        "net10-ref" => referenceSetDigestOverride ?? LockedComponentDigest(referenceSetId),
+                        "netfx48-managed-ref" =>
+                            netFxManagedReferenceSetDigestOverride ?? LockedComponentDigest(referenceSetId),
+                        "netfx20-managed-ref" when artifactsDefaultReferenceSetDigestOverride is not null &&
+                            reference.Contains("worker-artifacts-default:", StringComparison.Ordinal) =>
+                            artifactsDefaultReferenceSetDigestOverride,
+                        _ => LockedComponentDigest(referenceSetId)
+                    };
+                    labels[ReleaseBundleBuilder.ReferenceSetLabelPrefix + referenceSetId] = digest;
                 }
             }
             AddBaseImageLabels(labels);
             if (!omitComponentLabels)
+            {
                 AddComponentLabels(reference, labels, componentIdOverride, componentVersionOverride);
+                if (reference.Contains("runtime-wine-", StringComparison.Ordinal))
+                {
+                    var prefix = ReleaseBundleBuilder.ComponentLabelPrefix + "wine-coreclr-userspace.";
+                    labels[prefix + "version"] = TestWineManifest.Component.ResolvedVersion;
+                    labels[prefix + "digest"] = "sha256:" + Convert.ToHexStringLower(SHA256.HashData(
+                        JsonSerializer.SerializeToUtf8Bytes(TestWineManifest, RuntimeProfileFixtureJsonOptions)));
+                    labels[prefix + "source-uri"] = TestWineManifest.Component.SourceUri;
+                }
+            }
 
-            var imageId = reference switch
+            var imageId = promotion?.ImageId ?? reference switch
             {
                 var value when value.Contains("worker-roslyn-netfx48:", StringComparison.Ordinal) =>
                     RoslynNetFx48ImageId,
@@ -2835,7 +5512,7 @@ public sealed class BundleBuilderTests
                 var value when value.Contains("worker-peachpie:", StringComparison.Ordinal) => PeachPieImageId,
                 var value when value.Contains("worker-cppcli:", StringComparison.Ordinal) => CppCliImageId,
                 var value when value.Contains("worker-jsharp:", StringComparison.Ordinal) => JSharpImageId,
-                var value when value.Contains("runtime-wine-netfx48:", StringComparison.Ordinal) =>
+                var value when value.Contains("runtime-wine-netfx48", StringComparison.Ordinal) =>
                     WineNetFxRuntimeImageId,
                 var value when value.Contains("runtime-wine-jsharp20:", StringComparison.Ordinal) =>
                     WineJSharpRuntimeImageId,
@@ -2855,8 +5532,8 @@ public sealed class BundleBuilderTests
                 imageId,
                 "linux",
                 "amd64",
-                536870912,
-                [],
+                promotion?.SizeBytes ?? 536870912,
+                promotion is null ? [] : [promotion.Reference],
                 labels));
         }
 
@@ -2864,10 +5541,90 @@ public sealed class BundleBuilderTests
             string imageId,
             string absolutePath,
             long maximumBytes,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(new DockerImageFileInspection(
+            CancellationToken cancellationToken)
+        {
+            if (absolutePath == RuntimeMeasurementHelperContract.Entrypoint)
+            {
+                return Task.FromResult(new DockerImageFileInspection(
+                    RuntimeMeasurementHelperContract.ContentSha256,
+                    10_365));
+            }
+            if (PromotionFixtures.Value.Files.TryGetValue(
+                    PromotionFixtureData.FileKey(imageId, absolutePath),
+                    out var file))
+            {
+                return Task.FromResult(file.Inspection);
+            }
+            return Task.FromResult(new DockerImageFileInspection(
                 "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 1));
+        }
+
+        private static DeploymentImageDefinition FindDeploymentDefinition(string reference)
+        {
+            var root = FindRepositoryRoot();
+            var deployment = JsonSerializer.Deserialize<DeploymentImageManifest>(
+                File.ReadAllText(Path.Combine(root, "deploy", "images.json")),
+                FixtureJsonOptions) ?? throw new InvalidOperationException("Deployment image fixture is invalid.");
+            var exact = deployment.Images.SingleOrDefault(item =>
+                StringComparer.Ordinal.Equals(item.ImmutableReference, reference));
+            if (exact is not null)
+                return exact;
+            var name = ImageName(reference);
+            return deployment.Images.Single(item =>
+                StringComparer.Ordinal.Equals(ImageName(item.Repository), name));
+        }
+
+        private static string ImageName(string reference)
+        {
+            var namedReference = reference.Split('@', 2)[0];
+            var slash = namedReference.LastIndexOf('/');
+            var colon = namedReference.LastIndexOf(':');
+            var start = slash + 1;
+            var end = colon > slash ? colon : namedReference.Length;
+            return namedReference[start..end];
+        }
+
+        private static string ReleaseIdFromTaggedReference(string reference)
+        {
+            if (reference.Contains('@'))
+                return CatalogReleaseId();
+            var slash = reference.LastIndexOf('/');
+            var colon = reference.LastIndexOf(':');
+            return colon > slash ? reference[(colon + 1)..] : "development";
+        }
+
+        private static string CatalogReleaseId()
+        {
+            using var catalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+                FindRepositoryRoot(), "profiles", "catalog", "catalog.json")));
+            return catalog.RootElement.GetProperty("releaseId").GetString()
+                ?? throw new InvalidOperationException("Catalog fixture has no release ID.");
+        }
+
+        private static string RuntimeCommit(DeploymentImageDefinition definition)
+        {
+            if (definition.RuntimeId is null)
+                return TestSourceRevision;
+            var releaseLock = LoadReleaseLock();
+            return releaseLock.Components[definition.LockComponentId ?? definition.RuntimeId].Commit ?? "not-applicable";
+        }
+
+        private static string RuntimeJitCommit(DeploymentImageDefinition definition)
+        {
+            if (definition.RuntimeId is null)
+                return TestSourceRevision;
+            var releaseLock = LoadReleaseLock();
+            return releaseLock.Components[definition.LockComponentId ?? definition.RuntimeId].JitCommit ?? "not-applicable";
+        }
+
+        private static ReleaseLockDocument LoadReleaseLock()
+        {
+            var root = FindRepositoryRoot();
+            return JsonSerializer.Deserialize<ReleaseLockDocument>(
+                File.ReadAllText(Path.Combine(root, "profiles", "lock.json")),
+                FixtureJsonOptions) ?? throw new InvalidOperationException("Release lock fixture is invalid.");
+        }
 
         private static void AddComponentLabels(
             string reference,
@@ -2876,21 +5633,8 @@ public sealed class BundleBuilderTests
             string? componentVersionOverride)
         {
             var root = FindRepositoryRoot();
-            var deployment = JsonSerializer.Deserialize<DeploymentImageManifest>(
-                File.ReadAllText(Path.Combine(root, "deploy", "images.json")),
-                FixtureJsonOptions) ?? throw new InvalidOperationException("Deployment image fixture is invalid.");
-            var releaseLock = JsonSerializer.Deserialize<ReleaseLockDocument>(
-                File.ReadAllText(Path.Combine(root, "profiles", "lock.json")),
-                FixtureJsonOptions) ?? throw new InvalidOperationException("Release lock fixture is invalid.");
-            var slash = reference.LastIndexOf('/');
-            var colon = reference.LastIndexOf(':');
-            var imageName = reference[(slash + 1)..colon];
-            var definition = deployment.Images.Single(item =>
-            {
-                var repositorySlash = item.Repository.LastIndexOf('/');
-                var repositoryName = item.Repository[(repositorySlash + 1)..];
-                return string.Equals(repositoryName, imageName, StringComparison.Ordinal);
-            });
+            var releaseLock = LoadReleaseLock();
+            var definition = FindDeploymentDefinition(reference);
             var primary = definition.LockComponentId ?? definition.ToolchainId ?? definition.RuntimeId ??
                 definition.ArtifactProcessorId;
             var componentIds = primary is null
@@ -2936,6 +5680,13 @@ public sealed class BundleBuilderTests
                         $"Release lock component '{componentId}' has no digest.");
         }
 
+        private static string[] LockedReferenceSetIds() =>
+            LoadReleaseLock().Components
+                .Where(static pair => string.Equals(pair.Value.Kind, "reference-set", StringComparison.Ordinal))
+                .Select(static pair => pair.Key)
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+
         private static void AddOptional(Dictionary<string, string> labels, string label, string? value)
         {
             if (!string.IsNullOrWhiteSpace(value))
@@ -2949,6 +5700,21 @@ public sealed class BundleBuilderTests
         {
             SavedReferences.AddRange(references);
             await File.WriteAllTextAsync(outputPath, "fake image archive", cancellationToken);
+        }
+
+        public async Task<DockerImageFileInspection> CopyImageFileAsync(
+            string imageId,
+            string absolutePath,
+            string destinationPath,
+            long maximumBytes,
+            CancellationToken cancellationToken)
+        {
+            Assert.Equal(WineRuntimePackageManifestLoader.RequiredNoticeArchiveImagePath, absolutePath);
+            Assert.True(maximumBytes >= TestWineNoticeArchive.Length);
+            await File.WriteAllBytesAsync(destinationPath, TestWineNoticeArchive, cancellationToken);
+            return new DockerImageFileInspection(
+                "sha256:" + Convert.ToHexStringLower(SHA256.HashData(TestWineNoticeArchive)),
+                TestWineNoticeArchive.Length);
         }
     }
 
@@ -2976,6 +5742,44 @@ public sealed class BundleBuilderTests
             Assert.True(File.Exists(publicKeyPath));
             WasCalled = true;
             await File.WriteAllTextAsync(signaturePath, "test signature", cancellationToken);
+        }
+    }
+
+    private sealed class FakeExternalSourceMaterialFetcher : IExternalSourceMaterialFetcher
+    {
+        public Task<ExternalSourceMaterial> FetchAsync(Uri sourceUri, CancellationToken cancellationToken)
+        {
+            var poolIndex = sourceUri.AbsolutePath.IndexOf("/pool/", StringComparison.Ordinal);
+            var path = poolIndex >= 0 ? sourceUri.AbsolutePath[(poolIndex + 1)..] : string.Empty;
+            if (!TestOperatingSystemSourceFiles.TryGetValue(path, out var bytes))
+                throw new BundleValidationException($"Unexpected test source URI '{sourceUri}'.");
+            return Task.FromResult(new ExternalSourceMaterial(
+                sourceUri,
+                bytes.Length,
+                new MemoryStream(bytes, writable: false)));
+        }
+    }
+
+    private sealed class RedirectingExternalSourceMaterialFetcher : IExternalSourceMaterialFetcher
+    {
+        public Task<ExternalSourceMaterial> FetchAsync(Uri sourceUri, CancellationToken cancellationToken) =>
+            Task.FromResult(new ExternalSourceMaterial(
+                new Uri("https://redirect.example.test/wine-source"),
+                1,
+                new MemoryStream([0x00], writable: false)));
+    }
+
+    private sealed class TamperedExternalSourceMaterialFetcher : IExternalSourceMaterialFetcher
+    {
+        public Task<ExternalSourceMaterial> FetchAsync(Uri sourceUri, CancellationToken cancellationToken)
+        {
+            var poolIndex = sourceUri.AbsolutePath.IndexOf("/pool/", StringComparison.Ordinal);
+            var path = poolIndex >= 0 ? sourceUri.AbsolutePath[(poolIndex + 1)..] : string.Empty;
+            var length = TestOperatingSystemSourceFiles[path].Length;
+            return Task.FromResult(new ExternalSourceMaterial(
+                sourceUri,
+                length,
+                new MemoryStream(Enumerable.Repeat((byte)0x00, length).ToArray(), writable: false)));
         }
     }
 

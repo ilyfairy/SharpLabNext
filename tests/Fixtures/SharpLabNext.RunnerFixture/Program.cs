@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 if (args is ["compiler-child-exit"])
     return 134;
 
@@ -59,6 +61,30 @@ if (args is ["process-bridge", var fixedArgument, var userArgument])
         "wineserver: could not save registry branch to user.reg : Read-only file system\n" +
         "bridge-stderr");
     return 23;
+}
+
+if (args is ["runner-descendant-parent", var pidPath])
+{
+    var windows = Environment.OSVersion.Platform == PlatformID.Win32NT;
+    var startInfo = new ProcessStartInfo
+    {
+        FileName = windows ? "cmd.exe" : "/bin/sh",
+        Arguments = windows
+            ? "/d /s /c \"ping -t 127.0.0.1 >NUL 2>NUL\""
+            : "-c \"while :; do sleep 60; done >/dev/null 2>&1\"",
+        UseShellExecute = false,
+        CreateNoWindow = true
+    };
+    using var descendant = Process.Start(startInfo)
+        ?? throw new InvalidOperationException("Runner descendant did not start.");
+    File.WriteAllText(pidPath, descendant.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    Console.Write("runner-descendant-parent-output");
+    var outputChunk = new string('x', 64 * 1024);
+    for (var index = 0; index < 16; index++)
+        Console.Write(outputChunk);
+    Console.Out.Flush();
+    await Task.Delay(100);
+    return 0;
 }
 
 Console.Write("fixture-stdout");

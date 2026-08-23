@@ -26,7 +26,8 @@ public sealed record RuntimeContainerSpec(
     string WorkspaceVolumeName,
     string? TraceParent = null,
     RuntimeContainerIsolationKind IsolationKind = RuntimeContainerIsolationKind.Standard,
-    string? WinePrefixPath = null);
+    string? WinePrefixPath = null,
+    IReadOnlyList<string>? Entrypoint = null);
 
 public enum RuntimeContainerIsolationKind
 {
@@ -41,12 +42,64 @@ public sealed record ManagedRuntimeContainer(string Id, DateTimeOffset CreatedAt
 
 public sealed record ManagedWorkspaceVolume(string Name, DateTimeOffset CreatedAtUtc);
 
-public sealed record RuntimeWorkspaceMaterialization(string VolumeName, string MaterializerContainerId);
+public sealed record RuntimeWorkspaceMaterialization(
+    string VolumeName,
+    string MaterializerContainerId,
+    string? MeasurementVolumeName = null);
 
-public sealed record RuntimeContainerResourceUsage(long PeakMemoryBytes, int SampleCount);
+public sealed record RuntimeRunningContainerInspection(
+    string ContainerId,
+    int HostPid,
+    bool Running);
+
+public sealed record RuntimeMeasurementSidecarSpec(
+    string JobId,
+    string ReleaseId,
+    string Image,
+    string TargetContainerId,
+    int TargetHostPid,
+    string Token,
+    string MeasurementVolumeName,
+    string ManagementLabel,
+    string ResourceScope,
+    string? TraceParent = null);
+
+public sealed record RuntimeExecSpec(
+    IReadOnlyList<string> Command,
+    string User,
+    string WorkingDirectory,
+    IReadOnlyDictionary<string, string>? Environment = null);
+
+public sealed record RuntimeContainerExecInspection(
+    string ExecId,
+    bool Running,
+    int? ExitCode);
+
+public enum RuntimeMeasurementSignalKind
+{
+    Capture,
+    Finish
+}
+
+public sealed record RuntimeContainerResourceUsage(
+    long PeakMemoryBytes,
+    int SampleCount,
+    long CompletionPeakMemoryBytes = 0,
+    int PostCompletionSampleCount = 0);
+
+public sealed record RuntimeContainerMeasurement(
+    string CgroupKind,
+    long PeakMemoryBytes);
 
 public interface IRuntimeContainerResourceMonitor : IAsyncDisposable
 {
+    int SampleCount { get; }
+
+    Task WaitForSampleAfterAsync(int checkpoint, CancellationToken cancellationToken = default);
+
+    Task WaitForFirstSampleAsync(CancellationToken cancellationToken = default) =>
+        WaitForSampleAfterAsync(0, cancellationToken);
+
     Task<RuntimeContainerResourceUsage> StopAsync(CancellationToken cancellationToken = default);
 }
 
@@ -57,7 +110,8 @@ public sealed record RuntimeImageInspection(
     string OperatingSystem,
     string Architecture,
     IReadOnlyList<string> RepoDigests,
-    IReadOnlyDictionary<string, string>? Labels = null);
+    IReadOnlyDictionary<string, string>? Labels = null,
+    IReadOnlyList<string>? Entrypoint = null);
 
 public sealed record RuntimeImageFileRequest(string Role, string Path);
 
@@ -94,9 +148,58 @@ public interface IDockerEngineClient
         RuntimeContainerIsolationKind isolationKind,
         string managementLabel,
         string resourceScope,
+        bool createMeasurementControl = false,
         CancellationToken cancellationToken = default);
 
-    Task UploadArchiveAsync(string containerId, Stream archive, CancellationToken cancellationToken = default);
+    Task UploadArchiveAsync(
+        string containerId,
+        Stream archive,
+        string destinationPath = "/workspace",
+        CancellationToken cancellationToken = default);
+
+    Task<RuntimeRunningContainerInspection> InspectRunningContainerAsync(
+        string containerId,
+        CancellationToken cancellationToken = default);
+
+    Task<string> CreateRuntimeMeasurementSidecarAsync(
+        RuntimeMeasurementSidecarSpec spec,
+        CancellationToken cancellationToken = default);
+
+    Task<string> CreateContainerExecAsync(
+        string containerId,
+        RuntimeExecSpec spec,
+        CancellationToken cancellationToken = default);
+
+    Task<Stream> StartContainerExecAsync(
+        string execId,
+        CancellationToken cancellationToken = default);
+
+    Task<RuntimeContainerExecInspection> InspectContainerExecAsync(
+        string execId,
+        CancellationToken cancellationToken = default);
+
+    Task WaitForRuntimeMeasurementArmedAsync(
+        string sidecarContainerId,
+        string token,
+        string targetContainerId,
+        CancellationToken cancellationToken = default);
+
+    Task<RuntimeContainerMeasurement> WaitForRuntimeMeasurementAsync(
+        string sidecarContainerId,
+        string token,
+        string targetContainerId,
+        CancellationToken cancellationToken = default);
+
+    Task UploadRuntimeMeasurementSignalAsync(
+        string sidecarContainerId,
+        string token,
+        string targetContainerId,
+        RuntimeMeasurementSignalKind signalKind,
+        CancellationToken cancellationToken = default);
+
+    Task<Stream> AttachContainerOutputAsync(
+        string containerId,
+        CancellationToken cancellationToken = default);
 
     Task StartContainerAsync(string containerId, CancellationToken cancellationToken = default);
 
@@ -109,15 +212,6 @@ public interface IDockerEngineClient
         TimeSpan timeout,
         CancellationToken cancellationToken = default);
 
-    Task<Stream> OpenContainerLogsAsync(
-        string containerId,
-        CancellationToken cancellationToken = default);
-
-    Task<Stream> OpenContainerLogsSinceAsync(
-        string containerId,
-        DateTimeOffset sinceUtc,
-        CancellationToken cancellationToken = default);
-
     Task<RuntimeContainerExit> WaitContainerAsync(string containerId, CancellationToken cancellationToken = default);
 
     Task KillContainerAsync(string containerId, CancellationToken cancellationToken = default);
@@ -128,15 +222,23 @@ public interface IDockerEngineClient
 
     Task<IReadOnlyList<ManagedRuntimeContainer>> ListManagedContainersAsync(
         string managementLabel,
+        string resourceScope,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ManagedWorkspaceVolume>> ListManagedWorkspaceVolumesAsync(
         string managementLabel,
+        string resourceScope,
         CancellationToken cancellationToken = default);
 }
 
 public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
 {
+    private enum RuntimeMeasurementRecordKind
+    {
+        Armed,
+        Completion
+    }
+
     private static readonly SearchValues<char> LowercaseHexCharacters =
         SearchValues.Create("0123456789abcdef");
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -219,6 +321,10 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
             throw new DockerEngineException(
                 "The inspected image does not retain the requested immutable repository digest.");
         }
+        var entrypoint = inspection.Config?.Entrypoint?.ToArray() ?? [];
+        if (entrypoint.Length > 32 || entrypoint.Any(static value =>
+                string.IsNullOrWhiteSpace(value) || value.Length > 4096 || value.Contains('\0')))
+            throw new DockerEngineException("Docker returned an invalid image entrypoint.");
 
         return new RuntimeImageInspection(
             immutableReference,
@@ -229,7 +335,8 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
             repoDigests,
             inspection.Config?.Labels is { } labels
                 ? new Dictionary<string, string>(labels, StringComparer.Ordinal)
-                : new Dictionary<string, string>(StringComparer.Ordinal));
+                : new Dictionary<string, string>(StringComparer.Ordinal),
+            entrypoint);
     }
 
     public async Task<string> CreateContainerAsync(
@@ -237,6 +344,15 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(spec);
+        ValidateVolumeName(spec.WorkspaceVolumeName);
+        if (spec.Entrypoint is not null)
+        {
+            if (spec.Entrypoint.Count == 0 || spec.Entrypoint.Any(static value =>
+                    string.IsNullOrWhiteSpace(value) || value.Length > 4096 || value.Contains('\0')))
+            {
+                throw new ArgumentException("The Docker container entrypoint is invalid.", nameof(spec));
+            }
+        }
         var effectiveEnvironment = new Dictionary<string, string>(spec.Environment, StringComparer.Ordinal);
         if (spec.TraceParent is not null)
         {
@@ -261,7 +377,9 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
             ["AttachStdout"] = true,
             ["AttachStderr"] = true,
             ["Tty"] = false,
-            ["OpenStdin"] = false,
+            // The measured keeper blocks on a shell builtin. Keep its stdin open
+            // without attaching it so the cgroup still contains one process.
+            ["OpenStdin"] = spec.Entrypoint is not null,
             ["NetworkDisabled"] = true,
             ["StopTimeout"] = 1,
             ["Labels"] = CreateManagedLabels(
@@ -277,7 +395,7 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
                 ["ReadonlyRootfs"] = true,
                 ["AutoRemove"] = false,
                 ["Privileged"] = false,
-                ["Init"] = true,
+                ["Init"] = spec.Entrypoint is null,
                 ["IpcMode"] = "none",
                 ["CapDrop"] = new[] { "ALL" },
                 ["SecurityOpt"] = _sandbox.SecurityOptions,
@@ -310,6 +428,8 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
                 ["Tmpfs"] = isolation.Tmpfs
             }
         };
+        if (spec.Entrypoint is not null)
+            body["Entrypoint"] = spec.Entrypoint;
 
         var name = Uri.EscapeDataString(spec.Name);
         using var response = await _client.PostAsJsonAsync(
@@ -324,6 +444,7 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
         {
             throw new DockerEngineException("Docker returned an invalid container ID.");
         }
+        ValidateFullContainerIdFromDocker(result.Id);
 
         return result.Id;
     }
@@ -444,6 +565,7 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
         RuntimeContainerIsolationKind isolationKind,
         string managementLabel,
         string resourceScope,
+        bool createMeasurementControl = false,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(jobId);
@@ -454,6 +576,9 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(managementLabel);
         var workspaceOwner = RuntimeContainerIsolation.ResolveWorkspaceOwner(isolationKind);
         var volumeName = $"sln-work-{Guid.NewGuid():N}";
+        var measurementVolumeName = createMeasurementControl
+            ? $"sln-measure-{Guid.NewGuid():N}"
+            : null;
         string? materializerId = null;
         try
         {
@@ -483,6 +608,39 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
                        cancellationToken))
             {
                 await EnsureSuccessAsync(volumeResponse, cancellationToken);
+            }
+
+            if (measurementVolumeName is not null)
+            {
+                var measurementLabels = new Dictionary<string, string>(
+                    CreateManagedLabels(
+                        managementLabel,
+                        "workspace",
+                        jobId,
+                        releaseId,
+                        resourceScope),
+                    StringComparer.Ordinal)
+                {
+                    ["com.sharplabnext.measurement-control"] = "true"
+                };
+                var measurementVolumeBody = new Dictionary<string, object?>
+                {
+                    ["Name"] = measurementVolumeName,
+                    ["Driver"] = "local",
+                    ["DriverOpts"] = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["type"] = "tmpfs",
+                        ["device"] = "tmpfs",
+                        ["o"] = "noexec,nosuid,nodev,size=65536,uid=1654,gid=1654,mode=0700"
+                    },
+                    ["Labels"] = measurementLabels
+                };
+                using var measurementVolumeResponse = await _client.PostAsJsonAsync(
+                    Api("/volumes/create"),
+                    measurementVolumeBody,
+                    JsonOptions,
+                    cancellationToken);
+                await EnsureSuccessAsync(measurementVolumeResponse, cancellationToken);
             }
 
             var helperName = Uri.EscapeDataString($"sln-materialize-{Guid.NewGuid():N}");
@@ -550,6 +708,7 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
                     JsonOptions,
                     cancellationToken)
                     ?? throw new DockerEngineException("Docker returned an empty materializer response.");
+                ValidateFullContainerIdFromDocker(created.Id);
                 materializerId = created.Id;
             }
 
@@ -557,9 +716,17 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
             // Keep the materializer running across upload and runtime-container startup so
             // Docker cannot unmount (and therefore discard) the workspace between them.
             await StartContainerAsync(materializerId, cancellationToken).ConfigureAwait(false);
-            await UploadArchiveAsync(materializerId, archive, cancellationToken).ConfigureAwait(false);
-            var materialization = new RuntimeWorkspaceMaterialization(volumeName, materializerId);
+            await UploadArchiveAsync(
+                materializerId,
+                archive,
+                destinationPath: "/workspace",
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            var materialization = new RuntimeWorkspaceMaterialization(
+                volumeName,
+                materializerId,
+                measurementVolumeName);
             materializerId = null;
+            measurementVolumeName = null;
             return materialization;
         }
         catch
@@ -567,6 +734,8 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
             if (materializerId is not null)
                 await RemoveContainerBestEffortAsync(materializerId).ConfigureAwait(false);
 
+            if (measurementVolumeName is not null)
+                await RemoveWorkspaceVolumeBestEffortAsync(measurementVolumeName).ConfigureAwait(false);
             await RemoveWorkspaceVolumeBestEffortAsync(volumeName).ConfigureAwait(false);
             throw;
         }
@@ -599,19 +768,381 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
     public async Task UploadArchiveAsync(
         string containerId,
         Stream archive,
+        string destinationPath = "/workspace",
         CancellationToken cancellationToken = default)
     {
         ValidateContainerId(containerId);
         ArgumentNullException.ThrowIfNull(archive);
+        if (destinationPath is not ("/workspace" or "/measurement"))
+            throw new ArgumentException("Archive destination is not allowed.", nameof(destinationPath));
         using var request = new HttpRequestMessage(
             HttpMethod.Put,
-            Api($"/containers/{Uri.EscapeDataString(containerId)}/archive?path=%2Fworkspace"))
+            Api($"/containers/{Uri.EscapeDataString(containerId)}/archive?path=" +
+                Uri.EscapeDataString(destinationPath) +
+                (destinationPath == "/measurement" ? "&copyUIDGID=true" : string.Empty)))
         {
             Content = new StreamContent(new NonDisposingStream(archive))
         };
         request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/x-tar");
         using var response = await _client.SendAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    public async Task<RuntimeRunningContainerInspection> InspectRunningContainerAsync(
+        string containerId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateFullContainerId(containerId);
+        using var response = await _client.GetAsync(
+            Api($"/containers/{Uri.EscapeDataString(containerId)}/json"),
+            cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+        var inspected = await response.Content.ReadFromJsonAsync<InspectContainerResponse>(
+            JsonOptions,
+            cancellationToken).ConfigureAwait(false)
+            ?? throw new DockerEngineException("Docker returned an empty container-inspect response.");
+        if (!StringComparer.Ordinal.Equals(inspected.Id, containerId) ||
+            inspected.State?.Running is not true ||
+            inspected.State.Pid is null or <= 0)
+        {
+            throw new DockerEngineException(
+                "Docker did not return the expected running container and positive host PID.");
+        }
+
+        return new RuntimeRunningContainerInspection(containerId, inspected.State.Pid.Value, Running: true);
+    }
+
+    public async Task<string> CreateRuntimeMeasurementSidecarAsync(
+        RuntimeMeasurementSidecarSpec spec,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentException.ThrowIfNullOrWhiteSpace(spec.JobId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(spec.ReleaseId);
+        ValidateImageId(spec.Image);
+        ValidateFullContainerId(spec.TargetContainerId);
+        if (spec.TargetHostPid <= 0)
+            throw new ArgumentOutOfRangeException(nameof(spec), "The target host PID must be positive.");
+        ValidateRuntimeMeasurementToken(spec.Token);
+        ValidateMeasurementVolumeName(spec.MeasurementVolumeName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(spec.ManagementLabel);
+        ArgumentException.ThrowIfNullOrWhiteSpace(spec.ResourceScope);
+        if (spec.TraceParent is not null)
+            ValidateTraceParent(spec.TraceParent);
+
+        var labels = new Dictionary<string, string>(
+            CreateManagedLabels(
+                spec.ManagementLabel,
+                "true",
+                spec.JobId,
+                spec.ReleaseId,
+                spec.ResourceScope,
+                traceParent: spec.TraceParent),
+            StringComparer.Ordinal)
+        {
+            ["com.sharplabnext.measurement-sidecar"] = "true",
+            ["com.sharplabnext.target-container-id"] = spec.TargetContainerId
+        };
+        var body = new Dictionary<string, object?>
+        {
+            ["Image"] = spec.Image,
+            ["Entrypoint"] = new[] { "/usr/local/bin/sharplabnext-runtime-measurement" },
+            ["Cmd"] = new[] { spec.Token, spec.TargetContainerId },
+            ["WorkingDir"] = "/",
+            ["User"] = "1654:1654",
+            ["AttachStdout"] = false,
+            ["AttachStderr"] = false,
+            ["Tty"] = false,
+            ["OpenStdin"] = false,
+            ["NetworkDisabled"] = true,
+            ["StopTimeout"] = 1,
+            ["Labels"] = labels,
+            ["HostConfig"] = new Dictionary<string, object?>
+            {
+                ["NetworkMode"] = "none",
+                ["ReadonlyRootfs"] = true,
+                ["AutoRemove"] = false,
+                ["Privileged"] = false,
+                ["Init"] = false,
+                ["IpcMode"] = "private",
+                // An empty Docker PidMode is the explicit private namespace.
+                    ["CgroupnsMode"] = "host",
+                ["CapDrop"] = new[] { "ALL" },
+                ["SecurityOpt"] = _sandbox.SecurityOptions,
+                ["Ulimits"] = _sandbox.CreateUlimits(),
+                ["Memory"] = 32L * 1024 * 1024,
+                ["MemorySwap"] = 32L * 1024 * 1024,
+                ["NanoCpus"] = 100_000_000L,
+                ["PidsLimit"] = 8L,
+                ["OomKillDisable"] = false,
+                ["LogConfig"] = new Dictionary<string, object?>
+                {
+                    ["Type"] = "local",
+                    ["Config"] = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["max-size"] = "1m",
+                        ["max-file"] = "1",
+                        ["compress"] = "false"
+                    }
+                },
+                ["Mounts"] = new object[]
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["Type"] = "volume",
+                        ["Source"] = spec.MeasurementVolumeName,
+                        ["Target"] = "/measurement",
+                        ["ReadOnly"] = false
+                    },
+                    new Dictionary<string, object?>
+                    {
+                        ["Type"] = "bind",
+                        ["Source"] = $"/proc/{spec.TargetHostPid}/cgroup",
+                        ["Target"] = "/run/sharplabnext-target-cgroup",
+                        ["ReadOnly"] = true,
+                        ["BindOptions"] = new Dictionary<string, object?>
+                        {
+                            ["Propagation"] = "rprivate"
+                        }
+                    }
+                },
+                ["Tmpfs"] = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["/tmp"] = "rw,noexec,nosuid,nodev,size=1048576,uid=1654,gid=1654,mode=0700"
+                }
+            }
+        };
+
+        var name = Uri.EscapeDataString($"sln-measurement-{Guid.NewGuid():N}");
+        using var response = await _client.PostAsJsonAsync(
+            Api($"/containers/create?name={name}"),
+            body,
+            JsonOptions,
+            cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+        var created = await response.Content.ReadFromJsonAsync<CreateContainerResponse>(
+            JsonOptions,
+            cancellationToken).ConfigureAwait(false)
+            ?? throw new DockerEngineException("Docker returned an empty measurement-sidecar response.");
+        ValidateFullContainerIdFromDocker(created.Id);
+        return created.Id;
+    }
+
+    public async Task<string> CreateContainerExecAsync(
+        string containerId,
+        RuntimeExecSpec spec,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateFullContainerId(containerId);
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentNullException.ThrowIfNull(spec.Command);
+        if (spec.Command.Count == 0 || spec.Command.Count > 256 ||
+            spec.Command.Any(static value =>
+                value is null || value.Length > 32 * 1024 || value.Contains('\0')))
+        {
+            throw new ArgumentException("The Docker exec command is invalid.", nameof(spec));
+        }
+        if (spec.User is not ("0:0" or "1654:1654"))
+            throw new ArgumentException("The Docker exec user is not allowed.", nameof(spec));
+        if (spec.WorkingDirectory != "/workspace")
+            throw new ArgumentException("The Docker exec working directory is not allowed.", nameof(spec));
+        if (spec.Environment is { } execEnvironment && execEnvironment.Any(static pair =>
+                string.IsNullOrWhiteSpace(pair.Key) ||
+                pair.Key.Length > 256 ||
+                pair.Key.Contains('=') ||
+                pair.Key.Contains('\0') ||
+                pair.Value is null ||
+                pair.Value.Length > 32 * 1024 ||
+                pair.Value.Contains('\0')))
+        {
+            throw new ArgumentException("The Docker exec environment is invalid.", nameof(spec));
+        }
+
+        var body = new Dictionary<string, object?>
+        {
+            ["AttachStdin"] = false,
+            ["AttachStdout"] = true,
+            ["AttachStderr"] = true,
+            ["DetachKeys"] = string.Empty,
+            ["Tty"] = false,
+            ["Cmd"] = spec.Command,
+            ["User"] = spec.User,
+            ["WorkingDir"] = spec.WorkingDirectory
+        };
+        if (spec.Environment is { Count: > 0 } environment)
+        {
+            body["Env"] = environment
+                .OrderBy(static pair => pair.Key, StringComparer.Ordinal)
+                .Select(static pair => $"{pair.Key}={pair.Value}")
+                .ToArray();
+        }
+        using var response = await _client.PostAsJsonAsync(
+            Api($"/containers/{Uri.EscapeDataString(containerId)}/exec"),
+            body,
+            JsonOptions,
+            cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+        var created = await response.Content.ReadFromJsonAsync<CreateExecResponse>(
+            JsonOptions,
+            cancellationToken).ConfigureAwait(false)
+            ?? throw new DockerEngineException("Docker returned an empty create-exec response.");
+        ValidateFullExecIdFromDocker(created.Id);
+        return created.Id;
+    }
+
+    public async Task<Stream> StartContainerExecAsync(
+        string execId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateFullExecId(execId);
+        var body = new Dictionary<string, object?>
+        {
+            ["Detach"] = false,
+            ["Tty"] = false
+        };
+        using var request = new HttpRequestMessage(HttpMethod.Post, Api($"/exec/{execId}/start"))
+        {
+            Content = JsonContent.Create(body, options: JsonOptions)
+        };
+        var response = await _client.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            return new DockerMultiplexedReadStream(new DockerResponseStream(response, stream));
+        }
+        catch
+        {
+            response.Dispose();
+            throw;
+        }
+    }
+
+    public async Task<RuntimeContainerExecInspection> InspectContainerExecAsync(
+        string execId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateFullExecId(execId);
+        using var response = await _client.GetAsync(
+            Api($"/exec/{execId}/json"),
+            cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+        var inspected = await response.Content.ReadFromJsonAsync<InspectExecResponse>(
+            JsonOptions,
+            cancellationToken).ConfigureAwait(false)
+            ?? throw new DockerEngineException("Docker returned an empty exec-inspect response.");
+        if (!StringComparer.Ordinal.Equals(inspected.Id, execId) ||
+            inspected.Running is null ||
+            inspected.ExitCode is null or < 0 or > 255)
+        {
+            throw new DockerEngineException("Docker returned a malformed exec-inspect response.");
+        }
+
+        return new RuntimeContainerExecInspection(
+            execId,
+            inspected.Running.Value,
+            inspected.Running.Value ? null : checked((int)inspected.ExitCode.Value));
+    }
+
+    public async Task WaitForRuntimeMeasurementArmedAsync(
+        string sidecarContainerId,
+        string token,
+        string targetContainerId,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await WaitForRuntimeMeasurementRecordAsync(
+            sidecarContainerId,
+            token,
+            targetContainerId,
+            RuntimeMeasurementRecordKind.Armed,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<RuntimeContainerMeasurement> WaitForRuntimeMeasurementAsync(
+        string sidecarContainerId,
+        string token,
+        string targetContainerId,
+        CancellationToken cancellationToken = default)
+    {
+        return await WaitForRuntimeMeasurementRecordAsync(
+            sidecarContainerId,
+            token,
+            targetContainerId,
+            RuntimeMeasurementRecordKind.Completion,
+            cancellationToken).ConfigureAwait(false)
+            ?? throw new DockerEngineException("The runtime measurement completion was empty.");
+    }
+
+    public async Task UploadRuntimeMeasurementSignalAsync(
+        string sidecarContainerId,
+        string token,
+        string targetContainerId,
+        RuntimeMeasurementSignalKind signalKind,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateFullContainerId(sidecarContainerId);
+        ValidateRuntimeMeasurementToken(token);
+        ValidateFullContainerId(targetContainerId);
+        var signalName = signalKind switch
+        {
+            RuntimeMeasurementSignalKind.Capture => "capture",
+            RuntimeMeasurementSignalKind.Finish => "finish",
+            _ => throw new ArgumentOutOfRangeException(nameof(signalKind), signalKind, "Unknown signal kind.")
+        };
+        var fileName = $"{signalName}-{token}";
+        var uploadFileName = fileName + ".upload";
+        var content = System.Text.Encoding.ASCII.GetBytes(
+            $"sharplabnext-runtime-measurement-signal-v1\n{token}\n{targetContainerId}\n{signalName}\n");
+        await using var contentStream = new MemoryStream(content, writable: false);
+        await using var archive = new MemoryStream();
+        using (var writer = new TarWriter(archive, TarEntryFormat.Ustar, leaveOpen: true))
+        {
+            var entry = new UstarTarEntry(TarEntryType.RegularFile, uploadFileName)
+            {
+                DataStream = contentStream,
+                Gid = 1654,
+                Uid = 1654,
+                Mode = UnixFileMode.UserRead | UnixFileMode.UserWrite,
+                ModificationTime = DateTimeOffset.UnixEpoch,
+                GroupName = string.Empty,
+                UserName = string.Empty
+            };
+            await writer.WriteEntryAsync(entry, cancellationToken).ConfigureAwait(false);
+        }
+        archive.Position = 0;
+        await UploadArchiveAsync(
+            sidecarContainerId,
+            archive,
+            destinationPath: "/measurement",
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<Stream> AttachContainerOutputAsync(
+        string containerId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateFullContainerId(containerId);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            Api($"/containers/{Uri.EscapeDataString(containerId)}/attach?logs=false&stream=true&stdin=false&stdout=true&stderr=true"));
+        var response = await _client.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            return new DockerMultiplexedReadStream(new DockerResponseStream(response, stream));
+        }
+        catch
+        {
+            response.Dispose();
+            throw;
+        }
     }
 
     public async Task StartContainerAsync(string containerId, CancellationToken cancellationToken = default)
@@ -702,52 +1233,6 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
-    public async Task<Stream> OpenContainerLogsAsync(
-        string containerId,
-        CancellationToken cancellationToken = default) =>
-        await OpenContainerLogsCoreAsync(containerId, sinceUtc: null, cancellationToken).ConfigureAwait(false);
-
-    public async Task<Stream> OpenContainerLogsSinceAsync(
-        string containerId,
-        DateTimeOffset sinceUtc,
-        CancellationToken cancellationToken = default) =>
-        await OpenContainerLogsCoreAsync(containerId, sinceUtc, cancellationToken).ConfigureAwait(false);
-
-    private async Task<Stream> OpenContainerLogsCoreAsync(
-        string containerId,
-        DateTimeOffset? sinceUtc,
-        CancellationToken cancellationToken = default)
-    {
-        ValidateContainerId(containerId);
-        var sinceQuery = sinceUtc is null
-            ? string.Empty
-            : $"&since={FormatDockerTimestamp(sinceUtc.Value)}";
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            Api($"/containers/{Uri.EscapeDataString(containerId)}/logs?stdout=true&stderr=true&follow=true&timestamps=false{sinceQuery}"));
-        var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        try
-        {
-            await EnsureSuccessAsync(response, cancellationToken);
-            var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            return new DockerMultiplexedReadStream(new DockerResponseStream(response, stream));
-        }
-        catch
-        {
-            response.Dispose();
-            throw;
-        }
-    }
-
-    private static string FormatDockerTimestamp(DateTimeOffset timestamp)
-    {
-        var utcTicks = timestamp.UtcDateTime.Ticks;
-        var nanoseconds = utcTicks % TimeSpan.TicksPerSecond * 100;
-        return string.Create(
-            System.Globalization.CultureInfo.InvariantCulture,
-            $"{timestamp.ToUnixTimeSeconds()}.{nanoseconds:D9}");
-    }
-
     public async Task<RuntimeContainerExit> WaitContainerAsync(
         string containerId,
         CancellationToken cancellationToken = default)
@@ -817,12 +1302,18 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
 
     public async Task<IReadOnlyList<ManagedRuntimeContainer>> ListManagedContainersAsync(
         string managementLabel,
+        string resourceScope,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(managementLabel);
+        ValidateManagementLabel(managementLabel);
+        ValidateResourceScope(resourceScope);
         var filters = JsonSerializer.Serialize(new Dictionary<string, string[]>
         {
-            ["label"] = [managementLabel + "=true"]
+            ["label"] =
+            [
+                managementLabel + "=true",
+                "com.sharplabnext.resource-scope=" + resourceScope
+            ]
         }, JsonOptions);
         using var response = await _client.GetAsync(
             Api($"/containers/json?all=true&filters={Uri.EscapeDataString(filters)}"),
@@ -841,12 +1332,18 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
 
     public async Task<IReadOnlyList<ManagedWorkspaceVolume>> ListManagedWorkspaceVolumesAsync(
         string managementLabel,
+        string resourceScope,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(managementLabel);
+        ValidateManagementLabel(managementLabel);
+        ValidateResourceScope(resourceScope);
         var filters = JsonSerializer.Serialize(new Dictionary<string, string[]>
         {
-            ["label"] = [$"{managementLabel}=workspace"]
+            ["label"] =
+            [
+                $"{managementLabel}=workspace",
+                "com.sharplabnext.resource-scope=" + resourceScope
+            ]
         }, JsonOptions);
         using var response = await _client.GetAsync(
             Api($"/volumes?filters={Uri.EscapeDataString(filters)}"),
@@ -872,7 +1369,7 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
         bool materializer = false,
         string? traceParent = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(managementLabel);
+        ValidateManagementLabel(managementLabel);
         ArgumentException.ThrowIfNullOrWhiteSpace(managementValue);
         ArgumentException.ThrowIfNullOrWhiteSpace(jobId);
         ArgumentException.ThrowIfNullOrWhiteSpace(releaseId);
@@ -899,6 +1396,31 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
         }
 
         return labels;
+    }
+
+    private static void ValidateManagementLabel(string managementLabel)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(managementLabel);
+        if (managementLabel.Length > 128 ||
+            managementLabel.Any(static character =>
+                !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '-' or '_' or '/')) ||
+            RuntimeManagedLabelPolicy.IsReservedManagementLabel(managementLabel))
+        {
+            throw new ArgumentException(
+                "The Docker management label is malformed or collides with a reserved SharpLabNext label.",
+                nameof(managementLabel));
+        }
+    }
+
+    private static void ValidateResourceScope(string resourceScope)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(resourceScope);
+        if (resourceScope.Length > 128 ||
+            resourceScope.Any(static character =>
+                !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.' or ':')))
+        {
+            throw new ArgumentException("The Docker resource scope is malformed.", nameof(resourceScope));
+        }
     }
 
     private static void ValidateTraceParent(string traceParent)
@@ -1028,7 +1550,7 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
     }
 
     private static bool IsStableArtifactRole(string role) => role is
-        "helper" or "control-host" or "runtime-host" or "support-assembly" or
+        "helper" or "desktop-helper" or "control-host" or "runtime-host" or "support-assembly" or
         "jit-library" or "profiler";
 
     private static bool IsCanonicalContainerPath(string path) =>
@@ -1054,6 +1576,47 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
         }
     }
 
+    private static void ValidateFullContainerId(string containerId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(containerId);
+        if (containerId.Length != 64 ||
+            containerId.AsSpan().IndexOfAnyExcept(LowercaseHexCharacters) >= 0)
+        {
+            throw new ArgumentException(
+                "The Docker container ID must contain exactly 64 lowercase hexadecimal characters.",
+                nameof(containerId));
+        }
+    }
+
+    private static void ValidateFullContainerIdFromDocker(string? containerId)
+    {
+        if (containerId is not { Length: 64 } ||
+            containerId.AsSpan().IndexOfAnyExcept(LowercaseHexCharacters) >= 0)
+        {
+            throw new DockerEngineException("Docker returned a noncanonical full container ID.");
+        }
+    }
+
+    private static void ValidateFullExecId(string execId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(execId);
+        if (execId.Length != 64 || execId.AsSpan().IndexOfAnyExcept(LowercaseHexCharacters) >= 0)
+        {
+            throw new ArgumentException(
+                "The Docker exec ID must contain exactly 64 lowercase hexadecimal characters.",
+                nameof(execId));
+        }
+    }
+
+    private static void ValidateFullExecIdFromDocker(string? execId)
+    {
+        if (execId is not { Length: 64 } ||
+            execId.AsSpan().IndexOfAnyExcept(LowercaseHexCharacters) >= 0)
+        {
+            throw new DockerEngineException("Docker returned a noncanonical full exec ID.");
+        }
+    }
+
     private static void ValidateImmutableImageReference(string immutableReference)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(immutableReference);
@@ -1074,6 +1637,162 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
         value is { Length: 71 } && value.StartsWith("sha256:", StringComparison.Ordinal) &&
         value.AsSpan(7).IndexOfAnyExcept(LowercaseHexCharacters) < 0;
 
+    private static void ValidateRuntimeMeasurementToken(string token)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(token);
+        if (token.Length != 32 || token.AsSpan().IndexOfAnyExcept(LowercaseHexCharacters) >= 0)
+        {
+            throw new ArgumentException(
+                "The runtime measurement token must contain exactly 32 lowercase hexadecimal characters.",
+                nameof(token));
+        }
+    }
+
+    private async Task<RuntimeContainerMeasurement?> WaitForRuntimeMeasurementRecordAsync(
+        string sidecarContainerId,
+        string token,
+        string targetContainerId,
+        RuntimeMeasurementRecordKind recordKind,
+        CancellationToken cancellationToken)
+    {
+        ValidateFullContainerId(sidecarContainerId);
+        ValidateRuntimeMeasurementToken(token);
+        ValidateFullContainerId(targetContainerId);
+        var prefix = recordKind switch
+        {
+            RuntimeMeasurementRecordKind.Armed => "armed",
+            RuntimeMeasurementRecordKind.Completion => "completion",
+            _ => throw new ArgumentOutOfRangeException(nameof(recordKind), recordKind, "Unknown record kind.")
+        };
+        var fileName = $"{prefix}-{token}";
+        var requestPath = Api(
+            $"/containers/{Uri.EscapeDataString(sidecarContainerId)}/archive?path=" +
+            Uri.EscapeDataString($"/measurement/{fileName}"));
+
+        while (true)
+        {
+            using var response = await _client.GetAsync(
+                requestPath,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken).ConfigureAwait(false);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(10), cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
+            await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+            await using var archive = await response.Content.ReadAsStreamAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return await ReadRuntimeMeasurementArchiveAsync(
+                archive,
+                fileName,
+                token,
+                targetContainerId,
+                recordKind,
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task<RuntimeContainerMeasurement?> ReadRuntimeMeasurementArchiveAsync(
+        Stream archive,
+        string expectedFileName,
+        string expectedToken,
+        string expectedTargetContainerId,
+        RuntimeMeasurementRecordKind recordKind,
+        CancellationToken cancellationToken)
+    {
+        using var reader = new TarReader(archive, leaveOpen: true);
+        var entry = await reader.GetNextEntryAsync(copyData: false, cancellationToken).ConfigureAwait(false);
+        if (entry is null ||
+            !StringComparer.Ordinal.Equals(entry.Name, expectedFileName) ||
+            entry.EntryType is not (
+                TarEntryType.RegularFile or TarEntryType.V7RegularFile or TarEntryType.ContiguousFile) ||
+            entry.DataStream is null ||
+            !string.IsNullOrEmpty(entry.LinkName) ||
+            entry.Length is <= 0 or > 512 ||
+            entry.Uid != 1654 ||
+            entry.Gid != 1654 ||
+            entry.Mode != (UnixFileMode.UserRead | UnixFileMode.UserWrite))
+        {
+            throw new DockerEngineException(
+                "The runtime measurement archive must contain one canonical regular measurement file.");
+        }
+
+        var content = new byte[checked((int)entry.Length)];
+        var offset = 0;
+        while (offset < content.Length)
+        {
+            var read = await entry.DataStream.ReadAsync(
+                content.AsMemory(offset),
+                cancellationToken).ConfigureAwait(false);
+            if (read == 0)
+                throw new DockerEngineException("The runtime measurement archive ended inside its file payload.");
+            offset += read;
+        }
+
+        if (await reader.GetNextEntryAsync(copyData: false, cancellationToken).ConfigureAwait(false) is not null)
+        {
+            throw new DockerEngineException(
+                "The runtime measurement archive contains an unexpected additional entry.");
+        }
+
+        return ParseRuntimeMeasurement(
+            content,
+            expectedToken,
+            expectedTargetContainerId,
+            recordKind);
+    }
+
+    private static RuntimeContainerMeasurement? ParseRuntimeMeasurement(
+        ReadOnlySpan<byte> content,
+        string expectedToken,
+        string expectedTargetContainerId,
+        RuntimeMeasurementRecordKind recordKind)
+    {
+        foreach (var value in content)
+        {
+            if (value != (byte)'\n' && (value < 0x20 || value > 0x7e))
+                throw new DockerEngineException("The runtime measurement is not canonical ASCII.");
+        }
+
+        var lines = System.Text.Encoding.ASCII.GetString(content).Split('\n');
+        var expectedHeader = recordKind switch
+        {
+            RuntimeMeasurementRecordKind.Armed => "sharplabnext-runtime-measurement-sidecar-armed-v1",
+            RuntimeMeasurementRecordKind.Completion => "sharplabnext-runtime-measurement-sidecar-v1",
+            _ => throw new ArgumentOutOfRangeException(nameof(recordKind), recordKind, "Unknown record kind.")
+        };
+        var expectedLineCount = recordKind == RuntimeMeasurementRecordKind.Armed ? 5 : 6;
+        if (lines.Length != expectedLineCount || lines[^1].Length != 0 ||
+            !StringComparer.Ordinal.Equals(lines[0], expectedHeader) ||
+            !StringComparer.Ordinal.Equals(lines[1], expectedToken) ||
+            !StringComparer.Ordinal.Equals(lines[2], expectedTargetContainerId) ||
+            lines[3] is not ("cgroup-v1" or "cgroup-v2"))
+        {
+            throw new DockerEngineException("The runtime measurement payload is malformed or noncanonical.");
+        }
+
+        if (recordKind == RuntimeMeasurementRecordKind.Armed)
+            return null;
+        if (!TryParseCanonicalPositiveInt64(lines[4], out var peakMemoryBytes))
+            throw new DockerEngineException("The runtime measurement peak is malformed or noncanonical.");
+        return new RuntimeContainerMeasurement(lines[3], peakMemoryBytes);
+    }
+
+    private static bool TryParseCanonicalPositiveInt64(string value, out long result)
+    {
+        result = 0;
+        return value.Length > 0 && value[0] is >= '1' and <= '9' &&
+            value.All(static character => character is >= '0' and <= '9') &&
+            long.TryParse(
+                value,
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out result) &&
+            result > 0;
+    }
+
     private static void ValidateVolumeName(string volumeName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(volumeName);
@@ -1082,6 +1801,20 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
                 !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.')))
         {
             throw new ArgumentException("The Docker volume name is malformed.", nameof(volumeName));
+        }
+    }
+
+    private static void ValidateMeasurementVolumeName(string volumeName)
+    {
+        ValidateVolumeName(volumeName);
+        const string prefix = "sln-measure-";
+        if (volumeName.Length != prefix.Length + 32 ||
+            !volumeName.StartsWith(prefix, StringComparison.Ordinal) ||
+            volumeName.AsSpan(prefix.Length).IndexOfAnyExcept(LowercaseHexCharacters) >= 0)
+        {
+            throw new ArgumentException(
+                "The runtime measurement control volume name is not canonical.",
+                nameof(volumeName));
         }
     }
 
@@ -1136,13 +1869,23 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
 
     private sealed record CreateContainerResponse(string Id);
 
+    private sealed record CreateExecResponse(string Id);
+
     private sealed record WaitContainerResponse(long StatusCode, DockerErrorResponse? Error);
 
     private sealed record DockerErrorResponse(string? Message);
 
-    private sealed record InspectContainerResponse(InspectContainerState? State);
+    private sealed record InspectContainerResponse(string? Id, InspectContainerState? State);
 
-    private sealed record InspectContainerState(bool OomKilled);
+    private sealed record InspectContainerState(
+        bool? OomKilled,
+        bool? Running,
+        int? Pid);
+
+    private sealed record InspectExecResponse(
+        [property: JsonPropertyName("ID")] string? Id,
+        bool? Running,
+        long? ExitCode);
 
     private sealed record InspectImageResponse(
         string? Id,
@@ -1152,7 +1895,9 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
         string? Architecture,
         InspectImageConfig? Config);
 
-    private sealed record InspectImageConfig(IReadOnlyDictionary<string, string>? Labels);
+    private sealed record InspectImageConfig(
+        IReadOnlyDictionary<string, string>? Labels,
+        IReadOnlyList<string>? Entrypoint);
 
     private sealed record DockerStatsResponse(
         [property: JsonPropertyName("memory_stats")] DockerMemoryStats? MemoryStats);
@@ -1181,7 +1926,13 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
         private readonly Stream _stream;
         private readonly CancellationTokenSource _lifetime;
         private readonly Func<Task<long>> _oneShotMemoryReader;
+        private readonly object _sampleGate = new();
+        private TaskCompletionSource<bool> _sampleChanged = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly Task<RuntimeContainerResourceUsage> _completion;
+        private int _sampleCount;
+        private bool _sampleStreamTerminated;
+        private Exception? _sampleStreamFailure;
         private int _stopRequested;
         private int _disposed;
 
@@ -1197,6 +1948,40 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
             _oneShotMemoryReader = oneShotMemoryReader;
             _completion = ReadUsageAsync(stream, lifetime.Token);
         }
+
+        public int SampleCount => Volatile.Read(ref _sampleCount);
+
+        public async Task WaitForSampleAfterAsync(
+            int checkpoint,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(checkpoint);
+
+            while (true)
+            {
+                Task? changed;
+                Exception? terminalFailure;
+                lock (_sampleGate)
+                {
+                    if (_sampleCount > checkpoint)
+                        return;
+                    terminalFailure = _sampleStreamTerminated ? _sampleStreamFailure : null;
+                    changed = _sampleStreamTerminated ? null : _sampleChanged.Task;
+                }
+
+                if (terminalFailure is not null)
+                    throw terminalFailure;
+                if (changed is null)
+                {
+                    throw new DockerEngineException(
+                        "Docker container-stats stream ended before the required sample was observed.");
+                }
+                await changed!.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        public async Task WaitForFirstSampleAsync(CancellationToken cancellationToken = default) =>
+            await WaitForSampleAfterAsync(0, cancellationToken).ConfigureAwait(false);
 
         public async Task<RuntimeContainerResourceUsage> StopAsync(
             CancellationToken cancellationToken = default)
@@ -1216,12 +2001,16 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
 
         public async ValueTask DisposeAsync()
         {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
             try
             {
-                await StopAsync(CancellationToken.None).ConfigureAwait(false);
+                await StopAsync(timeout.Token).ConfigureAwait(false);
             }
             catch (Exception)
             {
+                // A broken Docker stats stream must never hold cleanup hostage.
+                // StopAsync has already cancelled the shared lifetime; disposing
+                // the response and stream forces any blocked reader to unwind.
                 DisposeResources();
             }
         }
@@ -1238,6 +2027,7 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
                 leaveOpen: true);
             var peak = 0L;
             var count = 0;
+            OperationCanceledException? streamCancellation = null;
             try
             {
                 while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
@@ -1256,26 +2046,85 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
                         continue;
                     peak = Math.Max(peak, observed);
                     count++;
+                    RecordSample();
                 }
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested)
             {
+                streamCancellation = exception;
+                TerminateSampleStream(exception);
             }
             catch (JsonException exception)
             {
-                throw new DockerEngineException(
+                var failure = new DockerEngineException(
                     $"Docker returned malformed container-stats JSON: {exception.Message}");
+                TerminateSampleStream(failure);
+                throw failure;
+            }
+            catch (Exception exception)
+            {
+                TerminateSampleStream(exception);
+                throw;
             }
 
             if (count > 0)
+            {
+                if (streamCancellation is null)
+                    TerminateSampleStream(failure: null);
                 return new RuntimeContainerResourceUsage(peak, count);
+            }
+            if (streamCancellation is not null)
+                throw streamCancellation;
 
             // Very short-lived jobs can exit before Docker emits the first
             // streaming stats line. A one-shot sample closes that race while
             // retaining the fail-closed contract when Docker has no positive
             // memory observation at all.
-            var oneShot = await _oneShotMemoryReader().ConfigureAwait(false);
-            return new RuntimeContainerResourceUsage(oneShot, 1);
+            try
+            {
+                var oneShot = await _oneShotMemoryReader().ConfigureAwait(false);
+                RecordSample();
+                TerminateSampleStream(failure: null);
+                return new RuntimeContainerResourceUsage(oneShot, 1);
+            }
+            catch (Exception exception)
+            {
+                TerminateSampleStream(exception);
+                throw;
+            }
+        }
+
+        private void RecordSample()
+        {
+            TaskCompletionSource<bool> changed;
+            lock (_sampleGate)
+            {
+                if (_sampleStreamTerminated)
+                    throw new InvalidOperationException("Docker stats produced a sample after stream termination.");
+                checked
+                {
+                    _sampleCount++;
+                }
+                changed = _sampleChanged;
+                _sampleChanged = new TaskCompletionSource<bool>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+            changed.TrySetResult(true);
+        }
+
+        private void TerminateSampleStream(Exception? failure)
+        {
+            TaskCompletionSource<bool> changed;
+            lock (_sampleGate)
+            {
+                if (_sampleStreamTerminated)
+                    return;
+                _sampleStreamTerminated = true;
+                _sampleStreamFailure = failure ?? new DockerEngineException(
+                    "Docker container-stats ended before the requested sample was observed.");
+                changed = _sampleChanged;
+            }
+            changed.TrySetResult(true);
         }
 
         private void DisposeResources()
@@ -1351,8 +2200,10 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
         public override ValueTask DisposeAsync() => base.DisposeAsync();
     }
 
-    private sealed class DockerResponseStream(HttpResponseMessage response, Stream stream) : Stream
+    internal sealed class DockerResponseStream(HttpResponseMessage response, Stream stream) : Stream
     {
+        private int _disposed;
+
         public override bool CanRead => stream.CanRead;
         public override bool CanSeek => false;
         public override bool CanWrite => false;
@@ -1374,21 +2225,53 @@ public sealed class DockerEngineClient : IDockerEngineClient, IDisposable
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing)
+            if (!disposing)
             {
-                stream.Dispose();
-                response.Dispose();
+                base.Dispose(disposing);
+                return;
             }
 
-            base.Dispose(disposing);
+            var disposeResources = Interlocked.Exchange(ref _disposed, 1) == 0;
+            try
+            {
+                if (disposeResources)
+                    stream.Dispose();
+            }
+            finally
+            {
+                try
+                {
+                    if (disposeResources)
+                        response.Dispose();
+                }
+                finally
+                {
+                    base.Dispose(disposing);
+                }
+            }
         }
 
         public override async ValueTask DisposeAsync()
         {
-            await stream.DisposeAsync();
-            response.Dispose();
-            await base.DisposeAsync();
-            GC.SuppressFinalize(this);
+            var disposeResources = Interlocked.Exchange(ref _disposed, 1) == 0;
+            try
+            {
+                if (disposeResources)
+                    await stream.DisposeAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                try
+                {
+                    if (disposeResources)
+                        response.Dispose();
+                }
+                finally
+                {
+                    await base.DisposeAsync().ConfigureAwait(false);
+                    GC.SuppressFinalize(this);
+                }
+            }
         }
     }
 

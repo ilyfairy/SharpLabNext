@@ -12,6 +12,12 @@ import {
   RuntimePromotionPlanError,
   verifyRuntimePromotionPlan,
 } from './runtime-promotion-plan.mjs'
+import {
+  createWineCoreClrOperatorReceipt,
+  serializeWineCoreClrOperatorReceipt,
+  signWineCoreClrOperatorReceipt,
+  wineCoreClrOperatorCommittedFiles,
+} from './wine-coreclr-operator-receipt.mjs'
 
 const target = 'runtime-wine-dotnet-matrix-candidate'
 const profileId = 'wine-dotnet-7-linux-x64'
@@ -20,6 +26,10 @@ const imageId = `sha256:${'b'.repeat(64)}`
 const otherImageId = `sha256:${'c'.repeat(64)}`
 const pinnedReference = `registry.example/runtime@sha256:${'d'.repeat(64)}`
 const helperDigest = `sha256:${'e'.repeat(64)}`
+const planKeys = crypto.generateKeyPairSync('ed25519')
+const planKeyId = `sha256:${crypto.createHash('sha256').update(
+  planKeys.publicKey.export({ type: 'spki', format: 'der' }),
+).digest('hex')}`
 
 function digestReference(name, character) {
   return `registry.example/${name}@sha256:${character.repeat(64)}`
@@ -32,6 +42,7 @@ function createEnvironment() {
     SOURCE_DATE_EPOCH: '1784678400',
     SOURCE_REVISION: sourceRevision,
     BASE_DOTNET_SDK_IMAGE: digestReference('sdk', '1'),
+    BASE_DOTNET_RUNTIME_DEPS_IMAGE: digestReference('runtime-deps', '0'),
     RUNTIME_MATRIX_WINE_IMAGE: digestReference('wine', '2'),
     RUNTIME_MATRIX_CONTROL_IMAGE: digestReference('control', '3'),
     RUNTIME_MATRIX_PROFILE_ID: profileId,
@@ -44,6 +55,9 @@ function createEnvironment() {
       'https://builds.dotnet.microsoft.com/dotnet/Runtime/7.0.20/dotnet-runtime-7.0.20-win-x64.zip',
     RUNTIME_MATRIX_WINDOWS_SHA512: '4'.repeat(128),
     WINE_CONTROL_TFM: 'net10.0',
+    WINE_CORECLR_USERSPACE_VERSION: 'wine-9.0',
+    WINE_CORECLR_USERSPACE_DIGEST: `sha256:${'6'.repeat(64)}`,
+    WINE_CORECLR_USERSPACE_SOURCE_URI: 'https://example.test/wine',
   }
 }
 
@@ -121,6 +135,36 @@ function createFixture() {
     fs.mkdirSync(path.dirname(filename), { recursive: true })
     fs.writeFileSync(filename, `${JSON.stringify(value, null, 2)}\n`)
   }
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519')
+  const sourceFiles = Object.fromEntries(wineCoreClrOperatorCommittedFiles.map(relative => [
+    relative,
+    Buffer.from(`committed:${relative}`),
+  ]))
+  const operatorReceipt = createWineCoreClrOperatorReceipt({
+    source: {
+      revision: sourceRevision,
+      tree: 'c'.repeat(40),
+      files: Object.fromEntries(Object.entries(sourceFiles).map(([relative, bytes]) => [
+        relative, `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`,
+      ])),
+    },
+    operator: {
+      reference: environment.RUNTIME_MATRIX_WINE_IMAGE,
+      imageId: `sha256:${'8'.repeat(64)}`,
+      sizeBytes: 1024,
+      platform: 'linux/amd64',
+      userspace: { version: 'wine-9.0', digest: `sha256:${'9'.repeat(64)}`, sourceUri: 'https://example.test/wine' },
+      baseImage: digestReference('runtime-deps', '7'),
+      labels: { 'io.sharplabnext.operator.contract': 'wine-coreclr-v1' },
+    },
+  })
+  const operatorReceiptPath = path.join(root, 'operator-receipt.json')
+  const operatorSignaturePath = path.join(root, 'operator-receipt.json.sig')
+  const operatorReceiptBytes = serializeWineCoreClrOperatorReceipt(operatorReceipt)
+  fs.writeFileSync(operatorReceiptPath, operatorReceiptBytes)
+  fs.writeFileSync(operatorSignaturePath, `${signWineCoreClrOperatorReceipt(operatorReceipt, privateKey)}\n`)
+  environment.WINE_CORECLR_OPERATOR_RECEIPT = operatorReceiptPath
+  environment.WINE_CORECLR_OPERATOR_RECEIPT_SIG = operatorSignaturePath
   return {
     root,
     target,
@@ -136,6 +180,12 @@ function createFixture() {
       'runtime-promotion-plans',
       `${profileId}.profile.json`,
     ),
+    operatorPublicKey: publicKey,
+    gitShow(arguments_) {
+      if (arguments_[0] === 'rev-parse') return Buffer.from(`${operatorReceipt.source.tree}\n`)
+      const relative = arguments_[1].slice(arguments_[1].indexOf(':') + 1)
+      return sourceFiles[relative]
+    },
     dispose() {
       fs.rmSync(root, { recursive: true, force: true })
     },
@@ -267,6 +317,111 @@ function createModernFixture() {
   }
 }
 
+function createMonoFixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-mono-plan-'))
+  const monoTarget = 'runtime-mono-matrix-candidate'
+  const monoProfileId = 'mono-6.12-linux-x64'
+  const runtimeVersion = '6.12.0.182'
+  const runtimeImage = digestReference('mono', '2')
+  const environment = {
+    IMAGE_PREFIX: 'registry.example/sharplabnext',
+    RELEASE_ID: 'candidate-test',
+    SOURCE_DATE_EPOCH: '1784678400',
+    SOURCE_REVISION: sourceRevision,
+    BASE_DOTNET_SDK_IMAGE: digestReference('sdk', '1'),
+    RUNTIME_MATRIX_MONO_IMAGE: runtimeImage,
+    RUNTIME_MATRIX_CONTROL_IMAGE: digestReference('control', '3'),
+    RUNTIME_MATRIX_PROFILE_ID: monoProfileId,
+    RUNTIME_MATRIX_RUNTIME_VERSION: runtimeVersion,
+    RUNTIME_MATRIX_RUNTIME_DIGEST: `sha256:${'2'.repeat(64)}`,
+    RUNTIME_MATRIX_RUNTIME_SOURCE_URI: `docker://${runtimeImage}`,
+    WINE_CONTROL_TFM: 'net10.0',
+  }
+  const image = `${environment.IMAGE_PREFIX}/runtime-${monoProfileId}:candidate`
+  const profile = {
+    schemaVersion: 1,
+    id: monoProfileId,
+    image,
+    family: 'mono',
+    acceptedRuntimeFamilies: ['mono', 'netfx-clr-wine'],
+    acceptedFrameworks: [{ name: '.NETFramework', exactVersion: '4.8' }],
+    runtimeVersion,
+    runtimeCommit: 'not-applicable',
+    jitVersion: 'not-applicable',
+    jitCommit: 'not-applicable',
+    runtimeImageId: image,
+    rid: 'linux-x64',
+    architecture: 'x64',
+    capabilities: ['run', 'jit-asm'],
+    allowedSecurityPolicyIds: ['runtime-job-default'],
+    container: {
+      isolationKind: 'standard',
+      environmentKind: 'mono',
+      executionUser: '1654:1654',
+    },
+    operations: {
+      run: { implementationId: 'sharplabnext-target-runtime-runner-v1' },
+      jit: {
+        implementationId: 'sharplabnext-mono-jit-inspector-v1',
+        sourceMappingKind: 'none',
+      },
+    },
+    layout: {
+      runnerAssemblyPath: '/opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe',
+      jitInspectorAssemblyPath: '/opt/sharplabnext/SharpLabNext.MonoJitInspector.dll',
+    },
+    securityPolicies: [{ id: 'runtime-job-default' }],
+  }
+  const matrix = {
+    schemaVersion: 1,
+    mono: {
+      id: monoProfileId,
+      version: runtimeVersion,
+      image: runtimeImage,
+      capability: {
+        capabilities: ['run', 'jit-asm'],
+        promotionState: 'blocked',
+      },
+    },
+  }
+  const policy = {
+    schemaVersion: 1,
+    id: 'runtime-image-linux-x64-v1',
+    image: { maximumSizeBytes: 1024 },
+  }
+  const profilePath = `profiles/runtimes/candidates/${monoProfileId}.json`
+  const performancePolicyPath =
+    'profiles/runtime-performance-policies/runtime-image-linux-x64-v1.json'
+  for (const [relativePath, value] of [
+    [profilePath, profile],
+    ['profiles/runtime-matrix.json', matrix],
+    [performancePolicyPath, policy],
+  ]) {
+    const filename = path.join(root, ...relativePath.split('/'))
+    fs.mkdirSync(path.dirname(filename), { recursive: true })
+    fs.writeFileSync(filename, `${JSON.stringify(value, null, 2)}\n`)
+  }
+  return {
+    root,
+    target: monoTarget,
+    profileId: monoProfileId,
+    environment,
+    profile,
+    profilePath,
+    performancePolicyPath,
+    outputPath: path.join(root, 'profiles', 'runtime-promotion-plans', `${monoProfileId}.json`),
+    preflightProfilePath: path.join(
+      root,
+      'profiles',
+      'runtime-promotion-plans',
+      `${monoProfileId}.profile.json`,
+    ),
+    dispose() {
+      fs.rmSync(root, { recursive: true, force: true })
+    },
+  }
+}
+
 function createInspection(environment, overrides = {}, candidateTarget = target) {
   return {
     imageId,
@@ -294,8 +449,16 @@ function options(fixture, overrides = {}) {
     validateCandidateInputs: () => [],
     inspectGit: () => ({ headRevision: sourceRevision, isDirty: false }),
     inspectImage: () => createInspection(fixture.environment, {}, fixture.target),
+    rebuildCandidate: () => {},
+    pullPinnedImage: () => {},
     hashOperations,
     now: () => new Date('2026-07-22T01:02:03Z'),
+    signingPrivateKey: planKeys.privateKey,
+    planSignaturePublicKey: planKeys.publicKey,
+    planSignatureKeyId: planKeyId,
+    readSourceTree: () => 'c'.repeat(40),
+    operatorReceiptPublicKey: fixture.operatorPublicKey,
+    gitShow: fixture.gitShow,
     ...overrides,
   }
 }
@@ -315,8 +478,18 @@ test('promotion plan is derived from immutable observations and written only to 
   t.after(() => fixture.dispose())
   fs.mkdirSync(path.dirname(fixture.outputPath), { recursive: true })
   fs.writeFileSync(fixture.outputPath, '{"stale":true}\n')
+  let rebuilds = 0
+  let pulls = 0
 
-  const result = produceRuntimePromotionPlan(input(fixture), options(fixture))
+  const result = produceRuntimePromotionPlan(input(fixture), options(fixture, {
+    rebuildCandidate() { rebuilds++ },
+    pullPinnedImage(reference) {
+      assert.equal(reference, pinnedReference)
+      pulls++
+    },
+  }))
+  assert.equal(rebuilds, 1)
+  assert.equal(pulls, 1)
   assert.equal(result.outputPath, fixture.outputPath)
   assert.match(result.planSha256, /^sha256:[0-9a-f]{64}$/)
   assert.equal(result.plan.image.reference, pinnedReference)
@@ -334,11 +507,94 @@ test('promotion plan is derived from immutable observations and written only to 
   )
   assert.equal(result.plan.operations.run.assemblySha256, helperDigest)
   assert.equal(result.plan.performance.policyId, 'runtime-image-linux-x64-v1')
-  assert.equal(result.plan.createdAtUtc, '2026-07-22T01:02:03.000Z')
+  assert.equal(result.plan.createdAtUtc, undefined)
   assert.deepEqual(JSON.parse(fs.readFileSync(fixture.outputPath, 'utf8')), result.plan)
   const preflightProfile = JSON.parse(fs.readFileSync(fixture.preflightProfilePath, 'utf8'))
   assert.equal(preflightProfile.image, pinnedReference)
   assert.equal(preflightProfile.runtimeImageId, imageId)
+  assert.equal(result.plan.preflightProfile.sha256, result.preflightProfileSha256)
+})
+
+test('promotion plan rejects candidate identity drift across committed-source rebuild', t => {
+  for (const [name, mutate] of [
+    ['image ID', value => { value.imageId = otherImageId }],
+    ['size', value => { value.sizeBytes++ }],
+    ['operating system', value => { value.operatingSystem = 'windows' }],
+    ['architecture', value => { value.architecture = 'arm64' }],
+    ['source revision', value => {
+      value.labels = {
+        ...value.labels,
+        'org.opencontainers.image.revision': '0'.repeat(40),
+      }
+    }],
+    ['complete labels', value => { value.labels = { ...value.labels, injected: 'changed' } }],
+  ]) {
+    const fixture = createFixture()
+    t.after(() => fixture.dispose())
+    let rebuilt = false
+    assert.throws(
+      () => produceRuntimePromotionPlan(input(fixture), options(fixture, {
+        rebuildCandidate() { rebuilt = true },
+        inspectImage(reference) {
+          const value = createInspection(fixture.environment)
+          if (rebuilt && reference !== pinnedReference) mutate(value)
+          return value
+        },
+      })),
+      /committed-source rebuild|image binding failed/,
+      name,
+    )
+    assert.equal(fs.existsSync(fixture.outputPath), false, name)
+  }
+})
+
+test('Mono JIT promotion plan binds the canonical mono-sgen executable', t => {
+  const fixture = createMonoFixture()
+  t.after(() => fixture.dispose())
+
+  const result = produceRuntimePromotionPlan(input(fixture), options(fixture))
+
+  assert.equal(result.plan.family, 'mono')
+  assert.equal(result.plan.platform, 'mono')
+  assert.equal(result.plan.jitLibraryPath, '/usr/bin/mono-sgen')
+})
+
+test('promotion plan schema accepts only the canonical Mono JIT executable', () => {
+  const schema = JSON.parse(fs.readFileSync(
+    new URL('../schemas/runtime-promotion-plan.schema.json', import.meta.url),
+    'utf8',
+  ))
+  const pattern = new RegExp(schema.properties.jitLibraryPath.pattern)
+
+  assert.equal(pattern.test('/usr/bin/mono-sgen'), true)
+  assert.equal(pattern.test('/usr/bin/mono'), false)
+  assert.equal(pattern.test('/usr/local/bin/mono-sgen'), false)
+  assert.equal(pattern.test('/tmp/mono-sgen'), false)
+  assert.equal(pattern.test('/opt/dotnet/libclrjit.so'), true)
+  assert.equal(pattern.test('/opt/dotnet/clrjit.dll'), true)
+})
+
+test('immutable preflight collapses a candidate framework patch range to runtimeVersion', t => {
+  const fixture = createFixture()
+  t.after(() => fixture.dispose())
+  const profilePath = path.join(fixture.root, ...fixture.profilePath.split('/'))
+  const candidate = JSON.parse(fs.readFileSync(profilePath, 'utf8'))
+  candidate.acceptedFrameworks = [{
+    name: 'Microsoft.NETCore.App',
+    minimumVersion: '7.0.1',
+    maximumVersion: '7.0.20',
+  }]
+  fs.writeFileSync(profilePath, `${JSON.stringify(candidate, null, 2)}\n`)
+
+  const result = produceRuntimePromotionPlan(input(fixture), options(fixture))
+  const preflight = JSON.parse(fs.readFileSync(fixture.preflightProfilePath, 'utf8'))
+  const candidateAfter = JSON.parse(fs.readFileSync(profilePath, 'utf8'))
+
+  assert.deepEqual(candidateAfter.acceptedFrameworks, candidate.acceptedFrameworks)
+  assert.deepEqual(preflight.acceptedFrameworks, [{
+    name: 'Microsoft.NETCore.App',
+    exactVersion: '7.0.20',
+  }])
   assert.equal(result.plan.preflightProfile.sha256, result.preflightProfileSha256)
 })
 
@@ -396,9 +652,20 @@ test('installed plan verification repeats immutable observations without writing
   const planBytes = fs.readFileSync(fixture.outputPath)
   const profileBytes = fs.readFileSync(fixture.preflightProfilePath)
   const observedAllowedPaths = []
+  let rebuilds = 0
+  let pulls = 0
+  let rebuildAllowedPaths
 
   const result = verifyRuntimePromotionPlan(input(fixture), options(fixture, {
     now: () => { throw new Error('verification must retain the installed timestamp') },
+    rebuildCandidate(_target, _values, rebuildOptions) {
+      rebuilds++
+      rebuildAllowedPaths = rebuildOptions.allowedDirtyPaths
+    },
+    pullPinnedImage(reference) {
+      assert.equal(reference, pinnedReference)
+      pulls++
+    },
     inspectGit(gitOptions) {
       observedAllowedPaths.push(...(gitOptions.allowedDirtyPaths ?? []))
       return { headRevision: sourceRevision, isDirty: false }
@@ -408,12 +675,49 @@ test('installed plan verification repeats immutable observations without writing
   assert.equal(result.planSha256, `sha256:${crypto.createHash('sha256').update(planBytes).digest('hex')}`)
   assert.deepEqual(fs.readFileSync(fixture.outputPath), planBytes)
   assert.deepEqual(fs.readFileSync(fixture.preflightProfilePath), profileBytes)
+  assert.equal(rebuilds, 1)
+  assert.equal(pulls, 1)
+  assert.deepEqual(new Set(rebuildAllowedPaths), new Set(observedAllowedPaths))
   assert.equal(observedAllowedPaths.includes(
     `profiles/runtime-promotion-evidence/${profileId}/performance.json`,
   ), true)
   assert.equal(observedAllowedPaths.includes(
     `profiles/runtime-promotion-receipts/${profileId}.json`,
   ), true)
+})
+
+test('installed plan verification rejects candidate or pinned identity drift after rebuild', t => {
+  for (const drift of ['rebuilt candidate', 'pinned image']) {
+    const fixture = createFixture()
+    t.after(() => fixture.dispose())
+    produceRuntimePromotionPlan(input(fixture), options(fixture))
+    const planBytes = fs.readFileSync(fixture.outputPath)
+    const profileBytes = fs.readFileSync(fixture.preflightProfilePath)
+    let rebuilt = false
+    let pulled = false
+    let pulls = 0
+
+    assert.throws(
+      () => verifyRuntimePromotionPlan(input(fixture), options(fixture, {
+        rebuildCandidate() { rebuilt = true },
+        pullPinnedImage() { pulled = true; pulls++ },
+        inspectImage(reference) {
+          if (drift === 'rebuilt candidate' && rebuilt && reference !== pinnedReference) {
+            return createInspection(fixture.environment, { imageId: otherImageId })
+          }
+          if (drift === 'pinned image' && pulled && reference === pinnedReference) {
+            return createInspection(fixture.environment, { imageId: otherImageId })
+          }
+          return createInspection(fixture.environment)
+        },
+      })),
+      /committed-source rebuild|pinned image reference|Pinned runtime candidate/,
+      drift,
+    )
+    assert.equal(pulls, drift === 'rebuilt candidate' ? 0 : 1, drift)
+    assert.deepEqual(fs.readFileSync(fixture.outputPath), planBytes, drift)
+    assert.deepEqual(fs.readFileSync(fixture.preflightProfilePath), profileBytes, drift)
+  }
 })
 
 test('installed plan verification rejects plan, profile, image, helper, and Git drift', t => {
@@ -484,7 +788,7 @@ test('missing registry digest and tag retargeting fail without installing a plan
       }
       return createInspection(retargeted.environment)
     },
-  })), /resolves to sha256:b{64}.*candidate.*sha256:c{64}|binding changed/s)
+  })), /resolves to sha256:b{64}.*candidate.*sha256:c{64}|binding changed|committed-source rebuild/s)
   assert.equal(fs.existsSync(retargeted.outputPath), false)
 })
 
@@ -532,6 +836,32 @@ test('image size and required image labels are fail-closed', t => {
     }),
   })), /runtime\.commit/)
   assert.equal(fs.existsSync(relabelled.outputPath), false)
+
+  for (const [name, mutate] of [
+    ['missing source context', labels => { delete labels['io.sharplabnext.source.context'] }],
+    ['development source context', labels => {
+      labels['io.sharplabnext.source.context'] = 'working-tree-development'
+    }],
+    ['missing promotion eligibility', labels => {
+      delete labels['com.sharplabnext.runtime-candidate.promotion-eligible']
+    }],
+    ['false promotion eligibility', labels => {
+      labels['com.sharplabnext.runtime-candidate.promotion-eligible'] = 'false'
+    }],
+  ]) {
+    const fixture = createFixture()
+    t.after(() => fixture.dispose())
+    const labels = { ...candidateExpectedImageLabels(target, fixture.environment) }
+    mutate(labels)
+    assert.throws(
+      () => produceRuntimePromotionPlan(input(fixture), options(fixture, {
+        inspectImage: () => createInspection(fixture.environment, { labels }),
+      })),
+      /io\.sharplabnext\.source\.context|com\.sharplabnext\.runtime-candidate\.promotion-eligible/,
+      name,
+    )
+    assert.equal(fs.existsSync(fixture.outputPath), false, name)
+  }
 })
 
 test('image Size and label drift between capture and commit are rejected', t => {
@@ -553,7 +883,10 @@ test('image Size and label drift between capture and commit are rejected', t => 
           },
         })
       },
-    })), drift === 'size' ? /binding changed/ : /image\.version/, drift)
+    })), drift === 'size'
+      ? /binding changed|committed-source rebuild/
+      : /image\.version|committed-source rebuild/,
+    drift)
     assert.equal(fs.existsSync(fixture.outputPath), false, drift)
   }
 })
@@ -587,14 +920,22 @@ test('only canonical candidate profile and performance policy paths are accepted
     ['performancePolicyPath', `profiles/runtime-performance-policies/../` +
       'runtime-performance-policies/runtime-image-linux-x64-v1.json'],
   ]) {
+    let boundaryCalls = 0
     assert.throws(() => produceRuntimePromotionPlan(
       input(fixture, { [field]: value }),
-      options(fixture),
+      options(fixture, {
+        inspectGit() { boundaryCalls++; throw new Error('must not inspect Git') },
+        inspectImage() { boundaryCalls++; throw new Error('must not inspect Docker') },
+        rebuildCandidate() { boundaryCalls++; throw new Error('must not rebuild') },
+        pullPinnedImage() { boundaryCalls++; throw new Error('must not pull') },
+        hashOperations() { boundaryCalls++; throw new Error('must not hash helpers') },
+      }),
     ), error => {
       assert.equal(error instanceof RuntimePromotionPlanError, true)
       assert.match(error.message, /canonical path/)
       return true
     })
+    assert.equal(boundaryCalls, 0, field)
   }
 })
 

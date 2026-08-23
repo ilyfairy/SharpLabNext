@@ -30,12 +30,15 @@ import {
   validateGitSourceState,
   validateRuntimeImageInspection,
 } from './runtime-promotion-image-binding.mjs'
+import {
+  rebuildRuntimeCandidateFromCommittedSource,
+  requireSameRuntimeCandidateBuild,
+} from './rebuild-runtime-candidate.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const imageIdPattern = /^sha256:[0-9a-f]{64}$/
 const digestReferencePattern = /^([^@\s]+)@(sha256:[0-9a-f]{64})$/
 const localTaggedReferencePattern = /^[a-z0-9][a-z0-9._:/-]*:[a-z0-9][a-z0-9._-]{0,127}$/
-
 export const runtimeCandidatePublishUsage = `Usage:
   node eng/publish-runtime-candidate.mjs <candidate-target>
     --destination <registry-host>/<repository>:<RELEASE_ID>`
@@ -165,6 +168,11 @@ export function publishRuntimeCandidate(input, options = {}) {
     validateInputs = validateCandidateBuildInputs,
     expectedLabelsFor = candidateExpectedImageLabels,
     operationSpecificationsFor = candidateOperationHelpers,
+    rebuildCandidate = (candidateTarget, candidateValues) =>
+      rebuildRuntimeCandidateFromCommittedSource(candidateTarget, candidateValues, {
+        repositoryRoot,
+        spawn,
+      }),
     hashOperations = (imageId, specifications) => hashRuntimeOperationHelpers(
       imageId,
       specifications,
@@ -207,6 +215,8 @@ export function publishRuntimeCandidate(input, options = {}) {
   }
   requireCleanSource()
 
+  // The shared formal candidate label contract includes committed source and
+  // promotion eligibility, so a later-clean worktree cannot bless dirty bytes.
   const expectedLabels = expectedLabelsFor(target, values)
   const inspect = reference => inspectImage(reference, {
     spawn,
@@ -226,6 +236,18 @@ export function publishRuntimeCandidate(input, options = {}) {
   ]
   if (identityFailures.length > 0) {
     fail(`Runtime candidate publication identity is invalid:\n- ${identityFailures.join('\n- ')}`)
+  }
+  try {
+    rebuildCandidate(target, values)
+    const rebuilt = bindRuntimeCandidateImage({
+      candidateReference: sourceReference,
+      sourceRevision: values.SOURCE_REVISION,
+      expectedLabels,
+      inspect,
+    })
+    requireSameRuntimeCandidateBuild(captured, rebuilt)
+  } catch (error) {
+    fail(`Runtime candidate committed-source rebuild failed: ${error.message}`, { cause: error })
   }
   const operationSpecifications = operationSpecificationsFor(target, values)
   const capturedHelpers = hashOperations(captured.imageId, operationSpecifications)

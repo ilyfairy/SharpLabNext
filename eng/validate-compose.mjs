@@ -200,6 +200,28 @@ function validateConfig(config, fileName, isProduction) {
 
   validateCppCliNetworkIsolation(services, fileName)
   validateJSharpNetworkIsolation(services, fileName)
+  validateRoslynCoreReferenceSetConfiguration(services, fileName, isProduction)
+}
+
+function validateRoslynCoreReferenceSetConfiguration(services, fileName, isProduction) {
+  // Roslyn stable/main images materialize the complete locked CoreCLR closure
+  // into appsettings. Any Compose override can replace an attested identity or
+  // change whether SharpLab.Runtime is referenced, so the image owns every
+  // ReferenceSets setting for these workers.
+  for (const serviceName of ['worker-roslyn-stable', 'worker-roslyn-main']) {
+    if (!isProduction && services[serviceName]?.pull_policy !== 'never') {
+      failures.push(
+        `${fileName}: ${serviceName} must use pull_policy=never for its prebuilt development image`,
+      )
+    }
+    const overrides = Object.keys(services[serviceName]?.environment ?? {})
+      .filter(key => /^ReferenceSets__/.test(key))
+    if (overrides.length > 0) {
+      failures.push(
+        `${fileName}: ${serviceName} must not override materialized CoreCLR reference-set configuration (${overrides.join(', ')})`,
+      )
+    }
+  }
 }
 
 function validateCppCliNetworkIsolation(services, fileName) {

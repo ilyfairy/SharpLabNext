@@ -10,7 +10,7 @@ public static class ProcessorProtocol
     public const int Version = 1;
     public static string IlSpyVersion { get; } = RequiredAssemblyMetadata("SharpLabNext.ILSpyVersion");
     public static string IlVerificationVersion { get; } = RequiredAssemblyMetadata("SharpLabNext.ILVerificationVersion");
-    public const string RuntimeInstrumentationVersion = "1.0.0";
+    public const string RuntimeInstrumentationVersion = "1.0.1";
     public const string RuntimeInstrumentationProfileId = "execution-flow-v1";
 
     public static JsonSerializerOptions JsonOptions { get; } = CreateJsonOptions();

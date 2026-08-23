@@ -74,6 +74,14 @@ public sealed partial class RuntimeCapabilityPreflightCoordinator(
     private const string StderrMarker = "SLN-CAPABILITY-STDERR-V1";
     private const string NetworkBlockedMarker = "SLN-CAPABILITY-NETWORK-BLOCKED-V1";
     private const string ReadOnlyBlockedMarker = "SLN-CAPABILITY-ROOTFS-READONLY-V1";
+    private const string HangReadyMarker = RuntimeJobExecutor.CapabilityHangReadyMarker;
+    private const string DesktopClrCaptureHelperPath =
+        "/opt/sharplabnext/SharpLabNext.DesktopClrJitInspector.exe";
+    // Docker materialization and container startup are part of the Supervisor
+    // operation, but are not the behavior exercised by the timeout probe. Its
+    // short deadline is passed separately once the probe emits its ready line;
+    // setup retains the selected policy's normal, bounded operation deadline.
+    private static readonly TimeSpan TimeoutProbeRuntimeDeadline = TimeSpan.FromMilliseconds(250);
     private static readonly JsonSerializerOptions EvidenceJsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -426,9 +434,15 @@ public sealed partial class RuntimeCapabilityPreflightCoordinator(
             artifactRef,
             ["hang"],
             RunInstrumentation.None,
-            deadline: TimeSpan.FromMilliseconds(250),
+            deadline: TimeoutProbeRuntimeDeadline,
             cancellationToken: cancellationToken).ConfigureAwait(false);
         RequireAuditedCompletion(timeout, "timeout");
+        if (!HasExactLineMarker(timeout.Audit!.Stdout, HangReadyMarker))
+        {
+            throw Failed(
+                "capability-timeout-marker-missing",
+                "The timeout probe did not emit its ready marker before the operation deadline.");
+        }
         if (timeout.Result is not RunResult { Status: RunTerminalStatus.Timeout })
             throw Failed("capability-timeout-probe-failed", "The timeout probe did not terminate at its deadline.");
 
@@ -441,6 +455,12 @@ public sealed partial class RuntimeCapabilityPreflightCoordinator(
             cancelAfterContainerStart: true,
             cancellationToken: cancellationToken).ConfigureAwait(false);
         RequireAuditedCompletion(cancellation, "cancellation");
+        if (!HasExactLineMarker(cancellation.Audit!.Stdout, HangReadyMarker))
+        {
+            throw Failed(
+                "capability-cancellation-marker-missing",
+                "The cancellation probe did not emit its ready marker before cancellation.");
+        }
         if (cancellation.Result is not RunResult { Status: RunTerminalStatus.Cancelled })
             throw Failed("capability-cancellation-probe-failed", "The cancellation probe did not report cancellation.");
 
@@ -479,17 +499,23 @@ public sealed partial class RuntimeCapabilityPreflightCoordinator(
             requestId,
             DateTimeOffset.UtcNow);
         var measurement = new RuntimeJobMeasurementRegistration(collectResources: false);
-        var queued = executor.QueueRunForMeasurement(
-            operation,
-            new RunRequest(
-                requestId,
-                $"runtime-capability-run-{nonce}",
-                "runtime-capability-preflight",
-                artifactRef,
-                profile.Id,
-                new RunOptions(arguments, null, instrumentation, policy.Id),
-                DateTimeOffset.UtcNow.Add(deadline ?? TimeSpan.FromSeconds(policy.MaximumDurationSeconds))),
-            measurement);
+        var runtimeDeadline = deadline;
+        var requestDeadline = DateTimeOffset.UtcNow.AddSeconds(policy.MaximumDurationSeconds);
+        var runRequest = new RunRequest(
+            requestId,
+            $"runtime-capability-run-{nonce}",
+            "runtime-capability-preflight",
+            artifactRef,
+            profile.Id,
+            new RunOptions(arguments, null, instrumentation, policy.Id),
+            requestDeadline);
+        var queued = runtimeDeadline is { } postStartDeadline
+            ? executor.QueueRunForCapabilityProbe(
+                operation,
+                runRequest,
+                measurement,
+                postStartDeadline)
+            : executor.QueueRunForMeasurement(operation, runRequest, measurement);
         if (!queued)
             throw Unavailable("capability-queue-rejected", "The runtime queue rejected a capability probe.");
 
@@ -497,13 +523,13 @@ public sealed partial class RuntimeCapabilityPreflightCoordinator(
         {
             try
             {
-                await measurement.ContainerStarted.WaitAsync(
+                await measurement.ProbeReady.WaitAsync(
                     TimeSpan.FromSeconds(Math.Min(policy.MaximumDurationSeconds, 30)),
                     cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                throw Failed("capability-cancellation-start-timeout", "The cancellation probe never started its container.");
+                throw Failed("capability-cancellation-ready-timeout", "The cancellation probe never reached its ready marker.");
             }
             operations.Cancel(operation.Handle.OperationId, "capability-cancellation-probe", DateTimeOffset.UtcNow);
         }
@@ -1206,6 +1232,14 @@ public sealed partial class RuntimeCapabilityPreflightCoordinator(
             {
                 files.Add(new RuntimeImageFileRequest("profiler", profilerPath));
             }
+            if (StringComparer.Ordinal.Equals(
+                    operation.ImplementationId,
+                    RuntimeOperationImplementationIds.DesktopClrJitInspector))
+            {
+                files.Add(new RuntimeImageFileRequest(
+                    "desktop-helper",
+                    DesktopClrCaptureHelperPath));
+            }
         }
 
         if (files.Count is < 2 or > 8 ||
@@ -1272,6 +1306,14 @@ public sealed partial class RuntimeCapabilityPreflightCoordinator(
             innerHost = profile.Layout.DotNetHostPath;
             if (!StringComparer.Ordinal.Equals(innerHost, "/usr/bin/mono"))
                 throw Failed("capability-host-path-invalid", "The Mono JIT runtime host path is invalid.");
+        }
+        else if (StringComparer.Ordinal.Equals(
+                     operation.ImplementationId,
+                     RuntimeOperationImplementationIds.DesktopClrJitInspector))
+        {
+            innerHost = profile.Layout.WineHostPath;
+            if (!StringComparer.Ordinal.Equals(innerHost, "/usr/lib/wine/wine64"))
+                throw Failed("capability-host-path-invalid", "The Desktop CLR JIT Wine host path is invalid.");
         }
 
         return innerHost is null
@@ -1397,6 +1439,21 @@ public sealed partial class RuntimeCapabilityPreflightCoordinator(
         {
             throw Failed("capability-profiler-identity-mismatch", "The inspected JIT profiler identity is invalid.");
         }
+        var requiresDesktopHelper = StringComparer.Ordinal.Equals(
+            operation.ImplementationId,
+            RuntimeOperationImplementationIds.DesktopClrJitInspector);
+        if (requiresDesktopHelper != byRole.ContainsKey("desktop-helper") ||
+            requiresDesktopHelper && !MatchesArtifact(
+                byRole,
+                "desktop-helper",
+                DesktopClrCaptureHelperPath,
+                "managed-pe",
+                "anycpu"))
+        {
+            throw Failed(
+                "capability-desktop-helper-identity-mismatch",
+                "The inspected Desktop CLR capture helper identity is invalid.");
+        }
     }
 
     private static bool MatchesArtifact(
@@ -1411,11 +1468,13 @@ public sealed partial class RuntimeCapabilityPreflightCoordinator(
         StringComparer.Ordinal.Equals(artifact.Architecture, architecture);
 
     private static bool IsArtifactRole(string value) => value is
-        "helper" or "control-host" or "runtime-host" or "support-assembly" or "jit-library" or "profiler";
+        "helper" or "desktop-helper" or "control-host" or "runtime-host" or
+            "support-assembly" or "jit-library" or "profiler";
 
     private static bool IsArtifactMetadataValid(string role, string format, string architecture) => role switch
     {
-        "helper" or "support-assembly" => format == "managed-pe" && architecture == "anycpu",
+        "helper" or "desktop-helper" or "support-assembly" =>
+            format == "managed-pe" && architecture == "anycpu",
         "control-host" or "runtime-host" or "jit-library" =>
             format is "elf" or "pe" && architecture == "x64",
         "profiler" => format == "elf" && architecture == "x64",
@@ -1487,6 +1546,15 @@ public sealed partial class RuntimeCapabilityPreflightCoordinator(
                 "capability-security-marker-missing",
                 $"The runtime probe did not emit the required marker '{marker}'.");
         }
+    }
+
+    private static bool HasExactLineMarker(byte[] bytes, string marker)
+    {
+        var value = Utf8(bytes, "runtime probe marker");
+        return value.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n')
+            .Contains(marker, StringComparer.Ordinal);
     }
 
     private async Task<PortablePdbEvidence> ReadPortablePdbEvidenceAsync(

@@ -1,3 +1,5 @@
+using SharpLabNext.Testing;
+
 namespace SharpLabNext.Worker.Roslyn.Main.Tests;
 
 internal static class RoslynMainTestSettings
@@ -12,38 +14,9 @@ internal static class RoslynMainTestSettings
     public static bool IsSourceBuild => false;
 #endif
 
-    public static string GetReferencePath(string version, string targetFramework)
-    {
-        var variable = targetFramework == "net10.0"
-            ? "SHARPLABNEXT_NET10_REF_PATH"
-            : "SHARPLABNEXT_NET11_REF_PATH";
-        var explicitPath = Environment.GetEnvironmentVariable(variable);
-        if (!string.IsNullOrWhiteSpace(explicitPath) && Directory.Exists(explicitPath))
-            return explicitPath;
+    public static TestReferenceSet Net10ReferenceSet => TestReferenceSets.Net10;
 
-        var roots = new[]
-        {
-            Environment.GetEnvironmentVariable("DOTNET_ROOT"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet"),
-            "/usr/share/dotnet",
-            "/usr/local/share/dotnet"
-        };
-        foreach (var root in roots.Where(static root => !string.IsNullOrWhiteSpace(root)))
-        {
-            var candidate = Path.Combine(
-                root!,
-                "packs",
-                "Microsoft.NETCore.App.Ref",
-                version,
-                "ref",
-                targetFramework);
-            if (Directory.Exists(candidate))
-                return candidate;
-        }
-
-        throw new InvalidOperationException(
-            $"The {targetFramework} reference pack {version} was not found. Set {variable} explicitly.");
-    }
+    public static TestReferenceSet Net11ReferenceSet => TestReferenceSets.Net11;
 
     public static string GetInternalServiceTokenFile()
     {

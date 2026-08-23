@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" />
     <ProjectReference Include="..\..\Gateway\SharpLabNext.Catalog\SharpLabNext.Catalog.csproj" />
     <ProjectReference Include="..\..\Contracts\SharpLabNext.Artifacts.Contracts\SharpLabNext.Artifacts.Contracts.csproj" />
     <ProjectReference Include="..\..\Contracts\SharpLabNext.Contracts\SharpLabNext.Contracts.csproj" />

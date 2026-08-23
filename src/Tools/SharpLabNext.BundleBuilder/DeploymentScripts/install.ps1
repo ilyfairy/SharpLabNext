@@ -6,6 +6,7 @@ param(
     [string]$ExpectedSigningKeyId,
     [switch]$AllowUnsigned,
     [switch]$SkipArtifactBackup,
+    [switch]$CurrentOnly,
     [int]$ReadyTimeoutSeconds = 180,
     [string]$SmokeBaseAddress
 )
@@ -35,6 +36,7 @@ $releaseId = [string]$document.releaseId
 $InstallRoot = Resolve-InstallRoot $InstallRoot
 New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
 $current = Get-ReleasePointer $InstallRoot 'current-release'
+$previous = Get-ReleasePointer $InstallRoot 'previous-release'
 
 $verifyArguments = @{
     ReleaseRoot = $bundleRoot
@@ -76,6 +78,19 @@ catch {
     throw "Release '$releaseId' failed readiness checks; release '$current' was restored: $($deploymentFailure.Exception.Message)"
 }
 
-if ($current -and $current -cne $releaseId) { Set-ReleasePointer $InstallRoot 'previous-release' $current }
-Set-ReleasePointer $InstallRoot 'current-release' $releaseId
+if ($CurrentOnly) {
+    $retainedPrevious = if ($current -and $current -cne $releaseId) { $current } else { $previous }
+    $null = Test-CurrentOnlyRetentionSources `
+        $InstallRoot `
+        $releaseId `
+        $retainedPrevious `
+        $previous `
+        $current `
+        $previous
+    Set-ReleasePointerPair $InstallRoot $releaseId $current $previous
+    Remove-CurrentOnlyPreviousRelease $InstallRoot $releaseId $retainedPrevious $previous
+}
+else {
+    Set-ReleasePointerPair $InstallRoot $releaseId $current $previous
+}
 Write-Host "Installed SharpLabNext release $releaseId at $releaseRoot"

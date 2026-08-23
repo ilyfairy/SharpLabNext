@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using SharpLabNext.Contracts;
 using SharpLabNext.LanguageWorker.Sdk;
+using SharpLabNext.Testing;
 using System.Text.Json;
 
 namespace SharpLabNext.Worker.GSharp.Tests;
@@ -144,10 +145,10 @@ internal static class GSharpTestSettings
             ["GSharp:WorkRoot"] = Path.Combine(root, "web-work"),
             ["GSharp:MaximumProcessOutputBytes"] = (1024 * 1024).ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["GSharp:MaximumProcessWorkingSetBytes"] = (512L * 1024 * 1024).ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["ReferenceSets:net10-ref:Path"] = GetReferencePath("10.0.9", "net10.0"),
+            ["ReferenceSets:net10-ref:Path"] = TestReferenceSets.Net10.Path,
             ["ReferenceSets:net10-ref:TargetFramework"] = "net10.0",
-            ["ReferenceSets:net10-ref:FrameworkVersion"] = "10.0.9",
-            ["ReferenceSets:net10-ref:Digest"] = "development-net10-ref"
+            ["ReferenceSets:net10-ref:FrameworkVersion"] = TestReferenceSets.Net10.Version,
+            ["ReferenceSets:net10-ref:Digest"] = TestReferenceSets.Net10.Digest
         };
 
     public static void DeleteRoot(string root)
@@ -175,34 +176,12 @@ internal static class GSharpTestSettings
     [
         new(
             "net10-ref",
-            GetReferencePath("10.0.9", "net10.0"),
+            TestReferenceSets.Net10.Path,
             "net10.0",
-            "10.0.9",
-            "development-net10-ref",
+            TestReferenceSets.Net10.Version,
+            TestReferenceSets.Net10.Digest,
             null)
     ];
-
-    private static string GetReferencePath(string version, string targetFramework)
-    {
-        const string explicitVariable = "SHARPLABNEXT_NET10_REF_PATH";
-        var explicitPath = Environment.GetEnvironmentVariable(explicitVariable);
-        if (!string.IsNullOrWhiteSpace(explicitPath) && Directory.Exists(explicitPath))
-            return explicitPath;
-        var roots = new[]
-        {
-            Environment.GetEnvironmentVariable("DOTNET_ROOT"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet"),
-            "/usr/share/dotnet",
-            "/usr/local/share/dotnet"
-        };
-        foreach (var root in roots.Where(static value => !string.IsNullOrWhiteSpace(value)))
-        {
-            var candidate = Path.Combine(root!, "packs", "Microsoft.NETCore.App.Ref", version, "ref", targetFramework);
-            if (Directory.Exists(candidate))
-                return candidate;
-        }
-        throw new InvalidOperationException($"The .NET reference pack '{version}/{targetFramework}' was not found.");
-    }
 
     private static void EnsureToolsExist()
     {

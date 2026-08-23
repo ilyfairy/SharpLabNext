@@ -17,17 +17,17 @@ public sealed class RoslynWorkerArtifactPublishingIntegrationTests
             internalServiceToken: internalServiceToken);
         using var referenceSets = await AttestedReferenceSetTestData.CreateAsync(
             TestContext.Current.CancellationToken);
+        var workerEnvironment = new Dictionary<string, string?>
+        {
+            ["ASPNETCORE_ENVIRONMENT"] = "Production",
+            ["ArtifactStore__BaseUrl"] = artifactStore.HttpClient.BaseAddress!.AbsoluteUri,
+            ["RoslynWorker__DevelopmentArtifactEnvelope__Enabled"] = "false"
+        };
+        referenceSets.AddToEnvironment(workerEnvironment, "net10-ref", "net11-preview-ref");
         await using var worker = await DotNetWebServiceProcess.StartAsync(
             "src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable.csproj",
             "/health/ready",
-            new Dictionary<string, string?>
-            {
-                ["ASPNETCORE_ENVIRONMENT"] = "Production",
-                ["ArtifactStore__BaseUrl"] = artifactStore.HttpClient.BaseAddress!.AbsoluteUri,
-                ["ReferenceSets__net10-ref__Path"] = referenceSets.PathFor("net10-ref"),
-                ["ReferenceSets__net11-preview-ref__Path"] = referenceSets.PathFor("net11-preview-ref"),
-                ["RoslynWorker__DevelopmentArtifactEnvelope__Enabled"] = "false"
-            },
+            workerEnvironment,
             TestContext.Current.CancellationToken,
             internalServiceToken: internalServiceToken);
         var request = CreateRequest();

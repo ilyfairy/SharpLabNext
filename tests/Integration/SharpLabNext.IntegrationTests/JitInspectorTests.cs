@@ -15,6 +15,7 @@ using JitRichMethodMap = JitInspector::JitRichMethodMap;
 using JitInspectorProgram = JitInspector::JitInspectorProgram;
 using JitMethodResult = JitInspector::JitMethodResult;
 using JitSourceMapping = JitInspector::JitSourceMapping;
+using JitSourceLinkedRange = JitInspector::JitSourceLinkedRange;
 using JitSourcePoint = JitInspector::JitSourcePoint;
 using JitSourceTextRange = JitInspector::JitSourceTextRange;
 
@@ -22,6 +23,77 @@ namespace SharpLabNext.IntegrationTests;
 
 public sealed class JitInspectorTests
 {
+    [Fact]
+    public void InspectorSummaryKeepsEvidenceOutOfPublicLinkedRanges()
+    {
+        var sourceRange = new JitSourceTextRange(2, 8, 2, 30);
+        var outputRange = new JitSourceTextRange(7, 0, 7, 18);
+        var evidence = new JitEvidenceRange(0, 0, 4, "Program.cs", 3, 9, 3, 31);
+        var method = new JitMethodResult(
+            "0x06000001",
+            0x06000001,
+            (nuint)0x1234,
+            (nuint)0x5678,
+            "Program.Main",
+            "prepared",
+            "0x0000000000005678",
+            null,
+            4,
+            1,
+            [new JitSourceLinkedRange(
+                "Program.cs",
+                sourceRange,
+                outputRange,
+                "sequence-point",
+                evidence)])
+        {
+            MappingSource = "ordinary"
+        };
+
+        var payload = RuntimeStructuredPayloadCodec.Serialize(new
+        {
+            RuntimeVersion = "10.0.10",
+            Assembly = "SharpLabNext.User",
+            MethodFilter = "Program.Main",
+            Methods = new[] { method }
+        });
+        using var summary = JsonDocument.Parse(payload);
+        var serializedMethod = Assert.Single(
+            summary.RootElement.GetProperty("Methods").EnumerateArray());
+        var linkedRange = Assert.Single(
+            serializedMethod.GetProperty("LinkedRanges").EnumerateArray());
+        var evidenceRange = Assert.Single(
+            serializedMethod.GetProperty("EvidenceRanges").EnumerateArray());
+
+        Assert.Equal(
+            ["OutputRange", "Precision", "SourceFilePath", "SourceRange"],
+            linkedRange.EnumerateObject()
+                .Select(static property => property.Name)
+                .Order(StringComparer.Ordinal));
+        Assert.Equal(
+            [
+                "Document",
+                "EndColumn",
+                "EndLine",
+                "IlOffset",
+                "NativeEndOffset",
+                "NativeStartOffset",
+                "StartColumn",
+                "StartLine"
+            ],
+            evidenceRange.EnumerateObject()
+                .Select(static property => property.Name)
+                .Order(StringComparer.Ordinal));
+        Assert.Equal(0, evidenceRange.GetProperty("IlOffset").GetInt32());
+        Assert.Equal(0, evidenceRange.GetProperty("NativeStartOffset").GetInt32());
+        Assert.Equal(4, evidenceRange.GetProperty("NativeEndOffset").GetInt32());
+        Assert.Equal("Program.cs", evidenceRange.GetProperty("Document").GetString());
+        Assert.Equal(3, evidenceRange.GetProperty("StartLine").GetInt32());
+        Assert.Equal(9, evidenceRange.GetProperty("StartColumn").GetInt32());
+        Assert.Equal(3, evidenceRange.GetProperty("EndLine").GetInt32());
+        Assert.Equal(31, evidenceRange.GetProperty("EndColumn").GetInt32());
+    }
+
     [Fact]
     public void InspectorIncludesInstanceConstructorsInCurrentMethodFiltering()
     {

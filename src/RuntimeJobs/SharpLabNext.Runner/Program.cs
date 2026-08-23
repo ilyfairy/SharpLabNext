@@ -4,6 +4,7 @@ using System.IO.Pipes;
 using System.Reflection;
 using System.Text;
 using SharpLab.Runtime;
+using SharpLabNext.RuntimeJobs;
 using SharpLabNext.RuntimeProtocol;
 
 return await RunnerProgram.RunAsync(args);
@@ -11,6 +12,7 @@ return await RunnerProgram.RunAsync(args);
 internal static class RunnerProgram
 {
     private const string ChildSwitch = "--runtime-child";
+    private static readonly TimeSpan OutputDrainTimeout = TimeSpan.FromSeconds(2);
     // User code can construct arbitrary exception chains. Keep the diagnostic
     // payload bounded so a malicious chain cannot exhaust the framed protocol
     // writer or the supervisor's deserializer.
@@ -35,12 +37,21 @@ internal static class RunnerProgram
         using var child = StartChild(parsed, childFrames.GetClientHandleAsString());
         childFrames.DisposeLocalCopyOfClientHandle();
 
-        var stdout = ForwardTextAsync(child.StandardOutput.BaseStream, protocolWriter, RuntimeFrameKind.Stdout);
-        var stderr = ForwardTextAsync(child.StandardError.BaseStream, protocolWriter, RuntimeFrameKind.Stderr);
+        using var outputCancellation = new CancellationTokenSource();
+        var stdout = ForwardTextAsync(
+            child.StandardOutput.BaseStream,
+            protocolWriter,
+            RuntimeFrameKind.Stdout,
+            outputCancellation.Token);
+        var stderr = ForwardTextAsync(
+            child.StandardError.BaseStream,
+            protocolWriter,
+            RuntimeFrameKind.Stderr,
+            outputCancellation.Token);
         var structured = ForwardStructuredAsync(childFrames, protocolWriter);
         await child.WaitForExitAsync();
-        await Task.WhenAll(stdout, stderr);
         var childExitReported = await structured;
+        await CompleteTextForwardingAsync(child, stdout, stderr, outputCancellation);
 
         var syntheticStatus = RunnerExitClassification.GetSyntheticStatus(
             childExitReported,
@@ -94,20 +105,65 @@ internal static class RunnerProgram
     private static async Task ForwardTextAsync(
         Stream stream,
         RuntimeFrameWriter writer,
-        RuntimeFrameKind kind)
+        RuntimeFrameKind kind,
+        CancellationToken cancellationToken)
     {
         var buffer = new byte[16 * 1024];
-        while (await stream.ReadAsync(buffer) is var read && read > 0)
+        while (await stream.ReadAsync(buffer, cancellationToken) is var read && read > 0)
         {
-            await writer.WriteAsync(kind, buffer.AsMemory(0, read));
+            // Finish a frame once its payload has been read. Cancelling a write can
+            // leave the outer runtime protocol with a partial frame.
+            await writer.WriteAsync(kind, buffer.AsMemory(0, read), CancellationToken.None);
         }
     }
 
-    private static async Task<bool> ForwardStructuredAsync(
+    private static async Task CompleteTextForwardingAsync(
+        Process child,
+        Task stdout,
+        Task stderr,
+        CancellationTokenSource cancellation)
+    {
+        var forwarding = Task.WhenAll(stdout, stderr);
+        try
+        {
+            await forwarding.WaitAsync(OutputDrainTimeout);
+            return;
+        }
+        catch (TimeoutException)
+        {
+            cancellation.Cancel();
+            CloseReadPipe(child.StandardOutput.BaseStream);
+            CloseReadPipe(child.StandardError.BaseStream);
+        }
+
+        // On Windows an async pipe read can remain pending while a descendant
+        // retains an inherited writer, even after cancellation and handle close.
+        // The Runner must exit so the Supervisor can remove the process tree.
+        ObserveFault(forwarding);
+    }
+
+    private static void CloseReadPipe(Stream stream)
+    {
+        if (stream is FileStream fileStream)
+        {
+            fileStream.SafeFileHandle.Dispose();
+            return;
+        }
+
+        stream.Dispose();
+    }
+
+    private static void ObserveFault(Task task) =>
+        _ = task.ContinueWith(
+            static completed => _ = completed.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+    internal static async Task<bool> ForwardStructuredAsync(
         Stream stream,
         RuntimeFrameWriter writer)
     {
-        var exitReported = false;
         while (await RuntimeFrameCodec.ReadAsync(stream) is { } frame)
         {
             if (frame.Kind is not (
@@ -122,16 +178,18 @@ internal static class RunnerProgram
             }
 
             RuntimeStructuredPayloadCodec.Validate(frame.Kind, frame.Payload.Span);
-            exitReported |= frame.Kind == RuntimeFrameKind.Exit;
             await writer.WriteAsync(frame.Kind, frame.Payload);
+            if (frame.Kind == RuntimeFrameKind.Exit)
+                return true;
         }
-        return exitReported;
+        return false;
     }
 
     private static async Task<int> RunChildAsync(string[] args)
     {
         var parsed = ChildRunnerArguments.Parse(args);
         await using var pipe = new AnonymousPipeClientStream(PipeDirection.Out, parsed.PipeHandle);
+        PipeHandleInheritance.Disable(pipe.SafePipeHandle);
         await using var writer = new RuntimeFrameWriter(pipe);
         ConfigureStandardInput();
         using var inspectionScope = RuntimeServices.PushInspectionSink(new FramedInspectionSink(writer));

@@ -6,7 +6,19 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { validateRuntimePromotionReceipts } from './runtime-promotion-receipt-validation.mjs'
+import { validateRuntimePromotionReceipts as validateRuntimePromotionReceiptsImpl } from './runtime-promotion-receipt-validation.mjs'
+import { validateJsonSchemaInstance } from './json-schema-instance-validation.mjs'
+import {
+  createWineCoreClrOperatorReceipt,
+  serializeWineCoreClrOperatorReceipt,
+  signWineCoreClrOperatorReceipt,
+  wineCoreClrOperatorCommittedFiles,
+} from './wine-coreclr-operator-receipt.mjs'
+import {
+  runtimePromotionPlanSignaturePath,
+  serializeRuntimePromotionPlan,
+  signRuntimePromotionPlan,
+} from './runtime-promotion-plan-signature.mjs'
 
 const hex = character => character.repeat(64)
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -17,6 +29,27 @@ const performancePolicySourcePath = path.join(
   ...performancePolicyRelativePath.split('/'),
 )
 const planSha256 = `sha256:${hex('0')}`
+const operatorKeys = crypto.generateKeyPairSync('ed25519')
+const planKeys = crypto.generateKeyPairSync('ed25519')
+const planKeyId = `sha256:${crypto.createHash('sha256').update(
+  planKeys.publicKey.export({ type: 'spki', format: 'der' }),
+).digest('hex')}`
+const operatorSourceTree = 'f'.repeat(40)
+const operatorSourceFiles = Object.fromEntries(wineCoreClrOperatorCommittedFiles.map(relative => [
+  relative, Buffer.from(`committed:${relative}`),
+]))
+
+function validateRuntimePromotionReceipts(matrixValue, root, readFile) {
+  return validateRuntimePromotionReceiptsImpl(matrixValue, root, readFile, {
+    operatorReceiptPublicKey: operatorKeys.publicKey,
+    planSignaturePublicKey: planKeys.publicKey,
+    planSignatureKeyId: planKeyId,
+    gitShow(arguments_) {
+      if (arguments_[0] === 'rev-parse') return Buffer.from(`${operatorSourceTree}\n`)
+      return operatorSourceFiles[arguments_[1].slice(arguments_[1].indexOf(':') + 1)]
+    },
+  })
+}
 
 function receipt(profileId = 'wine-netfx48-linux-x64') {
   return {
@@ -81,9 +114,23 @@ function matrix(reference, capabilities = ['run']) {
 
 function writeFixture(
   value = receipt(),
-  { executionUser = defaultExecutionUser(value) } = {},
+  {
+    executionUser = defaultExecutionUser(value),
+    withPromotionPlan = true,
+  } = {},
 ) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-runtime-receipt-'))
+  const schemaDirectory = path.join(root, 'schemas')
+  fs.mkdirSync(schemaDirectory, { recursive: true })
+  for (const schemaName of [
+    'runtime-promotion-plan.schema.json',
+    'runtime-promotion-receipt.schema.json',
+  ]) {
+    fs.copyFileSync(
+      path.join(repositoryRoot, 'schemas', schemaName),
+      path.join(schemaDirectory, schemaName),
+    )
+  }
   const profile = runtimeProfile(value, executionUser)
   const profilePath = path.join(
     root,
@@ -134,6 +181,18 @@ function writeFixture(
     profileId: value.profileId,
     planSha256: value.planSha256,
     image: { ...value.image },
+    measurementHelper: {
+      implementation: 'sharplabnext-runtime-cgroup-sidecar-v1',
+      image: {
+        reference: `registry.example/runtime-supervisor@sha256:${'7'.repeat(64)}`,
+        imageId: `sha256:${'8'.repeat(64)}`,
+        sizeBytes: 536870912,
+      },
+      entrypoint: '/usr/local/bin/sharplabnext-runtime-measurement',
+      sourceRevision: value.sourceRevision,
+      contentSha256:
+        'sha256:f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c',
+    },
     sourceRevision: value.sourceRevision,
     policy: {
       id: 'runtime-image-linux-x64-v1',
@@ -142,7 +201,7 @@ function writeFixture(
     capabilities,
     sourceMappingKind: jitCheck?.sourceMappingKind ?? 'not-applicable',
     environment: {
-      runnerId: 'runtime-preflight-linux-x64-v1',
+      runnerId: 'runtime-preflight-linux-x64-v2',
       operatingSystem: 'linux',
       architecture: 'x64',
       nanoCpus: 1000000000,
@@ -164,12 +223,61 @@ function writeFixture(
       `sha256:${crypto.createHash('sha256').update(performanceEvidenceBytes).digest('hex')}`,
   }
 
+  if (value.family === 'coreclr-wine' || value.family === 'netfx-clr-wine') {
+    const sourceRevision = value.sourceRevision
+    const operator = createWineCoreClrOperatorReceipt({
+      source: {
+        revision: sourceRevision,
+        tree: operatorSourceTree,
+        files: Object.fromEntries(Object.entries(operatorSourceFiles).map(([relative, bytes]) => [
+          relative, digest(bytes),
+        ])),
+      },
+      operator: {
+        reference: `registry.example/wine@sha256:${hex('1')}`,
+        imageId: `sha256:${hex('2')}`,
+        sizeBytes: 1024,
+        platform: 'linux/amd64',
+        userspace: { version: 'wine-9.0', digest: `sha256:${hex('3')}`, sourceUri: 'https://example.test/wine' },
+        baseImage: `registry.example/base@sha256:${hex('4')}`,
+        labels: { 'io.sharplabnext.operator.contract': 'wine-coreclr-v1' },
+      },
+    })
+    const operatorBytes = serializeWineCoreClrOperatorReceipt(operator)
+    const signatureBytes = Buffer.from(`${signWineCoreClrOperatorReceipt(operator, operatorKeys.privateKey)}\n`)
+    const operatorPath = `profiles/runtime-operator-receipts/wine-coreclr-${sourceRevision}.json`
+    const signaturePath = `${operatorPath}.sig`
+    for (const [relativePath, bytes] of [[operatorPath, operatorBytes], [signaturePath, signatureBytes]]) {
+      const filename = path.join(root, ...relativePath.split('/'))
+      fs.mkdirSync(path.dirname(filename), { recursive: true })
+      fs.writeFileSync(filename, bytes)
+    }
+    value.wineOperator = {
+      receiptPath: operatorPath,
+      receiptSha256: digest(operatorBytes),
+      signaturePath,
+      signatureSha256: digest(signatureBytes),
+      keyId: operator.keyId,
+      reference: operator.operator.reference,
+      imageId: operator.operator.imageId,
+      sizeBytes: operator.operator.sizeBytes,
+      sourceRevision,
+      sourceTree: operator.source.tree,
+      lineageKind: value.family === 'coreclr-wine' ? 'direct' : 'framework-row',
+      ...(value.family === 'coreclr-wine' ? {} : {
+        intermediaryReference: value.componentIdentity.sourceUri.slice('docker://'.length),
+        intermediaryImageId: `sha256:${hex('5')}`,
+        intermediarySizeBytes: 2048,
+      }),
+    }
+  }
+
   const relativePath = `profiles/runtime-promotion-receipts/${value.profileId}.json`
   const absolutePath = path.join(root, ...relativePath.split('/'))
   fs.mkdirSync(path.dirname(absolutePath), { recursive: true })
   const bytes = Buffer.from(`${JSON.stringify(value, null, 2)}\n`)
   fs.writeFileSync(absolutePath, bytes)
-  return {
+  const fixture = {
     root,
     profilePath,
     receiptPath: absolutePath,
@@ -181,6 +289,8 @@ function writeFixture(
       sha256: `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`,
     },
   }
+  if (withPromotionPlan) bindPlanPreflight(fixture)
+  return fixture
 }
 
 function defaultExecutionUser(value) {
@@ -316,6 +426,15 @@ function runtimeProfileOperation(value, name, helper, check) {
 
 function capabilityEvidence(value, check, executionUser = defaultExecutionUser(value)) {
   const isJit = check.capability === 'jit-asm'
+  const runProbeArguments = isJit
+    ? []
+    : check.capability === 'run'
+    ? ['success-security']
+    : check.capability === 'inspection'
+    ? ['inspection']
+    : check.capability === 'execution-flow'
+    ? ['execution-flow']
+    : (() => { throw new Error(`Unsupported Run capability '${check.capability}'.`) })()
   const operation = value.operations[isJit ? 'jit' : 'run'] ?? value.operations.run
   const profile = runtimeProfile(value, executionUser)
   const profileOperation = profile.operations[isJit ? 'jit' : 'run'] ?? profile.operations.run
@@ -330,7 +449,7 @@ function capabilityEvidence(value, check, executionUser = defaultExecutionUser(v
   const command = [profileOperation.command.executable]
   for (const token of profileOperation.command.argv) {
     if (token === '{entryAssembly}') command.push(entryAssemblyPath)
-    else if (token === '{arguments}') continue
+    else if (token === '{arguments}') command.push(...runProbeArguments)
     else if (token === '{methodFilter}') command.push(methodFilter)
     else command.push(token)
   }
@@ -551,8 +670,10 @@ function performanceScenario() {
   const sample = latencyMilliseconds => ({
     latencyMilliseconds,
     peakMemoryBytes: 134217728,
+    completionPeakMemoryBytes: 134217728,
     operationId: `op_${(++performanceSampleSequence).toString(16).padStart(32, '0')}`,
     resourceSampleCount: 1,
+    postCompletionResourceSampleCount: 1,
     completedAtUtc: '2026-07-22T00:00:00.0000000Z',
   })
   return {
@@ -605,6 +726,104 @@ function rewriteReceipt(fixture, value) {
   fixture.reference.sha256 = digest(bytes)
 }
 
+function bindPlanPreflight(fixture, { candidateCapabilities } = {}) {
+  const receipt = JSON.parse(fs.readFileSync(fixture.receiptPath, 'utf8'))
+  const candidate = JSON.parse(fs.readFileSync(fixture.profilePath))
+  const preflight = structuredClone(candidate)
+  preflight.image = receipt.image.reference
+  preflight.runtimeImageId = receipt.image.imageId
+  delete preflight.promotionReceipt
+  if (candidateCapabilities !== undefined) {
+    candidate.capabilities = candidateCapabilities
+    fs.writeFileSync(fixture.profilePath, `${JSON.stringify(candidate, null, 2)}\n`)
+  }
+  const candidateBytes = fs.readFileSync(fixture.profilePath)
+
+  const planRoot = path.join(fixture.root, 'profiles', 'runtime-promotion-plans')
+  fs.mkdirSync(planRoot, { recursive: true })
+  const preflightRelativePath =
+    `profiles/runtime-promotion-plans/${receipt.profileId}.profile.json`
+  const preflightPath = path.join(fixture.root, ...preflightRelativePath.split('/'))
+  const preflightBytes = Buffer.from(`${JSON.stringify(preflight, null, 2)}\n`)
+  fs.writeFileSync(preflightPath, preflightBytes)
+  const plan = {
+    schemaVersion: 1,
+    candidateTarget: 'fixture-candidate',
+    profileId: receipt.profileId,
+    profileSha256: digest(candidateBytes),
+    matrixTargetId: receipt.matrixTargetId,
+    platform: receipt.platform,
+    family: receipt.family,
+    resolvedVersion: receipt.resolvedVersion,
+    sourceRevision: receipt.sourceRevision,
+    sourceTree: 'f'.repeat(40),
+    image: receipt.image,
+    componentIdentity: receipt.componentIdentity,
+    ...(receipt.wineOperator === undefined ? {} : { wineOperator: receipt.wineOperator }),
+    runtimeIdentity: receipt.runtimeIdentity,
+    buildInputs: { FIXTURE: 'runtime-promotion-receipt-validation' },
+    buildInputsSha256: digest(serializeRuntimePromotionPlan({
+      FIXTURE: 'runtime-promotion-receipt-validation',
+    })),
+    producer: {
+      id: 'sharplabnext-runtime-preflight-v1',
+      sourceRevision: receipt.sourceRevision,
+    },
+    securityPolicyId: candidate.allowedSecurityPolicyIds[0],
+    capabilities: receipt.checks.map(check => check.capability).sort(),
+    sourceMappingKind: receipt.checks.find(check => check.capability === 'jit-asm')?.sourceMappingKind ??
+      'not-applicable',
+    operations: receipt.operations,
+    preflightProfile: {
+      path: preflightRelativePath,
+      sha256: digest(preflightBytes),
+    },
+    performance: {
+      policyId: receipt.performance.policyId,
+      policyPath: receipt.performance.policyPath,
+      policySha256: receipt.performance.policySha256,
+      evidencePath: receipt.performance.evidencePath,
+    },
+  }
+  const planPath = path.join(planRoot, `${receipt.profileId}.json`)
+  const planBytes = serializeRuntimePromotionPlan(plan)
+  fs.writeFileSync(planPath, planBytes)
+  receipt.planSha256 = digest(planBytes)
+  const signatureRelativePath = runtimePromotionPlanSignaturePath(receipt.profileId)
+  const signatureBytes = Buffer.from(`${signRuntimePromotionPlan(planBytes, planKeys.privateKey)}\n`)
+  fs.writeFileSync(path.join(fixture.root, ...signatureRelativePath.split('/')), signatureBytes)
+  receipt.planSignature = { path: signatureRelativePath, sha256: digest(signatureBytes), keyId: planKeyId }
+
+  for (const check of receipt.checks) {
+    const evidencePath = fixture.evidencePaths[check.capability]
+    const evidence = JSON.parse(fs.readFileSync(evidencePath, 'utf8'))
+    evidence.producer.planSha256 = receipt.planSha256
+    const evidenceBytes = Buffer.from(`${JSON.stringify(evidence, null, 2)}\n`)
+    fs.writeFileSync(evidencePath, evidenceBytes)
+    check.evidenceSha256 = digest(evidenceBytes)
+  }
+  const performance = JSON.parse(fs.readFileSync(fixture.performanceEvidencePath, 'utf8'))
+  performance.planSha256 = receipt.planSha256
+  const performanceBytes = Buffer.from(`${JSON.stringify(performance, null, 2)}\n`)
+  fs.writeFileSync(fixture.performanceEvidencePath, performanceBytes)
+  receipt.performance.evidenceSha256 = digest(performanceBytes)
+  rewriteReceipt(fixture, receipt)
+  fixture.planPath = planPath
+  fixture.planSignaturePath = path.join(fixture.root, ...signatureRelativePath.split('/'))
+  return { planPath, preflightPath }
+}
+
+function rewritePlan(fixture, plan) {
+  const planBytes = serializeRuntimePromotionPlan(plan)
+  fs.writeFileSync(fixture.planPath, planBytes)
+  const signatureBytes = Buffer.from(`${signRuntimePromotionPlan(planBytes, planKeys.privateKey)}\n`)
+  fs.writeFileSync(fixture.planSignaturePath, signatureBytes)
+  const receipt = JSON.parse(fs.readFileSync(fixture.receiptPath, 'utf8'))
+  receipt.planSha256 = digest(planBytes)
+  receipt.planSignature.sha256 = digest(signatureBytes)
+  rewriteReceipt(fixture, receipt)
+}
+
 function digest(bytes) {
   return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`
 }
@@ -612,6 +831,190 @@ function digest(bytes) {
 test('verified runtime capability is closed against an immutable promotion receipt', t => {
   const fixture = writeFixture()
   t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }))
+  assert.deepEqual(validateRuntimePromotionReceipts(matrix(fixture.reference), fixture.root), [])
+})
+
+test('shared JSON Schema subset rejects promotion-contract boundary violations', () => {
+  const schema = {
+    type: 'object',
+    maxProperties: 2,
+    required: ['kind'],
+    properties: {
+      kind: { enum: ['receipt', 'plan'] },
+      source: {
+        oneOf: [
+          { type: 'string', minLength: 1 },
+          { type: 'integer', minimum: 1 },
+        ],
+      },
+      profilerPath: { type: 'string' },
+      profilerSha256: { type: 'string' },
+    },
+    dependentRequired: {
+      profilerPath: ['profilerSha256'],
+      profilerSha256: ['profilerPath'],
+    },
+    additionalProperties: false,
+  }
+  assert.match(
+    validateJsonSchemaInstance({ kind: 'unknown' }, schema).join('\n'),
+    /allowed enum/,
+  )
+  assert.match(
+    validateJsonSchemaInstance({ kind: 'receipt', source: 0 }, schema).join('\n'),
+    /exactly one allowed schema/,
+  )
+  assert.match(
+    validateJsonSchemaInstance({ kind: 'receipt', profilerPath: '/x' }, schema).join('\n'),
+    /requires property profilerSha256/,
+  )
+  assert.match(
+    validateJsonSchemaInstance({ kind: 'receipt', source: 'x', extra: true }, schema).join('\n'),
+    /too many properties/,
+  )
+  assert.match(
+    validateJsonSchemaInstance(1, { type: 'string' }).join('\n'),
+    /expected type string/,
+  )
+  assert.match(
+    validateJsonSchemaInstance(['one', 'two'], { type: 'array', maxItems: 1 }).join('\n'),
+    /array has too many items/,
+  )
+  assert.match(
+    validateJsonSchemaInstance('toolong', { type: 'string', maxLength: 3 }).join('\n'),
+    /string is longer than maxLength/,
+  )
+})
+
+test('receipt and signed plan reject unknown and missing root or nested contract fields', t => {
+  const cases = [
+    {
+      name: 'receipt unknown root',
+      mutate(fixture) {
+        const value = JSON.parse(fs.readFileSync(fixture.receiptPath, 'utf8'))
+        value.injected = true
+        rewriteReceipt(fixture, value)
+      },
+      expected: /promotion receipt has unknown property 'injected'/,
+    },
+    {
+      name: 'receipt missing nested image identity',
+      mutate(fixture) {
+        const value = JSON.parse(fs.readFileSync(fixture.receiptPath, 'utf8'))
+        delete value.image.imageId
+        rewriteReceipt(fixture, value)
+      },
+      expected: /promotion receipt\.image is missing required property 'imageId'/,
+    },
+    {
+      name: 'plan unknown nested helper field',
+      mutate(fixture) {
+        const plan = JSON.parse(fs.readFileSync(fixture.planPath, 'utf8'))
+        plan.operations.run.injected = true
+        rewritePlan(fixture, plan)
+      },
+      expected: /promotion plan\.operations\.run has unknown property 'injected'/,
+    },
+    {
+      name: 'plan missing root source closure',
+      mutate(fixture) {
+        const plan = JSON.parse(fs.readFileSync(fixture.planPath, 'utf8'))
+        delete plan.buildInputs
+        rewritePlan(fixture, plan)
+      },
+      expected: /promotion plan is missing required property 'buildInputs'/,
+    },
+  ]
+  for (const testCase of cases) {
+    const fixture = writeFixture()
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }))
+    testCase.mutate(fixture)
+    assert.match(
+      validateRuntimePromotionReceipts(matrix(fixture.reference), fixture.root).join('\n'),
+      testCase.expected,
+      testCase.name,
+    )
+  }
+})
+
+test('receipt and signed plan fail closed on their shared JSON Schema limits and dependencies', t => {
+  const cases = [
+    {
+      name: 'receipt enum',
+      mutate(fixture) {
+        const value = JSON.parse(fs.readFileSync(fixture.receiptPath, 'utf8'))
+        value.platform = 'unsupported'
+        rewriteReceipt(fixture, value)
+      },
+      expected: /promotion receipt#\/platform: value is not in the allowed enum/,
+    },
+    {
+      name: 'receipt dependent helper fields',
+      mutate(fixture) {
+        const value = JSON.parse(fs.readFileSync(fixture.receiptPath, 'utf8'))
+        value.operations.run.profilerPath = '/opt/sharplabnext/SharpLabNext.JitProfiler.so'
+        rewriteReceipt(fixture, value)
+      },
+      expected: /promotion receipt#\/operations\/run: property profilerPath requires property profilerSha256/,
+    },
+    {
+      name: 'plan maximum build inputs',
+      mutate(fixture) {
+        const plan = JSON.parse(fs.readFileSync(fixture.planPath, 'utf8'))
+        plan.buildInputs = Object.fromEntries(Array.from({ length: 65 }, (_, index) => [
+          `INPUT_${index}`,
+          'fixture',
+        ]))
+        rewritePlan(fixture, plan)
+      },
+      expected: /promotion plan#\/buildInputs: object has too many properties/,
+    },
+  ]
+  for (const testCase of cases) {
+    const fixture = writeFixture()
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }))
+    testCase.mutate(fixture)
+    assert.match(
+      validateRuntimePromotionReceipts(matrix(fixture.reference), fixture.root).join('\n'),
+      testCase.expected,
+      testCase.name,
+    )
+  }
+})
+
+test('Wine operator binding rejects missing, tampered, noncanonical, and escaped retained material', t => {
+  for (const [name, mutate] of [
+    ['missing', fixture => { delete fixture.value.wineOperator }],
+    ['escaped', fixture => { fixture.value.wineOperator.receiptPath = '../outside.json' }],
+    ['noncanonical signature', fixture => {
+      fs.appendFileSync(path.join(fixture.root, ...fixture.value.wineOperator.signaturePath.split('/')), ' ')
+    }],
+    ['tampered receipt', fixture => {
+      fs.appendFileSync(path.join(fixture.root, ...fixture.value.wineOperator.receiptPath.split('/')), ' ')
+    }],
+  ]) {
+    const fixture = writeFixture()
+    t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }))
+    fixture.value = JSON.parse(fs.readFileSync(fixture.receiptPath, 'utf8'))
+    mutate(fixture)
+    if (name === 'missing' || name === 'escaped') rewriteReceipt(fixture, fixture.value)
+    assert.notDeepEqual(validateRuntimePromotionReceipts(matrix(fixture.reference), fixture.root), [], name)
+  }
+})
+
+test('Framework Wine supports row and shared-parent clean operator lineage without replacing componentIdentity', t => {
+  const fixture = writeFixture()
+  t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }))
+  const value = JSON.parse(fs.readFileSync(fixture.receiptPath, 'utf8'))
+  assert.equal(value.wineOperator.lineageKind, 'framework-row')
+  const originalComponent = structuredClone(value.componentIdentity)
+  value.wineOperator.lineageKind = 'framework-parent'
+  value.wineOperator.intermediaryReference = `registry.example/framework-parent@sha256:${hex('6')}`
+  value.wineOperator.intermediaryImageId = `sha256:${hex('7')}`
+  value.wineOperator.intermediarySizeBytes = 4096
+  rewriteReceipt(fixture, value)
+  assert.deepEqual(value.componentIdentity, originalComponent)
+  bindPlanPreflight(fixture)
   assert.deepEqual(validateRuntimePromotionReceipts(matrix(fixture.reference), fixture.root), [])
 })
 
@@ -703,6 +1106,22 @@ test('capability evidence schema and validators reject Unix and Wine PDB dot seg
   ))
   assert.deepEqual(schema.$defs.producer.required, ['id', 'sourceRevision', 'planSha256'])
   assert.equal(schema.$defs.producer.properties.planSha256.$ref, '#/$defs/sha256')
+  assert.deepEqual(
+    schema.$defs.probeArtifact.required,
+    [
+      'contract',
+      'sourceArtifactSha256',
+      'artifactSha256',
+      'entryAssemblySha256',
+      'planSha256',
+      'preflightProfileSha256',
+    ],
+  )
+  assert.equal(schema.$defs.probeArtifact.properties.planSha256.$ref, '#/$defs/sha256')
+  assert.equal(
+    schema.$defs.probeArtifact.properties.preflightProfileSha256.$ref,
+    '#/$defs/sha256',
+  )
   const absolutePathPattern = new RegExp(schema.$defs.absolutePath.pattern)
   assert.equal(absolutePathPattern.test('/workspace/SharpLabNext.Preflight.pdb'), true)
   assert.equal(absolutePathPattern.test('Z:\\workspace\\SharpLabNext.Preflight.pdb'), true)
@@ -843,6 +1262,161 @@ test('capability commands and security resources exactly match the Runtime Profi
   )
 })
 
+test('Run capability commands require the exact expanded probe arguments', t => {
+  const valid = writeFixture(coreClrReceipt('dotnet-10-linux-x64', 'linux', 'coreclr'))
+  t.after(() => fs.rmSync(valid.root, { recursive: true, force: true }))
+  assert.deepEqual(
+    JSON.parse(fs.readFileSync(valid.evidencePaths.run)).invocation.command.slice(-2),
+    ['--', 'success-security'],
+  )
+  assert.deepEqual(
+    validateRuntimePromotionReceipts(
+      coreClrMatrix('linuxCapability', valid.reference),
+      valid.root,
+    ),
+    [],
+  )
+
+  const unexpanded = writeFixture(coreClrReceipt('dotnet-10-linux-x64', 'linux', 'coreclr'))
+  t.after(() => fs.rmSync(unexpanded.root, { recursive: true, force: true }))
+  updateCapabilityEvidence(unexpanded, 'run', evidence => {
+    evidence.invocation.command.pop()
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(
+      coreClrMatrix('linuxCapability', unexpanded.reference),
+      unexpanded.root,
+    ).join('\n'),
+    /invocation command does not match the selected Runtime Profile operation/,
+  )
+
+  const substituted = writeFixture(coreClrReceipt('dotnet-10-linux-x64', 'linux', 'coreclr'))
+  t.after(() => fs.rmSync(substituted.root, { recursive: true, force: true }))
+  updateCapabilityEvidence(substituted, 'run', evidence => {
+    evidence.invocation.command[evidence.invocation.command.length - 1] = 'unexpected'
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(
+      coreClrMatrix('linuxCapability', substituted.reference),
+      substituted.root,
+    ).join('\n'),
+    /invocation command does not match the selected Runtime Profile operation/,
+  )
+})
+
+test('plan-bound preflight profiles close evidence before active materialization', t => {
+  const planless = writeFixture(
+    coreClrReceipt('dotnet-10-linux-x64', 'linux', 'coreclr'),
+    { withPromotionPlan: false },
+  )
+  t.after(() => fs.rmSync(planless.root, { recursive: true, force: true }))
+  assert.match(
+    validateRuntimePromotionReceipts(
+      coreClrMatrix('linuxCapability', planless.reference),
+      planless.root,
+    ).join('\n'),
+    /plan and preflight Runtime Profile are required/,
+  )
+
+  const instrumentedValue = coreClrReceipt('dotnet-10-linux-x64', 'linux', 'coreclr')
+  instrumentedValue.checks.push(
+    {
+      ...instrumentedValue.checks[0],
+      capability: 'inspection',
+    },
+    {
+      ...instrumentedValue.checks[0],
+      capability: 'execution-flow',
+    },
+  )
+  const instrumented = writeFixture(instrumentedValue)
+  t.after(() => fs.rmSync(instrumented.root, { recursive: true, force: true }))
+  bindPlanPreflight(instrumented, { candidateCapabilities: ['run', 'jit-asm'] })
+  const instrumentedMatrix = coreClrMatrix('linuxCapability', instrumented.reference)
+  instrumentedMatrix.coreClr[0].linuxCapability.capabilities =
+    ['run', 'jit-asm', 'inspection', 'execution-flow']
+  assert.deepEqual(
+    validateRuntimePromotionReceipts(instrumentedMatrix, instrumented.root),
+    [],
+  )
+
+  const valid = writeFixture(coreClrReceipt('dotnet-10-linux-x64', 'linux', 'coreclr'))
+  t.after(() => fs.rmSync(valid.root, { recursive: true, force: true }))
+  bindPlanPreflight(valid, { candidateCapabilities: [] })
+  assert.deepEqual(
+    validateRuntimePromotionReceipts(
+      coreClrMatrix('linuxCapability', valid.reference),
+      valid.root,
+    ),
+    [],
+  )
+
+  const planDrift = writeFixture(coreClrReceipt('dotnet-10-linux-x64', 'linux', 'coreclr'))
+  t.after(() => fs.rmSync(planDrift.root, { recursive: true, force: true }))
+  const driftedPlan = bindPlanPreflight(planDrift, { candidateCapabilities: [] })
+  fs.appendFileSync(driftedPlan.planPath, ' ')
+  assert.match(
+    validateRuntimePromotionReceipts(
+      coreClrMatrix('linuxCapability', planDrift.reference),
+      planDrift.root,
+    ).join('\n'),
+    /plan digest mismatch/,
+  )
+
+  const preflightDrift = writeFixture(coreClrReceipt('dotnet-10-linux-x64', 'linux', 'coreclr'))
+  t.after(() => fs.rmSync(preflightDrift.root, { recursive: true, force: true }))
+  const driftedPreflight = bindPlanPreflight(preflightDrift, { candidateCapabilities: [] })
+  fs.appendFileSync(driftedPreflight.preflightPath, ' ')
+  assert.match(
+    validateRuntimePromotionReceipts(
+      coreClrMatrix('linuxCapability', preflightDrift.reference),
+      preflightDrift.root,
+    ).join('\n'),
+    /plan preflightProfile\.sha256/,
+  )
+
+  const candidateDrift = writeFixture(coreClrReceipt('dotnet-10-linux-x64', 'linux', 'coreclr'))
+  t.after(() => fs.rmSync(candidateDrift.root, { recursive: true, force: true }))
+  bindPlanPreflight(candidateDrift, { candidateCapabilities: [] })
+  fs.appendFileSync(candidateDrift.profilePath, ' ')
+  assert.match(
+    validateRuntimePromotionReceipts(
+      coreClrMatrix('linuxCapability', candidateDrift.reference),
+      candidateDrift.root,
+    ).join('\n'),
+    /plan profileSha256/,
+  )
+
+  const active = writeFixture(coreClrReceipt('dotnet-10-linux-x64', 'linux', 'coreclr'))
+  t.after(() => fs.rmSync(active.root, { recursive: true, force: true }))
+  const activeBinding = bindPlanPreflight(active, { candidateCapabilities: [] })
+  const activeProfile = JSON.parse(fs.readFileSync(activeBinding.preflightPath, 'utf8'))
+  activeProfile.promotionReceipt = active.reference
+  fs.writeFileSync(
+    path.join(active.root, 'profiles', 'runtimes', `${activeProfile.id}.json`),
+    `${JSON.stringify(activeProfile, null, 2)}\n`,
+  )
+  assert.deepEqual(
+    validateRuntimePromotionReceipts(
+      coreClrMatrix('linuxCapability', active.reference),
+      active.root,
+    ),
+    [],
+  )
+  activeProfile.operations.run.command.argv.push('substituted')
+  fs.writeFileSync(
+    path.join(active.root, 'profiles', 'runtimes', `${activeProfile.id}.json`),
+    `${JSON.stringify(activeProfile, null, 2)}\n`,
+  )
+  assert.match(
+    validateRuntimePromotionReceipts(
+      coreClrMatrix('linuxCapability', active.reference),
+      active.root,
+    ).join('\n'),
+    /invocation command does not match the selected Runtime Profile operation/,
+  )
+})
+
 test('performance evidence is retained, content-addressed, and image-bound', t => {
   const missing = writeFixture()
   t.after(() => fs.rmSync(missing.root, { recursive: true, force: true }))
@@ -868,6 +1442,69 @@ test('performance evidence is retained, content-addressed, and image-bound', t =
   assert.match(
     validateRuntimePromotionReceipts(matrix(identity.reference), identity.root).join('\n'),
     /evidence image\.sizeBytes mismatch/,
+  )
+})
+
+test('performance evidence binds the trusted measurement helper identity', t => {
+  const missing = writeFixture()
+  t.after(() => fs.rmSync(missing.root, { recursive: true, force: true }))
+  updatePerformanceEvidence(missing, evidence => {
+    delete evidence.measurementHelper
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(matrix(missing.reference), missing.root).join('\n'),
+    /measurementHelper/,
+  )
+
+  const implementation = writeFixture()
+  t.after(() => fs.rmSync(implementation.root, { recursive: true, force: true }))
+  updatePerformanceEvidence(implementation, evidence => {
+    evidence.measurementHelper.implementation = 'substituted-helper'
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(matrix(implementation.reference), implementation.root).join('\n'),
+    /implementation must equal "sharplabnext-runtime-cgroup-sidecar-v1"/,
+  )
+
+  const entrypoint = writeFixture()
+  t.after(() => fs.rmSync(entrypoint.root, { recursive: true, force: true }))
+  updatePerformanceEvidence(entrypoint, evidence => {
+    evidence.measurementHelper.entrypoint = '/tmp/substituted'
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(matrix(entrypoint.reference), entrypoint.root).join('\n'),
+    /entrypoint must equal "\/usr\/local\/bin\/sharplabnext-runtime-measurement"/,
+  )
+
+  const source = writeFixture()
+  t.after(() => fs.rmSync(source.root, { recursive: true, force: true }))
+  updatePerformanceEvidence(source, evidence => {
+    evidence.measurementHelper.sourceRevision = '9'.repeat(40)
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(matrix(source.reference), source.root).join('\n'),
+    /sourceRevision must equal the evidence sourceRevision/,
+  )
+
+  const repository = writeFixture()
+  t.after(() => fs.rmSync(repository.root, { recursive: true, force: true }))
+  updatePerformanceEvidence(repository, evidence => {
+    evidence.measurementHelper.image.reference =
+      `registry.example/not-the-supervisor@sha256:${'7'.repeat(64)}`
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(matrix(repository.reference), repository.root).join('\n'),
+    /immutable runtime-supervisor repository reference/,
+  )
+
+  const candidate = writeFixture()
+  t.after(() => fs.rmSync(candidate.root, { recursive: true, force: true }))
+  updatePerformanceEvidence(candidate, evidence => {
+    evidence.measurementHelper.image.imageId = evidence.image.imageId
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(matrix(candidate.reference), candidate.root).join('\n'),
+    /must be distinct from the candidate runtime image/,
   )
 })
 
@@ -910,6 +1547,95 @@ test('performance evidence enforces sample counts, positive metrics, P95, and me
   assert.match(
     validateRuntimePromotionReceipts(matrix(memory.reference), memory.root).join('\n'),
     /peak memory exceeds the measured container limit/,
+  )
+
+  const legacyRunner = writeFixture()
+  t.after(() => fs.rmSync(legacyRunner.root, { recursive: true, force: true }))
+  updatePerformanceEvidence(legacyRunner, evidence => {
+    evidence.environment.runnerId = 'runtime-preflight-linux-x64-v1'
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(matrix(legacyRunner.reference), legacyRunner.root).join('\n'),
+    /runnerId must equal "runtime-preflight-linux-x64-v2"/,
+  )
+
+  const missingCompletionPeak = writeFixture()
+  t.after(() => fs.rmSync(missingCompletionPeak.root, { recursive: true, force: true }))
+  updatePerformanceEvidence(missingCompletionPeak, evidence => {
+    delete evidence.scenarios.run.cold[0].completionPeakMemoryBytes
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(
+      matrix(missingCompletionPeak.reference),
+      missingCompletionPeak.root,
+    ).join('\n'),
+    /completionPeakMemoryBytes/,
+  )
+
+  const completionPeak = writeFixture()
+  t.after(() => fs.rmSync(completionPeak.root, { recursive: true, force: true }))
+  updatePerformanceEvidence(completionPeak, evidence => {
+    const sample = evidence.scenarios.run.cold[0]
+    sample.peakMemoryBytes = 1024
+    sample.completionPeakMemoryBytes = 1025
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(matrix(completionPeak.reference), completionPeak.root).join('\n'),
+    /peakMemoryBytes cannot be less than completionPeakMemoryBytes/,
+  )
+
+  const nonPositiveCompletion = writeFixture()
+  t.after(() => fs.rmSync(nonPositiveCompletion.root, { recursive: true, force: true }))
+  updatePerformanceEvidence(nonPositiveCompletion, evidence => {
+    evidence.scenarios.run.cold[0].completionPeakMemoryBytes = 0
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(
+      matrix(nonPositiveCompletion.reference),
+      nonPositiveCompletion.root,
+    ).join('\n'),
+    /completionPeakMemoryBytes must be a positive integer/,
+  )
+
+  const missingPostCompletion = writeFixture()
+  t.after(() => fs.rmSync(missingPostCompletion.root, { recursive: true, force: true }))
+  updatePerformanceEvidence(missingPostCompletion, evidence => {
+    delete evidence.scenarios.run.cold[0].postCompletionResourceSampleCount
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(
+      matrix(missingPostCompletion.reference),
+      missingPostCompletion.root,
+    ).join('\n'),
+    /postCompletionResourceSampleCount/,
+  )
+
+  const nonPositivePostCompletion = writeFixture()
+  t.after(() => fs.rmSync(nonPositivePostCompletion.root, { recursive: true, force: true }))
+  updatePerformanceEvidence(nonPositivePostCompletion, evidence => {
+    evidence.scenarios.run.cold[0].postCompletionResourceSampleCount = 0
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(
+      matrix(nonPositivePostCompletion.reference),
+      nonPositivePostCompletion.root,
+    ).join('\n'),
+    /postCompletionResourceSampleCount must be a positive bounded integer/,
+  )
+
+  const postCompletionCount = writeFixture()
+  t.after(() => fs.rmSync(postCompletionCount.root, { recursive: true, force: true }))
+  updatePerformanceEvidence(postCompletionCount, evidence => {
+    const sample = evidence.scenarios.run.cold[0]
+    sample.resourceSampleCount = 1
+    sample.postCompletionResourceSampleCount = 2
+  })
+  assert.match(
+    validateRuntimePromotionReceipts(
+      matrix(postCompletionCount.reference),
+      postCompletionCount.root,
+    ).join('\n'),
+    /resourceSampleCount cannot be less than postCompletionResourceSampleCount/,
   )
 })
 

@@ -1,20 +1,22 @@
 {
   "schemaVersion": 1,
   "id": "dotnet-11-preview-linux-x64",
-  "image": "sharplabnext/runtime-dotnet11:dev",
+  "image": "sharplabnext/runtime-dotnet-11-preview-linux-x64:development",
   "family": "coreclr",
-  "acceptedRuntimeFamilies": [],
+  "acceptedRuntimeFamilies": [
+    "coreclr"
+  ],
   "acceptedFrameworks": [
     {
       "name": "Microsoft.NETCore.App",
-      "exactVersion": "11.0.0-preview.5.26302.115"
+      "exactVersion": "11.0.0-preview.6.26359.118"
     }
   ],
-  "runtimeVersion": "11.0.0-preview.5.26302.115",
-  "runtimeCommit": "f7b4c5716faaee8fb8a289aed29118cad955c45f",
-  "jitVersion": "11.0.0-preview.5.26302.115",
-  "jitCommit": "f7b4c5716faaee8fb8a289aed29118cad955c45f",
-  "runtimeImageId": "sharplabnext/runtime-dotnet11:dev",
+  "runtimeVersion": "11.0.0-preview.6.26359.118",
+  "runtimeCommit": "ba53d0ed335bed4ab7bfd01988c8e3953ee5ffbe",
+  "jitVersion": "11.0.0-preview.6.26359.118",
+  "jitCommit": "ba53d0ed335bed4ab7bfd01988c8e3953ee5ffbe",
+  "runtimeImageId": "sha256:30aa0fb727b72c2cc64460c59be80223b87c0d98832add9bb71dd483a8c85f12",
   "rid": "linux-x64",
   "architecture": "x64",
   "cpuFeatureProfile": "x64-v2",
@@ -27,9 +29,7 @@
     "inspection",
     "execution-flow"
   ],
-  "providedRuntimeFeatureTags": [
-    "runtime.dotnet-11-preview"
-  ],
+  "providedRuntimeFeatureTags": [],
   "providedMetadataFeatureTags": [],
   "allowedSecurityPolicyIds": [
     "runtime-job-default"
@@ -44,7 +44,7 @@
       "implementationId": "sharplabnext-runner-v1",
       "pathStyle": "unix",
       "command": {
-        "executable": "dotnet",
+        "executable": "/opt/sharplabnext/target-dotnet/dotnet",
         "argv": [
           "/opt/sharplabnext/SharpLabNext.Runner.dll",
           "{entryAssembly}",
@@ -57,7 +57,7 @@
       "implementationId": "sharplabnext-jit-inspector-v1",
       "pathStyle": "unix",
       "command": {
-        "executable": "dotnet",
+        "executable": "/opt/sharplabnext/target-dotnet/dotnet",
         "argv": [
           "/opt/sharplabnext/SharpLabNext.JitInspector.dll",
           "{entryAssembly}",
@@ -70,7 +70,7 @@
   },
   "layout": {
     "runnerKind": "dotnet",
-    "dotNetHostPath": "dotnet",
+    "dotNetHostPath": "/opt/sharplabnext/target-dotnet/dotnet",
     "runnerAssemblyPath": "/opt/sharplabnext/SharpLabNext.Runner.dll",
     "jitInspectorAssemblyPath": "/opt/sharplabnext/SharpLabNext.JitInspector.dll"
   },

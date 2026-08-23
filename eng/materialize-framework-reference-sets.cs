@@ -7,6 +7,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -139,7 +140,11 @@ appsettings["ReferenceSets"] = configuredReferenceSets;
 Directory.CreateDirectory(Path.GetDirectoryName(options.AppsettingsOutputPath)!);
 await File.WriteAllTextAsync(
     options.AppsettingsOutputPath,
-    appsettings.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
+    appsettings.ToJsonString(new JsonSerializerOptions
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        WriteIndented = true
+    }) + "\n");
 
 Console.WriteLine(
     $"Materialized {configuredReferenceSets.Count} locked Framework reference sets, including the net30 composition.");
@@ -359,6 +364,9 @@ static async Task RunSelfTestAsync()
     Directory.CreateDirectory(root);
     try
     {
+        RequireSelfTest(RuntimeFrameworkVersion("net20") == "2.0", "net20 runtime version derivation failed.");
+        RequireSelfTest(RuntimeFrameworkVersion("net451") == "4.5.1", "net451 runtime version derivation failed.");
+
         var payload = Encoding.UTF8.GetBytes("locked reference package");
         var expectedSha512 = Convert.ToHexString(SHA512.HashData(payload)).ToLowerInvariant();
         var uri = new Uri(
@@ -683,7 +691,11 @@ static async Task WriteAttestationAsync(
     };
     await File.WriteAllTextAsync(
         Path.Combine(root, "reference-set.attestation.json"),
-        document.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
+        document.ToJsonString(new JsonSerializerOptions
+        {
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            WriteIndented = true
+        }) + "\n");
 }
 
 static JsonObject PackageProvenance(LockedReferencePackage package) => new()
@@ -749,10 +761,30 @@ static void AddConfiguration(
         ["Path"] = $"/reference-sets/{id}",
         ["TargetFramework"] = targetFramework,
         ["FrameworkVersion"] = resolvedVersion,
+        ["RuntimeFrameworkVersion"] = RuntimeFrameworkVersion(targetFramework),
         ["Digest"] = digest,
         ["IncludeSharpLabRuntime"] = false
     };
     configuredReferenceSets.Add(id, configuration);
+}
+
+static string RuntimeFrameworkVersion(string targetFramework)
+{
+    if (!targetFramework.StartsWith("net", StringComparison.Ordinal))
+        throw new InvalidDataException(
+            $"Target framework '{targetFramework}' is not a recognized .NET Framework TFM.");
+
+    var digits = targetFramework.AsSpan(3);
+    if (digits.Length is not (2 or 3) ||
+        digits.IndexOfAnyExceptInRange('0', '9') >= 0)
+    {
+        throw new InvalidDataException(
+            $"Target framework '{targetFramework}' is not a recognized .NET Framework TFM.");
+    }
+
+    return digits.Length == 2
+        ? $"{digits[0]}.{digits[1]}"
+        : $"{digits[0]}.{digits[1]}.{digits[2]}";
 }
 
 static string SafeChild(string root, string name)

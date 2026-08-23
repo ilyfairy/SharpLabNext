@@ -391,6 +391,166 @@ variable "NET11_REFERENCE_SOURCE_URI" {
   default = ""
 }
 
+variable "NETCOREAPP20_REFERENCE_VERSION" {
+  default = ""
+}
+
+variable "NETCOREAPP20_REFERENCE_SOURCE_URI" {
+  default = ""
+}
+
+variable "NETCOREAPP20_REFERENCE_SHA512" {
+  default = ""
+}
+
+variable "NETCOREAPP20_REFERENCE_PACKAGE_CONTENT_HASH" {
+  default = ""
+}
+
+variable "NETCOREAPP21_REFERENCE_VERSION" {
+  default = ""
+}
+
+variable "NETCOREAPP21_REFERENCE_SOURCE_URI" {
+  default = ""
+}
+
+variable "NETCOREAPP21_REFERENCE_SHA512" {
+  default = ""
+}
+
+variable "NETCOREAPP21_REFERENCE_PACKAGE_CONTENT_HASH" {
+  default = ""
+}
+
+variable "NETCOREAPP22_REFERENCE_VERSION" {
+  default = ""
+}
+
+variable "NETCOREAPP22_REFERENCE_SOURCE_URI" {
+  default = ""
+}
+
+variable "NETCOREAPP22_REFERENCE_SHA512" {
+  default = ""
+}
+
+variable "NETCOREAPP22_REFERENCE_PACKAGE_CONTENT_HASH" {
+  default = ""
+}
+
+variable "NETCOREAPP30_REFERENCE_VERSION" {
+  default = ""
+}
+
+variable "NETCOREAPP30_REFERENCE_SOURCE_URI" {
+  default = ""
+}
+
+variable "NETCOREAPP30_REFERENCE_SHA512" {
+  default = ""
+}
+
+variable "NETCOREAPP30_REFERENCE_PACKAGE_CONTENT_HASH" {
+  default = ""
+}
+
+variable "NETCOREAPP31_REFERENCE_VERSION" {
+  default = ""
+}
+
+variable "NETCOREAPP31_REFERENCE_SOURCE_URI" {
+  default = ""
+}
+
+variable "NETCOREAPP31_REFERENCE_SHA512" {
+  default = ""
+}
+
+variable "NETCOREAPP31_REFERENCE_PACKAGE_CONTENT_HASH" {
+  default = ""
+}
+
+variable "NET5_REFERENCE_VERSION" {
+  default = ""
+}
+
+variable "NET5_REFERENCE_SOURCE_URI" {
+  default = ""
+}
+
+variable "NET5_REFERENCE_SHA512" {
+  default = ""
+}
+
+variable "NET5_REFERENCE_PACKAGE_CONTENT_HASH" {
+  default = ""
+}
+
+variable "NET6_REFERENCE_VERSION" {
+  default = ""
+}
+
+variable "NET6_REFERENCE_SOURCE_URI" {
+  default = ""
+}
+
+variable "NET6_REFERENCE_SHA512" {
+  default = ""
+}
+
+variable "NET6_REFERENCE_PACKAGE_CONTENT_HASH" {
+  default = ""
+}
+
+variable "NET7_REFERENCE_VERSION" {
+  default = ""
+}
+
+variable "NET7_REFERENCE_SOURCE_URI" {
+  default = ""
+}
+
+variable "NET7_REFERENCE_SHA512" {
+  default = ""
+}
+
+variable "NET7_REFERENCE_PACKAGE_CONTENT_HASH" {
+  default = ""
+}
+
+variable "NET8_REFERENCE_VERSION" {
+  default = ""
+}
+
+variable "NET8_REFERENCE_SOURCE_URI" {
+  default = ""
+}
+
+variable "NET8_REFERENCE_SHA512" {
+  default = ""
+}
+
+variable "NET8_REFERENCE_PACKAGE_CONTENT_HASH" {
+  default = ""
+}
+
+variable "NET9_REFERENCE_VERSION" {
+  default = ""
+}
+
+variable "NET9_REFERENCE_SOURCE_URI" {
+  default = ""
+}
+
+variable "NET9_REFERENCE_SHA512" {
+  default = ""
+}
+
+variable "NET9_REFERENCE_PACKAGE_CONTENT_HASH" {
+  default = ""
+}
+
 variable "DOTNET10_RUNTIME_VERSION" {
   default = ""
 }
@@ -867,6 +1027,33 @@ variable "WINE_NETFX48_RUNTIME_SOURCE_URI" {
   default = ""
 }
 
+variable "WINE_CORECLR_USERSPACE_VERSION" {
+  default = ""
+}
+
+variable "WINE_CORECLR_USERSPACE_DIGEST" {
+  default = ""
+}
+
+variable "WINE_CORECLR_USERSPACE_SOURCE_URI" {
+  default = ""
+}
+
+# The Wine userspace operator has a dedicated committed-source build entry.
+# These values are deliberately unset for direct Bake invocations so a dirty
+# working tree cannot accidentally receive release-looking provenance labels.
+variable "OPERATOR_SOURCE_CONTEXT" {
+  default = ""
+}
+
+variable "OPERATOR_PROMOTION_ELIGIBLE" {
+  default = ""
+}
+
+variable "OPERATOR_DEVELOPMENT_ONLY" {
+  default = ""
+}
+
 group "default" {
   targets = [
     "gateway",
@@ -919,6 +1106,41 @@ target "common" {
     "org.opencontainers.image.revision" = required(SOURCE_REVISION)
     "org.opencontainers.image.source" = "https://github.com/sharplabnext/SharpLabNext"
     "io.sharplabnext.source.revision" = required(SOURCE_REVISION)
+  }
+}
+
+target "operator-wine-coreclr" {
+  context = "."
+  platforms = ["linux/amd64"]
+  output = ["type=docker,rewrite-timestamp=true,unpack=false"]
+  attest = ["type=provenance,disabled=true"]
+  dockerfile = "deploy/docker/Dockerfile.operator-wine-coreclr"
+  target = "final"
+  tags = ["${required(IMAGE_PREFIX)}/operator-wine-coreclr:${required(RELEASE_ID)}"]
+  args = {
+    SOURCE_DATE_EPOCH = unix_seconds(required(SOURCE_DATE_EPOCH))
+    RUNTIME_DEPS_IMAGE = required(BASE_DOTNET_RUNTIME_DEPS_IMAGE)
+    VERSION = RELEASE_ID
+    SOURCE_REVISION = required(SOURCE_REVISION)
+    WINE_CORECLR_USERSPACE_VERSION = required(WINE_CORECLR_USERSPACE_VERSION)
+    WINE_CORECLR_USERSPACE_DIGEST = required(WINE_CORECLR_USERSPACE_DIGEST)
+    WINE_CORECLR_USERSPACE_SOURCE_URI = required(WINE_CORECLR_USERSPACE_SOURCE_URI)
+    OPERATOR_SOURCE_CONTEXT = required(OPERATOR_SOURCE_CONTEXT)
+    OPERATOR_PROMOTION_ELIGIBLE = required(OPERATOR_PROMOTION_ELIGIBLE)
+    OPERATOR_DEVELOPMENT_ONLY = required(OPERATOR_DEVELOPMENT_ONLY)
+  }
+  labels = {
+    "org.opencontainers.image.version" = "wine-9.0-noble-amd64"
+    "org.opencontainers.image.revision" = required(SOURCE_REVISION)
+    "org.opencontainers.image.source" = "https://github.com/sharplabnext/SharpLabNext"
+    "io.sharplabnext.source.revision" = required(SOURCE_REVISION)
+    "io.sharplabnext.base-image.dotnet-runtime-deps" = required(BASE_DOTNET_RUNTIME_DEPS_IMAGE)
+    "io.sharplabnext.component.wine-coreclr-userspace.version" = required(WINE_CORECLR_USERSPACE_VERSION)
+    "io.sharplabnext.component.wine-coreclr-userspace.digest" = required(WINE_CORECLR_USERSPACE_DIGEST)
+    "io.sharplabnext.component.wine-coreclr-userspace.source-uri" = required(WINE_CORECLR_USERSPACE_SOURCE_URI)
+    "io.sharplabnext.source.context" = required(OPERATOR_SOURCE_CONTEXT)
+    "io.sharplabnext.development-only" = required(OPERATOR_DEVELOPMENT_ONLY)
+    "com.sharplabnext.operator.promotion-eligible" = required(OPERATOR_PROMOTION_ELIGIBLE)
   }
 }
 
@@ -1172,6 +1394,115 @@ target "service-with-reference-sets" {
   }
 }
 
+# Roslyn is the only generic worker family that compiles against every
+# selectable CoreCLR reference set. The worker Dockerfile materializes the
+# complete closure from the candidate source lock; the two current channels
+# remain explicit build arguments so the helper can reject a stale lock.
+target "service-with-roslyn-coreclr-reference-sets" {
+  inherits = ["service"]
+  target = "final-with-roslyn-coreclr-reference-sets"
+  args = {
+    NETCOREAPP20_REFERENCE_VERSION = required(NETCOREAPP20_REFERENCE_VERSION)
+    NETCOREAPP20_REFERENCE_SOURCE_URI = required(NETCOREAPP20_REFERENCE_SOURCE_URI)
+    NETCOREAPP20_REFERENCE_SHA512 = required(NETCOREAPP20_REFERENCE_SHA512)
+    NETCOREAPP20_REFERENCE_PACKAGE_CONTENT_HASH = required(NETCOREAPP20_REFERENCE_PACKAGE_CONTENT_HASH)
+    NETCOREAPP21_REFERENCE_VERSION = required(NETCOREAPP21_REFERENCE_VERSION)
+    NETCOREAPP21_REFERENCE_SOURCE_URI = required(NETCOREAPP21_REFERENCE_SOURCE_URI)
+    NETCOREAPP21_REFERENCE_SHA512 = required(NETCOREAPP21_REFERENCE_SHA512)
+    NETCOREAPP21_REFERENCE_PACKAGE_CONTENT_HASH = required(NETCOREAPP21_REFERENCE_PACKAGE_CONTENT_HASH)
+    NETCOREAPP22_REFERENCE_VERSION = required(NETCOREAPP22_REFERENCE_VERSION)
+    NETCOREAPP22_REFERENCE_SOURCE_URI = required(NETCOREAPP22_REFERENCE_SOURCE_URI)
+    NETCOREAPP22_REFERENCE_SHA512 = required(NETCOREAPP22_REFERENCE_SHA512)
+    NETCOREAPP22_REFERENCE_PACKAGE_CONTENT_HASH = required(NETCOREAPP22_REFERENCE_PACKAGE_CONTENT_HASH)
+    NETCOREAPP30_REFERENCE_VERSION = required(NETCOREAPP30_REFERENCE_VERSION)
+    NETCOREAPP30_REFERENCE_SOURCE_URI = required(NETCOREAPP30_REFERENCE_SOURCE_URI)
+    NETCOREAPP30_REFERENCE_SHA512 = required(NETCOREAPP30_REFERENCE_SHA512)
+    NETCOREAPP30_REFERENCE_PACKAGE_CONTENT_HASH = required(NETCOREAPP30_REFERENCE_PACKAGE_CONTENT_HASH)
+    NETCOREAPP31_REFERENCE_VERSION = required(NETCOREAPP31_REFERENCE_VERSION)
+    NETCOREAPP31_REFERENCE_SOURCE_URI = required(NETCOREAPP31_REFERENCE_SOURCE_URI)
+    NETCOREAPP31_REFERENCE_SHA512 = required(NETCOREAPP31_REFERENCE_SHA512)
+    NETCOREAPP31_REFERENCE_PACKAGE_CONTENT_HASH = required(NETCOREAPP31_REFERENCE_PACKAGE_CONTENT_HASH)
+    NET5_REFERENCE_VERSION = required(NET5_REFERENCE_VERSION)
+    NET5_REFERENCE_SOURCE_URI = required(NET5_REFERENCE_SOURCE_URI)
+    NET5_REFERENCE_SHA512 = required(NET5_REFERENCE_SHA512)
+    NET5_REFERENCE_PACKAGE_CONTENT_HASH = required(NET5_REFERENCE_PACKAGE_CONTENT_HASH)
+    NET6_REFERENCE_VERSION = required(NET6_REFERENCE_VERSION)
+    NET6_REFERENCE_SOURCE_URI = required(NET6_REFERENCE_SOURCE_URI)
+    NET6_REFERENCE_SHA512 = required(NET6_REFERENCE_SHA512)
+    NET6_REFERENCE_PACKAGE_CONTENT_HASH = required(NET6_REFERENCE_PACKAGE_CONTENT_HASH)
+    NET7_REFERENCE_VERSION = required(NET7_REFERENCE_VERSION)
+    NET7_REFERENCE_SOURCE_URI = required(NET7_REFERENCE_SOURCE_URI)
+    NET7_REFERENCE_SHA512 = required(NET7_REFERENCE_SHA512)
+    NET7_REFERENCE_PACKAGE_CONTENT_HASH = required(NET7_REFERENCE_PACKAGE_CONTENT_HASH)
+    NET8_REFERENCE_VERSION = required(NET8_REFERENCE_VERSION)
+    NET8_REFERENCE_SOURCE_URI = required(NET8_REFERENCE_SOURCE_URI)
+    NET8_REFERENCE_SHA512 = required(NET8_REFERENCE_SHA512)
+    NET8_REFERENCE_PACKAGE_CONTENT_HASH = required(NET8_REFERENCE_PACKAGE_CONTENT_HASH)
+    NET9_REFERENCE_VERSION = required(NET9_REFERENCE_VERSION)
+    NET9_REFERENCE_SOURCE_URI = required(NET9_REFERENCE_SOURCE_URI)
+    NET9_REFERENCE_SHA512 = required(NET9_REFERENCE_SHA512)
+    NET9_REFERENCE_PACKAGE_CONTENT_HASH = required(NET9_REFERENCE_PACKAGE_CONTENT_HASH)
+    NET10_REFERENCE_PACK_VERSION = required(NET10_REFERENCE_PACK_VERSION)
+    NET10_REFERENCE_URL = required(NET10_REFERENCE_URL)
+    NET10_REFERENCE_SHA512 = required(NET10_REFERENCE_SHA512)
+    NET10_REFERENCE_PACKAGE_CONTENT_HASH = required(NET10_REFERENCE_PACKAGE_CONTENT_HASH)
+    NET11_REFERENCE_VERSION = required(NET11_REFERENCE_VERSION)
+    NET11_REFERENCE_URL = required(NET11_REFERENCE_URL)
+    NET11_REFERENCE_SHA512 = required(NET11_REFERENCE_SHA512)
+    NET11_REFERENCE_PACKAGE_CONTENT_HASH = required(NET11_REFERENCE_PACKAGE_CONTENT_HASH)
+  }
+  labels = {
+    "io.sharplabnext.component.netcoreapp2.0-ref.version" = required(NETCOREAPP20_REFERENCE_VERSION)
+    "io.sharplabnext.component.netcoreapp2.0-ref.source-uri" = required(NETCOREAPP20_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.netcoreapp2.0-ref.source-sha512" = required(NETCOREAPP20_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.netcoreapp2.0-ref" = required(NETCOREAPP20_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.netcoreapp2.1-ref.version" = required(NETCOREAPP21_REFERENCE_VERSION)
+    "io.sharplabnext.component.netcoreapp2.1-ref.source-uri" = required(NETCOREAPP21_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.netcoreapp2.1-ref.source-sha512" = required(NETCOREAPP21_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.netcoreapp2.1-ref" = required(NETCOREAPP21_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.netcoreapp2.2-ref.version" = required(NETCOREAPP22_REFERENCE_VERSION)
+    "io.sharplabnext.component.netcoreapp2.2-ref.source-uri" = required(NETCOREAPP22_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.netcoreapp2.2-ref.source-sha512" = required(NETCOREAPP22_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.netcoreapp2.2-ref" = required(NETCOREAPP22_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.netcoreapp3.0-ref.version" = required(NETCOREAPP30_REFERENCE_VERSION)
+    "io.sharplabnext.component.netcoreapp3.0-ref.source-uri" = required(NETCOREAPP30_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.netcoreapp3.0-ref.source-sha512" = required(NETCOREAPP30_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.netcoreapp3.0-ref" = required(NETCOREAPP30_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.netcoreapp3.1-ref.version" = required(NETCOREAPP31_REFERENCE_VERSION)
+    "io.sharplabnext.component.netcoreapp3.1-ref.source-uri" = required(NETCOREAPP31_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.netcoreapp3.1-ref.source-sha512" = required(NETCOREAPP31_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.netcoreapp3.1-ref" = required(NETCOREAPP31_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.net5-ref.version" = required(NET5_REFERENCE_VERSION)
+    "io.sharplabnext.component.net5-ref.source-uri" = required(NET5_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.net5-ref.source-sha512" = required(NET5_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.net5-ref" = required(NET5_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.net6-ref.version" = required(NET6_REFERENCE_VERSION)
+    "io.sharplabnext.component.net6-ref.source-uri" = required(NET6_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.net6-ref.source-sha512" = required(NET6_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.net6-ref" = required(NET6_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.net7-ref.version" = required(NET7_REFERENCE_VERSION)
+    "io.sharplabnext.component.net7-ref.source-uri" = required(NET7_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.net7-ref.source-sha512" = required(NET7_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.net7-ref" = required(NET7_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.net8-ref.version" = required(NET8_REFERENCE_VERSION)
+    "io.sharplabnext.component.net8-ref.source-uri" = required(NET8_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.net8-ref.source-sha512" = required(NET8_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.net8-ref" = required(NET8_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.net9-ref.version" = required(NET9_REFERENCE_VERSION)
+    "io.sharplabnext.component.net9-ref.source-uri" = required(NET9_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.net9-ref.source-sha512" = required(NET9_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.net9-ref" = required(NET9_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.net10-ref.version" = required(NET10_REFERENCE_PACK_VERSION)
+    "io.sharplabnext.component.net10-ref.source-uri" = required(NET10_REFERENCE_URL)
+    "io.sharplabnext.component.net10-ref.source-sha512" = required(NET10_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.net10-ref" = required(NET10_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.net11-preview-ref.version" = required(NET11_REFERENCE_VERSION)
+    "io.sharplabnext.component.net11-preview-ref.source-uri" = required(NET11_REFERENCE_URL)
+    "io.sharplabnext.component.net11-preview-ref.source-sha512" = required(NET11_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.net11-preview-ref" = required(NET11_REFERENCE_PACKAGE_CONTENT_HASH)
+  }
+}
+
 target "service-with-framework-reference-sets" {
   inherits = ["service-with-reference-sets"]
   target = "final-with-framework-reference-sets"
@@ -1299,7 +1630,7 @@ target "runtime-supervisor" {
 }
 
 target "worker-roslyn-stable" {
-  inherits = ["service-with-reference-sets"]
+  inherits = ["service-with-roslyn-coreclr-reference-sets"]
   tags = ["${required(IMAGE_PREFIX)}/worker-roslyn-stable:${required(RELEASE_ID)}"]
   args = {
     PROJECT_PATH = "src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable.csproj"
@@ -1390,6 +1721,46 @@ target "worker-roslyn-main" {
     ROSLYN_MAIN_ARCHIVE_URL = required(ROSLYN_MAIN_ARCHIVE_URL)
     ROSLYN_MAIN_ARCHIVE_SHA256 = required(ROSLYN_MAIN_ARCHIVE_SHA256)
     ROSLYN_MAIN_VERSION = required(ROSLYN_MAIN_VERSION)
+    NETCOREAPP20_REFERENCE_VERSION = required(NETCOREAPP20_REFERENCE_VERSION)
+    NETCOREAPP20_REFERENCE_SOURCE_URI = required(NETCOREAPP20_REFERENCE_SOURCE_URI)
+    NETCOREAPP20_REFERENCE_SHA512 = required(NETCOREAPP20_REFERENCE_SHA512)
+    NETCOREAPP20_REFERENCE_PACKAGE_CONTENT_HASH = required(NETCOREAPP20_REFERENCE_PACKAGE_CONTENT_HASH)
+    NETCOREAPP21_REFERENCE_VERSION = required(NETCOREAPP21_REFERENCE_VERSION)
+    NETCOREAPP21_REFERENCE_SOURCE_URI = required(NETCOREAPP21_REFERENCE_SOURCE_URI)
+    NETCOREAPP21_REFERENCE_SHA512 = required(NETCOREAPP21_REFERENCE_SHA512)
+    NETCOREAPP21_REFERENCE_PACKAGE_CONTENT_HASH = required(NETCOREAPP21_REFERENCE_PACKAGE_CONTENT_HASH)
+    NETCOREAPP22_REFERENCE_VERSION = required(NETCOREAPP22_REFERENCE_VERSION)
+    NETCOREAPP22_REFERENCE_SOURCE_URI = required(NETCOREAPP22_REFERENCE_SOURCE_URI)
+    NETCOREAPP22_REFERENCE_SHA512 = required(NETCOREAPP22_REFERENCE_SHA512)
+    NETCOREAPP22_REFERENCE_PACKAGE_CONTENT_HASH = required(NETCOREAPP22_REFERENCE_PACKAGE_CONTENT_HASH)
+    NETCOREAPP30_REFERENCE_VERSION = required(NETCOREAPP30_REFERENCE_VERSION)
+    NETCOREAPP30_REFERENCE_SOURCE_URI = required(NETCOREAPP30_REFERENCE_SOURCE_URI)
+    NETCOREAPP30_REFERENCE_SHA512 = required(NETCOREAPP30_REFERENCE_SHA512)
+    NETCOREAPP30_REFERENCE_PACKAGE_CONTENT_HASH = required(NETCOREAPP30_REFERENCE_PACKAGE_CONTENT_HASH)
+    NETCOREAPP31_REFERENCE_VERSION = required(NETCOREAPP31_REFERENCE_VERSION)
+    NETCOREAPP31_REFERENCE_SOURCE_URI = required(NETCOREAPP31_REFERENCE_SOURCE_URI)
+    NETCOREAPP31_REFERENCE_SHA512 = required(NETCOREAPP31_REFERENCE_SHA512)
+    NETCOREAPP31_REFERENCE_PACKAGE_CONTENT_HASH = required(NETCOREAPP31_REFERENCE_PACKAGE_CONTENT_HASH)
+    NET5_REFERENCE_VERSION = required(NET5_REFERENCE_VERSION)
+    NET5_REFERENCE_SOURCE_URI = required(NET5_REFERENCE_SOURCE_URI)
+    NET5_REFERENCE_SHA512 = required(NET5_REFERENCE_SHA512)
+    NET5_REFERENCE_PACKAGE_CONTENT_HASH = required(NET5_REFERENCE_PACKAGE_CONTENT_HASH)
+    NET6_REFERENCE_VERSION = required(NET6_REFERENCE_VERSION)
+    NET6_REFERENCE_SOURCE_URI = required(NET6_REFERENCE_SOURCE_URI)
+    NET6_REFERENCE_SHA512 = required(NET6_REFERENCE_SHA512)
+    NET6_REFERENCE_PACKAGE_CONTENT_HASH = required(NET6_REFERENCE_PACKAGE_CONTENT_HASH)
+    NET7_REFERENCE_VERSION = required(NET7_REFERENCE_VERSION)
+    NET7_REFERENCE_SOURCE_URI = required(NET7_REFERENCE_SOURCE_URI)
+    NET7_REFERENCE_SHA512 = required(NET7_REFERENCE_SHA512)
+    NET7_REFERENCE_PACKAGE_CONTENT_HASH = required(NET7_REFERENCE_PACKAGE_CONTENT_HASH)
+    NET8_REFERENCE_VERSION = required(NET8_REFERENCE_VERSION)
+    NET8_REFERENCE_SOURCE_URI = required(NET8_REFERENCE_SOURCE_URI)
+    NET8_REFERENCE_SHA512 = required(NET8_REFERENCE_SHA512)
+    NET8_REFERENCE_PACKAGE_CONTENT_HASH = required(NET8_REFERENCE_PACKAGE_CONTENT_HASH)
+    NET9_REFERENCE_VERSION = required(NET9_REFERENCE_VERSION)
+    NET9_REFERENCE_SOURCE_URI = required(NET9_REFERENCE_SOURCE_URI)
+    NET9_REFERENCE_SHA512 = required(NET9_REFERENCE_SHA512)
+    NET9_REFERENCE_PACKAGE_CONTENT_HASH = required(NET9_REFERENCE_PACKAGE_CONTENT_HASH)
     NET10_REFERENCE_PACK_VERSION = required(NET10_REFERENCE_PACK_VERSION)
     NET10_REFERENCE_URL = required(NET10_REFERENCE_URL)
     NET10_REFERENCE_SHA512 = required(NET10_REFERENCE_SHA512)
@@ -1407,11 +1778,53 @@ target "worker-roslyn-main" {
     "io.sharplabnext.component.roslyn-main.digest" = "sha256:${required(ROSLYN_MAIN_ARCHIVE_SHA256)}"
     "io.sharplabnext.component.roslyn-main.source-uri" = required(ROSLYN_MAIN_SOURCE_URI)
     "io.sharplabnext.component.net10-ref.version" = required(NET10_REFERENCE_PACK_VERSION)
-    "io.sharplabnext.component.net10-ref.source-uri" = required(NET10_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.net10-ref.source-uri" = required(NET10_REFERENCE_URL)
+    "io.sharplabnext.component.net10-ref.source-sha512" = required(NET10_REFERENCE_SHA512)
     "io.sharplabnext.component.net11-preview-ref.version" = required(NET11_REFERENCE_VERSION)
-    "io.sharplabnext.component.net11-preview-ref.source-uri" = required(NET11_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.net11-preview-ref.source-uri" = required(NET11_REFERENCE_URL)
+    "io.sharplabnext.component.net11-preview-ref.source-sha512" = required(NET11_REFERENCE_SHA512)
     "io.sharplabnext.reference-set.net10-ref" = required(NET10_REFERENCE_PACKAGE_CONTENT_HASH)
     "io.sharplabnext.reference-set.net11-preview-ref" = required(NET11_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.netcoreapp2.0-ref.version" = required(NETCOREAPP20_REFERENCE_VERSION)
+    "io.sharplabnext.component.netcoreapp2.0-ref.source-uri" = required(NETCOREAPP20_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.netcoreapp2.0-ref.source-sha512" = required(NETCOREAPP20_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.netcoreapp2.0-ref" = required(NETCOREAPP20_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.netcoreapp2.1-ref.version" = required(NETCOREAPP21_REFERENCE_VERSION)
+    "io.sharplabnext.component.netcoreapp2.1-ref.source-uri" = required(NETCOREAPP21_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.netcoreapp2.1-ref.source-sha512" = required(NETCOREAPP21_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.netcoreapp2.1-ref" = required(NETCOREAPP21_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.netcoreapp2.2-ref.version" = required(NETCOREAPP22_REFERENCE_VERSION)
+    "io.sharplabnext.component.netcoreapp2.2-ref.source-uri" = required(NETCOREAPP22_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.netcoreapp2.2-ref.source-sha512" = required(NETCOREAPP22_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.netcoreapp2.2-ref" = required(NETCOREAPP22_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.netcoreapp3.0-ref.version" = required(NETCOREAPP30_REFERENCE_VERSION)
+    "io.sharplabnext.component.netcoreapp3.0-ref.source-uri" = required(NETCOREAPP30_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.netcoreapp3.0-ref.source-sha512" = required(NETCOREAPP30_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.netcoreapp3.0-ref" = required(NETCOREAPP30_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.netcoreapp3.1-ref.version" = required(NETCOREAPP31_REFERENCE_VERSION)
+    "io.sharplabnext.component.netcoreapp3.1-ref.source-uri" = required(NETCOREAPP31_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.netcoreapp3.1-ref.source-sha512" = required(NETCOREAPP31_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.netcoreapp3.1-ref" = required(NETCOREAPP31_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.net5-ref.version" = required(NET5_REFERENCE_VERSION)
+    "io.sharplabnext.component.net5-ref.source-uri" = required(NET5_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.net5-ref.source-sha512" = required(NET5_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.net5-ref" = required(NET5_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.net6-ref.version" = required(NET6_REFERENCE_VERSION)
+    "io.sharplabnext.component.net6-ref.source-uri" = required(NET6_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.net6-ref.source-sha512" = required(NET6_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.net6-ref" = required(NET6_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.net7-ref.version" = required(NET7_REFERENCE_VERSION)
+    "io.sharplabnext.component.net7-ref.source-uri" = required(NET7_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.net7-ref.source-sha512" = required(NET7_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.net7-ref" = required(NET7_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.net8-ref.version" = required(NET8_REFERENCE_VERSION)
+    "io.sharplabnext.component.net8-ref.source-uri" = required(NET8_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.net8-ref.source-sha512" = required(NET8_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.net8-ref" = required(NET8_REFERENCE_PACKAGE_CONTENT_HASH)
+    "io.sharplabnext.component.net9-ref.version" = required(NET9_REFERENCE_VERSION)
+    "io.sharplabnext.component.net9-ref.source-uri" = required(NET9_REFERENCE_SOURCE_URI)
+    "io.sharplabnext.component.net9-ref.source-sha512" = required(NET9_REFERENCE_SHA512)
+    "io.sharplabnext.reference-set.net9-ref" = required(NET9_REFERENCE_PACKAGE_CONTENT_HASH)
   }
 }
 
@@ -1766,9 +2179,9 @@ target "worker-artifacts-jsil" {
     "io.sharplabnext.component.jsil-cecil-source.digest" = "sha256:${required(JSIL_CECIL_ARCHIVE_SHA256)}"
     "io.sharplabnext.component.jsil-cecil-source.source-uri" = required(JSIL_CECIL_ARCHIVE_URL)
     "io.sharplabnext.component.net10-ref.version" = required(NET10_REFERENCE_PACK_VERSION)
-    "io.sharplabnext.component.net10-ref.source-uri" = required(NET10_REFERENCE_URL)
+    "io.sharplabnext.component.net10-ref.source-uri" = required(NET10_REFERENCE_SOURCE_URI)
     "io.sharplabnext.component.net11-preview-ref.version" = required(NET11_REFERENCE_VERSION)
-    "io.sharplabnext.component.net11-preview-ref.source-uri" = required(NET11_REFERENCE_URL)
+    "io.sharplabnext.component.net11-preview-ref.source-uri" = required(NET11_REFERENCE_SOURCE_URI)
   }
 }
 

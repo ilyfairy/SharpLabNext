@@ -164,11 +164,6 @@ public static class CatalogValidator
             errors.Add($"{description} has unsupported support status '{supportStatus}'.");
         if (visibility is not ("visible" or "hidden"))
             errors.Add($"{description} has unsupported visibility '{visibility}'.");
-        if (string.Equals(supportStatus, "legacy", StringComparison.Ordinal) &&
-            !string.Equals(visibility, "hidden", StringComparison.Ordinal))
-        {
-            errors.Add($"{description} is legacy and must be hidden by default.");
-        }
     }
 
     private static Dictionary<string, T> Index<T>(

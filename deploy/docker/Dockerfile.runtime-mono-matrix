@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
 # Candidate-only Mono runtime image.  The Mono distribution is supplied as a
 # digest-pinned build argument; this Dockerfile never installs a mutable apt
@@ -76,6 +76,8 @@ RUN test -x /usr/share/dotnet/dotnet \
 FROM mono-runtime-check AS final
 ARG VERSION
 ARG SOURCE_REVISION
+ARG CANDIDATE_SOURCE_CONTEXT
+ARG CANDIDATE_PROMOTION_ELIGIBLE
 ARG PROFILE_ID
 ARG MONO_VERSION
 ARG CONTROL_IMAGE
@@ -83,8 +85,36 @@ ARG MONO_IMAGE
 ARG RUNTIME_COMPONENT_DIGEST
 ARG RUNTIME_COMPONENT_SOURCE_URI
 
+# The promotion verifier executes the profile's exact /usr/bin/mono path and
+# accepts only a single regular file. Preserve that command path while making
+# it an independent copy of the audited Mono runtime binary, rather than
+# retaining the distribution's mono -> mono-sgen symlink.
+RUN set -eu; \
+    command -v stat >/dev/null; \
+    command -v cp >/dev/null; \
+    command -v cmp >/dev/null; \
+    mono_source=/usr/bin/mono-sgen; \
+    mono_destination=/usr/bin/mono; \
+    test -f "${mono_source}"; \
+    test ! -L "${mono_source}"; \
+    test -L "${mono_destination}"; \
+    mono_mode="$(stat --format=%a "${mono_source}")"; \
+    mono_owner="$(stat --format=%u:%g "${mono_source}")"; \
+    mono_timestamp="$(stat --format=%y "${mono_source}")"; \
+    rm -- "${mono_destination}"; \
+    cp --preserve=mode,ownership,timestamps -- "${mono_source}" "${mono_destination}"; \
+    test -f "${mono_destination}"; \
+    test ! -L "${mono_destination}"; \
+    test "$(stat --format=%a "${mono_destination}")" = "${mono_mode}"; \
+    test "$(stat --format=%u:%g "${mono_destination}")" = "${mono_owner}"; \
+    test "$(stat --format=%y "${mono_destination}")" = "${mono_timestamp}"; \
+    test "$(stat --format=%h "${mono_destination}")" -eq 1; \
+    cmp --silent "${mono_source}" "${mono_destination}"
+
 RUN test -n "${VERSION}" \
     && test -n "${SOURCE_REVISION}" \
+    && { test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "committed:true" \
+         || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "working-tree-development:false"; } \
     && test -n "${PROFILE_ID}" \
     && test -n "${MONO_VERSION}" \
     && test -n "${MONO_IMAGE}" \
@@ -95,8 +125,12 @@ RUN test -n "${VERSION}" \
 
 COPY --from=control-image /usr/share/dotnet/ /usr/share/dotnet/
 RUN test -x /usr/share/dotnet/dotnet \
-    && test -x /usr/bin/mono \
-    && test -x /usr/bin/mono-sgen \
+    && test -f /usr/bin/mono \
+    && test ! -L /usr/bin/mono \
+    && test "$(stat --format=%h /usr/bin/mono)" -eq 1 \
+    && test -f /usr/bin/mono-sgen \
+    && test ! -L /usr/bin/mono-sgen \
+    && cmp --silent /usr/bin/mono-sgen /usr/bin/mono \
     && command -v objdump \
     && test "$(ldd /usr/bin/mono-sgen 2>/dev/null | grep --count 'not found')" -eq 0 \
     && /usr/share/dotnet/dotnet --info \
@@ -106,6 +140,8 @@ RUN test -x /usr/share/dotnet/dotnet \
 LABEL org.opencontainers.image.title="SharpLabNext Mono Matrix Runtime Candidate" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      io.sharplabnext.source.context="${CANDIDATE_SOURCE_CONTEXT}" \
+      com.sharplabnext.runtime-candidate.promotion-eligible="${CANDIDATE_PROMOTION_ELIGIBLE}" \
       org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
       com.sharplabnext.runtime-candidate="true" \
       com.sharplabnext.runtime-profile="${PROFILE_ID}" \

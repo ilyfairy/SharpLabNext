@@ -5,13 +5,27 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { validateRuntimePromotionReceipts } from './runtime-promotion-receipt-validation.mjs'
+import {
+  runtimePromotionPlanKeyId,
+  runtimePromotionPlanSignaturePath,
+  serializeRuntimePromotionPlan,
+  verifyRuntimePromotionPlanSignature,
+} from './runtime-promotion-plan-signature.mjs'
+import {
+  isWinePromotionFamily,
+  loadOwnedWineOperatorBinding,
+  runtimeOperatorReceiptPaths,
+  validateWineOperatorBinding,
+} from './runtime-wine-operator-binding.mjs'
 
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const commitPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
 const profileIdPattern = /^[a-z0-9][a-z0-9._-]*$/
-const deploymentRepositoryPattern = /^[a-z0-9][a-z0-9._/-]*$/
+const deploymentRepositoryPattern =
+  /^[a-z0-9][a-z0-9.-]*(?::[1-9][0-9]{0,4})?(?:\/[a-z0-9][a-z0-9._-]*)*$/
 const immutableImagePattern = /^([^@\s]+)@sha256:([0-9a-f]{64})$/
 const maximumReceiptBytes = 1024 * 1024
+const wineCoreClrUserspaceComponentId = 'wine-coreclr-userspace'
 
 export class RuntimeMatrixPromotionError extends Error {}
 
@@ -154,18 +168,20 @@ export function prepareRuntimeMatrixPromotion({
   profileId,
   sourceRevision,
   generatorRunner = runMatrixGenerator,
+  planSignaturePublicKey,
+  planSignatureKeyId,
 }) {
   const root = path.resolve(repositoryRoot)
   validateProfileId(profileId)
   const paths = promotionPaths(root, profileId)
-  const originalBytes = readPromotionInputs(paths)
+  const originalBytes = readPromotionInputs(paths, root)
   const matrix = parseJson(originalBytes.matrix, paths.matrix)
   const binding = findRuntimeMatrixBinding(matrix, profileId)
   const receiptBytes = readRegularFile(paths.receipt, maximumReceiptBytes, root)
   const receiptDigest = sha256(receiptBytes)
   const receipt = parseJson(receiptBytes, paths.receipt)
 
-  validateReceiptIdentity(receipt, binding, sourceRevision)
+  validateReceiptIdentity(receipt, binding, sourceRevision, root)
   const receiptReference = {
     path: `profiles/runtime-promotion-receipts/${profileId}.json`,
     sha256: receiptDigest,
@@ -173,9 +189,12 @@ export function prepareRuntimeMatrixPromotion({
   binding.capability.promotionState = 'verified'
   binding.capability.promotionReceipt = receiptReference
   delete binding.capability.blockedReason
-  requireValidPromotionReceipts(matrix, root)
+  const planSignatureOptions = { planSignaturePublicKey, planSignatureKeyId }
+  requireValidPromotionReceipts(matrix, root, planSignatureOptions)
+  materializeInstrumentationCapabilities(binding, receipt)
   originalBytes.receipt = receiptBytes
   originalBytes.evidence = readEvidenceInputs(root, binding, receipt)
+  originalBytes.wineOperator = readWineOperatorInputs(root, binding, receipt, sourceRevision)
 
   const stageParent = path.join(root, 'artifacts', 'runtime-matrix-promotion')
   fs.mkdirSync(stageParent, { recursive: true })
@@ -188,8 +207,24 @@ export function prepareRuntimeMatrixPromotion({
 
     const stagedCatalog = structuredClone(catalog)
     deactivateCatalogBinding(stagedCatalog, binding)
-    stageGeneratorInputs(root, stageRoot, matrix, stagedCatalog, profileId, receipt, paths.receipt)
-    generatorRunner({ repositoryRoot: root, stageRoot })
+    stageGeneratorInputs(
+      root,
+      stageRoot,
+      matrix,
+      stagedCatalog,
+      {
+        profileId,
+        receipt,
+        sourceRevision,
+        receiptBytes,
+        candidateProfileBytes: originalBytes.candidateProfile,
+        promotionPlanBytes: originalBytes.promotionPlan,
+        preflightProfileBytes: originalBytes.preflightProfile,
+        planSignatureOptions,
+        evidence: originalBytes.evidence,
+      },
+    )
+    generatorRunner({ repositoryRoot: root, stageRoot, planSignatureOptions })
 
     const generatedCatalogPath = path.join(stageRoot, 'profiles', 'catalog', 'catalog.json')
     const generatedProfilePath = path.join(
@@ -218,6 +253,9 @@ export function prepareRuntimeMatrixPromotion({
     })
 
     const replacements = [
+      ...[...originalBytes.wineOperator.entries()].map(([relativePath, content]) => ({
+        path: path.join(root, ...relativePath.split('/')), content,
+      })),
       { path: paths.deployment, content: serializeJson(finalDeployment) },
       { path: paths.activeProfile, content: serializeJson(profile) },
       { path: paths.catalog, content: serializeJson(finalCatalog) },
@@ -230,6 +268,7 @@ export function prepareRuntimeMatrixPromotion({
       receipt,
       receiptReference,
       sourceRevision,
+      planSignatureOptions,
       replacements,
       originalBytes,
       stageRoot,
@@ -239,6 +278,22 @@ export function prepareRuntimeMatrixPromotion({
     fs.rmSync(stageRoot, { recursive: true, force: true })
     throw error
   }
+}
+
+function materializeInstrumentationCapabilities(binding, receipt) {
+  const verifiedCapabilities = new Set(
+    receipt.checks.map(check => check.capability),
+  )
+  const instrumentationCapabilities = binding.capability.capabilities.filter(
+    capability =>
+      (capability === 'inspection' || capability === 'execution-flow') &&
+      verifiedCapabilities.has(capability),
+  )
+  if (instrumentationCapabilities.length === 0) {
+    delete binding.capability.instrumentationCapabilities
+    return
+  }
+  binding.capability.instrumentationCapabilities = instrumentationCapabilities
 }
 
 export function promoteRuntimeMatrix(options) {
@@ -251,11 +306,11 @@ export function promoteRuntimeMatrix(options) {
     lockHandle = fs.openSync(lockPath, 'wx', 0o600)
     fs.writeFileSync(lockHandle, `${process.pid}${os.EOL}`)
     fs.fsyncSync(lockHandle)
-    const sourceRevision = readPromotionRepositoryRevision(root, options.profileId)
+    const sourceRevision = readPromotionRepositoryRevision(root, options.profileId, new Set(), options)
     plan = prepareRuntimeMatrixPromotion({ ...options, repositoryRoot: root, sourceRevision })
     assertPromotionInputsUnchanged(plan)
     requireEqual(
-      readPromotionRepositoryRevision(root, options.profileId),
+      readPromotionRepositoryRevision(root, options.profileId, new Set(), options),
       plan.sourceRevision,
       'repository source revision',
     )
@@ -274,6 +329,7 @@ export function promoteRuntimeMatrix(options) {
               root,
               options.profileId,
               transactionTemporaries,
+              options,
             ),
             plan.sourceRevision,
             'repository source revision after promotion',
@@ -306,10 +362,35 @@ function promotionPaths(root, profileId) {
     deployment: path.join(root, 'deploy', 'images.json'),
     receipt: path.join(root, 'profiles', 'runtime-promotion-receipts', `${profileId}.json`),
     activeProfile: path.join(root, 'profiles', 'runtimes', `${profileId}.json`),
+    candidateProfile: path.join(
+      root,
+      'profiles',
+      'runtimes',
+      'candidates',
+      `${profileId}.json`,
+    ),
+    promotionPlan: path.join(
+      root,
+      'profiles',
+      'runtime-promotion-plans',
+      `${profileId}.json`,
+    ),
+    promotionPlanSignature: path.join(
+      root,
+      'profiles',
+      'runtime-promotion-plans',
+      `${profileId}.json.sig`,
+    ),
+    preflightProfile: path.join(
+      root,
+      'profiles',
+      'runtime-promotion-plans',
+      `${profileId}.profile.json`,
+    ),
   }
 }
 
-function readPromotionInputs(paths) {
+function readPromotionInputs(paths, root) {
   return {
     matrix: fs.readFileSync(paths.matrix),
     catalog: fs.readFileSync(paths.catalog),
@@ -318,10 +399,14 @@ function readPromotionInputs(paths) {
     activeProfile: fs.existsSync(paths.activeProfile)
       ? fs.readFileSync(paths.activeProfile)
       : undefined,
+    candidateProfile: readRegularFile(paths.candidateProfile, maximumReceiptBytes, root),
+    promotionPlan: readOptionalRegularFile(paths.promotionPlan, maximumReceiptBytes, root),
+    promotionPlanSignature: readOptionalRegularFile(paths.promotionPlanSignature, 4096, root),
+    preflightProfile: readOptionalRegularFile(paths.preflightProfile, maximumReceiptBytes, root),
   }
 }
 
-function validateReceiptIdentity(receipt, binding, sourceRevision) {
+function validateReceiptIdentity(receipt, binding, sourceRevision, root = undefined) {
   requireEqual(receipt.schemaVersion, 2, 'receipt.schemaVersion')
   requireEqual(receipt.profileId, binding.profileId, 'receipt.profileId')
   requireEqual(receipt.matrixTargetId, binding.targetId, 'receipt.matrixTargetId')
@@ -344,9 +429,44 @@ function validateReceiptIdentity(receipt, binding, sourceRevision) {
     throw new RuntimeMatrixPromotionError('The repository source revision is not a full Git commit.')
   }
   requireEqual(receipt.sourceRevision, sourceRevision, 'receipt.sourceRevision')
+  try { validateWineOperatorBinding(receipt.wineOperator, binding.family, sourceRevision) } catch (error) {
+    throw new RuntimeMatrixPromotionError(error.message, { cause: error })
+  }
+  if (root !== undefined && isWinePromotionFamily(binding.family)) {
+    const loaded = loadOwnedWineOperatorBinding(root, sourceRevision)
+    const operator = receipt.wineOperator
+    for (const [field, value] of Object.entries({
+      receiptPath: loaded.paths.receiptPath,
+      receiptSha256: sha256(loaded.receiptBytes),
+      signaturePath: loaded.paths.signaturePath,
+      signatureSha256: sha256(loaded.signatureBytes),
+      keyId: loaded.receipt.keyId,
+      reference: loaded.receipt.operator.reference,
+      imageId: loaded.receipt.operator.imageId,
+      sizeBytes: loaded.receipt.operator.sizeBytes,
+      sourceRevision: loaded.receipt.source.revision,
+      sourceTree: loaded.receipt.source.tree,
+    })) requireEqual(operator[field], value, `receipt.wineOperator.${field}`)
+  }
 }
 
-function stageGeneratorInputs(root, stageRoot, matrix, catalog, profileId, receipt, receiptPath) {
+function readWineOperatorInputs(root, binding, receipt, sourceRevision) {
+  if (!isWinePromotionFamily(binding.family)) return new Map()
+  validateReceiptIdentity(receipt, binding, sourceRevision, root)
+  const paths = runtimeOperatorReceiptPaths(sourceRevision)
+  return new Map([
+    [paths.receiptPath, readRegularFile(path.join(root, ...paths.receiptPath.split('/')), maximumReceiptBytes, root)],
+    [paths.signaturePath, readRegularFile(path.join(root, ...paths.signaturePath.split('/')), 4096, root)],
+  ])
+}
+
+function stageGeneratorInputs(
+  root,
+  stageRoot,
+  matrix,
+  catalog,
+  current,
+) {
   writeJson(path.join(stageRoot, 'profiles', 'runtime-matrix.json'), matrix)
   writeJson(path.join(stageRoot, 'profiles', 'catalog', 'catalog.json'), catalog)
 
@@ -358,60 +478,178 @@ function stageGeneratorInputs(root, stageRoot, matrix, catalog, profileId, recei
       fs.copyFileSync(path.join(activeProfiles, entry.name), path.join(stagedProfiles, entry.name))
     }
   }
-
-  const stagedReceipt = path.join(
-    stageRoot,
-    'profiles',
-    'runtime-promotion-receipts',
-    `${profileId}.json`,
-  )
-  fs.mkdirSync(path.dirname(stagedReceipt), { recursive: true })
-  fs.copyFileSync(receiptPath, stagedReceipt)
-
-  const evidenceRoot = path.join(root, 'profiles', 'runtime-promotion-evidence', profileId)
-  if (fs.existsSync(evidenceRoot)) {
-    copyRegularTree(
-      evidenceRoot,
-      path.join(stageRoot, 'profiles', 'runtime-promotion-evidence', profileId),
-      root,
-    )
-  }
-  const performancePolicyRoot = path.join(root, 'profiles', 'runtime-performance-policies')
-  if (fs.existsSync(performancePolicyRoot)) {
-    copyRegularTree(
-      performancePolicyRoot,
-      path.join(stageRoot, 'profiles', 'runtime-performance-policies'),
-      root,
-    )
-  }
+  stageVerifiedPromotionInputs(root, stageRoot, matrix, current)
 
   const stagedEng = path.join(stageRoot, 'eng')
   fs.mkdirSync(stagedEng, { recursive: true })
-  for (const entry of fs.readdirSync(path.join(root, 'eng'), { withFileTypes: true })) {
-    if (entry.isFile() &&
-        (/^runtime-(?:promotion|performance|capability)-.*\.mjs$/.test(entry.name) ||
-         entry.name === 'strict-owned-json.mjs' ||
-         entry.name === 'runtime-candidate-input-validation.mjs')) {
-      fs.copyFileSync(path.join(root, 'eng', entry.name), path.join(stagedEng, entry.name))
+  for (const name of [
+    'runtime-promotion-receipt-validation.mjs',
+    'runtime-performance-evidence-validation.mjs',
+    'runtime-capability-evidence-validation.mjs',
+    'strict-owned-json.mjs',
+    'json-schema-formats.mjs',
+    'json-schema-instance-validation.mjs',
+    'runtime-candidate-input-validation.mjs',
+    'runtime-promotion-plan-signature.mjs',
+    'runtime-wine-operator-binding.mjs',
+    'wine-coreclr-operator-receipt.mjs',
+  ]) {
+    const source = path.join(root, 'eng', name)
+    const stat = fs.lstatSync(source, { throwIfNoEntry: false })
+    if (stat === undefined || !stat.isFile() || stat.isSymbolicLink()) {
+      throw new RuntimeMatrixPromotionError(
+        `Staged generator helper 'eng/${name}' must be a regular source-root file.`,
+      )
     }
+    fs.copyFileSync(source, path.join(stagedEng, name))
+  }
+  const trustSource = path.join(root, 'eng', 'profiles', 'trust', 'wine-coreclr-operator-receipt-public.pem')
+  const trustTarget = path.join(stageRoot, 'eng', 'profiles', 'trust', 'wine-coreclr-operator-receipt-public.pem')
+  const trustStat = fs.lstatSync(trustSource, { throwIfNoEntry: false })
+  if (trustStat === undefined || !trustStat.isFile() || trustStat.isSymbolicLink()) {
+    throw new RuntimeMatrixPromotionError(
+      "Staged generator trust key 'eng/profiles/trust/wine-coreclr-operator-receipt-public.pem' " +
+      'must be a regular source-root file.',
+    )
+  }
+  fs.mkdirSync(path.dirname(trustTarget), { recursive: true })
+  fs.copyFileSync(trustSource, trustTarget)
+  const planTrustSource = path.join(root, 'eng', 'profiles', 'trust', 'runtime-promotion-plan-public.pem')
+  const planTrustTarget = path.join(stageRoot, 'eng', 'profiles', 'trust', 'runtime-promotion-plan-public.pem')
+  fs.mkdirSync(path.dirname(planTrustTarget), { recursive: true })
+  if (current.planSignatureOptions.planSignaturePublicKey === undefined) {
+    fs.copyFileSync(planTrustSource, planTrustTarget)
+  } else {
+    fs.writeFileSync(planTrustTarget, current.planSignatureOptions.planSignaturePublicKey.export({ type: 'spki', format: 'pem' }))
+  }
+  const stagedSchemas = path.join(stageRoot, 'schemas')
+  fs.mkdirSync(stagedSchemas, { recursive: true })
+  for (const name of [
+    'runtime-promotion-plan.schema.json',
+    'runtime-promotion-receipt.schema.json',
+  ]) {
+    fs.copyFileSync(path.join(root, 'schemas', name), path.join(stagedSchemas, name))
   }
 
   // Fail before invoking the generator if a receipt names evidence outside
   // its canonical profile directory. The receipt validator repeats this gate.
-  for (const check of receipt.checks ?? []) {
-    const expected = `profiles/runtime-promotion-evidence/${profileId}/${check.capability}.json`
+  for (const check of current.receipt.checks ?? []) {
+    const expected =
+      `profiles/runtime-promotion-evidence/${current.profileId}/${check.capability}.json`
     requireEqual(check.evidencePath, expected, `${check.capability} evidencePath`)
   }
   requireEqual(
-    receipt.performance?.evidencePath,
-    `profiles/runtime-promotion-evidence/${profileId}/performance.json`,
+    current.receipt.performance?.evidencePath,
+    `profiles/runtime-promotion-evidence/${current.profileId}/performance.json`,
     'performance evidencePath',
   )
   requireEqual(
-    receipt.performance?.policyPath,
-    `profiles/runtime-performance-policies/${receipt.performance?.policyId}.json`,
+    current.receipt.performance?.policyPath,
+    `profiles/runtime-performance-policies/${current.receipt.performance?.policyId}.json`,
     'performance policyPath',
   )
+}
+
+function stageVerifiedPromotionInputs(root, stageRoot, matrix, current) {
+  const inputs = new Map()
+  const addInput = (relativePath, bytes) => {
+    const existing = inputs.get(relativePath)
+    if (existing !== undefined && !buffersEqual(existing, bytes)) {
+      throw new RuntimeMatrixPromotionError(
+        `Verified promotion input '${relativePath}' has conflicting bytes.`,
+      )
+    }
+    inputs.set(relativePath, bytes)
+  }
+  let currentFound = false
+  for (const binding of promotionBindings(matrix)) {
+    if (binding.capability?.promotionState !== 'verified') continue
+    const profileId = binding.profileId
+    const isCurrent = profileId === current.profileId
+    currentFound ||= isCurrent
+    const receiptRelativePath = `profiles/runtime-promotion-receipts/${profileId}.json`
+    const receiptBytes = isCurrent
+      ? current.receiptBytes
+      : readRegularFile(
+          path.join(root, ...receiptRelativePath.split('/')),
+          maximumReceiptBytes,
+          root,
+        )
+    const receipt = isCurrent
+      ? current.receipt
+      : parseJson(receiptBytes, receiptRelativePath)
+    validateReceiptIdentity(receipt, binding, current.sourceRevision)
+    requireEqual(
+      binding.capability.promotionReceipt?.path,
+      receiptRelativePath,
+      `${profileId} matrix receipt path`,
+    )
+    requireEqual(
+      binding.capability.promotionReceipt?.sha256,
+      sha256(receiptBytes),
+      `${profileId} matrix receipt sha256`,
+    )
+    addInput(receiptRelativePath, receiptBytes)
+    for (const [relativePath, bytes] of readWineOperatorInputs(
+      root, binding, receipt, current.sourceRevision,
+    )) addInput(relativePath, bytes)
+
+    const planBinding = validatePromotionPlanBinding(
+      root,
+      profileId,
+      receipt,
+      current.sourceRevision,
+      current.planSignatureOptions,
+    )
+    const currentPlanInputs = [
+      current.promotionPlanBytes,
+      current.preflightProfileBytes,
+    ]
+    if (isCurrent && currentPlanInputs.some(bytes => bytes === undefined)) {
+      throw new RuntimeMatrixPromotionError(
+        'Promotion plan and preflight Runtime Profile must both be present.',
+      )
+    }
+    const exactBytes = (input, captured) => {
+      if (!isCurrent) return input.bytes
+      if (!buffersEqual(input.bytes, captured)) {
+        throw new RuntimeMatrixPromotionError(
+          `Promotion input '${input.relativePath}' changed before generator staging.`,
+        )
+      }
+      return captured
+    }
+    addInput(
+      planBinding.candidate.relativePath,
+      exactBytes(planBinding.candidate, current.candidateProfileBytes),
+    )
+    addInput(
+      planBinding.plan.relativePath,
+      exactBytes(planBinding.plan, current.promotionPlanBytes),
+    )
+    addInput(
+      planBinding.preflight.relativePath,
+      exactBytes(planBinding.preflight, current.preflightProfileBytes),
+    )
+    addInput(planBinding.signature.relativePath, planBinding.signature.bytes)
+
+    const evidence = isCurrent
+      ? current.evidence
+      : readEvidenceInputs(root, binding, receipt)
+    for (const [filename, bytes] of evidence) {
+      addInput(repositoryRelativePath(root, filename), bytes)
+    }
+  }
+  if (!currentFound) {
+    throw new RuntimeMatrixPromotionError(
+      `Current promotion '${current.profileId}' is absent from the verified matrix closure.`,
+    )
+  }
+  for (const [relativePath, bytes] of inputs) {
+    const target = path.join(stageRoot, ...relativePath.split('/'))
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    fs.writeFileSync(target, bytes)
+  }
 }
 
 function runMatrixGenerator({ repositoryRoot, stageRoot }) {
@@ -429,6 +667,7 @@ function runMatrixGenerator({ repositoryRoot, stageRoot }) {
     ],
     {
       cwd: repositoryRoot,
+      env: process.env,
       encoding: 'utf8',
       timeout: 120_000,
       windowsHide: true,
@@ -609,10 +848,25 @@ function materializeDeploymentImages(deployment, binding, receipt) {
     immutableReference: receipt.image.reference,
     runtimeId: binding.profileId,
     lockComponentId: binding.profileId,
+    lockComponentIds: deploymentLockComponentIds(binding, existing.lockComponentIds),
   }
   if (matches.length === 0) result.images.push(definition)
   else result.images[matches[0].index] = definition
   return result
+}
+
+export function deploymentLockComponentIds(binding, existingComponentIds = []) {
+  if (!Array.isArray(existingComponentIds) ||
+      !existingComponentIds.every(componentId => typeof componentId === 'string' && componentId.length > 0)) {
+    throw new RuntimeMatrixPromotionError('Deployment image lockComponentIds must be an array of non-empty strings.')
+  }
+  const requiresWineUserspace = binding?.family === 'coreclr-wine' ||
+    binding?.family === 'netfx-clr-wine'
+  return requiresWineUserspace
+    ? existingComponentIds.includes(wineCoreClrUserspaceComponentId)
+      ? [...existingComponentIds]
+      : [...existingComponentIds, wineCoreClrUserspaceComponentId]
+    : [...existingComponentIds]
 }
 
 function validateMaterializedClosure(material) {
@@ -685,6 +939,18 @@ function validateMaterializedClosure(material) {
       'Deployment manifest must use an immutable registry reference, not a local image ID.',
     )
   }
+  if (binding.family === 'coreclr-wine' || binding.family === 'netfx-clr-wine') {
+    if (releaseLock.components?.[wineCoreClrUserspaceComponentId] === undefined) {
+      throw new RuntimeMatrixPromotionError(
+        `Wine deployment closure is missing '${wineCoreClrUserspaceComponentId}' from the release lock.`,
+      )
+    }
+    if (!deploymentImage.lockComponentIds?.includes(wineCoreClrUserspaceComponentId)) {
+      throw new RuntimeMatrixPromotionError(
+        `Wine deployment image '${binding.profileId}' is missing '${wineCoreClrUserspaceComponentId}'.`,
+      )
+    }
+  }
 }
 
 function validateProfileOperationClosure(profile, receipt) {
@@ -747,6 +1013,38 @@ function assertPromotionInputsUnchanged(plan) {
       )
     }
   }
+  const repositoryRoot = path.dirname(path.dirname(plan.paths.matrix))
+  const currentCandidateProfile = readRegularFile(
+    plan.paths.candidateProfile,
+    maximumReceiptBytes,
+    repositoryRoot,
+  )
+  if (!buffersEqual(currentCandidateProfile, plan.originalBytes.candidateProfile)) {
+    throw new RuntimeMatrixPromotionError(
+      `Candidate profile '${plan.paths.candidateProfile}' changed while promotion was staged.`,
+    )
+  }
+  for (const [name, filePath] of [
+    ['promotionPlan', plan.paths.promotionPlan],
+    ['promotionPlanSignature', plan.paths.promotionPlanSignature],
+    ['preflightProfile', plan.paths.preflightProfile],
+  ]) {
+    const original = plan.originalBytes[name]
+    const exists = fs.existsSync(filePath)
+    if (exists !== (original !== undefined)) {
+      throw new RuntimeMatrixPromotionError(
+        `Promotion input '${filePath}' changed while promotion was staged.`,
+      )
+    }
+    if (exists) {
+      const current = readRegularFile(filePath, maximumReceiptBytes, repositoryRoot)
+      if (!buffersEqual(current, original)) {
+        throw new RuntimeMatrixPromotionError(
+          `Promotion input '${filePath}' changed while promotion was staged.`,
+        )
+      }
+    }
+  }
   const activeExists = fs.existsSync(plan.paths.activeProfile)
   const originalProfile = plan.originalBytes.activeProfile
   if (activeExists !== (originalProfile !== undefined) ||
@@ -768,11 +1066,25 @@ function assertPromotionInputsUnchanged(plan) {
       )
     }
   }
+  for (const [relativePath, original] of plan.originalBytes.wineOperator) {
+    const current = readRegularFile(
+      path.join(repositoryRoot, ...relativePath.split('/')),
+      maximumReceiptBytes,
+      repositoryRoot,
+    )
+    if (!buffersEqual(current, original)) {
+      throw new RuntimeMatrixPromotionError(`Wine operator input '${relativePath}' changed while material was staged.`)
+    }
+  }
   const currentMatrix = parseJson(
     plan.replacements.at(-1).content,
     plan.paths.matrix,
   )
-  requireValidPromotionReceipts(currentMatrix, path.resolve(path.dirname(plan.paths.matrix), '..'))
+  requireValidPromotionReceipts(
+    currentMatrix,
+    path.resolve(path.dirname(plan.paths.matrix), '..'),
+    plan.planSignatureOptions,
+  )
 }
 
 function readEvidenceInputs(root, binding, receipt) {
@@ -807,8 +1119,8 @@ function readEvidenceInputs(root, binding, receipt) {
   return result
 }
 
-function requireValidPromotionReceipts(matrix, root) {
-  const failures = validateRuntimePromotionReceipts(matrix, root)
+function requireValidPromotionReceipts(matrix, root, options = {}) {
+  const failures = validateRuntimePromotionReceipts(matrix, root, fs.readFileSync, options)
   if (failures.length > 0) {
     throw new RuntimeMatrixPromotionError(
       `Runtime promotion receipt validation failed: ${failures.join(' ')}`,
@@ -835,9 +1147,9 @@ function readRepositoryRevision(root) {
   return revision
 }
 
-function readPromotionRepositoryRevision(root, profileId, transactionTemporaries = new Set()) {
+function readPromotionRepositoryRevision(root, profileId, transactionTemporaries = new Set(), options = {}) {
   const revision = readRepositoryRevision(root)
-  const allowed = derivePromotionDirtyPaths(root, profileId, revision)
+  const allowed = derivePromotionDirtyPaths(root, profileId, revision, options)
   for (const relativePath of transactionTemporaries) allowed.add(relativePath)
   const result = spawnSync(
     'git',
@@ -890,7 +1202,7 @@ function parseGitStatus(output) {
   return entries
 }
 
-function derivePromotionDirtyPaths(root, profileId, sourceRevision) {
+function derivePromotionDirtyPaths(root, profileId, sourceRevision, options = {}) {
   validateProfileId(profileId)
   const matrixPath = path.join(root, 'profiles', 'runtime-matrix.json')
   const matrix = parseJson(fs.readFileSync(matrixPath), matrixPath)
@@ -906,7 +1218,7 @@ function derivePromotionDirtyPaths(root, profileId, sourceRevision) {
     const receiptPath = path.join(root, ...receiptRelativePath.split('/'))
     const receiptBytes = readRegularFile(receiptPath, maximumReceiptBytes, root)
     const receipt = parseJson(receiptBytes, receiptPath)
-    validateReceiptIdentity(receipt, binding, sourceRevision)
+    validateReceiptIdentity(receipt, binding, sourceRevision, root)
     if (verifiedIds.includes(transactionId)) {
       requireEqual(
         binding.capability.promotionReceipt?.path,
@@ -920,21 +1232,26 @@ function derivePromotionDirtyPaths(root, profileId, sourceRevision) {
       )
     }
     allowed.add(receiptRelativePath)
+    for (const relativePath of readWineOperatorInputs(root, binding, receipt, sourceRevision).keys()) {
+      allowed.add(relativePath)
+    }
     for (const evidencePath of readEvidenceInputs(root, binding, receipt).keys()) {
       allowed.add(repositoryRelativePath(root, evidencePath))
     }
-    for (const promotionPath of validatePromotionPlanBinding(
+    const planBinding = validatePromotionPlanBinding(
       root,
       transactionId,
       receipt,
       sourceRevision,
-    )) {
-      allowed.add(promotionPath)
-    }
+      options,
+    )
+    allowed.add(planBinding.plan.relativePath)
+    allowed.add(planBinding.preflight.relativePath)
+    allowed.add(planBinding.signature.relativePath)
   }
 
   if (verifiedIds.length > 0) {
-    validateExistingMaterializedPromotions(root, matrix, verifiedIds)
+    validateExistingMaterializedPromotions(root, matrix, verifiedIds, options)
     for (const relativePath of [
       'profiles/runtime-matrix.json',
       'profiles/catalog/catalog.json',
@@ -961,7 +1278,7 @@ function promotionBindings(matrix) {
   return result
 }
 
-function validatePromotionPlanBinding(root, profileId, receipt, sourceRevision) {
+function validatePromotionPlanBinding(root, profileId, receipt, sourceRevision, options = {}) {
   const planRelativePath = `profiles/runtime-promotion-plans/${profileId}.json`
   const preflightRelativePath = `profiles/runtime-promotion-plans/${profileId}.profile.json`
   const candidateRelativePath = `profiles/runtimes/candidates/${profileId}.json`
@@ -972,6 +1289,20 @@ function validatePromotionPlanBinding(root, profileId, receipt, sourceRevision) 
   )
   requireEqual(sha256(planBytes), receipt.planSha256, `${profileId} promotion plan sha256`)
   const plan = parseJson(planBytes, planRelativePath)
+  requireJsonEqual(planBytes.toString('utf8'), serializeRuntimePromotionPlan(plan).toString('utf8'), `${profileId} canonical promotion plan`)
+  const signatureRelativePath = runtimePromotionPlanSignaturePath(profileId)
+  const signatureBytes = readRegularFile(
+    path.join(root, ...signatureRelativePath.split('/')), 4096, root,
+  )
+  requireEqual(receipt.planSignature?.path, signatureRelativePath, `${profileId} promotion plan signature path`)
+  requireEqual(receipt.planSignature?.sha256, sha256(signatureBytes), `${profileId} promotion plan signature sha256`)
+  requireEqual(receipt.planSignature?.keyId, options.planSignatureKeyId ?? runtimePromotionPlanKeyId, `${profileId} promotion plan signature keyId`)
+  try { verifyRuntimePromotionPlanSignature(planBytes, signatureBytes,
+    options.planSignaturePublicKey === undefined
+      ? {}
+      : { publicKey: options.planSignaturePublicKey, keyId: options.planSignatureKeyId }) } catch (error) {
+    throw new RuntimeMatrixPromotionError(`${profileId} promotion plan signature is invalid: ${error.message}`, { cause: error })
+  }
   requireEqual(plan.schemaVersion, 1, `${profileId} promotion plan schemaVersion`)
   requireEqual(plan.profileId, profileId, `${profileId} promotion plan profileId`)
   requireEqual(plan.sourceRevision, sourceRevision, `${profileId} promotion plan sourceRevision`)
@@ -986,6 +1317,7 @@ function validatePromotionPlanBinding(root, profileId, receipt, sourceRevision) 
     receipt.componentIdentity,
     `${profileId} promotion plan componentIdentity`,
   )
+  requireJsonEqual(plan.wineOperator, receipt.wineOperator, `${profileId} promotion plan wineOperator`)
   requireEqual(
     plan.preflightProfile?.path,
     preflightRelativePath,
@@ -1016,11 +1348,16 @@ function validatePromotionPlanBinding(root, profileId, receipt, sourceRevision) 
     root,
   )
   requireEqual(plan.profileSha256, sha256(candidateBytes), `${profileId} candidate profile sha256`)
-  return [planRelativePath, preflightRelativePath]
+  return {
+    plan: { relativePath: planRelativePath, bytes: planBytes },
+    signature: { relativePath: signatureRelativePath, bytes: signatureBytes },
+    preflight: { relativePath: preflightRelativePath, bytes: preflightBytes },
+    candidate: { relativePath: candidateRelativePath, bytes: candidateBytes },
+  }
 }
 
-function validateExistingMaterializedPromotions(root, matrix, profileIds) {
-  const failures = validateRuntimePromotionReceipts(matrix, root)
+function validateExistingMaterializedPromotions(root, matrix, profileIds, options = {}) {
+  const failures = validateRuntimePromotionReceipts(matrix, root, fs.readFileSync, options)
   if (failures.length > 0) {
     throw new RuntimeMatrixPromotionError(
       `Existing runtime promotion receipt validation failed: ${failures.join(' ')}`,
@@ -1079,7 +1416,13 @@ function deploymentRepository(reference) {
   const lastSlash = repository.lastIndexOf('/')
   const tagSeparator = repository.lastIndexOf(':')
   if (tagSeparator > lastSlash) repository = repository.slice(0, tagSeparator)
-  if (!deploymentRepositoryPattern.test(repository)) {
+  const firstSlash = repository.indexOf('/')
+  const portSeparator = firstSlash < 0 ? -1 : repository.lastIndexOf(':', firstSlash)
+  const port = portSeparator < 0
+    ? undefined
+    : Number(repository.slice(portSeparator + 1, firstSlash))
+  if (!deploymentRepositoryPattern.test(repository) ||
+      port !== undefined && (!Number.isSafeInteger(port) || port < 1 || port > 65535)) {
     throw new RuntimeMatrixPromotionError(
       `Image repository '${repository}' cannot be represented by deploy/images.json.`,
     )
@@ -1103,28 +1446,6 @@ function requireById(values, id, kind) {
   return structuredClone(matches[0])
 }
 
-function copyRegularTree(source, destination, allowedRoot) {
-  const sourceStat = fs.lstatSync(source)
-  if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) {
-    throw new RuntimeMatrixPromotionError(`Promotion evidence directory '${source}' is not regular.`)
-  }
-  fs.mkdirSync(destination, { recursive: true })
-  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
-    const sourcePath = path.join(source, entry.name)
-    const destinationPath = path.join(destination, entry.name)
-    if (entry.isSymbolicLink()) {
-      throw new RuntimeMatrixPromotionError(`Promotion evidence '${sourcePath}' cannot be a link.`)
-    }
-    if (entry.isDirectory()) copyRegularTree(sourcePath, destinationPath, allowedRoot)
-    else if (entry.isFile()) {
-      readRegularFile(sourcePath, maximumReceiptBytes, allowedRoot)
-      fs.copyFileSync(sourcePath, destinationPath)
-    } else {
-      throw new RuntimeMatrixPromotionError(`Promotion evidence '${sourcePath}' is not a regular file.`)
-    }
-  }
-}
-
 function readRegularFile(filePath, maximumBytes, allowedRoot) {
   const fullPath = path.resolve(filePath)
   const fullRoot = path.resolve(allowedRoot)
@@ -1140,6 +1461,12 @@ function readRegularFile(filePath, maximumBytes, allowedRoot) {
     throw new RuntimeMatrixPromotionError(`Promotion file '${fullPath}' exceeds the size limit.`)
   }
   return fs.readFileSync(fullPath)
+}
+
+function readOptionalRegularFile(filePath, maximumBytes, allowedRoot) {
+  return fs.existsSync(filePath)
+    ? readRegularFile(filePath, maximumBytes, allowedRoot)
+    : undefined
 }
 
 function cleanupTemporaryFiles(entries, options) {
@@ -1193,7 +1520,7 @@ function requireEqual(actual, expected, label) {
 }
 
 function requireJsonEqual(actual, expected, label) {
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+  if (!serializeRuntimePromotionPlan(actual).equals(serializeRuntimePromotionPlan(expected))) {
     throw new RuntimeMatrixPromotionError(`${label} does not match the canonical receipt binding.`)
   }
 }

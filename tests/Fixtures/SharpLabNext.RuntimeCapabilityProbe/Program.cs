@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
 
@@ -14,6 +15,8 @@ namespace SharpLabNext.RuntimeCapabilityProbe
         private const string StderrMarker = "SLN-CAPABILITY-STDERR-V1";
         private const string NetworkBlockedMarker = "SLN-CAPABILITY-NETWORK-BLOCKED-V1";
         private const string ReadOnlyBlockedMarker = "SLN-CAPABILITY-ROOTFS-READONLY-V1";
+        private const string ArgumentsForwardingMarker = "SLN-CAPABILITY-ARGUMENTS-V1";
+        private const string HangReadyMarker = "SLN-CAPABILITY-HANG-READY-V1";
 
         public static int Main(string[] args)
         {
@@ -25,15 +28,26 @@ namespace SharpLabNext.RuntimeCapabilityProbe
                 case "user-exception":
                     ThrowNestedException();
                     return 1;
+                case "arguments-forwarding":
+                    return RunArgumentsForwardingProbe(args);
+                case "non-zero-return":
+                    Console.WriteLine("SLN-CAPABILITY-NONZERO-V1");
+                    return 23;
                 case "output-overflow":
                     WritePastOutputLimit();
                     return 1;
                 case "hang":
+                    Console.WriteLine(HangReadyMarker);
+                    Console.Out.Flush();
                     Thread.Sleep(Timeout.Infinite);
                     return 1;
                 case "process-tree":
                     StartLongRunningChild();
                     return 0;
+                case "inspection":
+                    return RunInspectionProbe();
+                case "execution-flow":
+                    return MultipleSequencePoints(12) == 26 ? 0 : 3;
                 default:
                     Console.Error.Write("unknown capability probe mode");
                     return 2;
@@ -66,6 +80,81 @@ namespace SharpLabNext.RuntimeCapabilityProbe
             if (RootFileSystemIsReadOnly())
                 Console.WriteLine(ReadOnlyBlockedMarker);
             return MultipleSequencePoints(12) == 26 && WindowsAbi(20, 22) == 42 ? 0 : 3;
+        }
+
+        private static int RunArgumentsForwardingProbe(string[] args)
+        {
+            if (args.Length != 2 || args[1] != ArgumentsForwardingMarker)
+                return 4;
+            Console.WriteLine(ArgumentsForwardingMarker);
+            return 0;
+        }
+
+        private static int RunInspectionProbe()
+        {
+            Assembly runtime = FindLoadedRuntimeAssembly();
+            Type extensions = runtime.GetType("SharpLabObjectExtensions", true);
+            MethodInfo inspect = FindGenericMethod(extensions, "Inspect", 2, false);
+            inspect.MakeGenericMethod(typeof(int)).Invoke(
+                null,
+                new object[] { 42, "Capability Probe Value" });
+
+            Type inspectType = runtime.GetType("Inspect", true);
+            MethodInfo memoryGraph = FindGenericMethod(inspectType, "MemoryGraph", 1, true);
+            int[] graphValues = new[] { 4, 2 };
+            memoryGraph.MakeGenericMethod(typeof(int[])).Invoke(
+                null,
+                new object[] { graphValues });
+            return 0;
+        }
+
+        private static Assembly FindLoadedRuntimeAssembly()
+        {
+            Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            for (int index = 0; index < assemblies.Length; index++)
+            {
+                if (string.Equals(
+                    assemblies[index].GetName().Name,
+                    "SharpLab.Runtime",
+                    StringComparison.Ordinal))
+                {
+                    return assemblies[index];
+                }
+            }
+
+            throw new InvalidOperationException("Runner did not load the SharpLab.Runtime support assembly.");
+        }
+
+        private static MethodInfo FindGenericMethod(
+            Type type,
+            string name,
+            int parameterCount,
+            bool firstParameterIsByRef)
+        {
+            MethodInfo[] methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static);
+            for (int index = 0; index < methods.Length; index++)
+            {
+                MethodInfo method = methods[index];
+                ParameterInfo[] parameters = method.GetParameters();
+                Type firstParameter = parameters.Length == 0
+                    ? null
+                    : parameters[0].ParameterType;
+                bool firstParameterMatches = firstParameterIsByRef
+                    ? firstParameter != null &&
+                      firstParameter.IsByRef &&
+                      firstParameter.GetElementType().IsGenericParameter
+                    : firstParameter != null && firstParameter.IsGenericParameter;
+                if (method.Name == name &&
+                    method.IsGenericMethodDefinition &&
+                    method.GetGenericArguments().Length == 1 &&
+                    parameters.Length == parameterCount &&
+                    firstParameterMatches)
+                {
+                    return method;
+                }
+            }
+
+            throw new MissingMethodException(type.FullName, name);
         }
 
         private static bool NetworkIsBlocked()

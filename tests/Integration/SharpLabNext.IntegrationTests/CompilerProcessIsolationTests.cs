@@ -38,7 +38,7 @@ public sealed class CompilerProcessIsolationTests
         var outputDirectory = Path.Combine(root, projectDirectory, "bin", "Release", "net10.0");
         var assemblyPath = Path.Combine(outputDirectory, assemblyName);
         Assert.True(File.Exists(assemblyPath), assemblyPath);
-        var referencePath = FindReferencePath("10.0.9", "net10.0");
+        var referencePath = FindReferencePath("net10-ref", "10.0.9", "net10.0");
         var workRoot = Path.Combine(Path.GetTempPath(), "SharpLabNext-CompilerChild", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workRoot);
         try
@@ -128,7 +128,7 @@ public sealed class CompilerProcessIsolationTests
                 ["ASPNETCORE_ENVIRONMENT"] = "Staging",
                 ["DOTNET_ENVIRONMENT"] = "Staging",
                 ["InternalServiceAuth__Required"] = "false",
-                ["ReferenceSets__net10-ref__Path"] = FindReferencePath("10.0.9", "net10.0"),
+                ["ReferenceSets__net10-ref__Path"] = FindReferencePath("net10-ref", "10.0.9", "net10.0"),
                 ["PeachPie__WorkRoot"] = workRoot
             };
             using var runner = new CompilerProcessRunner(
@@ -346,8 +346,17 @@ public sealed class CompilerProcessIsolationTests
         throw new DirectoryNotFoundException("The repository root was not found.");
     }
 
-    private static string FindReferencePath(string version, string targetFramework)
+    private static string FindReferencePath(string id, string version, string targetFramework)
     {
+        var materializedRoot = Environment.GetEnvironmentVariable(
+            "SHARPLABNEXT_TEST_CORECLR_REFERENCE_SETS");
+        if (!string.IsNullOrWhiteSpace(materializedRoot))
+        {
+            var materialized = Path.Combine(materializedRoot, id);
+            if (Directory.Exists(materialized))
+                return materialized;
+        }
+
         var roots = new[]
         {
             Environment.GetEnvironmentVariable("DOTNET_ROOT"),

@@ -1,10 +1,19 @@
 using System.Text.Json;
 using SharpLabNext.ArtifactProcessing.Protocol;
+using SharpLabNext.Artifacts.Contracts;
 
 namespace SharpLabNext.ArtifactWorker.Tests;
 
 public sealed class ProcessorProtocolTests
 {
+    [Fact]
+    public void RuntimeInstrumentationVersionMatchesCapabilityProbeContract()
+    {
+        Assert.Equal(
+            RuntimeCapabilityProbeContract.ExecutionFlowProcessorVersion,
+            ProcessorProtocol.RuntimeInstrumentationVersion);
+    }
+
     [Fact]
     public void EnumValuesUseKebabCaseWireNames()
     {

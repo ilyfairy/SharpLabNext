@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
 ARG RUNTIME_BUILD_IMAGE
 ARG SDK_IMAGE
@@ -45,6 +45,7 @@ RUN --mount=type=cache,id=sharplabnext-const-runtime-nuget,target=/root/.nuget/p
       /p:PreReleaseVersionIteration=1 \
       /p:SourceRevisionId=${CONST_GENERICS_RUNTIME_COMMIT} \
       /p:MicrosoftDotNetVersionToolsTasksVersion=${CONST_GENERICS_VERSIONTOOLS_VERSION} \
+      /p:RestoreDisableParallel=true \
       /p:EnableSourceLink=false \
       /p:UseSharedCompilation=false
 RUN --mount=type=cache,id=sharplabnext-const-runtime-nuget,target=/root/.nuget/packages,sharing=locked \

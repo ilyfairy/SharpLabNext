@@ -180,7 +180,11 @@ public sealed class VisualBasicBuildServiceTests
     private static VisualBasicBuildService CreateService() =>
         new(
             new ReferenceSetProvider(
-                [new ReferenceSetDefinition("net10-ref", CSharpBuildServiceTests.GetNet10ReferencePathForHost(), "net10.0", "10.0.9")]),
+                [new ReferenceSetDefinition(
+                    "net10-ref",
+                    CSharpBuildServiceTests.GetNet10ReferencePathForHost(),
+                    "net10.0",
+                    CSharpBuildServiceTests.GetNet10ReferenceVersionForHost())]),
             new RoslynWorkerIdentity("development", "roslyn-stable", "5.6.0", null, "development-worker-image"),
             CompilationLimits.Default,
             AstLimits.Default);

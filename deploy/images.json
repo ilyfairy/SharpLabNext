@@ -224,13 +224,13 @@
     },
     {
       "id": "dotnet-10-linux-x64",
-      "repository": "sharplabnext/runtime-dotnet10",
+      "repository": "sharplabnext/runtime-dotnet-10-linux-x64",
       "runtimeId": "dotnet-10-linux-x64",
       "lockComponentId": "dotnet-10-linux-x64"
     },
     {
       "id": "dotnet-11-preview-linux-x64",
-      "repository": "sharplabnext/runtime-dotnet11",
+      "repository": "sharplabnext/runtime-dotnet-11-preview-linux-x64",
       "runtimeId": "dotnet-11-preview-linux-x64",
       "lockComponentId": "dotnet-11-preview-linux-x64"
     },
@@ -246,7 +246,7 @@
     },
     {
       "id": "wine-netfx48-linux-x64",
-      "repository": "sharplabnext/runtime-wine-netfx48",
+      "repository": "sharplabnext/runtime-wine-netfx48-linux-x64",
       "runtimeId": "wine-netfx48-linux-x64",
       "lockComponentIds": [
         "msvc-cppcli-private-image",
@@ -264,6 +264,192 @@
         "jsharp20-prepared-base"
       ],
       "lockComponentId": "wine-jsharp20-linux-x64"
+    },
+    {
+      "id": "dotnet-core-2.0-linux-x64",
+      "repository": "sharplabnext/runtime-dotnet-core-2.0-linux-x64",
+      "runtimeId": "dotnet-core-2.0-linux-x64",
+      "lockComponentId": "dotnet-core-2.0-linux-x64"
+    },
+    {
+      "id": "dotnet-core-2.1-linux-x64",
+      "repository": "sharplabnext/runtime-dotnet-core-2.1-linux-x64",
+      "runtimeId": "dotnet-core-2.1-linux-x64",
+      "lockComponentId": "dotnet-core-2.1-linux-x64"
+    },
+    {
+      "id": "dotnet-core-2.2-linux-x64",
+      "repository": "sharplabnext/runtime-dotnet-core-2.2-linux-x64",
+      "runtimeId": "dotnet-core-2.2-linux-x64",
+      "lockComponentId": "dotnet-core-2.2-linux-x64"
+    },
+    {
+      "id": "dotnet-core-3.0-linux-x64",
+      "repository": "sharplabnext/runtime-dotnet-core-3.0-linux-x64",
+      "runtimeId": "dotnet-core-3.0-linux-x64",
+      "lockComponentId": "dotnet-core-3.0-linux-x64"
+    },
+    {
+      "id": "dotnet-core-3.1-linux-x64",
+      "repository": "sharplabnext/runtime-dotnet-core-3.1-linux-x64",
+      "runtimeId": "dotnet-core-3.1-linux-x64",
+      "lockComponentId": "dotnet-core-3.1-linux-x64"
+    },
+    {
+      "id": "dotnet-5-linux-x64",
+      "repository": "sharplabnext/runtime-dotnet-5-linux-x64",
+      "runtimeId": "dotnet-5-linux-x64",
+      "lockComponentId": "dotnet-5-linux-x64"
+    },
+    {
+      "id": "dotnet-6-linux-x64",
+      "repository": "sharplabnext/runtime-dotnet-6-linux-x64",
+      "runtimeId": "dotnet-6-linux-x64",
+      "lockComponentId": "dotnet-6-linux-x64"
+    },
+    {
+      "id": "dotnet-7-linux-x64",
+      "repository": "sharplabnext/runtime-dotnet-7-linux-x64",
+      "runtimeId": "dotnet-7-linux-x64",
+      "lockComponentId": "dotnet-7-linux-x64"
+    },
+    {
+      "id": "dotnet-8-linux-x64",
+      "repository": "sharplabnext/runtime-dotnet-8-linux-x64",
+      "runtimeId": "dotnet-8-linux-x64",
+      "lockComponentId": "dotnet-8-linux-x64"
+    },
+    {
+      "id": "dotnet-9-linux-x64",
+      "repository": "sharplabnext/runtime-dotnet-9-linux-x64",
+      "runtimeId": "dotnet-9-linux-x64",
+      "lockComponentId": "dotnet-9-linux-x64"
+    },
+    {
+      "id": "wine-dotnet-5-linux-x64",
+      "repository": "sharplabnext/runtime-wine-dotnet-5-linux-x64",
+      "runtimeId": "wine-dotnet-5-linux-x64",
+      "lockComponentId": "wine-dotnet-5-linux-x64"
+    },
+    {
+      "id": "wine-dotnet-6-linux-x64",
+      "repository": "sharplabnext/runtime-wine-dotnet-6-linux-x64",
+      "runtimeId": "wine-dotnet-6-linux-x64",
+      "lockComponentId": "wine-dotnet-6-linux-x64"
+    },
+    {
+      "id": "wine-dotnet-7-linux-x64",
+      "repository": "sharplabnext/runtime-wine-dotnet-7-linux-x64",
+      "runtimeId": "wine-dotnet-7-linux-x64",
+      "lockComponentId": "wine-dotnet-7-linux-x64"
+    },
+    {
+      "id": "wine-dotnet-8-linux-x64",
+      "repository": "sharplabnext/runtime-wine-dotnet-8-linux-x64",
+      "runtimeId": "wine-dotnet-8-linux-x64",
+      "lockComponentId": "wine-dotnet-8-linux-x64"
+    },
+    {
+      "id": "wine-dotnet-9-linux-x64",
+      "repository": "sharplabnext/runtime-wine-dotnet-9-linux-x64",
+      "runtimeId": "wine-dotnet-9-linux-x64",
+      "lockComponentId": "wine-dotnet-9-linux-x64"
+    },
+    {
+      "id": "wine-dotnet-10-linux-x64",
+      "repository": "sharplabnext/runtime-wine-dotnet-10-linux-x64",
+      "runtimeId": "wine-dotnet-10-linux-x64",
+      "lockComponentId": "wine-dotnet-10-linux-x64"
+    },
+    {
+      "id": "wine-dotnet-11-preview-linux-x64",
+      "repository": "sharplabnext/runtime-wine-dotnet-11-preview-linux-x64",
+      "runtimeId": "wine-dotnet-11-preview-linux-x64",
+      "lockComponentId": "wine-dotnet-11-preview-linux-x64"
+    },
+    {
+      "id": "mono-6.12-linux-x64",
+      "repository": "sharplabnext/runtime-mono-6.12-linux-x64",
+      "runtimeId": "mono-6.12-linux-x64",
+      "lockComponentId": "mono-6.12-linux-x64"
+    },
+    {
+      "id": "wine-netfx20-linux-x64",
+      "repository": "sharplabnext/runtime-wine-netfx20-linux-x64",
+      "runtimeId": "wine-netfx20-linux-x64",
+      "lockComponentId": "wine-netfx20-linux-x64"
+    },
+    {
+      "id": "wine-netfx30-linux-x64",
+      "repository": "sharplabnext/runtime-wine-netfx30-linux-x64",
+      "runtimeId": "wine-netfx30-linux-x64",
+      "lockComponentId": "wine-netfx30-linux-x64"
+    },
+    {
+      "id": "wine-netfx35-linux-x64",
+      "repository": "sharplabnext/runtime-wine-netfx35-linux-x64",
+      "runtimeId": "wine-netfx35-linux-x64",
+      "lockComponentId": "wine-netfx35-linux-x64"
+    },
+    {
+      "id": "wine-netfx40-linux-x64",
+      "repository": "sharplabnext/runtime-wine-netfx40-linux-x64",
+      "runtimeId": "wine-netfx40-linux-x64",
+      "lockComponentId": "wine-netfx40-linux-x64"
+    },
+    {
+      "id": "wine-netfx45-linux-x64",
+      "repository": "sharplabnext/runtime-wine-netfx45-linux-x64",
+      "runtimeId": "wine-netfx45-linux-x64",
+      "lockComponentId": "wine-netfx45-linux-x64"
+    },
+    {
+      "id": "wine-netfx451-linux-x64",
+      "repository": "sharplabnext/runtime-wine-netfx451-linux-x64",
+      "runtimeId": "wine-netfx451-linux-x64",
+      "lockComponentId": "wine-netfx451-linux-x64"
+    },
+    {
+      "id": "wine-netfx452-linux-x64",
+      "repository": "sharplabnext/runtime-wine-netfx452-linux-x64",
+      "runtimeId": "wine-netfx452-linux-x64",
+      "lockComponentId": "wine-netfx452-linux-x64"
+    },
+    {
+      "id": "wine-netfx46-linux-x64",
+      "repository": "sharplabnext/runtime-wine-netfx46-linux-x64",
+      "runtimeId": "wine-netfx46-linux-x64",
+      "lockComponentId": "wine-netfx46-linux-x64"
+    },
+    {
+      "id": "wine-netfx461-linux-x64",
+      "repository": "sharplabnext/runtime-wine-netfx461-linux-x64",
+      "runtimeId": "wine-netfx461-linux-x64",
+      "lockComponentId": "wine-netfx461-linux-x64"
+    },
+    {
+      "id": "wine-netfx462-linux-x64",
+      "repository": "sharplabnext/runtime-wine-netfx462-linux-x64",
+      "runtimeId": "wine-netfx462-linux-x64",
+      "lockComponentId": "wine-netfx462-linux-x64"
+    },
+    {
+      "id": "wine-netfx47-linux-x64",
+      "repository": "sharplabnext/runtime-wine-netfx47-linux-x64",
+      "runtimeId": "wine-netfx47-linux-x64",
+      "lockComponentId": "wine-netfx47-linux-x64"
+    },
+    {
+      "id": "wine-netfx471-linux-x64",
+      "repository": "sharplabnext/runtime-wine-netfx471-linux-x64",
+      "runtimeId": "wine-netfx471-linux-x64",
+      "lockComponentId": "wine-netfx471-linux-x64"
+    },
+    {
+      "id": "wine-netfx472-linux-x64",
+      "repository": "sharplabnext/runtime-wine-netfx472-linux-x64",
+      "runtimeId": "wine-netfx472-linux-x64",
+      "lockComponentId": "wine-netfx472-linux-x64"
     }
   ]
 }

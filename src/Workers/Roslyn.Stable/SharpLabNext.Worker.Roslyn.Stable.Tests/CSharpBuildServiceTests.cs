@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using SharpLabNext.Contracts;
+using SharpLabNext.Testing;
 using SharpLabNext.Worker.Roslyn;
 
 namespace SharpLabNext.Worker.Roslyn.Stable.Tests;
@@ -140,6 +141,35 @@ public sealed class CSharpBuildServiceTests
     }
 
     [Fact]
+    public void FrameworkReferenceSetRetainsExactRuntimeVersionUnderNet48WorkerDefault()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RoslynWorker:ReleaseId"] = "development",
+                ["RoslynWorker:ToolchainId"] = "roslyn-stable-netfx48",
+                ["RoslynWorker:WorkerImageId"] = "development-netfx-worker-image",
+                ["RoslynWorker:ArtifactContract:Format"] = "dotnet-framework-managed-pe-v1",
+                ["RoslynWorker:ArtifactContract:RuntimeFamily"] = "netfx-clr-wine",
+                ["RoslynWorker:ArtifactContract:FrameworkName"] = ".NETFramework",
+                ["RoslynWorker:ArtifactContract:FrameworkVersion"] = "4.8",
+                ["RoslynWorker:ArtifactContract:ExecutableFileExtension"] = ".exe",
+                ["RoslynWorker:ArtifactContract:LibraryFileExtension"] = ".dll",
+                ["ReferenceSets:netfx20-managed-ref:Path"] = "test-path",
+                ["ReferenceSets:netfx20-managed-ref:TargetFramework"] = "net20",
+                ["ReferenceSets:netfx20-managed-ref:FrameworkVersion"] = "1.0.3",
+                ["ReferenceSets:netfx20-managed-ref:RuntimeFrameworkVersion"] = "2.0"
+            })
+            .Build();
+
+        var settings = RoslynWorkerSettings.FromConfiguration(configuration);
+        var referenceSet = Assert.Single(settings.ReferenceSets);
+
+        Assert.Equal("4.8", settings.Identity.ArtifactFrameworkVersion);
+        Assert.Equal("2.0", referenceSet.GetRuntimeFrameworkVersion());
+    }
+
+    [Fact]
     public async Task ArtifactBuildCompilesMultipleFilesAndProducesPortablePdb()
     {
         var service = CreateService();
@@ -168,7 +198,9 @@ public sealed class CSharpBuildServiceTests
         Assert.Equal(response.Artifact.ArtifactRef, result.ArtifactRef);
         Assert.Equal(response.Artifact.ArtifactRef, response.Artifact.Manifest.ArtifactId);
         Assert.Equal("Microsoft.NETCore.App", Assert.Single(response.Artifact.Manifest.RuntimeRequirement.Frameworks).Name);
-        Assert.Equal("10.0.9", Assert.Single(response.Artifact.Manifest.RuntimeRequirement.Frameworks).MinimumVersion);
+        Assert.Equal(
+            GetNet10ReferenceVersionForHost(),
+            Assert.Single(response.Artifact.Manifest.RuntimeRequirement.Frameworks).MinimumVersion);
         Assert.Equal("coreclr", response.Artifact.Manifest.RuntimeRequirement.Family);
         Assert.Empty(response.Artifact.Manifest.RuntimeRequirement.RequiredRuntimeFeatureTags);
         Assert.Empty(response.Artifact.Manifest.MetadataFeatureTags);
@@ -342,7 +374,11 @@ public sealed class CSharpBuildServiceTests
     {
         var missingPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         var provider = new ReferenceSetProvider(
-            [new ReferenceSetDefinition("net10-ref", missingPath, "net10.0", "10.0.9")]);
+            [new ReferenceSetDefinition(
+                "net10-ref",
+                missingPath,
+                "net10.0",
+                GetNet10ReferenceVersionForHost())]);
 
         var health = await provider.CheckHealthAsync(TestContext.Current.CancellationToken);
 
@@ -374,7 +410,11 @@ public sealed class CSharpBuildServiceTests
                 typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location,
                 Path.Combine(root, "SharpLab.Runtime.dll"));
             using var provider = new ReferenceSetProvider(
-                [new ReferenceSetDefinition("net10-ref", root, "net10.0", "10.0.9")]);
+                [new ReferenceSetDefinition(
+                    "net10-ref",
+                    root,
+                    "net10.0",
+                    GetNet10ReferenceVersionForHost())]);
 
             var loaded = await provider.GetAsync("net10-ref", TestContext.Current.CancellationToken);
 
@@ -490,7 +530,7 @@ public sealed class CSharpBuildServiceTests
     }
 
     [Fact]
-    public async Task OneWorkerBuildsCoreClrAndFrameworkReferenceSetsWithIndependentArtifactContracts()
+    public async Task OneWorkerBuildsUnsafeCoreClrAndFrameworkArtifactsWithIndependentContracts()
     {
         var identity = new RoslynWorkerIdentity(
             "development",
@@ -504,7 +544,7 @@ public sealed class CSharpBuildServiceTests
                     "net10-ref",
                     GetNet10ReferencePathForHost(),
                     "net10.0",
-                    "10.0.9"),
+                    GetNet10ReferenceVersionForHost()),
                 new ReferenceSetDefinition(
                     "netfx20-managed-ref",
                     GetNetFx20ReferencePathForHost(),
@@ -532,7 +572,7 @@ public sealed class CSharpBuildServiceTests
             [new WorkspaceFile(
                 "Program.cs",
                 1,
-                "public static class Program { public static void Main() { System.Console.WriteLine(42); } }")]);
+                "public static unsafe class Program { public static void Main() { int value = 42; int* pointer = &value; System.Console.WriteLine(*pointer); } }")]);
         var coreRequest = ForReference(executableRequest, "net10-ref", BuildOutputKind.Console);
         var net20Request = ForReference(executableRequest, "netfx20-managed-ref", BuildOutputKind.Console);
         var net48Request = ForReference(executableRequest, "netfx48-managed-ref", BuildOutputKind.Console);
@@ -554,7 +594,9 @@ public sealed class CSharpBuildServiceTests
         Assert.Equal("dotnet-managed-pe-v1", core.ArtifactFormat);
         Assert.Equal("SharpLabNext.User.dll", core.Manifest.EntryAssembly);
         Assert.Equal("coreclr", core.Manifest.RuntimeRequirement.Family);
-        Assert.Equal("10.0.9", Assert.Single(core.Manifest.RuntimeRequirement.Frameworks).MinimumVersion);
+        Assert.Equal(
+            GetNet10ReferenceVersionForHost(),
+            Assert.Single(core.Manifest.RuntimeRequirement.Frameworks).MinimumVersion);
 
         Assert.Equal("dotnet-framework-managed-pe-v1", net20.ArtifactFormat);
         Assert.Equal("SharpLabNext.User.exe", net20.Manifest.EntryAssembly);
@@ -580,7 +622,11 @@ public sealed class CSharpBuildServiceTests
             string referenceSetId,
             BuildOutputKind outputKind)
         {
-            var options = request.EffectiveOptions with { OutputKind = outputKind };
+            var options = request.EffectiveOptions with
+            {
+                OutputKind = outputKind,
+                AllowUnsafe = true
+            };
             return request with
             {
                 ReferenceSetId = referenceSetId,
@@ -597,7 +643,11 @@ public sealed class CSharpBuildServiceTests
     private static CSharpBuildService CreateService(AstLimits? astLimits = null)
     {
         var references = new ReferenceSetProvider(
-            [new ReferenceSetDefinition("net10-ref", GetNet10ReferencePathForHost(), "net10.0", "10.0.9")]);
+            [new ReferenceSetDefinition(
+                "net10-ref",
+                GetNet10ReferencePathForHost(),
+                "net10.0",
+                GetNet10ReferenceVersionForHost())]);
         return new CSharpBuildService(
             references,
             new RoslynWorkerIdentity("development", "roslyn-stable", "5.6.0", null, "development-worker-image"),
@@ -659,30 +709,11 @@ public sealed class CSharpBuildServiceTests
         }
     }
 
-    internal static string GetNet10ReferencePathForHost()
-    {
-        var explicitPath = Environment.GetEnvironmentVariable("SHARPLABNEXT_NET10_REF_PATH");
-        if (!string.IsNullOrWhiteSpace(explicitPath) && Directory.Exists(explicitPath))
-            return explicitPath;
+    internal static string GetNet10ReferencePathForHost() => TestReferenceSets.Net10.Path;
 
-        var roots = new[]
-        {
-            Environment.GetEnvironmentVariable("DOTNET_ROOT"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet"),
-            "/usr/share/dotnet",
-            "/usr/local/share/dotnet"
-        };
+    internal static string GetNet10ReferenceVersionForHost() => TestReferenceSets.Net10.Version;
 
-        foreach (var root in roots.Where(static root => !string.IsNullOrWhiteSpace(root)))
-        {
-            var candidate = Path.Combine(root!, "packs", "Microsoft.NETCore.App.Ref", "10.0.9", "ref", "net10.0");
-            if (Directory.Exists(candidate))
-                return candidate;
-        }
-
-        throw new InvalidOperationException(
-            "The .NET 10.0.9 reference pack was not found. Set SHARPLABNEXT_NET10_REF_PATH to its ref/net10.0 directory.");
-    }
+    internal static string GetNet11ReferencePathForHost() => TestReferenceSets.Net11.Path;
 
     internal static string GetNetFx48ReferencePathForHost()
     {

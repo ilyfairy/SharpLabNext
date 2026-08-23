@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "id": "wine-dotnet-7-linux-x64",
+  "image": "sharplabnext/runtime-wine-dotnet-7-linux-x64:development",
+  "family": "coreclr-wine",
+  "acceptedRuntimeFamilies": [
+    "coreclr-wine",
+    "coreclr"
+  ],
+  "acceptedFrameworks": [
+    {
+      "name": "Microsoft.NETCore.App",
+      "exactVersion": "7.0.20"
+    }
+  ],
+  "runtimeVersion": "7.0.20",
+  "runtimeCommit": "0fb6ac59fb1edbe4ed3ad62661df0eb7eacd7903",
+  "jitVersion": "7.0.20",
+  "jitCommit": "0fb6ac59fb1edbe4ed3ad62661df0eb7eacd7903",
+  "runtimeImageId": "sha256:9a5df241c2dca74679ee8eaf0437589df82242dbe9f118fb0022c7460a5e1d0a",
+  "rid": "linux-x64",
+  "architecture": "x64",
+  "cpuFeatureProfile": "x64-v2",
+  "acceptedArtifactFormats": [
+    "dotnet-managed-pe-v1"
+  ],
+  "capabilities": [
+    "run",
+    "jit-asm"
+  ],
+  "providedRuntimeFeatureTags": [],
+  "providedMetadataFeatureTags": [],
+  "allowedSecurityPolicyIds": [
+    "runtime-job-default"
+  ],
+  "container": {
+    "isolationKind": "wine",
+    "environmentKind": "wine",
+    "executionUser": "1654:1654",
+    "winePrefixPath": "/opt/wine-dotnet"
+  },
+  "operations": {
+    "run": {
+      "implementationId": "sharplabnext-legacy-jit-inspector-v1",
+      "pathStyle": "wine-z",
+      "command": {
+        "executable": "/usr/lib/wine/wine64",
+        "argv": [
+          "Z:\\opt\\wine-dotnet\\drive_c\\dotnet\\dotnet.exe",
+          "exec",
+          "--fx-version",
+          "7.0.20",
+          "Z:\\opt\\sharplabnext\\SharpLabNext.LegacyJitInspector.dll",
+          "--runtime-version",
+          "7.0.20",
+          "run",
+          "{entryAssembly}",
+          "--",
+          "{arguments}"
+        ]
+      }
+    },
+    "jit": {
+      "implementationId": "sharplabnext-legacy-jit-inspector-v1",
+      "pathStyle": "wine-z",
+      "command": {
+        "executable": "/usr/lib/wine/wine64",
+        "argv": [
+          "Z:\\opt\\wine-dotnet\\drive_c\\dotnet\\dotnet.exe",
+          "exec",
+          "--fx-version",
+          "7.0.20",
+          "Z:\\opt\\sharplabnext\\SharpLabNext.LegacyJitInspector.dll",
+          "--runtime-version",
+          "7.0.20",
+          "jit",
+          "{entryAssembly}",
+          "{methodFilter}"
+        ]
+      },
+      "sourceMappingKind": "none"
+    }
+  },
+  "layout": {
+    "runnerKind": "wine-coreclr",
+    "dotNetHostPath": "/opt/wine-dotnet/drive_c/dotnet/dotnet.exe",
+    "wineHostPath": "/usr/lib/wine/wine64",
+    "winePrefixPath": "/opt/wine-dotnet",
+    "runnerAssemblyPath": "/opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll"
+  },
+  "securityPolicies": [
+    {
+      "id": "runtime-job-default",
+      "memoryBytes": 268435456,
+      "nanoCpus": 1000000000,
+      "pidsLimit": 64,
+      "maximumDurationSeconds": 10,
+      "maximumArtifactBytes": 67108864,
+      "maximumOutputBytes": 1048576,
+      "tmpfsBytes": 33554432
+    }
+  ]
+}

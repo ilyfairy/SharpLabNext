@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+
 # Shared operator parent for all exact .NET Framework/Wine rows. The generated
 # build Dockerfile replaces the row-mount marker below with one target-prefix
 # digest-pinned named BuildKit mount per matrix row. Prefix bytes are never
@@ -84,6 +86,7 @@ RUN set -euo pipefail; \
 LABEL org.opencontainers.image.title="SharpLabNext shared Wine .NET Framework operator parent" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      io.sharplabnext.source.revision="${SOURCE_REVISION}" \
       io.sharplabnext.operator-only="true" \
       io.sharplabnext.framework.matrix="true" \
       io.sharplabnext.framework.matrix-strategy="shared-framework-target-prefix-matrix-v1" \

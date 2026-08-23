@@ -677,6 +677,27 @@ describe('CodeMirror editor LSP projections', () => {
     editorView.dispatch({ selection: { anchor: 0, head: 5 } })
     await waitFor(() => expect(editorView.state.selection.main.empty).toBe(true))
     expect(editorView.state.selection.main.head).toBe(2)
+
+    editorView.dispatch({ selection: { anchor: 0, head: 5 } })
+    fireEvent.mouseDown(line, {
+      button: 0,
+      detail: 1,
+      shiftKey: true,
+      clientX: 20,
+      clientY: 20,
+    })
+    editorView.dispatch({ selection: { anchor: 0, head: 5 } })
+    fireEvent.mouseUp(line, {
+      button: 0,
+      detail: 1,
+      shiftKey: true,
+      clientX: 20,
+      clientY: 20,
+    })
+    await new Promise((resolve) => window.setTimeout(resolve, 10))
+    expect(editorView.state.selection.main.empty).toBe(false)
+    expect(editorView.state.selection.main.from).toBe(0)
+    expect(editorView.state.selection.main.to).toBe(5)
     posAtCoords.mockRestore()
 
     rerender(<CodeMirrorEditor {...props} activeSourceAssociationKey={identifier.key} />)

@@ -6,8 +6,11 @@
 
 using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
+
+const string RuntimeFirstFrameMarker = "SLN-RUNTIME-FIRST-FRAME-V1\n";
 
 var baseAddress = args.Length == 0
     ? new Uri("http://127.0.0.1:8080", UriKind.Absolute)
@@ -93,6 +96,9 @@ async Task VerifyRunFailureAsync(string mode, string expectedStatus)
     if (expectedStatus == "output-limit-exceeded")
     {
         Require(result.GetProperty("OutputTruncated").GetBoolean(), "Output-limit result was not marked truncated.");
+        Require(
+            DecodeOutput(terminal.Events, "stdout").StartsWith(RuntimeFirstFrameMarker, StringComparison.Ordinal),
+            "Output-limit operation lost the first pre-start attach frame.");
         Require(
             terminal.Events.Any(static operationEvent =>
                 operationEvent.GetProperty("Payload").GetProperty("Kind").GetString() == "output-truncated"),
@@ -244,7 +250,11 @@ async Task<string> BuildFailureHarnessAsync(JsonElement resolved)
                         Environment.FailFast("intentional runtime smoke crash");
                         return;
                     case "output":
-                        Console.Write(new string('x', 2 * 1024 * 1024));
+                        Console.Out.Write("SLN-RUNTIME-FIRST-FRAME-V1\n");
+                        Console.Out.Flush();
+                        var outputBlock = new string('x', 64 * 1024);
+                        for (var block = 0; block < 128; block++)
+                            Console.Out.Write(outputBlock);
                         return;
                     case "oom":
                         ExhaustNativeMemory();
@@ -387,6 +397,23 @@ JsonElement SingleTypedResult(IReadOnlyList<JsonElement> events)
         .ToArray();
     Require(results.Length == 1, $"Operation returned {results.Length} typed results.");
     return results[0];
+}
+
+string DecodeOutput(IReadOnlyList<JsonElement> events, string channel)
+{
+    var output = new StringBuilder();
+    foreach (var operationEvent in events)
+    {
+        var payload = operationEvent.GetProperty("Payload");
+        if (payload.GetProperty("Kind").GetString() != "output-chunk")
+            continue;
+        var chunk = payload.GetProperty("Chunk");
+        if (chunk.GetProperty("Channel").GetString() != channel)
+            continue;
+        var data = chunk.GetProperty("Data").GetString() ?? string.Empty;
+        output.Append(Encoding.UTF8.GetString(Convert.FromBase64String(data)));
+    }
+    return output.ToString();
 }
 
 void RecordCreatedContainer(IReadOnlyList<JsonElement> events)

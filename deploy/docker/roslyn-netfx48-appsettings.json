@@ -9,6 +9,7 @@
       "Format": "dotnet-framework-managed-pe-v1",
       "RuntimeFamily": "netfx-clr-wine",
       "FrameworkName": ".NETFramework",
+      "FrameworkVersion": "4.8",
       "Architecture": "anycpu",
       "ExecutableFileExtension": ".exe",
       "LibraryFileExtension": ".dll"

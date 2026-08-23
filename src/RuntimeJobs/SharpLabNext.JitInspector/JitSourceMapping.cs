@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 internal static partial class JitSourceMapping
@@ -315,7 +316,7 @@ internal sealed record JitSourceLinkedRange(
     JitSourceTextRange SourceRange,
     JitSourceTextRange OutputRange,
     string Precision,
-    JitEvidenceRange? EvidenceRange = null);
+    [property: JsonIgnore] JitEvidenceRange? EvidenceRange = null);
 
 internal sealed record JitEvidenceRange(
     int IlOffset,

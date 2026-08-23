@@ -348,13 +348,17 @@ function mergeRetainedImageFiles(retainedImageFiles, artifactsByPath, failures, 
   }
 }
 
-function createExpectedCommand(operation, invocation) {
+function createExpectedCommand(operation, invocation, capability) {
   if (!isObject(operation.command) || !Array.isArray(operation.command.argv) ||
       typeof operation.command.executable !== 'string') return undefined
+  const runArguments = capability === 'jit-asm'
+    ? []
+    : expectedRunProbeArguments(capability)
+  if (runArguments === undefined) return undefined
   const command = [operation.command.executable]
   for (const token of operation.command.argv) {
     if (token === '{entryAssembly}') command.push(invocation.entryAssembly?.path)
-    else if (token === '{arguments}') continue
+    else if (token === '{arguments}') command.push(...runArguments)
     else if (token === '{methodFilter}') {
       if (typeof invocation.methodFilter === 'string' && invocation.methodFilter.length > 0) {
         command.push(invocation.methodFilter)
@@ -362,6 +366,15 @@ function createExpectedCommand(operation, invocation) {
     } else command.push(token)
   }
   return command.every(token => typeof token === 'string') ? command : undefined
+}
+
+function expectedRunProbeArguments(capability) {
+  switch (capability) {
+    case 'run': return ['success-security']
+    case 'inspection': return ['inspection']
+    case 'execution-flow': return ['execution-flow']
+    default: return undefined
+  }
 }
 
 function validateInvocation(binding, profile, receipt, check, invocation, artifacts, failures, prefix) {
@@ -385,7 +398,7 @@ function validateInvocation(binding, profile, receipt, check, invocation, artifa
   } else if (!isObject(profileOperation)) {
     failures.push(`${prefix} Runtime Profile operation is missing`)
   } else {
-    const expectedCommand = createExpectedCommand(profileOperation, invocation)
+    const expectedCommand = createExpectedCommand(profileOperation, invocation, check.capability)
     if (expectedCommand === undefined || !arraysEqual(invocation.command, expectedCommand)) {
       failures.push(`${prefix} invocation command does not match the selected Runtime Profile operation`)
     }

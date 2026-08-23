@@ -100,7 +100,7 @@ public sealed class PipelineResolverTests
     }
 
     [Fact]
-    public async Task Net10ArtifactCanUseApprovedNet11RuntimeWithoutChangingReferenceSet()
+    public async Task Net10ReferenceSetCanRunOnNet11Runtime()
     {
         var catalog = await LoadCatalogAsync();
         var request = new ResolveSelectionRequest(
@@ -115,10 +115,7 @@ public sealed class PipelineResolverTests
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
-        Assert.Equal("net10-ref", result.EffectiveSelection.ReferenceSetId);
         Assert.Equal("dotnet-11-preview-linux-x64", result.EffectiveSelection.RuntimeId);
-        Assert.Equal("runtime-job-default", result.PipelinePlan.SecurityPolicyId);
-        Assert.Equal(PipelineStageKind.Jit, result.PipelinePlan.Stages[^1].Kind);
     }
 
     [Fact]
@@ -140,6 +137,70 @@ public sealed class PipelineResolverTests
 
         Assert.Equal("unsupported-capability", exception.Code);
         Assert.Equal(SelectionField.Runtime, exception.Field);
+    }
+
+    [Fact]
+    public async Task EveryCoreClrReferenceSetDefaultsToItsMatchingRuntimeAndAllowsOnlyNewerRuntimes()
+    {
+        var catalog = await LoadCatalogAsync();
+        (string ReferenceSetId, string RuntimeId)[] rows =
+        [
+            ("netcoreapp2.0-ref", "dotnet-core-2.0-linux-x64"),
+            ("netcoreapp2.1-ref", "dotnet-core-2.1-linux-x64"),
+            ("netcoreapp2.2-ref", "dotnet-core-2.2-linux-x64"),
+            ("netcoreapp3.0-ref", "dotnet-core-3.0-linux-x64"),
+            ("netcoreapp3.1-ref", "dotnet-core-3.1-linux-x64"),
+            ("net5-ref", "dotnet-5-linux-x64"),
+            ("net6-ref", "dotnet-6-linux-x64"),
+            ("net7-ref", "dotnet-7-linux-x64"),
+            ("net8-ref", "dotnet-8-linux-x64"),
+            ("net9-ref", "dotnet-9-linux-x64"),
+            ("net10-ref", "dotnet-10-linux-x64"),
+            ("net11-preview-ref", "dotnet-11-preview-linux-x64")
+        ];
+
+        for (var index = 0; index < rows.Length; index++)
+        {
+            var row = rows[index];
+            var matchingRequest = new ResolveSelectionRequest(
+                "csharp",
+                "roslyn-stable",
+                row.ReferenceSetId,
+                "run",
+                row.RuntimeId,
+                BuildConfiguration.Release,
+                catalog.Revision,
+                index);
+            var matching = Resolver.Resolve(catalog, matchingRequest, DateTimeOffset.UnixEpoch);
+            Assert.Equal(row.RuntimeId, matching.EffectiveSelection.RuntimeId);
+
+            var defaulted = Resolver.Resolve(
+                catalog,
+                matchingRequest with { RuntimeId = null },
+                DateTimeOffset.UnixEpoch);
+            Assert.Equal(row.RuntimeId, defaulted.EffectiveSelection.RuntimeId);
+
+            if (index + 1 < rows.Length)
+            {
+                var newerRuntime = rows[index + 1].RuntimeId;
+                var newer = Resolver.Resolve(
+                    catalog,
+                    matchingRequest with { RuntimeId = newerRuntime },
+                    DateTimeOffset.UnixEpoch);
+                Assert.Equal(newerRuntime, newer.EffectiveSelection.RuntimeId);
+            }
+
+            if (index > 0)
+            {
+                var olderRuntime = rows[index - 1].RuntimeId;
+                var mismatch = Assert.Throws<SelectionResolutionException>(() =>
+                    Resolver.Resolve(
+                        catalog,
+                        matchingRequest with { RuntimeId = olderRuntime },
+                        DateTimeOffset.UnixEpoch));
+                Assert.Equal(SelectionField.Runtime, mismatch.Field);
+            }
+        }
     }
 
     [Fact]
@@ -172,6 +233,99 @@ public sealed class PipelineResolverTests
             "net10-ref",
             "run",
             "const-generics-linux-x64",
+            BuildConfiguration.Release,
+            catalog.Revision,
+            10);
+
+        var exception = Assert.Throws<SelectionResolutionException>(() =>
+            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+
+        Assert.Equal(SelectionField.Runtime, exception.Field);
+    }
+
+    [Fact]
+    public async Task ConstGenericsReferenceSetRunsOnItsMatchingRuntime()
+    {
+        var catalog = await LoadCatalogAsync();
+        var request = new ResolveSelectionRequest(
+            "csharp",
+            "roslyn-const-generics",
+            "const-generics-ref",
+            "run",
+            "const-generics-linux-x64",
+            BuildConfiguration.Release,
+            catalog.Revision,
+            10);
+
+        var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
+
+        Assert.Equal("const-generics-linux-x64", result.EffectiveSelection.RuntimeId);
+    }
+
+    [Fact]
+    public async Task FrameworkReferenceSetRejectsAStaleRuntimeEdgeWithTheWrongAcceptedFramework()
+    {
+        var catalog = await LoadCatalogAsync();
+        var runtime = catalog.Runtimes.Single(static item => item.Id == "wine-netfx48-linux-x64");
+        catalog = catalog with
+        {
+            Runtimes =
+            [
+                .. catalog.Runtimes.Where(item => item.Id != runtime.Id),
+                runtime with
+                {
+                    AcceptedFrameworks =
+                    [
+                        new RuntimeFrameworkManifest
+                        {
+                            Name = ".NETFramework",
+                            ExactVersion = "4.7"
+                        }
+                    ]
+                }
+            ]
+        };
+        var request = new ResolveSelectionRequest(
+            "csharp",
+            "roslyn-stable-netfx48",
+            "netfx48-managed-ref",
+            "run",
+            runtime.Id,
+            BuildConfiguration.Release,
+            catalog.Revision,
+            10);
+
+        var exception = Assert.Throws<SelectionResolutionException>(() =>
+            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+
+        Assert.Equal(SelectionField.Runtime, exception.Field);
+    }
+
+    [Fact]
+    public async Task MonoRejectsCoreClrReferenceSetEvenWhenAStaleRuntimeEdgeRemains()
+    {
+        var catalog = EnableMono(await LoadCatalogAsync());
+        catalog = catalog with
+        {
+            Compatibility =
+            [
+                .. catalog.Compatibility,
+                new CompatibilityRule
+                {
+                    Id = "test-managed-pe-mono",
+                    Kind = CompatibilityRuleKind.ArtifactRuntime,
+                    FromId = "dotnet-managed-pe-v1",
+                    ToId = "mono-6.12-linux-x64",
+                    Allowed = true
+                }
+            ]
+        };
+        var request = new ResolveSelectionRequest(
+            "csharp",
+            "roslyn-stable",
+            "net10-ref",
+            "run",
+            "mono-6.12-linux-x64",
             BuildConfiguration.Release,
             catalog.Revision,
             10);
@@ -492,8 +646,8 @@ public sealed class PipelineResolverTests
     }
 
     [Theory]
-    [InlineData("csharp", "compile-check,ast,il,decompiled-csharp,run,explain")]
-    [InlineData("visual-basic", "compile-check,ast,il,decompiled-csharp,run")]
+    [InlineData("csharp", "compile-check,ast,il,decompiled-csharp,jit-asm,run,explain")]
+    [InlineData("visual-basic", "compile-check,ast,il,decompiled-csharp,jit-asm,run")]
     public async Task ManagedNetFxOffersOnlyTruthfulOutputs(
         string languageId,
         string expectedOutputIds)
@@ -518,7 +672,6 @@ public sealed class PipelineResolverTests
 
     [Theory]
     [InlineData("il-verify")]
-    [InlineData("jit-asm")]
     [InlineData("execution-flow")]
     [InlineData("run-il")]
     public async Task ManagedNetFxRejectsCoreClrOnlyOutputs(string outputId)
@@ -529,13 +682,41 @@ public sealed class PipelineResolverTests
             "roslyn-stable-netfx48",
             "netfx48-managed-ref",
             outputId,
-            outputId is "jit-asm" or "execution-flow" ? "wine-netfx48-linux-x64" : null,
+            outputId == "execution-flow" ? "wine-netfx48-linux-x64" : null,
             BuildConfiguration.Release,
             catalog.Revision,
             21);
 
         Assert.Throws<SelectionResolutionException>(() =>
             Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+    }
+
+    [Fact]
+    public async Task ManagedNetFxJitUsesTheMatchingDesktopClrRuntime()
+    {
+        var catalog = await LoadCatalogAsync();
+        var request = new ResolveSelectionRequest(
+            "csharp",
+            "roslyn-stable-netfx48",
+            "netfx48-managed-ref",
+            "jit-asm",
+            "wine-netfx48-linux-x64",
+            BuildConfiguration.Release,
+            catalog.Revision,
+            21);
+
+        var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
+
+        Assert.Equal("wine-netfx48-linux-x64", result.EffectiveSelection.RuntimeId);
+        Assert.Collection(
+            result.PipelinePlan.Stages,
+            stage => Assert.Equal(PipelineStageKind.Build, stage.Kind),
+            stage =>
+            {
+                Assert.Equal(PipelineStageKind.Jit, stage.Kind);
+                Assert.Equal("wine-netfx48-linux-x64", stage.ProviderId);
+                Assert.Equal("dotnet-framework-managed-pe-v1", stage.InputArtifactFormat);
+            });
     }
 
     [Fact]

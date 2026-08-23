@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
 # Candidate-only Windows CoreCLR-under-Wine image.  A digest-pinned Wine base
 # image supplies the loader, native libraries, and an initialized 64-bit
@@ -8,19 +8,28 @@
 ARG SDK_IMAGE
 ARG CONTROL_IMAGE
 ARG WINE_IMAGE
+ARG WINE_IDENTITY
+ARG ALLOW_DEVELOPMENT_IMAGE_ID
+ARG ALLOW_DEVELOPMENT_LOCAL_TAG
 
 FROM ${SDK_IMAGE} AS publish
 ARG SDK_IMAGE
 ARG CONTROL_IMAGE
 ARG WINE_IMAGE
+ARG WINE_IDENTITY
+ARG ALLOW_DEVELOPMENT_IMAGE_ID
+ARG ALLOW_DEVELOPMENT_LOCAL_TAG
 ARG SOURCE_REVISION
 WORKDIR /source
 COPY deploy/docker/validate-digest-pinned-image.sh /usr/local/bin/sharplabnext-validate-image
 RUN chmod 0555 /usr/local/bin/sharplabnext-validate-image \
     && /usr/local/bin/sharplabnext-validate-image \
+         --allow-bare-image-id "${ALLOW_DEVELOPMENT_IMAGE_ID}" \
+         --allow-local-image-tag "${ALLOW_DEVELOPMENT_LOCAL_TAG}" \
          SDK_IMAGE "${SDK_IMAGE}" \
          CONTROL_IMAGE "${CONTROL_IMAGE}" \
-         WINE_IMAGE "${WINE_IMAGE}"
+         WINE_IMAGE "${WINE_IMAGE}" \
+         WINE_IDENTITY "${WINE_IDENTITY}"
 COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
 COPY profiles/versions.props ./profiles/versions.props
 COPY src/ ./src/
@@ -65,7 +74,10 @@ RUN test -x /usr/bin/wine-stable \
     && test -d /opt/wine-dotnet/drive_c/windows/system32 \
     && test -r /opt/wine-dotnet/system.reg \
     && test "$(awk 'index($0, "#arch=") == 1 { value=substr($0, 7); sub(/\r$/, "", value); print value; exit }' /opt/wine-dotnet/system.reg)" = win64 \
-    && test ! -e /usr/lib/x86_64-linux-gnu/wine/i386-windows
+    && test "$(od -An -t x1 -j 4 -N 1 /usr/lib/wine/wine64 | tr -d '[:space:]')" = 02 \
+    && test ! -e /usr/lib/x86_64-linux-gnu/wine/i386-windows \
+    && test -z "$(dpkg --print-foreign-architectures)" \
+    && test -z "$(dpkg-query -W -f='${binary:Package}\n' | grep ':i386$' || true)"
 
 FROM ${CONTROL_IMAGE} AS control-image
 RUN test -x /usr/share/dotnet/dotnet \
@@ -75,13 +87,15 @@ RUN test -x /usr/share/dotnet/dotnet \
 FROM wine-source AS runtime-base
 ARG VERSION
 ARG SOURCE_REVISION
+ARG CANDIDATE_SOURCE_CONTEXT
+ARG CANDIDATE_PROMOTION_ELIGIBLE
 ARG PROFILE_ID
 ARG DOTNET_RUNTIME_VERSION
 ARG DOTNET_RUNTIME_COMMIT
 ARG DOTNET_JIT_COMMIT
 ARG DOTNET_RUNTIME_SHA512
 ARG CONTROL_IMAGE
-ARG WINE_IMAGE
+ARG WINE_IDENTITY
 
 RUN test -n "${VERSION}" \
     && test -n "${SOURCE_REVISION}" \
@@ -108,7 +122,10 @@ RUN test -x /usr/bin/wine-stable \
     && test -x /usr/lib/wine/wineserver64 \
     && test -r /opt/wine-dotnet/system.reg \
     && test "$(awk 'index($0, "#arch=") == 1 { value=substr($0, 7); sub(/\r$/, "", value); print value; exit }' /opt/wine-dotnet/system.reg)" = win64 \
+    && test "$(od -An -t x1 -j 4 -N 1 /usr/lib/wine/wine64 | tr -d '[:space:]')" = 02 \
     && test ! -e /usr/lib/x86_64-linux-gnu/wine/i386-windows \
+    && test -z "$(dpkg --print-foreign-architectures)" \
+    && test -z "$(dpkg-query -W -f='${binary:Package}\n' | grep ':i386$' || true)" \
     && test -f "/opt/wine-dotnet/drive_c/dotnet/dotnet.exe" \
     && test -f "/opt/wine-dotnet/drive_c/dotnet/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}/System.Private.CoreLib.dll" \
     && test -s /opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll \
@@ -147,6 +164,8 @@ RUN set -eu; \
 FROM runtime-base AS final
 ARG VERSION
 ARG SOURCE_REVISION
+ARG CANDIDATE_SOURCE_CONTEXT
+ARG CANDIDATE_PROMOTION_ELIGIBLE
 ARG PROFILE_ID
 ARG DOTNET_RUNTIME_VERSION
 ARG DOTNET_RUNTIME_COMMIT
@@ -156,9 +175,14 @@ ARG CONTROL_IMAGE
 ARG WINE_IMAGE
 COPY --from=preflight --chown=0:0 /tmp/runtime-image-preflight /opt/sharplabnext/.image-preflight
 
+RUN test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "committed:true" \
+    || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "working-tree-development:false"
+
 LABEL org.opencontainers.image.title="SharpLabNext Wine CoreCLR Matrix Runtime Candidate" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      io.sharplabnext.source.context="${CANDIDATE_SOURCE_CONTEXT}" \
+      com.sharplabnext.runtime-candidate.promotion-eligible="${CANDIDATE_PROMOTION_ELIGIBLE}" \
       org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
       com.sharplabnext.runtime-candidate="true" \
       com.sharplabnext.runtime-profile="${PROFILE_ID}" \
@@ -168,7 +192,7 @@ LABEL org.opencontainers.image.title="SharpLabNext Wine CoreCLR Matrix Runtime C
       io.sharplabnext.jit.commit="${DOTNET_JIT_COMMIT}" \
       io.sharplabnext.runtime.payload-sha512="${DOTNET_RUNTIME_SHA512}" \
       io.sharplabnext.control-image="${CONTROL_IMAGE}" \
-      io.sharplabnext.operator-image.wine="${WINE_IMAGE}"
+      io.sharplabnext.operator-image.wine="${WINE_IDENTITY}"
 WORKDIR /workspace
 USER 0:0
 ENTRYPOINT ["/opt/sharplabnext/runtime-entrypoint.sh"]

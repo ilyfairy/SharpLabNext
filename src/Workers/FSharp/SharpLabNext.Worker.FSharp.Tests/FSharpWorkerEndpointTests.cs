@@ -306,7 +306,7 @@ public sealed class FSharpWorkerEndpointTests
                     ["FSharpWorker:DevelopmentArtifactEnvelope:MaxBytes"] = (8 * 1024 * 1024).ToString(CultureInfo.InvariantCulture),
                     ["ReferenceSets:net10-ref:Path"] = FSharpTestSettings.GetNet10ReferencePath(),
                     ["ReferenceSets:net10-ref:TargetFramework"] = "net10.0",
-                    ["ReferenceSets:net10-ref:FrameworkVersion"] = "10.0.9",
+                    ["ReferenceSets:net10-ref:FrameworkVersion"] = FSharpTestSettings.Net10Version,
                     ["ReferenceSets:net11-preview-ref:Path"] = FSharpTestSettings.GetNet11PreviewReferencePath(),
                     ["ReferenceSets:net11-preview-ref:TargetFramework"] = "net11.0",
                     ["ReferenceSets:net11-preview-ref:FrameworkVersion"] = FSharpTestSettings.Net11PreviewVersion

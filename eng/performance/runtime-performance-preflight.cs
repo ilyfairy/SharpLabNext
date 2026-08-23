@@ -40,6 +40,7 @@ static class RuntimePerformancePreflightApplication
         RespectRequiredConstructorParameters = true,
         TypeInfoResolver = new DefaultJsonTypeInfoResolver()
     };
+    private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
     public static async Task<int> RunAsync(string[] args)
     {
@@ -268,6 +269,50 @@ static class RuntimePerformancePreflightApplication
             PascalJson);
         if (!requestJson.Contains("\"RuntimeProfileId\":\"example\"", StringComparison.Ordinal))
             throw new InvalidOperationException("Performance request JSON self-test failed.");
+        var responseJson = JsonSerializer.Serialize(
+            new SampleResponse(
+                "example",
+                "run",
+                "op_00000000000000000000000000000001",
+                new SampleImage(
+                    $"registry.example/runtime@sha256:{new string('3', 64)}",
+                    $"sha256:{new string('4', 64)}",
+                    1024),
+                new SampleMeasurementHelper(
+                    "sharplabnext-runtime-cgroup-sidecar-v1",
+                    new SampleImage(
+                        $"registry.example/runtime-supervisor@sha256:{new string('5', 64)}",
+                        $"sha256:{new string('6', 64)}",
+                        2048),
+                    "/usr/local/bin/sharplabnext-runtime-measurement",
+                    new string('7', 40),
+                    "sha256:f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c"),
+                ["run"],
+                "not-applicable",
+                new SampleEnvironment(
+                    "runtime-preflight-linux-x64-v2",
+                    "linux",
+                    "x64",
+                    1_000_000_000,
+                    268_435_456),
+                new SampleValue(1, 2048, 1024),
+                2,
+                1,
+                0,
+                DateTimeOffset.UtcNow),
+            PascalJson);
+        var responseRoundTrip = JsonSerializer.Deserialize<SampleResponse>(responseJson, PascalJson);
+        if (responseRoundTrip?.MeasurementHelper.Implementation !=
+                "sharplabnext-runtime-cgroup-sidecar-v1" ||
+            responseRoundTrip.MeasurementHelper.Entrypoint !=
+                "/usr/local/bin/sharplabnext-runtime-measurement" ||
+            responseRoundTrip.MeasurementHelper.ContentSha256 !=
+                "sha256:f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c" ||
+            responseRoundTrip.Sample.CompletionPeakMemoryBytes != 1024 ||
+            responseRoundTrip.PostCompletionResourceSampleCount != 1)
+        {
+            throw new InvalidOperationException("Performance response JSON self-test failed.");
+        }
         var values = Enumerable.Range(1, 10).Select(static value => (double)value).ToArray();
         if (NearestRank(values, 0.95) != 10)
             throw new InvalidOperationException("Nearest-rank P95 self-test failed.");
@@ -276,7 +321,9 @@ static class RuntimePerformancePreflightApplication
             values.Select((latency, index) => new SampleValue(
                 latency,
                 1024,
+                768,
                 $"op_{index + 1:x32}",
+                1,
                 1,
                 DateTimeOffset.UtcNow)).ToArray(),
             10,
@@ -287,9 +334,9 @@ static class RuntimePerformancePreflightApplication
             ValidateSamples(
                 "run.cold",
                 [
-                    new SampleValue(45_001, 1024, "op_00000000000000000000000000000001", 1, DateTimeOffset.UtcNow),
-                    new SampleValue(1, 1024, "op_00000000000000000000000000000002", 1, DateTimeOffset.UtcNow),
-                    new SampleValue(1, 1024, "op_00000000000000000000000000000003", 1, DateTimeOffset.UtcNow)
+                    new SampleValue(45_001, 1024, 768, "op_00000000000000000000000000000001", 1, 1, DateTimeOffset.UtcNow),
+                    new SampleValue(1, 1024, 768, "op_00000000000000000000000000000002", 1, 1, DateTimeOffset.UtcNow),
+                    new SampleValue(1, 1024, 768, "op_00000000000000000000000000000003", 1, 1, DateTimeOffset.UtcNow)
                 ],
                 3,
                 policy.Scenarios.Run.Cold,
@@ -347,6 +394,14 @@ static class RuntimePerformancePreflightApplication
             {
             }
             VerifyExactFile(output, original, "rolled back performance evidence");
+            var committedSnapshot = CaptureOutputSnapshot(root, output);
+            WriteAtomicJson(
+                root,
+                output,
+                new JsonObject { ["replacement"] = "committed" },
+                committedSnapshot,
+                static () => { });
+            AssertUtf8NoBomLf(File.ReadAllBytes(output), "written performance evidence");
             var directory = Path.GetDirectoryName(output)!;
             if (Directory.EnumerateFiles(directory, ".*.tmp").Any() ||
                 Directory.EnumerateFiles(directory, ".*.bak").Any())
@@ -452,10 +507,15 @@ static class RuntimePerformancePreflightApplication
                     $"{name}[{index}] latency {sample.LatencyMilliseconds} ms exceeds the sample budget.");
             }
             if (sample.PeakMemoryBytes <= 0 || sample.PeakMemoryBytes > memoryLimitBytes ||
-                sample.PeakMemoryBytes > budget.MaximumPeakMemoryBytes)
+                sample.PeakMemoryBytes > budget.MaximumPeakMemoryBytes ||
+                sample.CompletionPeakMemoryBytes <= 0 ||
+                sample.CompletionPeakMemoryBytes > sample.PeakMemoryBytes ||
+                sample.ResourceSampleCount is < 1 or > 1_000_000 ||
+                sample.PostCompletionResourceSampleCount is < 1 or > 1_000_000 ||
+                sample.ResourceSampleCount < sample.PostCompletionResourceSampleCount)
             {
                 throw new PerformanceGateException(
-                    $"{name}[{index}] peak memory {sample.PeakMemoryBytes} bytes exceeds the budget.");
+                    $"{name}[{index}] resource measurements are incomplete or exceed the budget.");
             }
         }
         var p95 = NearestRank(samples.Select(static sample => sample.LatencyMilliseconds), 0.95);
@@ -688,10 +748,7 @@ static class RuntimePerformancePreflightApplication
             ?? throw new ArgumentException("The output path has no parent directory.");
         Directory.CreateDirectory(directory);
         EnsureNoReparsePoints(repositoryRoot, directory, includeLeaf: true);
-        var bytes = Encoding.UTF8.GetBytes(document.ToJsonString(new JsonSerializerOptions
-        {
-            WriteIndented = true
-        }) + "\n");
+        var bytes = SerializeJsonUtf8Lf(document);
         var temporary = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         string? backup = null;
         var installed = false;
@@ -753,6 +810,26 @@ static class RuntimePerformancePreflightApplication
         }
     }
 
+    private static byte[] SerializeJsonUtf8Lf(JsonObject document)
+    {
+        var bytes = Utf8NoBom.GetBytes(document.ToJsonString(new JsonSerializerOptions
+        {
+            WriteIndented = true
+        }).ReplaceLineEndings("\n") + "\n");
+        AssertUtf8NoBomLf(bytes, "serialized performance evidence");
+        return bytes;
+    }
+
+    private static void AssertUtf8NoBomLf(ReadOnlySpan<byte> bytes, string description)
+    {
+        var text = Utf8NoBom.GetString(bytes);
+        if (text.Length == 0 || text[0] == '\uFEFF' || text[^1] != '\n' ||
+            bytes.IndexOf((byte)'\r') >= 0)
+        {
+            throw new InvalidOperationException($"{description} must be UTF-8 without a BOM and use LF line endings.");
+        }
+    }
+
     private sealed class SampleCollector(
         HttpClient client,
         PerformancePolicy policy,
@@ -802,6 +879,19 @@ static class RuntimePerformancePreflightApplication
                     ["reference"] = identity.Image.Reference,
                     ["imageId"] = identity.Image.ImageId,
                     ["sizeBytes"] = identity.Image.SizeBytes
+                },
+                ["measurementHelper"] = new JsonObject
+                {
+                    ["implementation"] = identity.MeasurementHelper.Implementation,
+                    ["image"] = new JsonObject
+                    {
+                        ["reference"] = identity.MeasurementHelper.Image.Reference,
+                        ["imageId"] = identity.MeasurementHelper.Image.ImageId,
+                        ["sizeBytes"] = identity.MeasurementHelper.Image.SizeBytes
+                    },
+                    ["entrypoint"] = identity.MeasurementHelper.Entrypoint,
+                    ["sourceRevision"] = identity.MeasurementHelper.SourceRevision,
+                    ["contentSha256"] = identity.MeasurementHelper.ContentSha256
                 },
                 ["sourceRevision"] = context.SourceRevision,
                 ["policy"] = new JsonObject
@@ -893,6 +983,7 @@ static class RuntimePerformancePreflightApplication
                 {
                     OperationId = sample.OperationId,
                     ResourceSampleCount = sample.ResourceSampleCount,
+                    PostCompletionResourceSampleCount = sample.PostCompletionResourceSampleCount,
                     CompletedAtUtc = sample.CompletedAtUtc
                 }
             };
@@ -904,9 +995,13 @@ static class RuntimePerformancePreflightApplication
             if (response.ProfileId != context.ProfileId || response.Scenario != scenario ||
                 !IsOperationId(response.OperationId) ||
                 !_operationIds.Add(response.OperationId) ||
-                response.ResourceSampleCount < 1 ||
+                response.ResourceSampleCount is < 1 or > 1_000_000 ||
+                response.PostCompletionResourceSampleCount is < 1 or > 1_000_000 ||
+                response.ResourceSampleCount < response.PostCompletionResourceSampleCount ||
                 response.Sample.LatencyMilliseconds is <= 0 or > 120_000 ||
                 response.Sample.PeakMemoryBytes <= 0 ||
+                response.Sample.CompletionPeakMemoryBytes <= 0 ||
+                response.Sample.PeakMemoryBytes < response.Sample.CompletionPeakMemoryBytes ||
                 response.CompletedAtUtc.Offset != TimeSpan.Zero ||
                 response.CompletedAtUtc < _collectionStartedAtUtc.AddMinutes(-1) ||
                 response.CompletedAtUtc > now.AddMinutes(1))
@@ -924,7 +1019,7 @@ static class RuntimePerformancePreflightApplication
                     "run" or "jit-asm" or "inspection" or "execution-flow")) ||
                 response.SourceMappingKind is not (
                     "not-applicable" or "none" or "linux-profiler" or "checked-jit-debug-info") ||
-                response.Environment.RunnerId != "runtime-preflight-linux-x64-v1" ||
+                response.Environment.RunnerId != "runtime-preflight-linux-x64-v2" ||
                 response.Environment.OperatingSystem != "linux" ||
                 response.Environment.Architecture != "x64" ||
                 response.Environment.NanoCpus != policy.ResourceLimits.NanoCpus ||
@@ -937,7 +1032,22 @@ static class RuntimePerformancePreflightApplication
                 response.SourceMappingKind != context.SourceMappingKind ||
                 !IsImmutableReference(response.Image.Reference) ||
                 !IsSha256(response.Image.ImageId) || response.Image.SizeBytes <= 0 ||
-                response.Image.SizeBytes > policy.Image.MaximumSizeBytes)
+                response.Image.SizeBytes > policy.Image.MaximumSizeBytes ||
+                response.MeasurementHelper is null ||
+                response.MeasurementHelper.Image is null ||
+                response.MeasurementHelper.Implementation !=
+                    "sharplabnext-runtime-cgroup-sidecar-v1" ||
+                response.MeasurementHelper.Entrypoint !=
+                    "/usr/local/bin/sharplabnext-runtime-measurement" ||
+                response.MeasurementHelper.SourceRevision != context.SourceRevision ||
+                response.MeasurementHelper.ContentSha256 !=
+                    "sha256:f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c" ||
+                !IsImmutableReference(response.MeasurementHelper.Image.Reference) ||
+                !IsRuntimeSupervisorReference(response.MeasurementHelper.Image.Reference) ||
+                !IsSha256(response.MeasurementHelper.Image.ImageId) ||
+                response.MeasurementHelper.Image.SizeBytes is <= 0 or > 17_179_869_184 ||
+                response.MeasurementHelper.Image.Reference == response.Image.Reference ||
+                response.MeasurementHelper.Image.ImageId == response.Image.ImageId)
             {
                 throw new InvalidDataException("Supervisor sample identity or environment is invalid.");
             }
@@ -947,11 +1057,13 @@ static class RuntimePerformancePreflightApplication
                 return;
             }
             if (_identity.Image != response.Image ||
+                _identity.MeasurementHelper != response.MeasurementHelper ||
                 !_identity.Capabilities.SequenceEqual(response.Capabilities, StringComparer.Ordinal) ||
                 _identity.SourceMappingKind != response.SourceMappingKind ||
                 _identity.Environment != response.Environment)
             {
-                throw new PerformanceGateException("Runtime image identity or environment drifted between samples.");
+                throw new PerformanceGateException(
+                    "Runtime image, measurement helper, or environment drifted between samples.");
             }
         }
 
@@ -960,8 +1072,10 @@ static class RuntimePerformancePreflightApplication
             {
                 ["latencyMilliseconds"] = sample.LatencyMilliseconds,
                 ["peakMemoryBytes"] = sample.PeakMemoryBytes,
+                ["completionPeakMemoryBytes"] = sample.CompletionPeakMemoryBytes,
                 ["operationId"] = sample.OperationId,
                 ["resourceSampleCount"] = sample.ResourceSampleCount,
+                ["postCompletionResourceSampleCount"] = sample.PostCompletionResourceSampleCount,
                 ["completedAtUtc"] = sample.CompletedAtUtc.ToUniversalTime().ToString(
                     "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'",
                     CultureInfo.InvariantCulture)
@@ -973,6 +1087,16 @@ static class RuntimePerformancePreflightApplication
             return marker > 0 && marker + 8 + 64 == value.Length &&
                 value[(marker + 8)..].All(static character =>
                     char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
+        }
+
+        private static bool IsRuntimeSupervisorReference(string value)
+        {
+            var digest = value.LastIndexOf("@sha256:", StringComparison.Ordinal);
+            if (digest <= 0)
+                return false;
+            var repository = value.AsSpan(0, digest);
+            var separator = repository.LastIndexOf('/');
+            return repository[(separator + 1)..].SequenceEqual("runtime-supervisor");
         }
 
         private static bool IsSha256(string value) =>
@@ -1122,15 +1246,23 @@ sealed record SampleResponse(
     string Scenario,
     string OperationId,
     SampleImage Image,
+    SampleMeasurementHelper MeasurementHelper,
     IReadOnlyList<string> Capabilities,
     string SourceMappingKind,
     SampleEnvironment Environment,
     SampleValue Sample,
     int ResourceSampleCount,
+    int PostCompletionResourceSampleCount,
     int DistinctSequencePointRangeCount,
     DateTimeOffset CompletedAtUtc);
 
 sealed record SampleImage(string Reference, string ImageId, long SizeBytes);
+sealed record SampleMeasurementHelper(
+    string Implementation,
+    SampleImage Image,
+    string Entrypoint,
+    string SourceRevision,
+    string ContentSha256);
 sealed record SampleEnvironment(
     string RunnerId,
     string OperatingSystem,
@@ -1140,8 +1272,10 @@ sealed record SampleEnvironment(
 sealed record SampleValue(
     double LatencyMilliseconds,
     long PeakMemoryBytes,
+    long CompletionPeakMemoryBytes,
     string? OperationId = null,
     int ResourceSampleCount = 0,
+    int PostCompletionResourceSampleCount = 0,
     DateTimeOffset CompletedAtUtc = default);
 sealed record CollectedScenario(IReadOnlyList<SampleValue> Cold, IReadOnlyList<SampleValue> Warm);
 sealed record PromotionInput(string Path, string Description, byte[] Bytes);

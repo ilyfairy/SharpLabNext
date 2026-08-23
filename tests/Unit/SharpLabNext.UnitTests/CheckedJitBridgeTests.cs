@@ -4,6 +4,7 @@ using System.IO.Pipes;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using SharpLabNext.CheckedJitBridge;
 using SharpLabNext.RuntimeProfile.Sdk;
@@ -500,6 +501,115 @@ public sealed class CheckedJitBridgeTests
         Assert.Equal("checked-jit-debug-info", mapped.Source);
         Assert.Equal(2, mapped.Ranges.Count);
         Assert.All(mapped.Ranges, range => Assert.Equal("sequence-point", range.Precision));
+    }
+
+    [Fact]
+    public void CheckedJitMarkersRetainNativeEvidenceAndSerializeItForPromotion()
+    {
+        var source = CreateSourceMap();
+        const string section =
+            "; Assembly listing for method Sample.Type:Add(int,int):int\n" +
+            "G_M000_IG01:                ;; offset=0x0000\n" +
+            "; INLRT @ 0x0\n" +
+            "       55                   push     rbp\n" +
+            "       4883EC10             sub      rsp, 16\n" +
+            "; INLRT @ 0x4\n" +
+            "       90                   nop\n" +
+            "; Total bytes of code 6\n";
+
+        var result = CreatePreparedResult(
+            "Sample.Type.Add",
+            0x06000001,
+            "Sample.Type:Add(int,int):int");
+        CheckedJitDisassemblyDocument.SelectPreparedMethods(
+            section,
+            [result],
+            new Dictionary<int, CheckedMethodSourceMap>
+            {
+                [result.MetadataToken] = source
+            });
+
+        var evidence = result.EvidenceRanges;
+        Assert.Equal(2, evidence.Count);
+        Assert.Equal(new JitEvidenceRange(0, 0, 5, "Sample.cs", 2, 1, 2, 13), evidence[0]);
+        Assert.Equal(new JitEvidenceRange(4, 5, 6, "Sample.cs", 3, 1, 3, 13), evidence[1]);
+
+        using var payload = JsonDocument.Parse(BridgePayloadCodec.Serialize(
+            new JitSummaryPayload("9.0.0", "Sample", null, [result])));
+        var serializedEvidence = payload.RootElement
+            .GetProperty("Methods")[0]
+            .GetProperty("EvidenceRanges");
+        Assert.Equal(2, serializedEvidence.GetArrayLength());
+        Assert.Equal(5, serializedEvidence[0].GetProperty("NativeEndOffset").GetInt32());
+    }
+
+    [Fact]
+    public void CheckedJitCodeBytesProducePdbVerifiableEvidenceRanges()
+    {
+        var source = CreateSourceMap();
+        const string section =
+            "; Assembly listing for method Sample.Type:Add(int,int):int\n" +
+            "G_M000_IG01:  ;; offset=0x0000\n" +
+            "; INLRT @ 0x0\n" +
+            "       55                   push     rbp\n" +
+            "; INLRT @ 0x4\n" +
+            "       4883EC10             sub      rsp, 16\n" +
+            "; Total bytes of code 5\n";
+
+        var mapped = CheckedJitSourceMapping.MapSection(section, source);
+
+        var evidence = mapped.Ranges
+            .Select(static range => range.EvidenceRange)
+            .OfType<JitEvidenceRange>()
+            .ToArray();
+        Assert.Equal(2, evidence.Length);
+        Assert.Equal(new JitEvidenceRange(0, 0, 1, "Sample.cs", 2, 1, 2, 13), evidence[0]);
+        Assert.Equal(new JitEvidenceRange(4, 1, 5, "Sample.cs", 3, 1, 3, 13), evidence[1]);
+    }
+
+    [Fact]
+    public void UnmappedCodeBytesStillAdvanceLaterCheckedJitEvidenceOffsets()
+    {
+        var source = CreateSourceMap();
+        const string section =
+            "; Assembly listing for method Sample.Type:Add(int,int):int\n" +
+            "G_M000_IG01:  ;; offset=0x0000\n" +
+            "       55                   push     rbp\n" +
+            "; INLRT @ 0x0\n" +
+            "       4883EC10             sub      rsp, 16\n" +
+            "; INL01 @ 0x0\n" +
+            "       90                   nop\n" +
+            "; INLRT @ 0x4\n" +
+            "       C3                   ret\n" +
+            "; Total bytes of code 7\n";
+
+        var mapped = CheckedJitSourceMapping.MapSection(section, source);
+
+        var evidence = mapped.Ranges
+            .Select(static range => range.EvidenceRange)
+            .OfType<JitEvidenceRange>()
+            .ToArray();
+        Assert.Equal(2, evidence.Length);
+        Assert.Equal((1, 5), (evidence[0].NativeStartOffset, evidence[0].NativeEndOffset));
+        Assert.Equal((6, 7), (evidence[1].NativeStartOffset, evidence[1].NativeEndOffset));
+    }
+
+    [Fact]
+    public void MissingCodeBytesDoNotProducePartialCheckedJitEvidence()
+    {
+        var source = CreateSourceMap();
+        const string section =
+            "; Assembly listing for method Sample.Type:Add(int,int):int\n" +
+            "G_M000_IG01:  ;; offset=0x0000\n" +
+            "; INLRT @ 0x0\n" +
+            "       55                   push     rbp\n" +
+            "       add      eax, edx\n" +
+            "; Total bytes of code 1\n";
+
+        var mapped = CheckedJitSourceMapping.MapSection(section, source);
+
+        var range = Assert.Single(mapped.Ranges);
+        Assert.Null(range.EvidenceRange);
     }
 
     [Fact]

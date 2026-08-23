@@ -19,8 +19,14 @@ import {
   isGitCommitIdentity,
   isSha256Digest,
 } from './runtime-candidate-input-validation.mjs'
+import { pinnedDockerfileFrontendDirective } from './dockerfile-frontend.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const installerManifestPath = path.join(
+  repositoryRoot,
+  'profiles',
+  'runtime-framework-installers.json',
+)
 const matrixStrategy = 'shared-framework-prefix-input-v1'
 const maximumMetadataBytes = 1024 * 1024
 const maximumMetadataImageBytes = 16 * 1024 * 1024
@@ -181,7 +187,7 @@ export function validateOperatorImageInspection(row, imageInfo, expectedImages =
       failures.push(`${row.id} operator label ${label} must be a digest-pinned image reference`)
       continue
     }
-    if (expectedImages !== undefined) {
+    if (expectedImages?.[expectedName] !== undefined) {
       const expected = normalizeDigestPinnedImageIdentity(expectedImages[expectedName])
       if (expected === undefined) {
         failures.push(`expected ${description} image must be a digest-pinned image reference`)
@@ -192,7 +198,32 @@ export function validateOperatorImageInspection(row, imageInfo, expectedImages =
       }
     }
   }
+  if (expectedImages?.installerManifestSha256 !== undefined &&
+      labels['io.sharplabnext.framework.installer-manifest-sha256'] !==
+        expectedImages.installerManifestSha256) {
+    failures.push(
+      `${row.id} operator installer manifest identity must equal ` +
+      `'${expectedImages.installerManifestSha256}'`,
+    )
+  }
+  if (expectedImages?.sourceRevision !== undefined &&
+      labels['org.opencontainers.image.revision'] !== expectedImages.sourceRevision) {
+    failures.push(
+      `${row.id} operator source revision must equal '${expectedImages.sourceRevision}'`,
+    )
+  }
+  if (expectedImages?.sourceRevision !== undefined &&
+      labels['io.sharplabnext.source.revision'] !== expectedImages.sourceRevision) {
+    failures.push(
+      `${row.id} operator label io.sharplabnext.source.revision must equal ` +
+      `'${expectedImages.sourceRevision}'`,
+    )
+  }
   return failures
+}
+
+function installerManifestSha256() {
+  return crypto.createHash('sha256').update(fs.readFileSync(installerManifestPath)).digest('hex')
 }
 
 function inspectImage(reference, spawn = spawnSync) {
@@ -231,7 +262,7 @@ function dockerfileLabelValue(value) {
 export function createContextDockerfile(document, inputDigest, sourceRevision, version) {
   // This image is an identity document, not a transport for Wine prefixes.
   // The parent builder mounts each digest-pinned operator image directly.
-  const lines = ['FROM scratch AS final']
+  const lines = [pinnedDockerfileFrontendDirective, '', 'FROM scratch AS final']
   lines.push('COPY matrix-input.json /matrix-input.json')
   document.rows.forEach((row) => {
     lines.push(`COPY rows/${row.id}/row.json /rows/${row.id}/row.json`)
@@ -243,6 +274,7 @@ export function createContextDockerfile(document, inputDigest, sourceRevision, v
     'io.sharplabnext.framework.matrix-input-sha256': inputDigest,
     'io.sharplabnext.framework.matrix-row-count': String(document.rows.length),
     'org.opencontainers.image.revision': sourceRevision,
+    'io.sharplabnext.source.revision': sourceRevision,
     'org.opencontainers.image.version': version,
   }
   lines.push('LABEL ' + Object.entries(labels)
@@ -372,7 +404,18 @@ export function runContextBuild(argv, environment = process.env, spawn = spawnSy
   if (values.SOURCE_REVISION !== 'development' && values.SOURCE_REVISION !== before.headRevision) { output.error('framework context source error: SOURCE_REVISION does not match Git HEAD'); return 1 }
   if (before.isDirty && !values.allowDirty) { output.error('framework context source error: worktree is dirty; use the explicit development override'); return 1 }
   if (values.push && before.isDirty) { output.error('framework context source error: --push requires a clean worktree'); return 1 }
-  try { document.rows.forEach(row => inspectOrPullOperator(row, spawn)) } catch (error) { output.error(`framework context operator error: ${error.message}`); return 1 }
+  const operatorExpectations = {
+    installerManifestSha256: installerManifestSha256(),
+    ...(values.SOURCE_REVISION === 'development'
+      ? {}
+      : { sourceRevision: values.SOURCE_REVISION }),
+  }
+  try {
+    document.rows.forEach(row => inspectOrPullOperator(row, spawn, operatorExpectations))
+  } catch (error) {
+    output.error(`framework context operator error: ${error.message}`)
+    return 1
+  }
 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-framework-context-'))
   const metadataRoot = values.push ? fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-framework-context-meta-')) : undefined
@@ -413,6 +456,7 @@ export function runContextBuild(argv, environment = process.env, spawn = spawnSy
       'io.sharplabnext.framework.matrix-input-sha256': values.MATRIX_INPUT_SHA256,
       'io.sharplabnext.framework.matrix-row-count': String(document.rows.length),
       'org.opencontainers.image.revision': values.SOURCE_REVISION,
+      'io.sharplabnext.source.revision': values.SOURCE_REVISION,
       'org.opencontainers.image.version': values.VERSION,
     })) if (labels[label] !== expected) fail(`built context label ${label} does not match supplied input`)
     if (info.Os !== 'linux' || info.Architecture !== 'amd64' ||

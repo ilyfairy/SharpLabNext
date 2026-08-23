@@ -26,6 +26,8 @@ public sealed class RuntimePromotionPreflightOptions
     public string? SourceRevision { get; set; }
     public string? ProfilePath { get; set; }
     public string? ProfileSha256 { get; set; }
+    public string? MeasurementHelperImage { get; set; }
+    public string? MeasurementHelperImageId { get; set; }
 
     private RuntimeProfileOptions? Profile { get; set; }
 
@@ -38,7 +40,9 @@ public sealed class RuntimePromotionPreflightOptions
         {
             if (options.PlanSha256 is not null || options.SourceRevision is not null ||
                 options.ProfilePath is not null ||
-                options.ProfileSha256 is not null)
+                options.ProfileSha256 is not null ||
+                options.MeasurementHelperImage is not null ||
+                options.MeasurementHelperImageId is not null)
             {
                 throw new InvalidOperationException(
                     "Disabled runtime promotion preflight configuration cannot retain trusted inputs.");
@@ -47,10 +51,16 @@ public sealed class RuntimePromotionPreflightOptions
         }
 
         if (!RuntimeProfileValidation.IsSha256(options.PlanSha256) ||
-            !RuntimeProfileValidation.IsSha256(options.ProfileSha256))
+            !RuntimeProfileValidation.IsSha256(options.ProfileSha256) ||
+            !RuntimeProfileValidation.IsSha256(options.MeasurementHelperImageId))
         {
             throw new InvalidOperationException(
-                "Runtime promotion preflight plan/profile digests must be canonical SHA-256 values.");
+                "Runtime promotion preflight plan/profile/helper digests must be canonical SHA-256 values.");
+        }
+        if (!IsRepositoryDigest(options.MeasurementHelperImage))
+        {
+            throw new InvalidOperationException(
+                "Runtime promotion preflight MeasurementHelperImage must be a canonical immutable repository digest.");
         }
         if (options.SourceRevision is null || options.SourceRevision.Length is not (40 or 64) ||
             options.SourceRevision.Any(static character =>
@@ -163,6 +173,18 @@ public sealed class RuntimePromotionPreflightOptions
         options.PromotionPreflightPlanSha256 = PlanSha256;
         options.PromotionPreflightProfileSha256 = ProfileSha256;
         options.PromotionPreflightSourceRevision = SourceRevision;
+        options.MeasurementHelperImage = MeasurementHelperImage;
+        options.MeasurementHelperImageId = MeasurementHelperImageId;
         options.ResourceScope = $"promotion-{PlanSha256![7..23]}";
+    }
+
+    private static bool IsRepositoryDigest(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Any(char.IsWhiteSpace))
+            return false;
+        const string marker = "@sha256:";
+        var separator = value.LastIndexOf(marker, StringComparison.Ordinal);
+        return separator > 0 && separator + marker.Length + 64 == value.Length &&
+            RuntimeProfileValidation.IsSha256(value[(separator + 1)..]);
     }
 }

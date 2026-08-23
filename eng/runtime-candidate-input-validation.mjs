@@ -40,6 +40,35 @@ export const candidateImageLabelBindings = Object.freeze({
   'io.sharplabnext.framework.row-digest': 'RUNTIME_MATRIX_FRAMEWORK_ROW_DIGEST',
 })
 
+export const wineCoreClrUserspaceInputNames = Object.freeze({
+  version: 'WINE_CORECLR_USERSPACE_VERSION',
+  digest: 'WINE_CORECLR_USERSPACE_DIGEST',
+  sourceUri: 'WINE_CORECLR_USERSPACE_SOURCE_URI',
+})
+
+/**
+ * The shared Wine userspace is a release component, not an untracked base
+ * image detail. Keep its three lock-derived inputs strict before candidate
+ * image resolution so a private or development operator cannot be relabelled
+ * into a promotion closure.
+ */
+export function validateWineCoreClrUserspaceInputs(values) {
+  const failures = []
+  const version = values?.[wineCoreClrUserspaceInputNames.version]
+  if (typeof version !== 'string' || version.trim().length === 0 || /\s/.test(version)) {
+    failures.push(`${wineCoreClrUserspaceInputNames.version} must be a non-empty whitespace-free version`)
+  }
+  const digest = values?.[wineCoreClrUserspaceInputNames.digest]
+  if (!isSha256Digest(digest)) {
+    failures.push(`${wineCoreClrUserspaceInputNames.digest} must be sha256:<64 lowercase hex>`)
+  }
+  const sourceUri = values?.[wineCoreClrUserspaceInputNames.sourceUri]
+  if (!isHttpsUri(sourceUri)) {
+    failures.push(`${wineCoreClrUserspaceInputNames.sourceUri} must be an absolute HTTPS URI without credentials`)
+  }
+  return failures
+}
+
 /**
  * Return true only for a Docker repository reference pinned to a lowercase
  * SHA-256 digest. Tags, bare digests, whitespace and alternate algorithms are

@@ -4,6 +4,8 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { isValidJsonSchemaFormat } from './json-schema-formats.mjs'
+
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const schema = JSON.parse(fs.readFileSync(
   path.join(repositoryRoot, 'schemas', 'runtime-matrix.schema.json'),
@@ -17,10 +19,91 @@ const releaseLock = JSON.parse(fs.readFileSync(
   path.join(repositoryRoot, 'profiles', 'lock.json'),
   'utf8',
 ))
+const releaseLockSchema = JSON.parse(fs.readFileSync(
+  path.join(repositoryRoot, 'schemas', 'release-lock.schema.json'),
+  'utf8',
+))
+const promotionPlanSchema = JSON.parse(fs.readFileSync(
+  path.join(repositoryRoot, 'schemas', 'runtime-promotion-plan.schema.json'),
+  'utf8',
+))
+const promotionReceiptSchema = JSON.parse(fs.readFileSync(
+  path.join(repositoryRoot, 'schemas', 'runtime-promotion-receipt.schema.json'),
+  'utf8',
+))
 const baseImages = JSON.parse(fs.readFileSync(
   path.join(repositoryRoot, 'profiles', 'base-images.json'),
   'utf8',
 ))
+
+test('release source URIs accept strict HTTPS or immutable Docker identities', () => {
+  const sourceUriSchemas = [
+    releaseLockSchema.$defs.sourceUri,
+    promotionPlanSchema.$defs.sourceUri,
+    promotionReceiptSchema.$defs.sourceUri,
+  ]
+  assert.deepEqual(
+    releaseLockSchema.$defs.component.properties.sourceUri,
+    { $ref: '#/$defs/sourceUri' },
+  )
+  assert.deepEqual(
+    promotionPlanSchema.$defs.componentIdentity.properties.sourceUri,
+    { $ref: '#/$defs/sourceUri' },
+  )
+  assert.deepEqual(
+    promotionReceiptSchema.$defs.componentIdentity.properties.sourceUri,
+    { $ref: '#/$defs/sourceUri' },
+  )
+  assert.deepEqual(sourceUriSchemas[0], sourceUriSchemas[1])
+  assert.deepEqual(sourceUriSchemas[0], sourceUriSchemas[2])
+  const digest = 'a'.repeat(64)
+
+  const accepted = [
+    'https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/runtime.tar.gz',
+    'https://example.test/runtime.tar.gz?channel=stable',
+    'https://[::1]/runtime.tar.gz',
+    `docker://localhost:5000/sharplabnext/runtime:10.0@sha256:${digest}`,
+    `docker://mono:6.12@sha256:${digest}`,
+  ]
+
+  const rejected = [
+    'https://user@example.test/runtime.tar.gz',
+    'https://user:password@example.test/runtime.tar.gz',
+    'https:///runtime.tar.gz',
+    'https://example.test:99999/runtime.tar.gz',
+    'https://example.test/runtime.tar.gz#fragment',
+    'HTTPS://example.test/runtime.tar.gz',
+    'http://example.test/runtime.tar.gz',
+    'docker://registry.example/runtime:latest',
+    `docker://@sha256:${digest}`,
+    `docker://user@registry.example/runtime@sha256:${digest}`,
+    `docker://registry.example/Runtime@sha256:${digest}`,
+    `docker://registry.example/runtime@sha256:${digest}@sha256:${digest}`,
+    `docker://registry.example/runtime@sha256:${digest.toUpperCase()}`,
+  ]
+
+  for (const sourceUriSchema of sourceUriSchemas) {
+    assert.equal(sourceUriSchema.oneOf.length, 2)
+    for (const value of accepted) {
+      assert.equal(sourceUriMatches(sourceUriSchema, value), true, `${value} must be accepted`)
+    }
+    for (const value of rejected) {
+      assert.equal(sourceUriMatches(sourceUriSchema, value), false, `${value} must be rejected`)
+    }
+  }
+})
+
+function sourceUriMatches(schema, value) {
+  return schema.oneOf.filter(branch => sourceUriBranchMatches(branch, value)).length === 1
+}
+
+function sourceUriBranchMatches(branch, value) {
+  if (branch.allOf !== undefined) {
+    return branch.allOf.every(item => sourceUriBranchMatches(item, value))
+  }
+  return (branch.pattern === undefined || new RegExp(branch.pattern).test(value)) &&
+    (branch.format === undefined || isValidJsonSchemaFormat(value, branch.format))
+}
 
 test('CoreCLR commit identities accept optional 40- and 64-character lowercase hex values', () => {
   const coreClrSchema = schema.$defs.coreClr

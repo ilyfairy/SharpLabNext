@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import {
   createContextBuildArguments,
@@ -13,7 +15,9 @@ import {
   validateOperatorImageInspection,
   runContextBuild,
 } from './build-framework-matrix-context.mjs'
+import { pinnedDockerfileFrontendDirective } from './dockerfile-frontend.mjs'
 
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const rowDefinitions = [
   ['netfx20', '2.0', 'clr2'], ['netfx30', '3.0', 'clr2'],
   ['netfx35', '3.5', 'clr2'], ['netfx40', '4.0', 'clr4'],
@@ -25,6 +29,9 @@ const rowDefinitions = [
 ]
 const operatorBase = `registry.example/wine:development@sha256:${'b'.repeat(64)}`
 const operatorRoot = `registry.example/root:stable@sha256:${'a'.repeat(64)}`
+const installerManifestSha256 = crypto.createHash('sha256').update(fs.readFileSync(
+  path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json'),
+)).digest('hex')
 
 function matrix() {
   return {
@@ -49,8 +56,11 @@ function labels(row) {
     'io.sharplabnext.framework.clr-generation': row.clrGeneration,
     'io.sharplabnext.wine-prefix-layout': 'hardlink-immutable-v1',
     'io.sharplabnext.wine-prefix-layout-manifest': '/opt/sharplabnext/.wine-prefix-layout.json',
+    'io.sharplabnext.framework.installer-manifest-sha256': installerManifestSha256,
     'io.sharplabnext.operator-base': operatorBase,
     'io.sharplabnext.operator-root': operatorRoot,
+    'org.opencontainers.image.revision': 'd'.repeat(40),
+    'io.sharplabnext.source.revision': 'd'.repeat(40),
   }
 }
 
@@ -68,11 +78,13 @@ test('generated Dockerfile contains bounded metadata and no operator prefix stag
   const document = normalizeMatrixInput(matrix())
   const digest = matrixInputDigest(document)
   const source = createContextDockerfile(document, digest, 'a'.repeat(40), 'development')
+  assert.ok(source.startsWith(`${pinnedDockerfileFrontendDirective}\n`))
   assert.match(source, /FROM scratch AS final/)
   assert.match(source, /COPY rows\/netfx20\/row\.json \/rows\/netfx20\/row\.json/)
   assert.match(source, /COPY rows\/netfx48\/row\.json \/rows\/netfx48\/row\.json/)
   assert.doesNotMatch(source, /FROM registry\.example|COPY --from|wine-netfx-clr[24]|wine-prefixes|--mount/)
   assert.match(source, /io\.sharplabnext\.framework\.matrix-content="metadata-only-v1"/)
+  assert.match(source, /io\.sharplabnext\.source\.revision="a{40}"/)
   assert.match(source, new RegExp(`io.sharplabnext.framework.matrix-input-sha256="${digest}"`))
 })
 
@@ -87,6 +99,8 @@ test('operator image identity requires the expected labels, platform, and digest
   assert.deepEqual(validateOperatorImageInspection(row, valid, {
     baseImage: `registry.example/wine@sha256:${'b'.repeat(64)}`,
     rootImage: `registry.example/root@sha256:${'a'.repeat(64)}`,
+    installerManifestSha256,
+    sourceRevision: 'd'.repeat(40),
   }), [])
   assert.match(validateOperatorImageInspection(row, { ...valid, Os: 'windows' }).join('\n'), /linux\/amd64/)
   assert.match(validateOperatorImageInspection(row, { ...valid, Id: `sha256:${'f'.repeat(64)}` }).join('\n'), /supplied digest/)
@@ -99,6 +113,12 @@ test('operator image identity requires the expected labels, platform, and digest
     baseImage: `registry.example/other-wine@sha256:${'b'.repeat(64)}`,
     rootImage: `registry.example/root@sha256:${'a'.repeat(64)}`,
   }).join('\n'), /Wine\/base identity.*must equal/)
+  assert.match(validateOperatorImageInspection(row, valid, {
+    installerManifestSha256: 'f'.repeat(64),
+  }).join('\n'), /installer manifest identity/)
+  assert.match(validateOperatorImageInspection(row, valid, {
+    sourceRevision: 'e'.repeat(40),
+  }).join('\n'), /source revision/)
 })
 
 test('context build arguments keep BuildKit on linux/amd64 and never mount a host prefix', () => {
@@ -155,6 +175,7 @@ test('development build emits only the mocked metadata boundary', () => {
           'io.sharplabnext.framework.matrix-input-sha256': matrixInputDigest(document),
           'io.sharplabnext.framework.matrix-row-count': '14',
           'org.opencontainers.image.revision': 'development',
+          'io.sharplabnext.source.revision': 'development',
           'org.opencontainers.image.version': 'development',
         } },
       }]) }

@@ -6,7 +6,7 @@ import type {
 } from '../api/types'
 
 const AUTO_OUTPUT_KIND_LANGUAGES = new Set(['csharp', 'visual-basic', 'gsharp'])
-const LIBRARY_OUTPUT_KIND_LANGUAGES = new Set(['fsharp', 'il'])
+const LIBRARY_OUTPUT_KIND_LANGUAGES = new Set(['il'])
 
 export interface WorkbenchOutputKindSelection {
   languageId: string
@@ -47,6 +47,7 @@ export function buildOutputKindForResolvedPipeline(
 ): BuildOutputKind {
   if (stages.some((stage) => stage.kind === 'run')) return 'console'
   if (AUTO_OUTPUT_KIND_LANGUAGES.has(languageId)) return 'auto'
+  if (languageId === 'fsharp') return 'console'
   return LIBRARY_OUTPUT_KIND_LANGUAGES.has(languageId) ? 'library' : 'console'
 }
 
@@ -64,7 +65,7 @@ export function createWorkbenchBuildOptions(
   if (languageId === 'jsharp') return options
 
   Object.assign(options, {
-    allowUnsafe: false,
+    allowUnsafe: languageId === 'csharp',
     emitPortablePdb: true,
     nullableContext: 'project-default',
     preprocessorSymbols: [],

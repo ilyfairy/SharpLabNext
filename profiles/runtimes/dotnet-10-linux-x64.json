@@ -1,20 +1,22 @@
 {
   "schemaVersion": 1,
   "id": "dotnet-10-linux-x64",
-  "image": "sharplabnext/runtime-dotnet10:dev",
+  "image": "sharplabnext/runtime-dotnet-10-linux-x64:development",
   "family": "coreclr",
-  "acceptedRuntimeFamilies": [],
+  "acceptedRuntimeFamilies": [
+    "coreclr"
+  ],
   "acceptedFrameworks": [
     {
       "name": "Microsoft.NETCore.App",
-      "exactVersion": "10.0.9"
+      "exactVersion": "10.0.10"
     }
   ],
-  "runtimeVersion": "10.0.9",
-  "runtimeCommit": "901ca941248413c79832d2fdbd709da0c4386353",
-  "jitVersion": "10.0.9",
-  "jitCommit": "901ca941248413c79832d2fdbd709da0c4386353",
-  "runtimeImageId": "sharplabnext/runtime-dotnet10:dev",
+  "runtimeVersion": "10.0.10",
+  "runtimeCommit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+  "jitVersion": "10.0.10",
+  "jitCommit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+  "runtimeImageId": "sha256:cffcdc996166e688699da7ce7c742545b2b1a4bf98c46c109bc130f49d67cd68",
   "rid": "linux-x64",
   "architecture": "x64",
   "cpuFeatureProfile": "x64-v2",
@@ -42,7 +44,7 @@
       "implementationId": "sharplabnext-runner-v1",
       "pathStyle": "unix",
       "command": {
-        "executable": "dotnet",
+        "executable": "/opt/sharplabnext/target-dotnet/dotnet",
         "argv": [
           "/opt/sharplabnext/SharpLabNext.Runner.dll",
           "{entryAssembly}",
@@ -55,7 +57,7 @@
       "implementationId": "sharplabnext-jit-inspector-v1",
       "pathStyle": "unix",
       "command": {
-        "executable": "dotnet",
+        "executable": "/opt/sharplabnext/target-dotnet/dotnet",
         "argv": [
           "/opt/sharplabnext/SharpLabNext.JitInspector.dll",
           "{entryAssembly}",
@@ -68,7 +70,7 @@
   },
   "layout": {
     "runnerKind": "dotnet",
-    "dotNetHostPath": "dotnet",
+    "dotNetHostPath": "/opt/sharplabnext/target-dotnet/dotnet",
     "runnerAssemblyPath": "/opt/sharplabnext/SharpLabNext.Runner.dll",
     "jitInspectorAssemblyPath": "/opt/sharplabnext/SharpLabNext.JitInspector.dll"
   },

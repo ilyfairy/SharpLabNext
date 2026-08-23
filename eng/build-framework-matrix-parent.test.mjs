@@ -9,11 +9,15 @@ import { fileURLToPath } from 'node:url'
 import {
   createParentBuildArguments,
   createParentDockerfile,
+  inspectMetadataImage,
   runParentBuild,
   validateParentInputs,
 } from './build-framework-matrix-parent.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const installerManifestSha256 = crypto.createHash('sha256').update(fs.readFileSync(
+  path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json'),
+)).digest('hex')
 const rowDefinitions = [
   ['netfx20', '2.0', 'clr2'],
   ['netfx30', '3.0', 'clr2'],
@@ -85,6 +89,7 @@ function parentLabels(input, revision) {
     'io.sharplabnext.framework.matrix-strategy': 'shared-framework-target-prefix-matrix-v1',
     'io.sharplabnext.framework.dedupe-policy': 'wine-static-runtime-payload-v1',
     'org.opencontainers.image.revision': revision,
+    'io.sharplabnext.source.revision': revision,
     'org.opencontainers.image.version': 'development',
     'io.sharplabnext.framework.matrix-input-sha256': input.FRAMEWORK_MATRIX_INPUT_SHA256,
     'io.sharplabnext.framework.matrix-source-uri': input.FRAMEWORK_MATRIX_SOURCE_URI,
@@ -106,11 +111,65 @@ function operatorInspection(row, input) {
       'io.sharplabnext.framework.clr-generation': row.clrGeneration,
       'io.sharplabnext.wine-prefix-layout': 'hardlink-immutable-v1',
       'io.sharplabnext.wine-prefix-layout-manifest': '/opt/sharplabnext/.wine-prefix-layout.json',
+      'io.sharplabnext.framework.installer-manifest-sha256': installerManifestSha256,
       'io.sharplabnext.operator-base': input.WINE_IMAGE.replace('/wine@', '/wine:development@'),
       'io.sharplabnext.operator-root': input.ROOT_IMAGE.replace('/root@', '/root:stable@'),
+      'org.opencontainers.image.revision': input.SOURCE_REVISION === 'development'
+        ? 'd'.repeat(40)
+        : input.SOURCE_REVISION,
+      'io.sharplabnext.source.revision': input.SOURCE_REVISION === 'development'
+        ? 'd'.repeat(40)
+        : input.SOURCE_REVISION,
     } },
   }
 }
+
+test('metadata image must resolve its digest and bind both source revision labels', () => {
+  const reference = `registry.example/framework-context@sha256:${'c'.repeat(64)}`
+  const matrixDigest = `sha256:${'d'.repeat(64)}`
+  const revision = 'e'.repeat(40)
+  const image = {
+    Id: reference.slice(reference.lastIndexOf('@') + 1),
+    RepoDigests: [reference],
+    Size: 4096,
+    Os: 'linux',
+    Architecture: 'amd64',
+    Config: { Labels: {
+      'io.sharplabnext.framework.matrix-context': 'true',
+      'io.sharplabnext.framework.matrix-content': 'metadata-only-v1',
+      'io.sharplabnext.framework.matrix-strategy': 'shared-framework-prefix-input-v1',
+      'io.sharplabnext.framework.matrix-input-sha256': matrixDigest,
+      'io.sharplabnext.framework.matrix-row-count': '14',
+      'org.opencontainers.image.revision': revision,
+      'io.sharplabnext.source.revision': revision,
+    } },
+  }
+  const inspect = value => () => ({ status: 0, stdout: JSON.stringify([value]) })
+
+  assert.doesNotThrow(() => inspectMetadataImage(
+    reference, matrixDigest, 14, revision, inspect(image),
+  ))
+  assert.throws(() => inspectMetadataImage(
+    reference,
+    matrixDigest,
+    14,
+    revision,
+    inspect({ ...image, Id: `sha256:${'f'.repeat(64)}`, RepoDigests: [] }),
+  ), /does not resolve to its supplied immutable digest/)
+  assert.throws(() => inspectMetadataImage(
+    reference,
+    matrixDigest,
+    14,
+    revision,
+    inspect({
+      ...image,
+      Config: { Labels: {
+        ...image.Config.Labels,
+        'io.sharplabnext.source.revision': 'f'.repeat(40),
+      } },
+    }),
+  ), /io.sharplabnext.source.revision/)
+})
 
 test('shared parent accepts the exact metadata-only matrix and emits 14 target-prefix mounts', () => {
   const context = makeContext()
@@ -244,6 +303,8 @@ test('immutable metadata rejects a non-canonical row count before copying any ro
           'io.sharplabnext.framework.matrix-strategy': 'shared-framework-prefix-input-v1',
           'io.sharplabnext.framework.matrix-input-sha256': digest,
           'io.sharplabnext.framework.matrix-row-count': '14',
+          'org.opencontainers.image.revision': 'development',
+          'io.sharplabnext.source.revision': 'development',
         } },
       }]) }
     }
@@ -352,6 +413,8 @@ test('shared parent push verifies the exact remote digest without pulling the la
           'io.sharplabnext.framework.matrix-strategy': 'shared-framework-prefix-input-v1',
           'io.sharplabnext.framework.matrix-input-sha256': context.digest,
           'io.sharplabnext.framework.matrix-row-count': '14',
+          'org.opencontainers.image.revision': revision,
+          'io.sharplabnext.source.revision': revision,
         } },
       }]) }
     }

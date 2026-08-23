@@ -6,6 +6,11 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import {
+  runtimePromotionPlanSignaturePath,
+  serializeRuntimePromotionPlan,
+  signRuntimePromotionPlan,
+} from './runtime-promotion-plan-signature.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -22,8 +27,14 @@ test('net30 composition generates its reference, presets, compatibility, and ful
     path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'),
     'utf8',
   ))
+  blockAllMatrixCapabilities(matrix)
   fs.writeFileSync(matrixPath, `${JSON.stringify(matrix, null, 2)}\n`)
   fs.copyFileSync(path.join(repositoryRoot, 'profiles', 'catalog', 'catalog.json'), catalogPath)
+  const catalogFixture = JSON.parse(fs.readFileSync(catalogPath, 'utf8'))
+  catalogFixture.referenceSets.find(candidate => candidate.id === 'net5-ref').visibility = 'hidden'
+  catalogFixture.runtimes.find(candidate => candidate.id === 'dotnet-5-linux-x64').visibility = 'hidden'
+  catalogFixture.presets.find(candidate => candidate.id === 'csharp-roslyn-stable-dotnet-5').visibility = 'hidden'
+  fs.writeFileSync(catalogPath, `${JSON.stringify(catalogFixture, null, 2)}\n`)
 
   const run = () => spawnSync(
     'dotnet',
@@ -49,7 +60,17 @@ test('net30 composition generates its reference, presets, compatibility, and ful
     `generator failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
   )
 
-  const generated = JSON.parse(fs.readFileSync(catalogPath, 'utf8'))
+  const generatedBytes = fs.readFileSync(catalogPath)
+  assert.equal(generatedBytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])), false)
+  assert.equal(generatedBytes.includes(0x0d), false)
+  const generatedText = generatedBytes.toString('utf8')
+  assert.match(generatedText, /C\+\+\/CLI/)
+  const generated = JSON.parse(generatedText)
+  const generatedProfileBytes = fs.readFileSync(
+    path.join(profileDirectory, 'dotnet-10-linux-x64.json'),
+  )
+  assert.equal(generatedProfileBytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])), false)
+  assert.equal(generatedProfileBytes.includes(0x0d), false)
   const target = matrix.framework.targets.find(candidate => candidate.id === 'netfx30')
   const reference = generated.referenceSets.find(candidate => candidate.id === target.referenceSetId)
   assert.equal(reference.targetFramework, 'net30')
@@ -69,6 +90,14 @@ test('net30 composition generates its reference, presets, compatibility, and ful
     new Set(toolchain.allowedReferenceSetIds),
     new Set(matrix.framework.targets.map(candidate => candidate.referenceSetId)),
   )
+  const coreReferenceSetIds = new Set(matrix.coreClr.map(candidate => candidate.referenceSetId))
+  for (const toolchainId of ['roslyn-stable', 'roslyn-main']) {
+    const coreToolchain = generated.toolchains.find(candidate => candidate.id === toolchainId)
+    assert.deepEqual(new Set(coreToolchain.allowedReferenceSetIds), coreReferenceSetIds)
+  }
+  assert.equal(generated.referenceSets.find(candidate => candidate.id === 'net5-ref').visibility, 'visible')
+  assert.equal(generated.runtimes.find(candidate => candidate.id === 'dotnet-5-linux-x64').visibility, 'visible')
+  assert.equal(generated.presets.find(candidate => candidate.id === 'csharp-roslyn-stable-dotnet-5').visibility, 'visible')
 
   matrix.framework.targets.find(candidate => candidate.id === 'netfx30')
     .referenceComposition.sourceIdentityDigest = `sha256:${hex('f')}`
@@ -92,6 +121,7 @@ test('payload fallback identity follows the selected CoreCLR platform', { timeou
     path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'),
     'utf8',
   ))
+  blockAllMatrixCapabilities(matrix)
   const target = matrix.coreClr.find(candidate => candidate.id === 'dotnet-5')
   assert.ok(target, 'fixture must contain the .NET 5 row')
   delete target.runtimeCommit
@@ -148,6 +178,7 @@ test('Wine profile generation rejects execution users outside the closed identit
     path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'),
     'utf8',
   ))
+  blockAllMatrixCapabilities(matrix)
   const target = matrix.coreClr.find(candidate => candidate.id === 'dotnet-5')
   assert.ok(target, 'fixture must contain the .NET 5 row')
   target.wineCapability.executionUser = '1000:1000'
@@ -188,7 +219,12 @@ test('blocked runtime refresh revokes a stale allowed artifact edge', { timeout:
   const matrixPath = path.join(root, 'runtime-matrix.json')
   const catalogPath = path.join(root, 'catalog.json')
   const profileDirectory = path.join(root, 'candidates')
-  fs.copyFileSync(path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'), matrixPath)
+  const matrix = JSON.parse(fs.readFileSync(
+    path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'),
+    'utf8',
+  ))
+  blockAllMatrixCapabilities(matrix)
+  fs.writeFileSync(matrixPath, `${JSON.stringify(matrix, null, 2)}\n`)
   const catalog = JSON.parse(fs.readFileSync(
     path.join(repositoryRoot, 'profiles', 'catalog', 'catalog.json'),
     'utf8',
@@ -284,6 +320,7 @@ test('checked JIT source lock selects the isolated bridge only for Linux', { tim
     path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'),
     'utf8',
   ))
+  blockAllMatrixCapabilities(matrix)
   const target = matrix.coreClr.find(candidate => candidate.id === 'dotnet-7')
   assert.ok(target, 'fixture must contain the .NET 7 row')
   target.checkedJit = {
@@ -354,6 +391,7 @@ test('blocked modern profiler rows retain one closed Runner and JIT provider con
     path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'),
     'utf8',
   ))
+  blockAllMatrixCapabilities(matrix)
   fs.writeFileSync(matrixPath, `${JSON.stringify(matrix, null, 2)}\n`)
   const catalog = JSON.parse(fs.readFileSync(
     path.join(repositoryRoot, 'profiles', 'catalog', 'catalog.json'),
@@ -448,33 +486,90 @@ test('verified runtime generation consumes immutable receipt identities and JIT 
   fs.mkdirSync(path.dirname(matrixPath), { recursive: true })
   fs.mkdirSync(path.dirname(catalogPath), { recursive: true })
   fs.mkdirSync(validatorDirectory, { recursive: true })
-  fs.copyFileSync(
-    path.join(repositoryRoot, 'eng', 'runtime-promotion-receipt-validation.mjs'),
-    path.join(validatorDirectory, 'runtime-promotion-receipt-validation.mjs'),
-  )
-  fs.copyFileSync(
-    path.join(repositoryRoot, 'eng', 'runtime-performance-evidence-validation.mjs'),
-    path.join(validatorDirectory, 'runtime-performance-evidence-validation.mjs'),
-  )
-  fs.copyFileSync(
-    path.join(repositoryRoot, 'eng', 'runtime-capability-evidence-validation.mjs'),
-    path.join(validatorDirectory, 'runtime-capability-evidence-validation.mjs'),
-  )
-  fs.copyFileSync(
-    path.join(repositoryRoot, 'eng', 'strict-owned-json.mjs'),
-    path.join(validatorDirectory, 'strict-owned-json.mjs'),
-  )
+  const planKeys = crypto.generateKeyPairSync('ed25519')
+  const planPublicKey = planKeys.publicKey.export({ type: 'spki', format: 'pem' })
+  const planKeyId = `sha256:${crypto.createHash('sha256').update(
+    planKeys.publicKey.export({ type: 'spki', format: 'der' }),
+  ).digest('hex')}`
+  for (const fileName of [
+    'json-schema-formats.mjs',
+    'json-schema-instance-validation.mjs',
+    'runtime-promotion-receipt-validation.mjs',
+    'runtime-performance-evidence-validation.mjs',
+    'runtime-capability-evidence-validation.mjs',
+    'strict-owned-json.mjs',
+    'runtime-promotion-plan-signature.mjs',
+    'runtime-wine-operator-binding.mjs',
+    'wine-coreclr-operator-receipt.mjs',
+  ]) {
+    const source = path.join(repositoryRoot, 'eng', fileName)
+    const targetPath = path.join(
+      validatorDirectory,
+      fileName === 'runtime-promotion-receipt-validation.mjs'
+        ? 'runtime-promotion-receipt-validation-impl.mjs'
+        : fileName,
+    )
+    fs.copyFileSync(source, targetPath)
+  }
+  const schemaDirectory = path.join(root, 'schemas')
+  fs.mkdirSync(schemaDirectory, { recursive: true })
+  for (const fileName of [
+    'runtime-promotion-plan.schema.json',
+    'runtime-promotion-receipt.schema.json',
+  ]) {
+    fs.copyFileSync(path.join(repositoryRoot, 'schemas', fileName), path.join(schemaDirectory, fileName))
+  }
+  // The production validator deliberately has no environment key override.
+  // This test-local executable is the only place that injects its ephemeral
+  // public key, keeping the generated-repository test self-contained.
+  fs.writeFileSync(path.join(validatorDirectory, 'runtime-promotion-receipt-validation.mjs'), `
+import fs from 'node:fs'
+import path from 'node:path'
+import { validateRuntimePromotionReceipts } from './runtime-promotion-receipt-validation-impl.mjs'
+
+const publicKey = ${JSON.stringify(planPublicKey)}
+const keyId = ${JSON.stringify(planKeyId)}
+let root = process.cwd()
+let matrixPath
+for (let index = 2; index < process.argv.length; index += 2) {
+  const option = process.argv[index]
+  const value = process.argv[index + 1]
+  if ((option !== '--repository-root' && option !== '--matrix') || value === undefined) process.exit(64)
+  if (option === '--repository-root') root = path.resolve(value)
+  else matrixPath = path.resolve(value)
+}
+matrixPath ??= path.join(root, 'profiles', 'runtime-matrix.json')
+const failures = validateRuntimePromotionReceipts(
+  JSON.parse(fs.readFileSync(matrixPath, 'utf8')),
+  root,
+  fs.readFileSync,
+  { planSignaturePublicKey: publicKey, planSignatureKeyId: keyId },
+)
+if (failures.length > 0) {
+  for (const failure of failures) console.error('promotion receipt error: ' + failure)
+  process.exitCode = 1
+}
+`)
 
   const matrix = JSON.parse(fs.readFileSync(
     path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'),
     'utf8',
   ))
+  blockAllMatrixCapabilities(matrix)
   const target = matrix.coreClr.find(candidate => candidate.id === 'dotnet-core-2.1')
   assert.ok(target, 'fixture must contain the .NET Core 2.1 row')
   target.runtimeCommit = '1'.repeat(40)
   target.jitCommit = '2'.repeat(40)
 
   const profileId = 'dotnet-core-2.1-linux-x64'
+  const writeFixtureCatalog = () => {
+    const catalog = JSON.parse(fs.readFileSync(
+      path.join(repositoryRoot, 'profiles', 'catalog', 'catalog.json'),
+      'utf8',
+    ))
+    catalog.runtimes = catalog.runtimes.filter(candidate => candidate.id !== profileId)
+    fs.writeFileSync(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`)
+  }
   const receipt = {
     schemaVersion: 2,
     planSha256: `sha256:${hex('0')}`,
@@ -595,6 +690,18 @@ test('verified runtime generation consumes immutable receipt identities and JIT 
       planSha256: receipt.planSha256,
       profileId,
       image: { ...receipt.image },
+      measurementHelper: {
+        implementation: 'sharplabnext-runtime-cgroup-sidecar-v1',
+        image: {
+          reference: `registry.example/runtime-supervisor@sha256:${'7'.repeat(64)}`,
+          imageId: `sha256:${'8'.repeat(64)}`,
+          sizeBytes: 536870912,
+        },
+        entrypoint: '/usr/local/bin/sharplabnext-runtime-measurement',
+        sourceRevision: receipt.sourceRevision,
+        contentSha256:
+          'sha256:f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c',
+      },
       sourceRevision: receipt.sourceRevision,
       policy: {
         id: 'runtime-image-linux-x64-v1',
@@ -603,7 +710,7 @@ test('verified runtime generation consumes immutable receipt identities and JIT 
       capabilities,
       sourceMappingKind: jitCheck?.sourceMappingKind ?? 'not-applicable',
       environment: {
-        runnerId: 'runtime-preflight-linux-x64-v1',
+        runnerId: 'runtime-preflight-linux-x64-v2',
         operatingSystem: 'linux',
         architecture: 'x64',
         nanoCpus: 1000000000,
@@ -662,7 +769,17 @@ test('verified runtime generation consumes immutable receipt identities and JIT 
       for (const token of profileOperation.command.argv) {
         if (token === '{entryAssembly}') command.push(entryAssembly.path)
         else if (token === '{methodFilter}') command.push(methodFilter)
-        else if (token !== '{arguments}') command.push(token)
+        else if (token === '{arguments}') {
+          const runProbeArgument = {
+            run: 'success-security',
+            inspection: 'inspection',
+            'execution-flow': 'execution-flow',
+          }[check.capability]
+          if (runProbeArgument === undefined) {
+            throw new Error(`Unsupported Run capability '${check.capability}'.`)
+          }
+          command.push(runProbeArgument)
+        } else command.push(token)
       }
       const lifecycleProbe = terminalStatus => ({
         result: 'passed',
@@ -684,7 +801,7 @@ test('verified runtime generation consumes immutable receipt identities and JIT 
         producer: {
           id: 'sharplabnext-runtime-preflight-v1',
           sourceRevision: receipt.sourceRevision,
-          planSha256: `sha256:${hex('0')}`,
+          planSha256: receipt.planSha256,
         },
         artifacts: [
           helper,
@@ -820,9 +937,76 @@ test('verified runtime generation consumes immutable receipt identities and JIT 
     }
     writePerformanceEvidence()
   }
+  const writePlanBinding = () => {
+    const candidatePath = path.join(profileDirectory, `${profileId}.json`)
+    const candidateBytes = fs.readFileSync(candidatePath)
+    const boundPreflight = JSON.parse(candidateBytes)
+    boundPreflight.image = receipt.image.reference
+    boundPreflight.runtimeImageId = receipt.image.imageId
+    boundPreflight.capabilities = receipt.checks.map(check => check.capability).sort()
+    delete boundPreflight.promotionReceipt
+    const planRoot = path.join(root, 'profiles', 'runtime-promotion-plans')
+    fs.mkdirSync(planRoot, { recursive: true })
+    const preflightRelativePath =
+      `profiles/runtime-promotion-plans/${profileId}.profile.json`
+    const preflightBytes = Buffer.from(`${JSON.stringify(boundPreflight, null, 2)}\n`)
+    fs.writeFileSync(path.join(root, ...preflightRelativePath.split('/')), preflightBytes)
+    const plan = {
+      schemaVersion: 1,
+      candidateTarget: 'runtime-dotnet-matrix-candidate',
+      profileId,
+      profileSha256:
+        `sha256:${crypto.createHash('sha256').update(candidateBytes).digest('hex')}`,
+      matrixTargetId: target.id,
+      platform: 'linux',
+      family: 'coreclr',
+      resolvedVersion: target.version,
+      sourceRevision: receipt.sourceRevision,
+      sourceTree: 'f'.repeat(40),
+      image: receipt.image,
+      componentIdentity: receipt.componentIdentity,
+      runtimeIdentity: receipt.runtimeIdentity,
+      buildInputs: { FIXTURE: 'runtime-matrix-generator' },
+      buildInputsSha256: `sha256:${crypto.createHash('sha256').update(
+        serializeRuntimePromotionPlan({ FIXTURE: 'runtime-matrix-generator' }),
+      ).digest('hex')}`,
+      producer: {
+        id: 'sharplabnext-runtime-preflight-v1',
+        sourceRevision: receipt.sourceRevision,
+      },
+      securityPolicyId: securityPolicy.id,
+      capabilities: receipt.checks.map(check => check.capability).sort(),
+      sourceMappingKind: receipt.checks.find(check => check.capability === 'jit-asm')?.sourceMappingKind ??
+        'not-applicable',
+      operations: receipt.operations,
+      preflightProfile: {
+        path: preflightRelativePath,
+        sha256: `sha256:${crypto.createHash('sha256').update(preflightBytes).digest('hex')}`,
+      },
+      performance: {
+        policyId: 'runtime-image-linux-x64-v1',
+        policyPath: performancePolicyRelativePath,
+        policySha256: performancePolicyDigest,
+        evidencePath: `profiles/runtime-promotion-evidence/${profileId}/performance.json`,
+      },
+    }
+    const planBytes = serializeRuntimePromotionPlan(plan)
+    fs.writeFileSync(path.join(planRoot, `${profileId}.json`), planBytes)
+    receipt.planSha256 =
+      `sha256:${crypto.createHash('sha256').update(planBytes).digest('hex')}`
+    const signatureRelativePath = runtimePromotionPlanSignaturePath(profileId)
+    const signatureBytes = Buffer.from(`${signRuntimePromotionPlan(planBytes, planKeys.privateKey)}\n`)
+    fs.writeFileSync(path.join(root, ...signatureRelativePath.split('/')), signatureBytes)
+    receipt.planSignature = {
+      path: signatureRelativePath,
+      sha256: `sha256:${crypto.createHash('sha256').update(signatureBytes).digest('hex')}`,
+      keyId: planKeyId,
+    }
+  }
   const receiptRelativePath = `profiles/runtime-promotion-receipts/${profileId}.json`
   const receiptPath = path.join(root, ...receiptRelativePath.split('/'))
   fs.mkdirSync(path.dirname(receiptPath), { recursive: true })
+  writePlanBinding()
   writeEvidence()
   const receiptBytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`)
   fs.writeFileSync(receiptPath, receiptBytes)
@@ -835,7 +1019,7 @@ test('verified runtime generation consumes immutable receipt identities and JIT 
     },
   }
   fs.writeFileSync(matrixPath, `${JSON.stringify(matrix, null, 2)}\n`)
-  fs.copyFileSync(path.join(repositoryRoot, 'profiles', 'catalog', 'catalog.json'), catalogPath)
+  writeFixtureCatalog()
 
   const runGenerator = () => spawnSync(
       'dotnet',
@@ -931,13 +1115,14 @@ test('verified runtime generation consumes immutable receipt identities and JIT 
     path.join(profileDirectory, `${profileId}.json`),
     `${JSON.stringify(profile, null, 2)}\n`,
   )
+  writePlanBinding()
   writeEvidence()
   let updatedReceiptBytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`)
   fs.writeFileSync(receiptPath, updatedReceiptBytes)
   target.linuxCapability.promotionReceipt.sha256 =
     `sha256:${crypto.createHash('sha256').update(updatedReceiptBytes).digest('hex')}`
   fs.writeFileSync(matrixPath, `${JSON.stringify(matrix, null, 2)}\n`)
-  fs.copyFileSync(path.join(repositoryRoot, 'profiles', 'catalog', 'catalog.json'), catalogPath)
+  writeFixtureCatalog()
 
   const profilerResult = runGenerator()
   assert.equal(
@@ -976,6 +1161,7 @@ test('verified runtime generation consumes immutable receipt identities and JIT 
     ...receipt.checks[0],
     capability: 'inspection',
   }]
+  writePlanBinding()
   writeEvidence()
   updatedReceiptBytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`)
   fs.writeFileSync(receiptPath, updatedReceiptBytes)
@@ -995,12 +1181,30 @@ test('verified runtime generation consumes immutable receipt identities and JIT 
 
 let performanceSampleSequence = 0
 
+function blockAllMatrixCapabilities(matrix) {
+  const block = capability => {
+    if (capability.promotionState !== 'verified') return
+    capability.promotionState = 'blocked'
+    capability.blockedReason = 'Fixture requires an explicit promotion receipt for this row.'
+    delete capability.promotionReceipt
+  }
+
+  for (const row of matrix.coreClr) {
+    block(row.linuxCapability)
+    block(row.wineCapability)
+  }
+  block(matrix.mono.capability)
+  for (const row of matrix.framework.targets) block(row.capability)
+}
+
 function performanceScenario() {
   const sample = latencyMilliseconds => ({
     latencyMilliseconds,
     peakMemoryBytes: 134217728,
+    completionPeakMemoryBytes: 134217728,
     operationId: `op_${(++performanceSampleSequence).toString(16).padStart(32, '0')}`,
     resourceSampleCount: 1,
+    postCompletionResourceSampleCount: 1,
     completedAtUtc: '2026-07-22T00:00:00.0000000Z',
   })
   return {

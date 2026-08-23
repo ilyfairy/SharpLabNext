@@ -15,4 +15,9 @@
     <InternalsVisibleTo Include="SharpLabNext.UnitTests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\PipeHandleInheritance.cs"
+             Link="Shared\PipeHandleInheritance.cs" />
+  </ItemGroup>
+
 </Project>

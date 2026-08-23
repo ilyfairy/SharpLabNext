@@ -176,6 +176,7 @@ test('operator Dockerfile keeps installers private, bounded, and preflights the 
 
   assert.match(source, /ARG BASE_IMAGE/)
   assert.match(source, /ARG ROOT_IMAGE/)
+  assert.match(source, /ARG SOURCE_REVISION/)
   assert.match(source, /FROM \$\{BASE_IMAGE\}/)
   assert.match(source, /FROM \$\{ROOT_IMAGE\} AS final/)
   assert.match(source, /COPY --from=wine-source \/usr\//)
@@ -210,6 +211,8 @@ test('operator Dockerfile keeps installers private, bounded, and preflights the 
   assert.match(source, /stage cleanup-private-assets/)
   assert.match(source, /rm -rf \/usr\/lib\/x86_64-linux-gnu\/wine\/i386-windows/)
   assert.match(source, /operator-only="true"/)
+  assert.match(source, /org\.opencontainers\.image\.revision="\$\{SOURCE_REVISION\}"/)
+  assert.match(source, /io\.sharplabnext\.source\.revision="\$\{SOURCE_REVISION\}"/)
   assert.match(source, /redistribution="operator-supplied-only"/)
   assert.doesNotMatch(source, /COPY[^\r\n]*\.(?:exe|msi|cab)\b/i)
   assert.doesNotMatch(source, /https?:\/\//i)

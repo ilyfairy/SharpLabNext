@@ -882,7 +882,9 @@ describe('SharpLabNext workbench', () => {
     expect(screen.queryByRole('status', { name: 'Connected' })).not.toBeInTheDocument()
     await waitFor(() => expect(screen.getByLabelText('Output')).toHaveValue('decompiled-csharp'))
     for (const label of ['Language', 'Toolchain', 'Reference set', 'Output']) {
-      expect(screen.getByLabelText(label)).toBeVisible()
+      const select = screen.getByLabelText(label)
+      expect(select).toBeVisible()
+      expect(select.nextElementSibling).toHaveClass('select-field__chevron')
       expect(screen.getByText(label, { selector: '.select-field > span' })).toHaveClass(
         'visually-hidden',
       )
@@ -897,10 +899,46 @@ describe('SharpLabNext workbench', () => {
     expect(screen.getByLabelText('Output')).toHaveAttribute('title', 'Output view')
     expect(document.querySelector('.identity-strip')).toHaveClass('identity-strip--hidden')
     expect(screen.queryByLabelText('Runtime')).not.toBeInTheDocument()
+    expect(document.querySelector('.selector-bar')?.parentElement).toHaveClass('app-bar')
     const statusBar = document.querySelector('.status-bar')
     expect(statusBar).not.toHaveTextContent(/Connected|Catalog|LSP|Workspace r|Selection r/)
-    expect(statusBar).toHaveTextContent('MonacoCodeMirror')
-    expect(screen.getByRole('toolbar', { name: 'Editor' })).toBeVisible()
+    const monacoToggle = screen.getByRole('button', {
+      name: 'Editor: Monaco. Click to switch to CodeMirror',
+    })
+    expect(monacoToggle).toBeVisible()
+    expect(statusBar).toHaveTextContent('Editor:Monaco')
+    expect(screen.queryByRole('toolbar', { name: 'Editor' })).not.toBeInTheDocument()
+
+    fireEvent.click(monacoToggle)
+    const codeMirrorToggle = screen.getByRole('button', {
+      name: 'Editor: CodeMirror. Click to switch to Monaco',
+    })
+    expect(codeMirrorToggle).toHaveTextContent('Editor:CodeMirror')
+    expect(window.localStorage.getItem('sharplabnext.editor')).toBe('codemirror')
+    fireEvent.click(codeMirrorToggle)
+    expect(
+      screen.getByRole('button', {
+        name: 'Editor: Monaco. Click to switch to CodeMirror',
+      }),
+    ).toBeInTheDocument()
+
+    const releaseMode = screen.getByRole('button', {
+      name: 'Build mode: Release. Click to switch to Debug',
+    })
+    expect(releaseMode).toHaveTextContent('Release')
+    fireEvent.click(releaseMode)
+    const debugMode = screen.getByRole('button', {
+      name: 'Build mode: Debug. Click to switch to Release',
+    })
+    expect(debugMode).toHaveTextContent('Debug')
+    expect(useWorkbenchStore.getState().buildMode).toBe('debug')
+    fireEvent.click(debugMode)
+    expect(
+      screen.getByRole('button', {
+        name: 'Build mode: Release. Click to switch to Debug',
+      }),
+    ).toBeInTheDocument()
+    expect(useWorkbenchStore.getState().buildMode).toBe('release')
 
     fireEvent.change(screen.getByLabelText('Output'), { target: { value: 'run' } })
 
@@ -910,6 +948,19 @@ describe('SharpLabNext workbench', () => {
       'title',
       'Runtime used for Run and JIT',
     )
+    const runtimeOptions = Array.from(
+      (screen.getByLabelText('Runtime') as HTMLSelectElement).options,
+    )
+    expect(runtimeOptions.every((option) => option.text.endsWith('\u00a0\u00a0'))).toBe(true)
+
+    fireEvent.change(screen.getByLabelText('Reference set'), {
+      target: { value: 'net11-ref' },
+    })
+    await waitFor(() => expect(screen.getByLabelText('Runtime')).toHaveValue('dotnet-11-linux-x64'))
+    fireEvent.change(screen.getByLabelText('Reference set'), {
+      target: { value: 'net10-ref' },
+    })
+    await waitFor(() => expect(screen.getByLabelText('Runtime')).toHaveValue('dotnet-10-linux-x64'))
   })
 
   it('does not expose a JIT method-scope filter', async () => {
@@ -1083,8 +1134,11 @@ describe('SharpLabNext workbench', () => {
     const settings = document.querySelector('.status-editor-settings-toggle')
     expect(settings).toBeInstanceOf(HTMLButtonElement)
     if (!(settings instanceof HTMLButtonElement)) return
-    const editorToolbar = screen.getByRole('toolbar', { name: 'Editor', hidden: true })
-    const settingsPanel = editorToolbar.closest('.status-editor-settings-panel')
+    const editorToggle = screen.getByRole('button', {
+      name: 'Editor: Monaco. Click to switch to CodeMirror',
+      hidden: true,
+    })
+    const settingsPanel = editorToggle.closest('.status-editor-settings-panel')
     expect(settings).toHaveAttribute('aria-expanded', 'false')
     expect(settingsPanel).toHaveAttribute('data-mobile-open', 'false')
 
@@ -1742,6 +1796,9 @@ describe('SharpLabNext workbench', () => {
     const copyOutputButton = screen.getByRole('button', { name: 'Copy output' })
     const resultControls = screen.getByRole('toolbar', { name: 'Result controls' })
     expect(resultControls).toContainElement(copyOutputButton)
+    expect(resultControls.querySelector('.result-state-slot')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel operation' })).not.toBeInTheDocument()
+    expect(resultControls.querySelectorAll('button')).toHaveLength(1)
     expect(resultControls.parentElement).toHaveClass('result-tabs-toolbar')
     expect(document.querySelector('.result-header')).not.toBeInTheDocument()
 
@@ -1859,6 +1916,32 @@ describe('SharpLabNext workbench', () => {
       expect(screen.getAllByText('AfterReconnectRoot').length).toBeGreaterThan(0)
       expect(screen.queryAllByText('BeforeDisconnectRoot')).toHaveLength(0)
       expect(astTab).toHaveAttribute('aria-selected', 'true')
+    })
+
+    it('drops results from the previous language as soon as the selection changes', async () => {
+      const gateway = mockLiveCompilationGateway()
+      await renderResolvedApp(gateway)
+      await advanceTime(450)
+      await flushReact()
+
+      const operationId = gateway.operationIds[0]
+      const workspaceRevision = gateway.buildRequests[0]?.workspace.revision
+      if (!operationId || workspaceRevision === undefined) {
+        throw new Error('Expected the initial live AST operation.')
+      }
+      await completeAstOperation(
+        operationSocket(operationId),
+        operationId,
+        workspaceRevision,
+        'CSharpSelectionRoot',
+      )
+      expect(screen.getAllByText('CSharpSelectionRoot').length).toBeGreaterThan(0)
+
+      fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'fsharp' } })
+      await flushReact()
+
+      expect(screen.getByLabelText('Language')).toHaveValue('fsharp')
+      expect(screen.queryAllByText('CSharpSelectionRoot')).toHaveLength(0)
     })
 
     it('starts the initial safe output without the recurring live-build debounce', async () => {

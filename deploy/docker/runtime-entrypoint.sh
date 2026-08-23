@@ -12,7 +12,9 @@ if [ "${SHARPLABNEXT_JIT_RESET_OUTPUT:-0}" = "1" ]; then
     rm -f -- \
         /tmp/sharplabnext-jit.asm \
         /tmp/sharplabnext-jit.map \
-        /tmp/sharplabnext-jit-rich.map
+        /tmp/sharplabnext-jit-rich.map \
+        /tmp/sharplabnext-desktop-jit.bin \
+        /tmp/sharplabnext-desktop-jit.bin.tmp
 fi
 
 if [ "${SHARPLABNEXT_PREPARE_WINE_XDG_RUNTIME_DIR:-0}" = "1" ] \
@@ -54,6 +56,51 @@ if [ "${SHARPLABNEXT_PREPARE_WINE_XDG_RUNTIME_DIR:-0}" = "1" ] \
 
     XDG_RUNTIME_DIR="${xdg_runtime_dir}"
     export XDG_RUNTIME_DIR
+fi
+
+if [ "${SHARPLABNEXT_WINE_CLEANUP:-0}" = "1" ] \
+    && [ -n "${WINESERVER:-}" ]; then
+    # Wine keeps a server and several service processes alive after the
+    # managed host exits. A measured runtime must be quiescent before the
+    # cgroup sidecar records completion, otherwise those descendants look
+    # like a leaked user process (and zombies cannot be recovered by /bin/sh's
+    # job table). Shut down this isolated prefix while the exec shell still
+    # owns the command's exit status.
+    if [ "$WINESERVER" != "/usr/lib/wine/wineserver64" ] \
+        || [ ! -x "$WINESERVER" ]; then
+        echo "SharpLabNext Wine cleanup requires the fixed x64 wineserver." >&2
+        exit 70
+    fi
+
+    set +e
+    "$@" &
+    child=$!
+
+    forward_term() {
+        kill -TERM "$child" 2>/dev/null || :
+        "$WINESERVER" -k >/dev/null 2>&1 || :
+    }
+    forward_int() {
+        kill -INT "$child" 2>/dev/null || :
+        "$WINESERVER" -k >/dev/null 2>&1 || :
+    }
+    trap forward_term TERM
+    trap forward_int INT
+
+    wait "$child"
+    status=$?
+    trap - TERM INT
+    "$WINESERVER" -k >/dev/null 2>&1
+    # Wait for Wine's service processes to exit, but never let cleanup extend
+    # the runtime deadline indefinitely. Docker's PID1 reaper (or the shell
+    # trap in the measured keeper) then reaps them before the sidecar's strict
+    # keeper-only check.
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 2 "$WINESERVER" -w >/dev/null 2>&1 || :
+    else
+        sleep 0.2
+    fi
+    exit "$status"
 fi
 
 exec "$@"

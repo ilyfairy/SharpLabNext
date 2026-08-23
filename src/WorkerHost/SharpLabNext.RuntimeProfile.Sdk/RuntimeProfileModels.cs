@@ -133,6 +133,7 @@ public static class RuntimeOperationImplementationIds
     public const string LegacyJitInspector = "sharplabnext-legacy-jit-inspector-v1";
     public const string CheckedJitBridge = "sharplabnext-checked-jit-bridge-v1";
     public const string MonoJitInspector = "sharplabnext-mono-jit-inspector-v1";
+    public const string DesktopClrJitInspector = "sharplabnext-desktop-clr-jit-inspector-v1";
     public const string WineRunner = "sharplabnext-wine-runner-v1";
     public const string TargetRuntimeRunner = "sharplabnext-target-runtime-runner-v1";
     public const string DirectRuntime = "sharplabnext-direct-runtime-v1";

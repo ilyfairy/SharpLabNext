@@ -7,6 +7,7 @@ using System.Text.Json;
 using SharpLabNext.RuntimeProtocol;
 using CgroupMemoryEvents = SharpLabNextRunner::CgroupMemoryEvents;
 using RunnerExitClassification = SharpLabNextRunner::RunnerExitClassification;
+using RunnerProgram = SharpLabNextRunner::RunnerProgram;
 using ProcessBridgeArguments = SharpLabNextWineRunner::ProcessBridgeArguments;
 using WineStderrFilter = SharpLabNextWineRunner::WineStderrFilter;
 
@@ -14,6 +15,8 @@ namespace SharpLabNext.IntegrationTests;
 
 public sealed class RunnerProtocolTests
 {
+    private const string DescendantParentOutput = "runner-descendant-parent-output";
+
     [Theory]
     [InlineData("low 0\nhigh 0\noom 3\noom_kill 2\noom_group_kill 0\n", 2L)]
     [InlineData("oom_kill\t17\r\n", 17L)]
@@ -149,6 +152,151 @@ public sealed class RunnerProtocolTests
         var exit = Assert.Single(frames, static frame => frame.Kind == RuntimeFrameKind.Exit);
         using var exitJson = JsonDocument.Parse(exit.Payload);
         Assert.Equal("user-exception", exitJson.RootElement.GetProperty("Status").GetString());
+    }
+
+    [Fact]
+    public async Task StructuredExitDoesNotWaitForPipeEnd()
+    {
+        var exitPayload = RuntimeStructuredPayloadCodec.Serialize(new
+        {
+            Status = "completed",
+            ExitCode = 0
+        });
+        await using var encoded = new MemoryStream();
+        await RuntimeFrameCodec.WriteAsync(
+            encoded,
+            new RuntimeFrame(1, RuntimeFrameKind.Exit, exitPayload),
+            TestContext.Current.CancellationToken);
+        await using var source = new FailOnReadAfterContentStream(encoded.ToArray());
+        await using var forwarded = new MemoryStream();
+        await using (var writer = new RuntimeFrameWriter(forwarded))
+        {
+            Assert.True(await RunnerProgram.ForwardStructuredAsync(source, writer));
+        }
+
+        forwarded.Position = 0;
+        var exit = await RuntimeFrameCodec.ReadAsync(
+            forwarded,
+            cancellationToken: TestContext.Current.CancellationToken);
+        Assert.NotNull(exit);
+        Assert.Equal(RuntimeFrameKind.Exit, exit.Kind);
+        Assert.Null(await RuntimeFrameCodec.ReadAsync(
+            forwarded,
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task RunnerDescendantsCannotHoldStructuredPipeOpen()
+    {
+        var runnerPath = Path.Combine(AppContext.BaseDirectory, "SharpLabNext.Runner.dll");
+        var fixturePath = Path.Combine(AppContext.BaseDirectory, "SharpLabNext.RunnerFixture.dll");
+        var nonce = Guid.NewGuid().ToString("N");
+        var pidPath = Path.Combine(Path.GetTempPath(), $"sln-runner-descendant-{nonce}.pid");
+        var startInfo = new ProcessStartInfo("dotnet")
+        {
+            RedirectStandardOutput = true,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add(runnerPath);
+        startInfo.ArgumentList.Add(fixturePath);
+        startInfo.ArgumentList.Add("runner-descendant-parent");
+        startInfo.ArgumentList.Add(pidPath);
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to start Runner.");
+        Process? descendant = null;
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            var frames = new List<RuntimeFrame>();
+            var reader = new RuntimeFrameLogReader(process.StandardOutput.BaseStream);
+            var expectedOutputLength =
+                DescendantParentOutput.Length +
+                (1024 * 1024);
+            var observedOutputLength = 0;
+            var exitSeen = false;
+            try
+            {
+                while (await reader.ReadAsync(cancellationToken: timeout.Token) is { } frame)
+                {
+                    frames.Add(frame);
+                    if (frame.Kind == RuntimeFrameKind.Stdout)
+                        observedOutputLength = checked(observedOutputLength + frame.Payload.Length);
+                    else if (frame.Kind == RuntimeFrameKind.Exit)
+                        exitSeen = true;
+
+                    if (exitSeen && observedOutputLength == expectedOutputLength)
+                        break;
+                }
+            }
+            catch (OperationCanceledException exception) when (timeout.IsCancellationRequested)
+            {
+                throw new TimeoutException(
+                    $"Runner did not complete the descendant scenario. " +
+                    $"Exited={process.HasExited}; frames={string.Join(',', frames.Select(static frame => frame.Kind))}; " +
+                    $"stdout={observedOutputLength}/{expectedOutputLength}; pidFile={File.Exists(pidPath)}.",
+                    exception);
+            }
+
+            await process.WaitForExitAsync(timeout.Token);
+
+            Assert.Equal(0, process.ExitCode);
+            var stdout = frames
+                .Where(static frame => frame.Kind == RuntimeFrameKind.Stdout)
+                .SelectMany(static frame => frame.Payload.ToArray())
+                .ToArray();
+            Assert.Equal(expectedOutputLength, stdout.Length);
+            Assert.Equal(
+                DescendantParentOutput,
+                Encoding.UTF8.GetString(stdout.AsSpan(0, DescendantParentOutput.Length)));
+            Assert.True(stdout.AsSpan(DescendantParentOutput.Length, 1024 * 1024).IndexOfAnyExcept((byte)'x') < 0);
+            var exit = Assert.Single(frames, static frame => frame.Kind == RuntimeFrameKind.Exit);
+            using var exitJson = JsonDocument.Parse(exit.Payload);
+            Assert.Equal("completed", exitJson.RootElement.GetProperty("Status").GetString());
+            Assert.Equal(0, exitJson.RootElement.GetProperty("ExitCode").GetInt32());
+            var descendantId = int.Parse(
+                await File.ReadAllTextAsync(pidPath, timeout.Token),
+                System.Globalization.CultureInfo.InvariantCulture);
+            descendant = Process.GetProcessById(descendantId);
+            Assert.False(descendant.HasExited);
+        }
+        finally
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+            if (descendant is null && File.Exists(pidPath) && int.TryParse(
+                    await File.ReadAllTextAsync(pidPath, CancellationToken.None),
+                    System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var descendantId))
+            {
+                try
+                {
+                    descendant = Process.GetProcessById(descendantId);
+                }
+                catch (ArgumentException)
+                {
+                }
+            }
+            if (descendant is not null && !descendant.HasExited)
+            {
+                descendant.Kill(entireProcessTree: true);
+                await descendant.WaitForExitAsync(CancellationToken.None);
+            }
+            descendant?.Dispose();
+            File.Delete(pidPath);
+        }
+    }
+
+    private sealed class FailOnReadAfterContentStream(byte[] content) : MemoryStream(content)
+    {
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            if (Position == Length)
+                throw new InvalidOperationException("The structured reader read past the Exit frame.");
+            return base.ReadAsync(buffer, cancellationToken);
+        }
     }
 
     [Fact]

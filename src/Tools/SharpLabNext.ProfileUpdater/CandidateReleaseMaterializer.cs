@@ -27,6 +27,7 @@ public static class CandidateReleaseMaterializer
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
+        NewLine = "\n",
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         PropertyNameCaseInsensitive = false,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
@@ -120,7 +121,7 @@ public static class CandidateReleaseMaterializer
             },
             "roslyn-stable-netfx48" => toolchain with
             {
-                DisplayName = $"Roslyn Stable {roslynStableNetFx48.ResolvedVersion} / .NET Framework 4.8",
+                DisplayName = $"Roslyn Stable {roslynStableNetFx48.ResolvedVersion} / .NET Framework",
                 ResolvedVersion = roslynStableNetFx48.ResolvedVersion
             },
             "roslyn-main" => toolchain with
@@ -140,7 +141,7 @@ public static class CandidateReleaseMaterializer
             },
             "gsharp-stable" => toolchain with
             {
-                DisplayName = $"G# Stable {gsharp.ResolvedVersion}",
+                DisplayName = gsharp.ResolvedVersion,
                 ResolvedVersion = gsharp.ResolvedVersion
             },
             "peachpie-stable" => toolchain with
@@ -618,10 +619,13 @@ public static class CandidateReleaseMaterializer
                 // Framework/Wine and Mono runtimes are operator payloads. Their
                 // identity is the immutable image/archive digest, never a
                 // CoreCLR Git commit (and never a payload-sha512 marker).
-                if (runtime.RuntimeCommit is not null || runtime.JitCommit is not null)
+                if (!IsAbsentOrNotApplicable(runtime.RuntimeCommit) ||
+                    !IsAbsentOrNotApplicable(runtime.JitVersion) ||
+                    !IsAbsentOrNotApplicable(runtime.JitCommit))
                 {
                     throw new ProfileUpdateValidationException(
-                        $"Selectable operator runtime '{runtime.Id}' must not declare RuntimeCommit/JitCommit.");
+                        $"Selectable operator runtime '{runtime.Id}' may only declare the canonical " +
+                        "'not-applicable' RuntimeCommit/JitVersion/JitCommit identity.");
                 }
 
                 if (!IsSha256(component.Digest))
@@ -656,6 +660,9 @@ public static class CandidateReleaseMaterializer
     private static bool RequiresCommitIdentity(RuntimeManifest runtime) =>
         !string.Equals(runtime.Family, "netfx-clr-wine", StringComparison.Ordinal) &&
         !string.Equals(runtime.Family, "mono", StringComparison.Ordinal);
+
+    private static bool IsAbsentOrNotApplicable(string? value) =>
+        value is null || string.Equals(value, "not-applicable", StringComparison.Ordinal);
 
     private static void RequireCommitIdentity(string? value, string field)
     {

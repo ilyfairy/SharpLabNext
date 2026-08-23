@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
 ARG SDK_IMAGE
 ARG ASPNET_IMAGE
@@ -18,6 +18,9 @@ COPY profiles/versions.props ./profiles/versions.props
 COPY src/ ./src/
 RUN dotnet restore \
       src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj \
+      --locked-mode \
+    && dotnet restore \
+      src/RuntimeJobs/SharpLabNext.DesktopClrJitInspector/SharpLabNext.DesktopClrJitInspector.csproj \
       --locked-mode
 RUN dotnet publish \
       src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj \
@@ -25,6 +28,15 @@ RUN dotnet publish \
       --framework ${CONTROL_TFM} \
       --no-restore \
       --output /runner \
+      /p:UseAppHost=false \
+      /p:ContinuousIntegrationBuild=true \
+      /p:SourceRevisionId=${SOURCE_REVISION}
+RUN dotnet publish \
+      src/RuntimeJobs/SharpLabNext.DesktopClrJitInspector/SharpLabNext.DesktopClrJitInspector.csproj \
+      --configuration Release \
+      --framework net20 \
+      --no-restore \
+      --output /desktop-clr-jit-inspector \
       /p:UseAppHost=false \
       /p:ContinuousIntegrationBuild=true \
       /p:SourceRevisionId=${SOURCE_REVISION}
@@ -62,12 +74,28 @@ COPY --from=wine-runtime-files /etc/fonts/ /etc/fonts/
 COPY --from=wine-runtime-files /opt/wine-dotnet/ /opt/wine-dotnet/
 RUN test -x /usr/bin/wine-stable
 COPY --from=publish /runner/ /opt/sharplabnext/
+COPY --from=publish /desktop-clr-jit-inspector/ /opt/sharplabnext/
 COPY --chmod=0555 deploy/docker/runtime-entrypoint.sh /usr/local/bin/sharplabnext-runtime
 ENV DOTNET_EnableDiagnostics=0 \
     COMPlus_EnableDiagnostics=0 \
     WINEPREFIX=/opt/wine-dotnet \
     WINEARCH=win64 \
-    WINEDEBUG=-all
+    WINEDEBUG=-all \
+    TEMP="Z:\\tmp" \
+    TMP="Z:\\tmp"
+RUN set -eu; \
+    install -d -m 0755 /workspace; \
+    cp /opt/sharplabnext/SharpLabNext.DesktopClrJitInspector.exe* /workspace/; \
+    jit_frames="$(/usr/share/dotnet/dotnet \
+      /opt/sharplabnext/SharpLabNext.WineRunner.dll \
+      desktop-jit \
+      /workspace/SharpLabNext.DesktopClrJitInspector.exe \
+      WindowsAbi)"; \
+    test "$(printf '%s\n' "${jit_frames}" | grep --count .)" -eq 3; \
+    printf '%s\n' "${jit_frames}" | sed -n '1p' | base64 -d | grep -aq 'rcx'; \
+    printf '%s\n' "${jit_frames}" | sed -n '1p' | base64 -d | grep -aq 'rdx'; \
+    printf '%s\n' "${jit_frames}" | sed -n '1p' | base64 -d | grep -aq 'rax'; \
+    rm -f /workspace/SharpLabNext.DesktopClrJitInspector.exe*
 WORKDIR /workspace
 USER 0:0
 ENTRYPOINT ["/usr/local/bin/sharplabnext-runtime"]

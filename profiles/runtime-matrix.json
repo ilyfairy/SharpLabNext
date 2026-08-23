@@ -17,7 +17,7 @@
       "releaseDate": "2018-07-10",
       "supportEndDate": "2018-10-01",
       "supportStatus": "legacy",
-      "visibility": "hidden",
+      "visibility": "visible",
       "referenceSetId": "netcoreapp2.0-ref",
       "referencePackage": {
         "id": "Microsoft.NETCore.App",
@@ -56,7 +56,7 @@
       "releaseDate": "2021-08-19",
       "supportEndDate": "2021-08-21",
       "supportStatus": "legacy",
-      "visibility": "hidden",
+      "visibility": "visible",
       "referenceSetId": "netcoreapp2.1-ref",
       "referencePackage": {
         "id": "Microsoft.NETCore.App",
@@ -95,7 +95,7 @@
       "releaseDate": "2019-11-19",
       "supportEndDate": "2019-12-23",
       "supportStatus": "legacy",
-      "visibility": "hidden",
+      "visibility": "visible",
       "referenceSetId": "netcoreapp2.2-ref",
       "referencePackage": {
         "id": "Microsoft.NETCore.App",
@@ -134,7 +134,7 @@
       "releaseDate": "2020-02-18",
       "supportEndDate": "2020-03-03",
       "supportStatus": "legacy",
-      "visibility": "hidden",
+      "visibility": "visible",
       "referenceSetId": "netcoreapp3.0-ref",
       "referencePackage": {
         "id": "Microsoft.NETCore.App.Ref",
@@ -173,7 +173,7 @@
       "releaseDate": "2022-12-13",
       "supportEndDate": "2022-12-13",
       "supportStatus": "legacy",
-      "visibility": "hidden",
+      "visibility": "visible",
       "referenceSetId": "netcoreapp3.1-ref",
       "referencePackage": {
         "id": "Microsoft.NETCore.App.Ref",
@@ -212,7 +212,7 @@
       "releaseDate": "2022-05-10",
       "supportEndDate": "2022-05-10",
       "supportStatus": "legacy",
-      "visibility": "hidden",
+      "visibility": "visible",
       "referenceSetId": "net5-ref",
       "referencePackage": {
         "id": "Microsoft.NETCore.App.Ref",
@@ -251,7 +251,7 @@
       "releaseDate": "2024-11-12",
       "supportEndDate": "2024-11-12",
       "supportStatus": "legacy",
-      "visibility": "hidden",
+      "visibility": "visible",
       "referenceSetId": "net6-ref",
       "referencePackage": {
         "id": "Microsoft.NETCore.App.Ref",
@@ -312,7 +312,7 @@
       "releaseDate": "2024-05-28",
       "supportEndDate": "2024-05-14",
       "supportStatus": "legacy",
-      "visibility": "hidden",
+      "visibility": "visible",
       "referenceSetId": "net7-ref",
       "referencePackage": {
         "id": "Microsoft.NETCore.App.Ref",
@@ -578,7 +578,7 @@
     "image": "mono:6.12@sha256:d2ae1881a608fb6401bcebbf0d444fc2fcadf0db27f07c87153a79e7b14e861a",
     "referenceSetId": "netfx48-managed-ref",
     "supportStatus": "legacy",
-    "visibility": "hidden",
+    "visibility": "visible",
     "capability": {
       "capabilities": ["run", "jit-asm"],
       "promotionState": "blocked",
@@ -594,7 +594,7 @@
         "version": "2.0",
         "supportStatus": "legacy",
         "supportEndDate": "2011-07-12",
-        "visibility": "hidden",
+        "visibility": "visible",
         "targetFramework": "net20",
         "clrGeneration": "clr2",
         "prefix": "/opt/wine-netfx-clr2",
@@ -606,14 +606,14 @@
           "sha512": "335bc1db148c258d05757352507e248e3d38693a9620e3d429e5147da0a8540e49570df45c63bd203ee652e068fa29d25cb8262efa0c9126f777df18110c1fc8",
           "packageContentHash": "sha512-M1vB2xSMJY0FdXNSUH4kjj04aTqWIOPUKeUUfaCoVA5JVw30XGO9ID7mUuBo+inSXLgmLvoMkSb3d98YEQwfyA=="
         },
-        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "The proprietary CLR2 prefix is operator-supplied and has not passed the product release gate." }
+        "capability": { "capabilities": ["run", "jit-asm"], "promotionState": "blocked", "blockedReason": "The proprietary CLR2 prefix and Desktop CLR JIT provider have not passed the product release gate." }
       },
       {
         "id": "netfx30",
         "version": "3.0",
         "supportStatus": "legacy",
         "supportEndDate": "2011-07-12",
-        "visibility": "hidden",
+        "visibility": "visible",
         "targetFramework": "net30",
         "clrGeneration": "clr2",
         "prefix": "/opt/wine-netfx-clr2",
@@ -635,7 +635,7 @@
             }
           ]
         },
-        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "The deterministic net20 plus net35-v3.0 reference composition is locked, but the exact proprietary CLR2 runtime has not passed the product release gate." }
+        "capability": { "capabilities": ["run", "jit-asm"], "promotionState": "blocked", "blockedReason": "The deterministic net20 plus net35-v3.0 reference composition is locked, but the exact proprietary CLR2 runtime and Desktop CLR JIT provider have not passed the product release gate." }
       },
       {
         "id": "netfx35",
@@ -654,14 +654,14 @@
           "sha512": "974538a5f8e787cd2af679cc4b2ea1f4e69a2edf76f3d428da53b361aa0d5f0cf8041520c7515e400fc16f3de1735f8252f0e9ce21bbecef22d4367a6d720af8",
           "packageContentHash": "sha512-l0U4pfjnh80q9nnMSy6h9OaaLt9289Qo2lOzYaoNXwz4BBUgx1FeQA/Bbz3hc1+CUvDpziG77O8i1DZ6bXIK+A=="
         },
-        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "The proprietary CLR2 prefix is operator-supplied and has not passed the product release gate." }
+        "capability": { "capabilities": ["run", "jit-asm"], "promotionState": "blocked", "blockedReason": "The proprietary CLR2 prefix and Desktop CLR JIT provider have not passed the product release gate." }
       },
       {
         "id": "netfx40",
         "version": "4.0",
         "supportStatus": "legacy",
         "supportEndDate": "2016-01-12",
-        "visibility": "hidden",
+        "visibility": "visible",
         "targetFramework": "net40",
         "clrGeneration": "clr4",
         "prefix": "/opt/wine-netfx-clr4",
@@ -673,14 +673,14 @@
           "sha512": "bd45e6c0fc62ee56350c49b19eb9ef7bf6b826037f6755c4e916a8cdc9a5aab7f6399c6cf6c99705bdd0f72d9d6769423ed54cc990513388d03c15f3d38227a5",
           "packageContentHash": "sha512-vUXmwPxi7lY1DEmxnrnve/a4JgN/Z1XE6Raozcmlqrf2OZxs9smXBb3Q9y2dZ2lCPtVMyZBRM4jQPBXz04InpQ=="
         },
-        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.0 operator image and registry preflight have not passed the product release gate." }
+        "capability": { "capabilities": ["run", "jit-asm"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.0 operator image and Desktop CLR JIT provider have not passed the product release gate." }
       },
       {
         "id": "netfx45",
         "version": "4.5",
         "supportStatus": "legacy",
         "supportEndDate": "2016-01-12",
-        "visibility": "hidden",
+        "visibility": "visible",
         "targetFramework": "net45",
         "clrGeneration": "clr4",
         "prefix": "/opt/wine-netfx-clr4",
@@ -692,14 +692,14 @@
           "sha512": "ccf2793ea73af9c060e22af7dc05abc80f025312498faf02b3509fa3ca6566dd471f743407f12a5689fa2d15f0f5bf1d7d0c8b60ca9324993699a5e02e118923",
           "packageContentHash": "sha512-zPJ5Pqc6+cBg4ir33AWryA8CUxJJj68Cs1Cfo8plZt1HH3Q0B/EqVon6LRXw9b8dfQyLYMqTJJk2maXgLhGJIw=="
         },
-        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.5 operator image and registry preflight have not passed the product release gate." }
+        "capability": { "capabilities": ["run", "jit-asm"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.5 operator image and Desktop CLR JIT provider have not passed the product release gate." }
       },
       {
         "id": "netfx451",
         "version": "4.5.1",
         "supportStatus": "legacy",
         "supportEndDate": "2016-01-12",
-        "visibility": "hidden",
+        "visibility": "visible",
         "targetFramework": "net451",
         "clrGeneration": "clr4",
         "prefix": "/opt/wine-netfx-clr4",
@@ -711,14 +711,14 @@
           "sha512": "7d2d90c31c7725ba09d9a50292730674cd7749a60bb20bab5de86ff8ba799676e5fe52b0b47e794bfb88dcaeca4411f90aa1b12ea05f59626f033fde952f4008",
           "packageContentHash": "sha512-fS2Qwxx3JboJ2aUCknMGdM13SaYLsgurXehv+Lp5lnbl/lKwtH55S/uI3K7KRBH5CqGxLqBfWWJvAz/elS9ACA=="
         },
-        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.5.1 operator image and registry preflight have not passed the product release gate." }
+        "capability": { "capabilities": ["run", "jit-asm"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.5.1 operator image and Desktop CLR JIT provider have not passed the product release gate." }
       },
       {
         "id": "netfx452",
         "version": "4.5.2",
         "supportStatus": "legacy",
         "supportEndDate": "2022-04-26",
-        "visibility": "hidden",
+        "visibility": "visible",
         "targetFramework": "net452",
         "clrGeneration": "clr4",
         "prefix": "/opt/wine-netfx-clr4",
@@ -730,14 +730,14 @@
           "sha512": "125b35cb0b1b2c3fd7a44810595d3232900e1e4d0b79ccf88d698e78bc33192149dca15707ee7bc0a8d7e2b109c6a25ff7b08816752670efa9bc8cfc2df4d7bf",
           "packageContentHash": "sha512-Els1ywsbLD/XpEgQWV0yMpAOHk0Lecz4jWmOeLwzGSFJ3KFXB+57wKjX4rEJxqJf97CIFnUmcO+pvIz8LfTXvw=="
         },
-        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.5.2 operator image and registry preflight have not passed the product release gate." }
+        "capability": { "capabilities": ["run", "jit-asm"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.5.2 operator image and Desktop CLR JIT provider have not passed the product release gate." }
       },
       {
         "id": "netfx46",
         "version": "4.6",
         "supportStatus": "legacy",
         "supportEndDate": "2022-04-26",
-        "visibility": "hidden",
+        "visibility": "visible",
         "targetFramework": "net46",
         "clrGeneration": "clr4",
         "prefix": "/opt/wine-netfx-clr4",
@@ -749,14 +749,14 @@
           "sha512": "d8351799a723a8d4d79f9144f79a9613a6cbdb669ed26ff4acbfd280adda5ac5baa82943cd7566a3490e2f270287a255ea2ddd414fca32e4f6c2dad3f047d988",
           "packageContentHash": "sha512-2DUXmacjqNTXn5FE95qWE6bL22ae0m/0rL/SgK3aWsW6qClDzXVmo0kOLycCh6JV6i3dQU/KMuT2wtrT8EfZiA=="
         },
-        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.6 operator image and registry preflight have not passed the product release gate." }
+        "capability": { "capabilities": ["run", "jit-asm"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.6 operator image and Desktop CLR JIT provider have not passed the product release gate." }
       },
       {
         "id": "netfx461",
         "version": "4.6.1",
         "supportStatus": "legacy",
         "supportEndDate": "2022-04-26",
-        "visibility": "hidden",
+        "visibility": "visible",
         "targetFramework": "net461",
         "clrGeneration": "clr4",
         "prefix": "/opt/wine-netfx-clr4",
@@ -768,7 +768,7 @@
           "sha512": "b717dcc15dab52be03c6bd2bda353adfb0ecc785bd5a8d4fc47239a1324f46c4ac187595d902d2ef90c69bbbc9d9eeec97d04c6599f5ef8feba374833bfa01c6",
           "packageContentHash": "sha512-txfcwV2rUr4Dxr0r2jU637Dsx4W9Wo1PxHI5oTJPRsSsGHWV2QLS75DGm7vJ2e7sl9BMZZn174/ro3SDO/oBxg=="
         },
-        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.6.1 operator image and registry preflight have not passed the product release gate." }
+        "capability": { "capabilities": ["run", "jit-asm"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.6.1 operator image and Desktop CLR JIT provider have not passed the product release gate." }
       },
       {
         "id": "netfx462",
@@ -786,7 +786,7 @@
           "sha512": "1cc9f441098f61c26c56e29eb7d580f0841b070799bdced44bcf0ddfd8ad491a9c9ffd57393fca6a8d508a2ca4c54fafc7c93bff38a6d7571598ab6e9e3bb830",
           "packageContentHash": "sha512-HMn0QQmPYcJsVuKet9WA8IQbBweZvc7US88N39itSRqcn/1XOT/Kao1QiiykxU+vx8k7/zim11cVmKtunju4MA=="
         },
-        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.6.2 operator image and registry preflight have not passed the product release gate." }
+        "capability": { "capabilities": ["run", "jit-asm"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.6.2 operator image and Desktop CLR JIT provider have not passed the product release gate." }
       },
       {
         "id": "netfx47",
@@ -804,7 +804,7 @@
           "sha512": "c7610db70f82c80395f443b5579a2478c90f911f0b1965bc17ac46fa7771c04ab718c94d983a34083059b48ebdd0f3ffd233074f094fc32413bd80615291a264",
           "packageContentHash": "sha512-x2ENtw+CyAOV9EO1V5okeMkPkR8LGWW8F6xG+ndxwEq3GMlNmDo0CDBZtI690PP/0jMHTwlPwyQTvYBhUpGiZA=="
         },
-        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.7 operator image and registry preflight have not passed the product release gate." }
+        "capability": { "capabilities": ["run", "jit-asm"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.7 operator image and Desktop CLR JIT provider have not passed the product release gate." }
       },
       {
         "id": "netfx471",
@@ -822,7 +822,7 @@
           "sha512": "57199cd45c492d4e210346f699c10b9f83b94ba3f701fc6d9451e38351b0ea831a04f2fc80c46df574fe20e0e4cc359e27d6d7ff260de043e224ccfd661ff685",
           "packageContentHash": "sha512-Vxmc1FxJLU4hA0b2mcELn4O5S6P3AfxtlFHjg1Gw6oMaBPL8gMRt9XT+IODkzDWeJ9bX/yYN4EPiJMz9Zh/2hQ=="
         },
-        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.7.1 operator image and registry preflight have not passed the product release gate." }
+        "capability": { "capabilities": ["run", "jit-asm"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.7.1 operator image and Desktop CLR JIT provider have not passed the product release gate." }
       },
       {
         "id": "netfx472",
@@ -840,7 +840,7 @@
           "sha512": "3ef64aa456edb31b49062ea1272cedfe268aef5a8676ef66355a494f8dfe8b55a9db7ca6e7b615b9023e0449ceffdf4ada9c4f304818b73eb69fbc99144822d8",
           "packageContentHash": "sha512-PvZKpFbtsxtJBi6hJyzt/iaK71qGdu9mNVpJT43+i1Wp23ym57YVuQI+BEnO/99K2pxPMEgYtz62n7yZFEgi2A=="
         },
-        "capability": { "capabilities": ["run"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.7.2 operator image and registry preflight have not passed the product release gate." }
+        "capability": { "capabilities": ["run", "jit-asm"], "promotionState": "blocked", "blockedReason": "An exact .NET Framework 4.7.2 operator image and Desktop CLR JIT provider have not passed the product release gate." }
       },
       {
         "id": "netfx48",
@@ -859,9 +859,9 @@
           "packageContentHash": "sha512-XWKgyeNadNcTQaIVvQB8BrdCNrEar6fo/de1OdQRZ9HFy0jcBSaM8IV5q64ZampsSnC8AlTsACaGZUuoFw41RA=="
         },
         "capability": {
-          "capabilities": ["run"],
+          "capabilities": ["run", "jit-asm"],
           "promotionState": "blocked",
-          "blockedReason": "The active .NET Framework 4.8 runtime remains available, but this matrix candidate has no immutable image-bound promotion receipt."
+          "blockedReason": "The active .NET Framework 4.8 runtime remains available, but the rebuilt Desktop CLR JIT candidate has no immutable image-bound promotion receipt."
         }
       }
     ]

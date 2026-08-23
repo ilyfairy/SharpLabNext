@@ -550,6 +550,9 @@
           "SharpLabNext.Observability": "[1.0.0, )"
         }
       },
+      "sharplabnext.testing": {
+        "type": "Project"
+      },
       "sharplabnext.workerhost": {
         "type": "Project",
         "dependencies": {

@@ -12,6 +12,11 @@ import {
   runRuntimePromotionSupervisorOverlay,
   RuntimePromotionSupervisorOverlayError,
 } from './runtime-promotion-supervisor-overlay.mjs'
+import {
+  runtimePromotionPlanSignaturePath,
+  serializeRuntimePromotionPlan,
+  signRuntimePromotionPlan,
+} from './runtime-promotion-plan-signature.mjs'
 
 const profileId = 'wine-dotnet-7-linux-x64'
 const imageId = `sha256:${'a'.repeat(64)}`
@@ -34,15 +39,19 @@ const controlImages = Object.freeze({
 const planPath = `profiles/runtime-promotion-plans/${profileId}.json`
 const profilePath = `profiles/runtime-promotion-plans/${profileId}.profile.json`
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const planKeys = crypto.generateKeyPairSync('ed25519')
+const planKeyId = `sha256:${crypto.createHash('sha256').update(
+  planKeys.publicKey.export({ type: 'spki', format: 'der' }),
+).digest('hex')}`
 
 function sha256(bytes) {
   return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`
 }
 
-function writeJson(root, relativePath, value) {
+function writeJson(root, relativePath, value, serialize = undefined) {
   const filename = path.join(root, ...relativePath.split('/'))
   fs.mkdirSync(path.dirname(filename), { recursive: true })
-  fs.writeFileSync(filename, `${JSON.stringify(value, null, 2)}\n`)
+  fs.writeFileSync(filename, serialize?.(value) ?? `${JSON.stringify(value, null, 2)}\n`)
   return filename
 }
 
@@ -77,7 +86,16 @@ function createFixture(t) {
       sizeBytes: 512,
     },
   }
-  const planFilename = writeJson(root, planPath, plan)
+  const writeSignedPlan = value => {
+    const bytes = serializeRuntimePromotionPlan(value)
+    fs.writeFileSync(path.join(root, ...planPath.split('/')), bytes)
+    fs.writeFileSync(
+      path.join(root, ...runtimePromotionPlanSignaturePath(profileId).split('/')),
+      `${signRuntimePromotionPlan(bytes, planKeys.privateKey)}\n`,
+    )
+  }
+  writeSignedPlan(plan)
+  const planFilename = path.join(root, ...planPath.split('/'))
   const outputFilename = path.join(
     root,
     '.tmp',
@@ -96,11 +114,11 @@ function createFixture(t) {
       writeJson(root, profilePath, value)
       if (bind) {
         plan.preflightProfile.sha256 = sha256(fs.readFileSync(profileFilename))
-        writeJson(root, planPath, plan)
+        writeSignedPlan(plan)
       }
     },
     writePlan(value = plan) {
-      writeJson(root, planPath, value)
+      writeSignedPlan(value)
     },
   }
 }
@@ -117,6 +135,8 @@ function produce(fixture, overrides = {}, options = {}) {
     ...overrides,
   }, {
     repositoryRoot: fixture.root,
+    planSignaturePublicKey: planKeys.publicKey,
+    planSignatureKeyId: planKeyId,
     inspectImage(reference) {
       const image = Object.values(controlImages).find(item => item.reference === reference)
       assert.ok(image, `unexpected control image ${reference}`)
@@ -226,6 +246,10 @@ test('writes only the minimal plan-bound loopback preflight overlay', t => {
     RuntimePromotionPreflight__ProfilePath:
       '/run/sharplabnext-preflight/runtime-profile.json',
     RuntimePromotionPreflight__ProfileSha256: result.profileSha256,
+    RuntimePromotionPreflight__MeasurementHelperImage:
+      controlImages['runtime-supervisor'].reference,
+    RuntimePromotionPreflight__MeasurementHelperImageId:
+      controlImages['runtime-supervisor'].imageId,
     RuntimeSupervisor__SessionReuseEnabled: 'false',
   })
   assert.deepEqual(supervisor.volumes, [{
@@ -246,6 +270,58 @@ test('writes only the minimal plan-bound loopback preflight overlay', t => {
     false,
   )
   assert.equal(JSON.stringify(result.overlay).includes('/var/run/docker.sock'), false)
+})
+
+test('binds the measurement helper to a distinct runtime-supervisor image', t => {
+  {
+    const fixture = createFixture(t)
+    assert.throws(
+      () => produce(fixture, { runtimeSupervisorImage: pinnedReference }),
+      /measurement helper image must be distinct from the candidate runtime image/,
+    )
+  }
+  {
+    const fixture = createFixture(t)
+    const wrongRepository = `registry.example/not-the-supervisor@sha256:${'4'.repeat(64)}`
+    assert.throws(() => produce(fixture, { runtimeSupervisorImage: wrongRepository }, {
+      inspectImage(reference) {
+        const image = Object.values(controlImages).find(item => item.reference === reference)
+        return {
+          imageId: image?.imageId ?? `sha256:${'5'.repeat(64)}`,
+          sizeBytes: 512,
+          operatingSystem: 'linux',
+          architecture: 'amd64',
+          repoDigests: [reference],
+          labels: {
+            'org.opencontainers.image.revision': sourceRevision,
+            'io.sharplabnext.source.revision': sourceRevision,
+          },
+        }
+      },
+    }), /repository must be named runtime-supervisor/)
+  }
+  {
+    const fixture = createFixture(t)
+    assert.throws(() => produce(fixture, {}, {
+      inspectImage(reference) {
+        const image = Object.values(controlImages).find(item => item.reference === reference)
+        assert.ok(image)
+        return {
+          imageId: reference === controlImages['runtime-supervisor'].reference
+            ? imageId
+            : image.imageId,
+          sizeBytes: 512,
+          operatingSystem: 'linux',
+          architecture: 'amd64',
+          repoDigests: [reference],
+          labels: {
+            'org.opencontainers.image.revision': sourceRevision,
+            'io.sharplabnext.source.revision': sourceRevision,
+          },
+        }
+      },
+    }), /measurement helper image must be distinct from the candidate runtime image/)
+  }
 })
 
 test('requires distinct canonical unprivileged ports', t => {

@@ -327,6 +327,12 @@ public sealed class RoslynStableWorkerFactory : WebApplicationFactory<global::Pr
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+        builder.UseSetting(
+            "ReferenceSets:net10-ref:Path",
+            CSharpBuildServiceTests.GetNet10ReferencePathForHost());
+        builder.UseSetting(
+            "ReferenceSets:net11-preview-ref:Path",
+            CSharpBuildServiceTests.GetNet11ReferencePathForHost());
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
