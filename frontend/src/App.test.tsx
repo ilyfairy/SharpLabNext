@@ -1301,6 +1301,56 @@ describe('SharpLabNext workbench', () => {
     }
   })
 
+  it('never renders a locally stored workspace while restoring an initial share URL', async () => {
+    useWorkbenchStore.getState().setSource('class LocallyStoredWorkspace {}')
+    window.history.replaceState(null, '', '/#v3:delayed-test-fragment')
+    let finishDecode: ((decoded: shareCodec.DecodedShare) => void) | undefined
+    const decodeSpy = vi.spyOn(shareCodec, 'decodeShareFragment').mockReturnValue(
+      new Promise((resolve) => {
+        finishDecode = resolve
+      }),
+    )
+
+    try {
+      renderApp()
+
+      expect(
+        await screen.findByRole('status', { name: 'Restoring shared workspace' }),
+      ).toBeVisible()
+      expect(screen.queryByLabelText('Source editor')).not.toBeInTheDocument()
+      expect(screen.queryByDisplayValue('class LocallyStoredWorkspace {}')).not.toBeInTheDocument()
+
+      await act(async () => {
+        finishDecode?.({
+          sourceFormat: 'v3',
+          codecId: 1,
+          state: {
+            languageId: 'csharp',
+            toolchainId: 'roslyn-stable',
+            referenceSetId: 'net10-ref',
+            outputId: 'decompiled-csharp',
+            runtimeId: 'not-required',
+            buildMode: 'release',
+            releaseVersion: 'test-release',
+            activeFile: 'Program.cs',
+            sourceOrder: ['Program.cs'],
+            files: [{ path: 'Program.cs', text: 'class SharedWorkspace {}' }],
+          },
+        })
+      })
+
+      await waitFor(() =>
+        expect(screen.getByLabelText('Source editor')).toHaveValue('class SharedWorkspace {}'),
+      )
+      expect(
+        screen.queryByRole('status', { name: 'Restoring shared workspace' }),
+      ).not.toBeInTheDocument()
+      expect(screen.queryByDisplayValue('class LocallyStoredWorkspace {}')).not.toBeInTheDocument()
+    } finally {
+      decodeSpy.mockRestore()
+    }
+  })
+
   it('keeps a background URL synchronization failure out of the restoration error surface', async () => {
     const encodeSpy = vi
       .spyOn(shareCodec, 'encodeV3')

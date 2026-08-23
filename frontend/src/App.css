@@ -10,6 +10,21 @@
   background: var(--surface);
 }
 
+.share-restore-stage {
+  display: grid;
+  grid-column: 1;
+  grid-row: 2;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  color: var(--accent-strong);
+  background: var(--panel);
+}
+
+.share-restore-spinner {
+  animation: spin 0.9s linear infinite;
+}
+
 .app-bar {
   z-index: 1;
   display: flex;

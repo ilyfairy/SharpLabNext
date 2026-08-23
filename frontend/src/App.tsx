@@ -479,6 +479,7 @@ function unavailableReason(changes: readonly SelectionChange[]): string | null {
 }
 
 function App() {
+  const initialShareFragment = useRef(window.location.hash).current
   const queryClient = useQueryClient()
   const catalogQuery = useCatalogQuery()
   const gatewayConnectionStatus = useGatewayConnectionStatus()
@@ -581,14 +582,14 @@ function App() {
   useEffect(() => {
     if (!catalog || shareDecodeStarted.current) return
     shareDecodeStarted.current = true
-    if (!window.location.hash) {
+    if (!initialShareFragment) {
       setShareReady(true)
       return
     }
 
     let parsedGist: ReturnType<typeof parseGistFragment>
     try {
-      parsedGist = parseGistFragment(window.location.hash)
+      parsedGist = parseGistFragment(initialShareFragment)
     } catch (error) {
       setShareError({ action: 'restore', error: normalizeError(error, 'The Gist URL is invalid.') })
       setShareReady(true)
@@ -620,11 +621,11 @@ function App() {
 
     let decode: ReturnType<typeof decodeShareFragment>
     if (typeof Worker === 'undefined') {
-      decode = decodeShareFragment(window.location.hash)
+      decode = decodeShareFragment(initialShareFragment)
     } else {
       const codec = urlCodec.current ?? new UrlCodecWorkerClient()
       urlCodec.current = codec
-      decode = codec.decode(window.location.hash)
+      decode = codec.decode(initialShareFragment)
     }
     void decode
       .then((decoded) => {
@@ -639,7 +640,7 @@ function App() {
         })
       })
       .finally(() => setShareReady(true))
-  }, [catalog, replaceWorkspace])
+  }, [catalog, initialShareFragment, replaceWorkspace])
 
   useEffect(() => {
     if (!renamingPath) return
@@ -1684,6 +1685,22 @@ function App() {
   } else if (profileUnavailable) {
     healthLabel = 'Development profile'
     healthState = 'warning'
+  }
+
+  if (!shareReady && initialShareFragment) {
+    return (
+      <div className="workbench workbench--restoring" aria-busy="true">
+        <header className="app-bar">
+          <div className="brand">
+            <img className="brand-mark" src="/logo-mark.svg" alt="" aria-hidden="true" />
+          </div>
+        </header>
+        <main className="share-restore-stage" role="status" aria-label="Restoring shared workspace">
+          <LoaderCircle className="share-restore-spinner" aria-hidden="true" size={18} />
+        </main>
+        <footer className="status-bar" aria-hidden="true" />
+      </div>
+    )
   }
 
   return (
