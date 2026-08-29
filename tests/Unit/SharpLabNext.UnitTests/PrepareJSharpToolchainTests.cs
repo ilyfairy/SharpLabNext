@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
-using System.Text.RegularExpressions;
 
 namespace SharpLabNext.UnitTests;
 
@@ -18,10 +16,9 @@ public sealed class PrepareJSharpToolchainTests
         "Dockerfile.operator-jsharp20");
 
     [Fact]
-    public async Task DryRunBuildsRedactedOperatorImageCommand()
+    public async Task DryRunUsesOneFixedLfsInstallerAndClr2FrameworkSeed()
     {
-        using var secrets = new SecretFiles();
-        var result = await RunAsync(ValidArguments(secrets));
+        var result = await RunAsync(ValidArguments());
 
         Assert.Equal(0, result.ExitCode);
         Assert.Empty(result.StandardError);
@@ -30,360 +27,135 @@ public sealed class PrepareJSharpToolchainTests
         Assert.Contains("--load", result.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("--provenance=false", result.StandardOutput, StringComparison.Ordinal);
         Assert.Contains(
-            $"BASE_IMAGE=codex/msvc-wine:cppcli@sha256:{new string('c', 64)}",
+            $"FRAMEWORK_SEED_IMAGE=localhost:5000/framework-clr2@sha256:{new string('a', 64)}",
             result.StandardOutput,
             StringComparison.Ordinal);
         Assert.Contains(
-            "--tag sharplabnext/operator-jsharp20:test",
+            "visual-jsharp-installer-context=<repository-lfs-context>",
             result.StandardOutput,
             StringComparison.Ordinal);
         Assert.Contains(
-            $"CLR2_INSTALLER_SHA256={new string('a', 64)}",
+            $"OPERATOR_BUILD_INPUT_SHA256={new string('b', 64)}",
             result.StandardOutput,
             StringComparison.Ordinal);
-        Assert.Contains(
-            $"JSHARP_INSTALLER_SHA256={new string('b', 64)}",
-            result.StandardOutput,
-            StringComparison.Ordinal);
-        Assert.Contains("id=dotnet-clr2-url,src=", result.StandardOutput, StringComparison.Ordinal);
-        Assert.Contains("id=visual-jsharp-url,src=", result.StandardOutput, StringComparison.Ordinal);
-        Assert.Contains(
-            "dotnet-clr2-installer-context=<staged-local-context>",
-            result.StandardOutput,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "visual-jsharp-installer-context=<staged-local-context>",
-            result.StandardOutput,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.Clr2Url, result.CombinedOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.JSharpUrl, result.CombinedOutput, StringComparison.Ordinal);
-        Assert.Contains(secrets.Clr2Path, result.StandardOutput, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(secrets.JSharpPath, result.StandardOutput, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task LargeLocalInstallersUseRedactedIndependentBuildContextsAndAreCleanedUp()
-    {
-        using var secrets = new SecretFiles();
-
-        var result = await RunAsync(LocalInstallerArguments(secrets));
-
-        Assert.Equal(0, result.ExitCode);
-        Assert.Empty(result.StandardError);
-        Assert.True(new FileInfo(secrets.Clr2InstallerPath).Length > 500 * 1024);
-        Assert.True(new FileInfo(secrets.JSharpInstallerPath).Length > 500 * 1024);
-        Assert.Contains("--provenance=false", result.StandardOutput, StringComparison.Ordinal);
-        Assert.Contains(
-            "dotnet-clr2-installer-context=<staged-local-context>",
-            result.StandardOutput,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "visual-jsharp-installer-context=<staged-local-context>",
-            result.StandardOutput,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain("id=dotnet-clr2-installer", result.StandardOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain("id=visual-jsharp-installer", result.StandardOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.Clr2InstallerPath, result.CombinedOutput, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(secrets.JSharpInstallerPath, result.CombinedOutput, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(secrets.Clr2Url, result.CombinedOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.JSharpUrl, result.CombinedOutput, StringComparison.Ordinal);
-        Assert.Empty(Directory.EnumerateDirectories(
-            secrets.Root,
-            ".sharplabnext-jsharp-context-*",
-            SearchOption.TopDirectoryOnly));
-    }
-
-    [Fact]
-    public async Task LocalInstallerContextsAreCleanedWhenDockerCannotStart()
-    {
-        using var secrets = new SecretFiles();
-        var arguments = LocalInstallerArguments(secrets).ToList();
-        arguments.Remove("--dry-run");
-        arguments.InsertRange(2, [
-            "--docker-command",
-            Path.Combine(secrets.Root, "missing-docker-command")
-        ]);
-
-        var result = await RunAsync(arguments);
-
-        Assert.Equal(1, result.ExitCode);
-        Assert.Contains("Could not start Docker Buildx", result.StandardError, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.Clr2InstallerPath, result.CombinedOutput, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(secrets.JSharpInstallerPath, result.CombinedOutput, StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(Directory.EnumerateDirectories(
-            secrets.Root,
-            ".sharplabnext-jsharp-context-*",
-            SearchOption.TopDirectoryOnly));
-    }
-
-    [Fact]
-    public async Task LocalInstallerDigestMismatchFailsBeforeDocker()
-    {
-        using var secrets = new SecretFiles();
-        var arguments = LocalInstallerArguments(secrets);
-        arguments[Array.IndexOf(arguments, "--jsharp-sha256") + 1] = new string('d', 64);
-
-        var result = await RunAsync(arguments);
-
-        Assert.Equal(1, result.ExitCode);
-        Assert.Contains("does not match its required SHA-256 digest", result.StandardError, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.JSharpInstallerPath, result.CombinedOutput, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task UrlAndLocalInstallerForOneAssetAreMutuallyExclusive()
-    {
-        using var secrets = new SecretFiles();
-        var arguments = ValidArguments(secrets).ToList();
-        arguments.InsertRange(
-            arguments.Count - 1,
-            ["--jsharp-installer-secret-file", secrets.JSharpInstallerPath]);
-
-        var result = await RunAsync(arguments);
-
-        Assert.Equal(64, result.ExitCode);
-        Assert.Contains("requires exactly one of", result.StandardError, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.JSharpUrl, result.CombinedOutput, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task FloatingBaseImageFailsAsUsage()
-    {
-        using var secrets = new SecretFiles();
-        var arguments = ValidArguments(secrets);
-        arguments[Array.IndexOf(arguments, "--base-image") + 1] = "codex/msvc-wine:cppcli";
-
-        var result = await RunAsync(arguments);
-
-        Assert.Equal(64, result.ExitCode);
-        Assert.Contains("repository[:tag]@sha256", result.StandardError, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void OperatorDockerfileLocksPrivateX64BootstrapContract()
-    {
-        var source = File.ReadAllText(DockerfilePath);
-
-        Assert.Contains("ARG BASE_IMAGE", source, StringComparison.Ordinal);
-        Assert.Contains("FROM ${BASE_IMAGE}", source, StringComparison.Ordinal);
-        Assert.Contains("@sha256:[0-9a-f]{64}", source, StringComparison.Ordinal);
-        Assert.Contains("id=dotnet-clr2-url", source, StringComparison.Ordinal);
-        Assert.Contains("id=visual-jsharp-url", source, StringComparison.Ordinal);
-        Assert.Contains("from=dotnet-clr2-installer-context", source, StringComparison.Ordinal);
-        Assert.Contains("from=visual-jsharp-installer-context", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("id=dotnet-clr2-installer", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("id=visual-jsharp-installer", source, StringComparison.Ordinal);
-        Assert.Contains("sha256sum --check --status", source, StringComparison.Ordinal);
-        Assert.Contains("${W_CACHE}/dotnet35sp1/dotnetfx35.exe", source, StringComparison.Ordinal);
-        Assert.Contains("[jsharp-bootstrap] stage=%s", source, StringComparison.Ordinal);
-        Assert.Contains("tail -c 16384", source, StringComparison.Ordinal);
-        Assert.Contains("tail -n 80", source, StringComparison.Ordinal);
-        Assert.Contains("<redacted-url>", source, StringComparison.Ordinal);
-        Assert.Contains("run_logged install-clr2-winetricks", source, StringComparison.Ordinal);
-        Assert.Contains("timeout --signal=KILL 900 xvfb-run -a", source, StringComparison.Ordinal);
-        Assert.Contains("winetricks --optout --unattended dotnet35sp1", source, StringComparison.Ordinal);
-        Assert.Contains("run_logged install-jsharp-bootstrap install_jsharp", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("url", result.StandardOutput, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("clr2-installer", result.StandardOutput, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(
-            "winetricks --optout --unattended dotnet35sp1 >/dev/null",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains("test \"${ACCEPT_MICROSOFT_DOTNET_EULA}\" = \"true\"", source, StringComparison.Ordinal);
-        Assert.Contains("test \"${ACCEPT_MICROSOFT_JSHARP_EULA}\" = \"true\"", source, StringComparison.Ordinal);
-        Assert.Contains("WINEPREFIX=/opt/wine-jsharp20", source, StringComparison.Ordinal);
-        Assert.Contains("WINEARCH=win64", source, StringComparison.Ordinal);
-        Assert.Contains("Framework64/v2.0.50727", source, StringComparison.Ordinal);
-        Assert.Contains("windows/assembly/GAC_64", source, StringComparison.Ordinal);
-        Assert.Contains("architecture: i386:x86-64", source, StringComparison.Ordinal);
-        Assert.Contains("vjc.exe", source, StringComparison.Ordinal);
-        Assert.Contains("vjslib.dll", source, StringComparison.Ordinal);
-        Assert.Contains("vjscor.dll", source, StringComparison.Ordinal);
-        Assert.Contains("vjsnativ.dll", source, StringComparison.Ordinal);
-        Assert.Contains("framework64-vjslib", source, StringComparison.Ordinal);
-        Assert.Contains("framework64-vjscor", source, StringComparison.Ordinal);
-        Assert.Contains("gac64-vjslib-runtime", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("gac64-vjscor", source, StringComparison.Ordinal);
-        Assert.Contains("arch-vjslib", source, StringComparison.Ordinal);
-        Assert.Contains("neutral-ilonly-vjscor", source, StringComparison.Ordinal);
-        Assert.Contains("flags & (0x2 | 0x10 | 0x20000)", source, StringComparison.Ordinal);
-        Assert.Contains("arch-vjsnativ", source, StringComparison.Ordinal);
-        Assert.Contains("private-installer-scan", source, StringComparison.Ordinal);
-        Assert.Contains("[jsharp-verify] failed=%s", source, StringComparison.Ordinal);
-        Assert.Contains("stage cleanup-private-assets", source, StringComparison.Ordinal);
-        Assert.Contains("operator_toolchain=/opt/sharplabnext/jsharp20", source, StringComparison.Ordinal);
-        Assert.Contains("link_export export-vjc", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("/opt/sharplabnext/operator/jsharp20", source, StringComparison.Ordinal);
-        Assert.Contains("trap cleanup EXIT", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("http://", source, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("https://", source, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotMatch(new Regex(@"COPY[^\r\n]*\.(?:exe|msi|cab)\b", RegexOptions.IgnoreCase), source);
-        var firstLineEnd = source.IndexOf('\n');
-        Assert.True(firstLineEnd >= 0);
-        var instructions = source[(firstLineEnd + 1)..];
-        Assert.DoesNotMatch(new Regex(@"sha256:[0-9a-f]{64}"), instructions);
-
-        var installComplete = source.IndexOf(
-            "run_logged install-jsharp-wineserver wineserver -w",
-            StringComparison.Ordinal);
-        var cachedLayerEnd = source.IndexOf("\nSH\n", installComplete, StringComparison.Ordinal);
-        var verifyLayer = source.IndexOf("RUN set -euo pipefail <<'SH'", cachedLayerEnd, StringComparison.Ordinal);
-        Assert.True(installComplete >= 0 && cachedLayerEnd > installComplete && verifyLayer > cachedLayerEnd);
-        var verifySource = source[verifyLayer..source.IndexOf("\nLABEL ", verifyLayer, StringComparison.Ordinal)];
-        Assert.DoesNotContain("--mount=", verifySource, StringComparison.Ordinal);
-        Assert.DoesNotContain("id=dotnet-clr2-url", verifySource, StringComparison.Ordinal);
-        Assert.DoesNotContain("id=visual-jsharp-url", verifySource, StringComparison.Ordinal);
+            Path.Combine(RepositoryRoot, "eng", "prerequisites"),
+            result.StandardOutput,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
     [InlineData("--accept-microsoft-dotnet-eula")]
     [InlineData("--accept-microsoft-jsharp-eula")]
-    public async Task MissingEulaAcceptanceFailsAsUsage(string omitted)
+    public async Task BothMicrosoftLicenseAcceptancesAreRequired(string omitted)
     {
-        using var secrets = new SecretFiles();
-        var arguments = ValidArguments(secrets).Where(argument => argument != omitted).ToArray();
+        var arguments = ValidArguments().Where(argument => argument != omitted);
 
         var result = await RunAsync(arguments);
 
         Assert.Equal(64, result.ExitCode);
-        Assert.Contains("Both --accept-microsoft-dotnet-eula", result.StandardError, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.Clr2Url, result.CombinedOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.JSharpUrl, result.CombinedOutput, StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData("--clr2-sha256")]
-    [InlineData("--jsharp-sha256")]
-    [InlineData("--base-image")]
-    [InlineData("--output-image")]
-    public async Task MissingRequiredAssetArgumentFailsAsUsage(string omitted)
-    {
-        using var secrets = new SecretFiles();
-        var arguments = ValidArguments(secrets).ToList();
-        var optionIndex = arguments.IndexOf(omitted);
-        arguments.RemoveRange(optionIndex, 2);
-
-        var result = await RunAsync(arguments);
-
-        Assert.Equal(64, result.ExitCode);
-        Assert.Contains("Base/output images", result.StandardError, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.Clr2Url, result.CombinedOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.JSharpUrl, result.CombinedOutput, StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData("--clr2-url-secret-file", "CLR2")]
-    [InlineData("--jsharp-url-secret-file", "Visual J# x64")]
-    public async Task MissingAssetSourceFailsAsUsage(string omitted, string assetName)
-    {
-        using var secrets = new SecretFiles();
-        var arguments = ValidArguments(secrets).ToList();
-        var optionIndex = arguments.IndexOf(omitted);
-        arguments.RemoveRange(optionIndex, 2);
-
-        var result = await RunAsync(arguments);
-
-        Assert.Equal(64, result.ExitCode);
-        Assert.Contains($"{assetName} requires exactly one of", result.StandardError, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.Clr2Url, result.CombinedOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.JSharpUrl, result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("required", result.StandardError, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task BlankRequiredValueFailsAsUsage()
+    public async Task FloatingFrameworkSeedFailsBeforeReadingLfsInput()
     {
-        using var secrets = new SecretFiles();
-        var arguments = ValidArguments(secrets);
-        arguments[Array.IndexOf(arguments, "--clr2-sha256") + 1] = "   ";
+        var arguments = ValidArguments().ToArray();
+        arguments[Array.IndexOf(arguments, "--framework-seed-image") + 1] =
+            "localhost:5000/framework-clr2:latest";
 
         var result = await RunAsync(arguments);
 
         Assert.Equal(64, result.ExitCode);
-        Assert.Contains("requires a non-empty value", result.StandardError, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.Clr2Url, result.CombinedOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.JSharpUrl, result.CombinedOutput, StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData("--clr2-sha256", "abc")]
-    [InlineData("--jsharp-sha256", "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg")]
-    public async Task InvalidSha256FailsAsUsage(string option, string invalidDigest)
-    {
-        using var secrets = new SecretFiles();
-        var arguments = ValidArguments(secrets);
-        arguments[Array.IndexOf(arguments, option) + 1] = invalidDigest;
-
-        var result = await RunAsync(arguments);
-
-        Assert.Equal(64, result.ExitCode);
-        Assert.Contains("exactly 64 hexadecimal", result.StandardError, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.Clr2Url, result.CombinedOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.JSharpUrl, result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("--framework-seed-image", result.StandardError, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task MissingUrlSecretFileFailsClosedWithoutRevealingPath()
+    public async Task MissingLfsObjectFailsBeforeDocker()
     {
-        using var secrets = new SecretFiles();
-        var missingPath = Path.Combine(secrets.Root, "missing-clr2-url.secret");
-        var arguments = ValidArguments(secrets);
-        arguments[Array.IndexOf(arguments, "--clr2-url-secret-file") + 1] = missingPath;
+        using var fixture = new RepositoryFixture();
 
-        var result = await RunAsync(arguments);
+        var result = await RunAsync(ValidArguments(fixture.Root));
 
         Assert.Equal(1, result.ExitCode);
-        Assert.Contains("CLR2 URL secret file does not exist", result.StandardError, StringComparison.Ordinal);
-        Assert.DoesNotContain(missingPath, result.CombinedOutput, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(secrets.JSharpUrl, result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("Git LFS object is missing", result.StandardError, StringComparison.Ordinal);
+        Assert.DoesNotContain("docker buildx", result.StandardOutput, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task EmptyUrlSecretFileFailsClosed()
+    public async Task UnexpandedLfsPointerFailsBeforeDocker()
     {
-        using var secrets = new SecretFiles(clr2Url: "   \r\n");
+        using var fixture = new RepositoryFixture();
+        fixture.WriteInstaller(
+            "version https://git-lfs.github.com/spec/v1\n" +
+            $"oid sha256:{new string('c', 64)}\n" +
+            "size 6110048\n");
 
-        var result = await RunAsync(ValidArguments(secrets));
+        var result = await RunAsync(ValidArguments(fixture.Root));
 
         Assert.Equal(1, result.ExitCode);
-        Assert.Contains("must contain one absolute HTTP(S) URL", result.StandardError, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.JSharpUrl, result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("unexpanded Git LFS pointer", result.StandardError, StringComparison.Ordinal);
+        Assert.DoesNotContain("docker buildx", result.StandardOutput, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task UnknownArgumentFailsAsUsageBeforeSecretsAreRead()
+    public async Task CorruptLfsPayloadFailsBeforeDocker()
     {
-        using var secrets = new SecretFiles();
-        var arguments = ValidArguments(secrets).Append("--unexpected").ToArray();
+        using var fixture = new RepositoryFixture();
+        fixture.WriteInstaller(new byte[6_110_048]);
 
-        var result = await RunAsync(arguments);
+        var result = await RunAsync(ValidArguments(fixture.Root));
 
-        Assert.Equal(64, result.ExitCode);
-        Assert.Contains("Unknown argument", result.StandardError, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.Clr2Url, result.CombinedOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain(secrets.JSharpUrl, result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("SHA-256", result.StandardError, StringComparison.Ordinal);
+        Assert.DoesNotContain("docker buildx", result.StandardOutput, StringComparison.Ordinal);
     }
 
-    private static string[] ValidArguments(SecretFiles secrets) =>
-    [
-        "--repository-root", RepositoryRoot,
-        "--base-image", $"codex/msvc-wine:cppcli@sha256:{new string('c', 64)}",
-        "--output-image", "sharplabnext/operator-jsharp20:test",
-        "--clr2-url-secret-file", secrets.Clr2Path,
-        "--clr2-sha256", new string('a', 64),
-        "--jsharp-url-secret-file", secrets.JSharpPath,
-        "--jsharp-sha256", new string('b', 64),
-        "--accept-microsoft-dotnet-eula",
-        "--accept-microsoft-jsharp-eula",
-        "--dry-run"
-    ];
+    [Fact]
+    public void OperatorDockerfileInstallsOnlyJSharpIntoTheClr2Seed()
+    {
+        var source = File.ReadAllText(DockerfilePath);
 
-    private static string[] LocalInstallerArguments(SecretFiles secrets) =>
+        Assert.Contains("ARG FRAMEWORK_SEED_IMAGE", source, StringComparison.Ordinal);
+        Assert.Contains("FROM ${FRAMEWORK_SEED_IMAGE} AS final", source, StringComparison.Ordinal);
+        Assert.Contains("from=visual-jsharp-installer-context", source, StringComparison.Ordinal);
+        Assert.Contains("vjredist64.exe", source, StringComparison.Ordinal);
+        Assert.Contains("seed_prefix=/opt/wine-netfx-clr2", source, StringComparison.Ordinal);
+        Assert.Contains("WINEPREFIX=\"${seed_prefix}\" timeout", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "sharplabnext-wine-netfx-preflight \"${seed_prefix}\" 3.5",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains("mv \"${seed_prefix}\" \"${WINEPREFIX}\"", source, StringComparison.Ordinal);
+        Assert.True(
+            source.IndexOf("stage preflight-framework-seed", StringComparison.Ordinal) <
+            source.IndexOf("stage bind-jsharp-prefix", StringComparison.Ordinal));
+        Assert.Contains("stage install-jsharp", source, StringComparison.Ordinal);
+        Assert.Contains("run_logged install-jsharp-bootstrap", source, StringComparison.Ordinal);
+        Assert.Contains("test -x /usr/lib/wine/wineserver", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "env WINEPREFIX=\"${seed_prefix}\" /usr/lib/wine/wineserver -w",
+            source,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "run_logged install-jsharp-wineserver wineserver -w",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains("[jsharp-verify] status=ok", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("dotnet-clr2-url", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("visual-jsharp-url", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("dotnetfx35.exe", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("winetricks", source, StringComparison.Ordinal);
+    }
+
+    private static string[] ValidArguments(string? repositoryRoot = null) =>
     [
-        "--repository-root", RepositoryRoot,
-        "--base-image", $"codex/msvc-wine:cppcli@sha256:{new string('c', 64)}",
-        "--output-image", "sharplabnext/operator-jsharp20:test",
-        "--clr2-installer-secret-file", secrets.Clr2InstallerPath,
-        "--clr2-sha256", secrets.Clr2InstallerSha256,
-        "--jsharp-installer-secret-file", secrets.JSharpInstallerPath,
-        "--jsharp-sha256", secrets.JSharpInstallerSha256,
+        "--repository-root", repositoryRoot ?? RepositoryRoot,
+        "--framework-seed-image", $"localhost:5000/framework-clr2@sha256:{new string('a', 64)}",
+        "--output-image", "sharplabnext/operator-jsharp20:source-v2",
+        "--operator-build-input-sha256", new string('b', 64),
         "--accept-microsoft-dotnet-eula",
         "--accept-microsoft-jsharp-eula",
         "--dry-run"
@@ -436,42 +208,60 @@ public sealed class PrepareJSharpToolchainTests
         throw new InvalidOperationException("SharpLabNext.slnx was not found above the test output directory.");
     }
 
-    private sealed class SecretFiles : IDisposable
+    private sealed class RepositoryFixture : IDisposable
     {
-        public SecretFiles(
-            string clr2Url = "https://operator.invalid/clr2-installer.exe?token=clr2-secret-token",
-            string jsharpUrl = "https://operator.invalid/jsharp-installer.exe?token=jsharp-secret-token")
+        public RepositoryFixture()
         {
-            Root = Path.Combine(Path.GetTempPath(), $"SharpLabNext.JSharpPreparation.Tests.{Guid.NewGuid():N}");
-            Directory.CreateDirectory(Root);
-            Clr2Path = Path.Combine(Root, "clr2-url.secret");
-            JSharpPath = Path.Combine(Root, "jsharp-url.secret");
-            Clr2InstallerPath = Path.Combine(Root, "clr2-installer.secret");
-            JSharpInstallerPath = Path.Combine(Root, "jsharp-installer.secret");
-            Clr2Url = clr2Url;
-            JSharpUrl = jsharpUrl;
-            File.WriteAllText(Clr2Path, clr2Url);
-            File.WriteAllText(JSharpPath, jsharpUrl);
-            File.WriteAllBytes(Clr2InstallerPath, new byte[(500 * 1024) + 1]);
-            File.WriteAllBytes(JSharpInstallerPath, Enumerable.Repeat((byte)0x5a, (500 * 1024) + 1).ToArray());
-            Clr2InstallerSha256 = FileSha256(Clr2InstallerPath);
-            JSharpInstallerSha256 = FileSha256(JSharpInstallerPath);
+            Root = Path.Combine(
+                Path.GetTempPath(),
+                $"SharpLabNext.JSharpLfs.Tests.{Guid.NewGuid():N}");
+            Directory.CreateDirectory(Path.Combine(
+                Root,
+                "eng",
+                "prerequisites",
+                "visual-jsharp-2.0-se-x64"));
+            Directory.CreateDirectory(Path.Combine(Root, "deploy", "docker"));
+            File.WriteAllText(Path.Combine(Root, "SharpLabNext.slnx"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(Root, "deploy", "docker", "Dockerfile.operator-jsharp20"),
+                "FROM scratch\n");
+            File.WriteAllText(
+                Path.Combine(Root, ".gitattributes"),
+                "eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe " +
+                "filter=lfs diff=lfs merge=lfs -text\n");
+            RunGit("init", "--quiet");
         }
 
         public string Root { get; }
-        public string Clr2Path { get; }
-        public string JSharpPath { get; }
-        public string Clr2InstallerPath { get; }
-        public string JSharpInstallerPath { get; }
-        public string Clr2InstallerSha256 { get; }
-        public string JSharpInstallerSha256 { get; }
-        public string Clr2Url { get; }
-        public string JSharpUrl { get; }
 
-        private static string FileSha256(string path)
+        public void WriteInstaller(string content) =>
+            File.WriteAllText(InstallerPath, content);
+
+        public void WriteInstaller(byte[] content) =>
+            File.WriteAllBytes(InstallerPath, content);
+
+        private string InstallerPath => Path.Combine(
+            Root,
+            "eng",
+            "prerequisites",
+            "visual-jsharp-2.0-se-x64",
+            "vjredist64.exe");
+
+        private void RunGit(params string[] arguments)
         {
-            using var stream = File.OpenRead(path);
-            return Convert.ToHexStringLower(SHA256.HashData(stream));
+            var startInfo = new ProcessStartInfo("git")
+            {
+                WorkingDirectory = Root,
+                UseShellExecute = false,
+                RedirectStandardError = true
+            };
+            foreach (var argument in arguments)
+                startInfo.ArgumentList.Add(argument);
+            using var process = Process.Start(startInfo)
+                ?? throw new InvalidOperationException("Could not start Git for the test fixture.");
+            process.WaitForExit();
+            if (process.ExitCode != 0)
+                throw new InvalidOperationException(process.StandardError.ReadToEnd());
         }
 
         public void Dispose()
@@ -489,8 +279,5 @@ public sealed class PrepareJSharpToolchainTests
         }
     }
 
-    private sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError)
-    {
-        public string CombinedOutput => StandardOutput + StandardError;
-    }
+    private sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
 }

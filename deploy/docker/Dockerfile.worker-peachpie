@@ -60,13 +60,7 @@ RUN mkdir -p /tmp/peachpie-packages /licenses \
     && grep -q "Apache License" /licenses/PeachPie-LICENSE.txt \
     && grep -q "Version 2.0, January 2004" /licenses/PeachPie-LICENSE.txt \
     && test -n "${PEACHPIE_COMMIT}"
-RUN --mount=type=cache,id=sharplabnext-peachpie-nuget,target=/root/.nuget/packages,sharing=locked \
-    dotnet restore \
-      src/Workers/PeachPie/SharpLabNext.Worker.PeachPie/SharpLabNext.Worker.PeachPie.csproj \
-      --locked-mode \
-      --source /tmp/peachpie-packages \
-      --source https://api.nuget.org/v3/index.json
-RUN --mount=type=cache,id=sharplabnext-peachpie-nuget,target=/root/.nuget/packages,sharing=locked \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
     dotnet restore \
       src/Workers/PeachPie/SharpLabNext.Worker.PeachPie/SharpLabNext.Worker.PeachPie.csproj \
       --locked-mode \

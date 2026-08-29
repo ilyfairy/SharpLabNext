@@ -170,7 +170,6 @@ services:
       RoslynWorker__BuildProcess__MaximumConcurrentProcesses: "8"
       ArtifactStore__BaseUrl: http://artifact-store:8080
       RoslynWorker__DevelopmentArtifactEnvelope__Enabled: "false"
-      ReferenceSets__net10-ref__Path: /reference-sets/net10-ref
 
   worker-roslyn-netfx48:
     <<: *service-defaults
@@ -195,8 +194,6 @@ services:
       RoslynWorker__BuildProcess__MaximumConcurrentProcesses: "8"
       ArtifactStore__BaseUrl: http://artifact-store:8080
       RoslynWorker__DevelopmentArtifactEnvelope__Enabled: "false"
-      ReferenceSets__net10-ref__Path: /reference-sets/net10-ref
-      ReferenceSets__net11-preview-ref__Path: /reference-sets/net11-preview-ref
 
   worker-roslyn-const-generics:
     <<: *service-defaults

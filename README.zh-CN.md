@@ -67,14 +67,13 @@ reference set、运行时和已批准兼容路径的事实来源。精确的上�
 `Microsoft.NETFramework.ReferenceAssemblies.net48` 包编译，发布 IL-only framework
 PE，并把 Run 路由到单独的 Wine runtime 容器。
 
-J# 路径只支持 x64，并依赖单独准备、按摘要锁定的 operator 镜像，其中包含已获许可的
-Visual J# 2.0 Second Edition 与 CLR 2.0 资产。Worker 固定调用 Framework64
-`vjc.exe /platform:x64`；用户产物必须是 AMD64 PE32+、IL-only，且不得带
+J# 路径只支持 x64，其私有基础镜像由可复用的 CLR 2/3.5 seed 与 Git LFS 中固定的
+Visual J# 2.0 Second Edition `vjredist64.exe` 从源码构建。Worker 固定调用
+Framework64 `vjc.exe /platform:x64`；用户产物必须是 AMD64 PE32+、IL-only，且不得带
 `Requires32Bit` 或 `Prefers32Bit`。编译与 Run 使用两个共享精简层但职责分离的镜像，
-并使用独立 win64 prefix。微软二进制、安装器路径和凭据不会进入 BSD 源码树，也不会
-发布为公共镜像。operator 必须自行取得安装器、接受对应许可，使用
-`eng/prepare-jsharp-toolchain.cs` 构建私有前置镜像，并把生成的 release 保持在获许可的
-部署边界内。
+并使用独立 win64 prefix。该 Microsoft 二进制使用独立许可，不属于仓库 BSD 许可范围，
+也不会进入公共镜像或 bundle。operator 必须接受相应许可，并把最终 release 保持在其
+获许可的部署边界内。
 
 ## 工作台与传输
 
@@ -133,41 +132,129 @@ git submodule update --init --recursive
 
 ## 快速启动
 
-完整环境包含从源码构建的 Roslyn Main、ConstGenerics、G#、PeachPie，以及 operator
-自行构建的 x64 J# 镜像。先准备私有 J# 前置镜像，再把 unsigned development bundle
-生成到一个新目录并安装到本机：
+构建与打包入口按职责分开：
+
+| 入口 | 职责 |
+| --- | --- |
+| `eng/build.ps1` / `eng/build.sh` | 在宿主机 restore、构建前后端并运行静态合同校验，不构建 Docker 镜像。 |
+| `eng/build-images.ps1` / `eng/build-images.sh` | 先生成并校验 Catalog 镜像计划，再构建计划中的全部镜像；BuildKit 会复用未变化的层和下载缓存。 |
+| `eng/bundle.ps1` / `eng/bundle.sh` | 只检查并打包已经存在的完整镜像集合，不做 restore 或镜像构建。缺少或身份不匹配时立即失败。 |
+| `eng/release.ps1` / `eng/release.sh` | 完整入口：预检输出和所有静态合同、构建并校验全部计划镜像，全部成功后才生成离线 bundle。 |
+
+完整环境还需要受 Microsoft 许可约束的输入。以下两份原始下载路径不能作为可靠的首次
+构建来源，因此精确文件通过 Git LFS 保存：
+
+- `.NET Framework 2.0 x64`：
+  `eng/prerequisites/dotnet-framework-2.0/NetFx64.exe`
+- `Visual J# 2.0 Second Edition x64`：
+  `eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe`
+
+正常的 LFS clone 会自动取得实体文件；如果工作树中只有 pointer，可执行：
 
 ```powershell
-$repositoryRoot = (Resolve-Path .).Path
-$bundleRoot = Join-Path $repositoryRoot "artifacts/bundles/local-$(Get-Date -Format yyyyMMdd-HHmmss)"
+git lfs install
+git lfs pull --include="eng/prerequisites/dotnet-framework-2.0/NetFx64.exe,eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe"
+```
 
-./eng/bundle.ps1 `
-  -OutputDirectory $bundleRoot `
+Docker 启动前，清单和准备工具会校验两份文件各自的精确大小与 SHA-256。它们只进入各自
+的私有 BuildKit context，不会在宿主机执行，也不会以安装器形式进入最终镜像或离线
+bundle。`NetFx64.exe` 用于预填 Winetricks 的 `dotnet20` 缓存；`vjredist64.exe` 只在
+J# Docker 阶段内安装。其他 .NET Framework 载荷继续通过锁定的 Winetricks/Microsoft
+下载路径获取。
+
+`.NET Framework 3.5 SP1`、`4.5.1` 和 `4.7` 安装器仍从清单锁定的 Microsoft HTTPS
+地址下载到 Git 忽略的 `artifacts/prerequisites/downloads`，并校验大小和 SHA-256。
+安装器不会在 Windows 宿主机启动，也不会写入宿主注册表或系统目录；它们只作为
+BuildKit 私有输入，在隔离的 Linux/Wine 构建阶段用静默参数安装到专用 Wine prefix，
+临时安装器随后从镜像层删除。3.5 SP1 文件会预填 Winetricks 的精确缓存路径，因此容器
+构建不再依赖其旧下载器或 TLS 栈。
+
+完整镜像构建只创建一次 classic WoW64 构建层，然后只构建两份私有 companion seed：
+CLR 2 + .NET Framework 3.5，以及 CLR 4 + .NET Framework 4.8。每个精确 Framework
+operator 从另一代 CLR 的 seed 开始，只安装自己选择的目标版本；之后仍会预检两份
+prefix、禁用对应 NGen 服务、删除安装器残留、记录 seed 镜像 digest，并执行现有的
+不可变文件去重。Framework operator 的并发上限继续保持为 2。
+
+构建脚本不会再通过 `docker image save` 额外封存这些 seed。每次构建都会把同一个锁定
+构建图交给 BuildKit；Docker 自身复用未变化的镜像层，输入摘要变化则使对应层自然失效。
+重装 Docker 或清空全部镜像后，会从 Git LFS 与经过校验的下载输入重新构建，不依赖任何
+预先生成的镜像 TAR。
+
+J# 会从仓库 LFS 对象与 CLR2 seed 重建。C++/CLI 会从锁定的 `msvc-wine` revision、
+Visual Studio 18.8 manifest 与 .NET Framework 4.8 Developer Pack 重建。源码归档和
+Microsoft 输入只作为经过大小/SHA-256 校验的字节下载到被忽略的 prerequisite cache；
+解压、准备和真实 `/clr` 预检全部发生在 Docker 内。
+
+J# 和 C++/CLI 基础镜像同样始终交给 BuildKit 构建，不再另存 `private-images.tar`。
+普通增量构建由 Docker 层缓存加速；清空 Docker 后则从上述锁定输入重新构建。
+`artifacts/prerequisites/downloads` 只缓存校验过的原始下载字节，不保存 Docker 镜像。
+
+在仓库根目录一键构建全部镜像并打包：
+
+```powershell
+.\eng\release.ps1 -AcceptMicrosoftLicenses
+```
+
+该完整本地入口会构建私有基础镜像，再把实际检查得到的 digest-pinned 引用
+注入其余镜像图。因此即使 Git 干净，生成的镜像和 bundle 也会明确标记为 development
+image inputs，只能生成可部署的 unsigned 开发产物。正式签名/晋级仍要求通过独立
+operator receipt 和 promotion 流程得到的不可变镜像，再由
+`bundle.ps1` 单独打包；开发输入授权不会弱化这条边界。
+
+当前工作树含有明确要测试的未提交改动时使用开发开关；这种 bundle 会记录开发输入且
+不能签名或晋级：
+
+```powershell
+.\eng\release.ps1 `
+  -AcceptMicrosoftLicenses `
   -AllowUncommittedSourceForDevelopment
+```
 
+默认输出目录是 `artifacts/sharplabnext-<release-id>`，且 bundle 输出不可变、不能覆盖。
+需要重复生成或指定位置时传入一个尚不存在的目录：
+
+```powershell
+.\eng\release.ps1 `
+  -AcceptMicrosoftLicenses `
+  -OutputDirectory D:\Bundles\SharpLabNext-20260824
+```
+
+只重建镜像或只打包现有镜像时分别调用 `build-images.ps1` 与 `bundle.ps1`。普通的
+`release.ps1`/`release.sh` 会先复用所有身份匹配的本地镜像，再让 BuildKit 只重建发生
+变化的输入，因此打包阶段失败后再次执行通常不会全量重建。`-BundleOnly`（或
+`--bundle-only`）只是可选的直接打包快捷方式。`-Offline`
+只禁止前置缓存联网补齐；从完全空的 BuildKit 缓存构建上游源码仍可能需要访问清单锁定的
+Docker、NuGet、npm 或源码地址。
+
+生成的 `.env` 会按正确顺序选择 `compose.prod.yaml` 和
+`compose.generated.yaml`，并固定 Compose 项目名。它只包含非敏感默认配置；部署入口会在
+每次调用时传入真实的宿主机令牌路径和 Docker socket group。不要修改不可变或已签名
+bundle 内的文件。
+
+在 Windows 上测试 unsigned 开发 bundle 时，传入 Git 忽略的本地开发令牌并运行产物
+自带的安装器：
+
+```powershell
+$bundleRoot = (Resolve-Path .\artifacts\sharplabnext-development).Path
 $env:SHARPLABNEXT_INTERNAL_SERVICE_TOKEN_FILE = `
-  (Resolve-Path ./deploy/secrets/internal-service-token.dev).Path
-$env:SHARPLABNEXT_BIND_ADDRESS = "127.0.0.1"
-$env:SHARPLABNEXT_HTTP_PORT = "8080"
-
+  (Resolve-Path .\deploy\secrets\internal-service-token.dev).Path
 & (Join-Path $bundleRoot "install.ps1") `
   -AllowUnsigned `
-  -InstallRoot (Join-Path $repositoryRoot "artifacts/local-install") `
+  -InstallRoot (Join-Path (Resolve-Path .\artifacts) "local-install") `
   -SmokeBaseAddress "http://127.0.0.1:8080"
 ```
 
-打开 <http://127.0.0.1:8080>。第一次完整构建会比较耗时，因为需要校验并构建锁定
-的上游源码树与 reference pack。每次重建应使用新的空 bundle 目录；bundle 输出目录
-是不可变的。
-
-Linux 使用对应的 `eng/bundle.sh` 和生成的 `install.sh`。安装前传入 Docker socket
-group 和相同的宿主设置：
+在 Linux 上，每个新传入的 bundle 只需调用一个部署入口；它会加载镜像归档、启动不可变
+Compose 集合、检查就绪状态，并在失败时回滚：
 
 ```bash
-export DOCKER_GID="$(stat -c '%g' /var/run/docker.sock)"
-export SHARPLABNEXT_BIND_ADDRESS=127.0.0.1
-export SHARPLABNEXT_HTTP_PORT=8080
+sudo env SHARPLABNEXT_HOME=/opt/sharplabnext \
+  sh ./deploy.sh --allow-unsigned
 ```
+
+正式签名 bundle 应改用 `install.sh` 说明中的信任参数，而不是
+`--allow-unsigned`。第一次完整构建会比较耗时，因为需要校验并构建锁定的上游源码树与
+reference pack。
 
 生成的 bundle 已包含离线部署所需的签名元数据、安装脚本和回滚脚本。
 `deploy/compose.dev.yaml` 适合所有 development tag 都已经存在的环境，但不是干净机器
@@ -179,13 +266,10 @@ export SHARPLABNEXT_HTTP_PORT=8080
 dotnet run eng/smoke/gateway-compose.cs -- http://127.0.0.1:8080 --full
 ```
 
-停止环境，但保留 Artifact Store volume：
+在当前部署目录停止环境，但保留 Artifact Store volume：
 
 ```powershell
-docker compose --project-name sharplabnext `
-  -f (Join-Path $bundleRoot "compose.prod.yaml") `
-  -f (Join-Path $bundleRoot "compose.generated.yaml") `
-  down --remove-orphans
+docker compose down --remove-orphans
 ```
 
 需要保留本地 Artifact Store 数据时，不要添加 `--volumes`。
@@ -235,7 +319,8 @@ dotnet run --project src/Tools/SharpLabNext.CompatibilityCli -- validate
 
 ## 发布与部署
 
-`eng/bundle.ps1` 与 `eng/bundle.sh` 会构建完整 Linux 镜像集合并生成离线 bundle。
+`eng/release.ps1` 与 `eng/release.sh` 会构建完整 Linux 镜像集合并生成离线 bundle；
+`eng/bundle.ps1` 与 `eng/bundle.sh` 只负责打包已经构建并验证的镜像集合。
 生产 bundle 必须来自干净 Git worktree，使用带外可信签名密钥，并通过身份、安全、
 smoke、性能与浏览器门禁。不要单独部署 `deploy/compose.prod.yaml`；生成的 bundle
 overlay 会写入生产启动所需的不可变镜像和 Worker 身份。

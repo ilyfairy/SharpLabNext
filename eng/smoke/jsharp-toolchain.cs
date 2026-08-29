@@ -289,7 +289,7 @@ internal static class JSharpX64ToolchainSmoke
         }
 
         cleanup() {
-            wineserver -k >/dev/null 2>&1 || true
+            /usr/lib/wine/wineserver -k >/dev/null 2>&1 || true
         }
         trap cleanup EXIT HUP INT TERM
 
@@ -299,7 +299,7 @@ internal static class JSharpX64ToolchainSmoke
         test "${WINEARCH:-}" = 'win64' || fail 'the Wine architecture is not win64'
         test -d "${prefix}" || fail '/opt/wine-jsharp20 is missing'
         command -v wine-stable >/dev/null 2>&1 || fail 'wine-stable is missing'
-        command -v wineserver >/dev/null 2>&1 || fail 'wineserver is missing'
+        test -x /usr/lib/wine/wineserver || fail 'the explicit wineserver is missing'
         command -v od >/dev/null 2>&1 || fail 'od is missing'
         command -v dd >/dev/null 2>&1 || fail 'dd is missing'
 

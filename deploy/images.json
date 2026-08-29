@@ -114,8 +114,6 @@
       "repository": "sharplabnext/worker-cppcli",
       "toolchainId": "msvc-cppcli-netfx48",
       "lockComponentIds": [
-        "msvc-cppcli-private-image",
-        "msvc-cppcli-prepared-base",
         "msvc-wine-source",
         "netfx48-ref"
       ],
@@ -129,7 +127,6 @@
       "toolchainId": "vjc-jsharp20",
       "lockComponentIds": [
         "jsharp20",
-        "jsharp20-prepared-base",
         "jsharp20-ref"
       ],
       "composeService": "worker-jsharp",
@@ -248,11 +245,6 @@
       "id": "wine-netfx48-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx48-linux-x64",
       "runtimeId": "wine-netfx48-linux-x64",
-      "lockComponentIds": [
-        "msvc-cppcli-private-image",
-        "msvc-cppcli-prepared-base",
-        "msvc-wine-source"
-      ],
       "lockComponentId": "wine-netfx48-linux-x64"
     },
     {
@@ -261,7 +253,7 @@
       "runtimeId": "wine-jsharp20-linux-x64",
       "lockComponentIds": [
         "jsharp20",
-        "jsharp20-prepared-base"
+        "vjc-jsharp20"
       ],
       "lockComponentId": "wine-jsharp20-linux-x64"
     },

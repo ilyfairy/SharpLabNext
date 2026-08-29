@@ -106,6 +106,23 @@ function contextHook(calls, directory = repositoryRoot) {
   }
 }
 
+test('Wine CoreCLR operator removes the amd64 package i386 module before prefix initialization', () => {
+  const dockerfile = fs.readFileSync(
+    path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.operator-wine-coreclr'),
+    'utf8',
+  )
+  const payloadPath = '/usr/lib/x86_64-linux-gnu/wine/i386-windows'
+  const removal = `rm -rf ${payloadPath}`
+  const prefixInitialization = 'xvfb-run -a /usr/bin/wineboot-stable --init'
+
+  assert.ok(dockerfile.includes(removal))
+  assert.ok(dockerfile.indexOf(removal) < dockerfile.indexOf(prefixInitialization))
+  assert.equal(
+    dockerfile.match(new RegExp(`test ! -e ${payloadPath}`, 'g'))?.length,
+    2,
+  )
+})
+
 test('formal Wine operator build uses an exact committed source context and verifies committed labels', () => {
   const values = environment()
   const out = output()
@@ -169,6 +186,43 @@ test('explicit dirty override labels the Wine operator as development-only and c
   assert.equal(bake[2].env.OPERATOR_PROMOTION_ELIGIBLE, 'false')
   assert.equal(bake[2].env.OPERATOR_DEVELOPMENT_ONLY, 'true')
   assert.match(out.logs.join('\n'), /development-only/)
+})
+
+test('development image-input grant makes a clean Wine operator local-only', () => {
+  const values = {
+    ...environment(),
+    SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS: 'true',
+  }
+  const out = output()
+  const docker = fakeDocker(labelsFor(values, {
+    context: 'working-tree-development', promotionEligible: false,
+  }))
+  assert.equal(runWineCoreClrOperatorBuild([
+    '--allow-development-image-inputs',
+  ], values, docker.spawn, out, {
+    createCommittedSourceContext() {
+      throw new Error('development image inputs must not claim a committed source context')
+    },
+  }), 0, out.errors.join('\n'))
+  const bake = docker.calls.find(([command, arguments_]) =>
+    command === 'docker' && arguments_[0] === 'buildx')
+  assert.equal(bake[2].env.OPERATOR_SOURCE_CONTEXT, 'working-tree-development')
+  assert.equal(bake[2].env.OPERATOR_PROMOTION_ELIGIBLE, 'false')
+  assert.equal(bake[2].env.OPERATOR_DEVELOPMENT_ONLY, 'true')
+  assert.equal(
+    bake[2].env.SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS,
+    undefined,
+  )
+
+  out.errors.length = 0
+  const missingGrant = fakeDocker(labelsFor(values, {
+    context: 'working-tree-development', promotionEligible: false,
+  }))
+  assert.equal(runWineCoreClrOperatorBuild([
+    '--allow-development-image-inputs',
+  ], environment(), missingGrant.spawn, out), 64)
+  assert.match(out.errors.join('\n'), /requires the outer development image-input grant/)
+  assert.equal(missingGrant.calls.some(([command]) => command === 'docker'), false)
 })
 
 test('Wine operator rejects source drift and incorrect source labels after Bake', () => {

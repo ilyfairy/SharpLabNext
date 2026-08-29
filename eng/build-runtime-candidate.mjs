@@ -80,6 +80,7 @@ const commonExpectedLabels = Object.freeze({
 })
 
 const developmentSourceOverride = '--allow-uncommitted-source-for-development'
+const developmentImageInputsOverride = '--allow-development-image-inputs'
 const historicalFrameworkOverride = '--allow-historical-framework-input-for-development'
 const candidateSourceContextInput = 'RUNTIME_CANDIDATE_SOURCE_CONTEXT'
 const candidatePromotionEligibilityInput = 'RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE'
@@ -1563,7 +1564,7 @@ function ensureUnchangedWineCoreClrOperator(before, after) {
   }
 }
 
-function developmentWineOperatorRequested(target, allowUncommittedSourceForDevelopment, values) {
+function developmentWineOperatorRequested(target, developmentMode, values) {
   const wrapperOptIn = values?.[developmentOperatorWrapperInput] === 'true'
   const anyDevelopmentInput = wrapperOptIn ||
     values?.[developmentOperatorTagInput] !== undefined ||
@@ -1572,10 +1573,9 @@ function developmentWineOperatorRequested(target, allowUncommittedSourceForDevel
   if (target !== 'runtime-wine-dotnet-matrix-candidate') {
     throw new Error('development Wine operator inputs are supported only for Wine CoreCLR candidates')
   }
-  if (!allowUncommittedSourceForDevelopment || !wrapperOptIn) {
+  if (!developmentMode || !wrapperOptIn) {
     throw new Error(
-      'development Wine operator requires both wrapper and candidate ' +
-      '--allow-uncommitted-source-for-development opt-ins',
+      'development Wine operator requires matching wrapper and candidate development opt-ins',
     )
   }
   const tag = values?.[developmentOperatorTagInput]
@@ -1605,7 +1605,7 @@ function historicalFrameworkInputRequested(target, flagPresent, values) {
   if (!anyHistoricalInput) return false
   if (!flagPresent || wrapperOptIn !== 'true') {
     throw new Error(
-      'historical Framework development mode requires both the wrapper and candidate opt-ins',
+      'Framework development mode requires both the wrapper and candidate opt-ins',
     )
   }
   if (target !== 'runtime-wine-framework-matrix-shared-candidate') {
@@ -1817,7 +1817,8 @@ export function runCandidateBuild(
   if (target === undefined) {
     output.error(
       'Usage: node eng/build-runtime-candidate.mjs <candidate-target> ' +
-      `[${developmentSourceOverride}] [${historicalFrameworkOverride}] ` +
+      `[${developmentSourceOverride}] [${developmentImageInputsOverride}] ` +
+      `[${historicalFrameworkOverride}] ` +
       '[docker buildx bake options]',
     )
     return 64
@@ -1830,6 +1831,13 @@ export function runCandidateBuild(
     return 64
   }
   const allowUncommittedSourceForDevelopment = developmentOverrideCount === 1
+  const developmentImageInputsOverrideCount = rawAdditionalArguments
+    .filter(argument => argument === developmentImageInputsOverride).length
+  if (developmentImageInputsOverrideCount > 1) {
+    output.error(`runtime candidate input error: ${developmentImageInputsOverride} may be specified once`)
+    return 64
+  }
+  const allowDevelopmentImageInputs = developmentImageInputsOverrideCount === 1
   const historicalFrameworkOverrideCount = rawAdditionalArguments
     .filter(argument => argument === historicalFrameworkOverride).length
   if (historicalFrameworkOverrideCount > 1) {
@@ -1839,9 +1847,11 @@ export function runCandidateBuild(
   const historicalFrameworkFlagPresent = historicalFrameworkOverrideCount === 1
   const additionalArguments = rawAdditionalArguments
     .filter(argument => argument !== developmentSourceOverride &&
+      argument !== developmentImageInputsOverride &&
       argument !== historicalFrameworkOverride)
   let developmentWineOperator = false
   let historicalFrameworkInput = false
+  let currentFrameworkDevelopmentInput = false
 
   try {
     if (candidateTargetSpecifications[target] === undefined) {
@@ -1850,7 +1860,7 @@ export function runCandidateBuild(
     validateAdditionalArguments(additionalArguments)
     developmentWineOperator = developmentWineOperatorRequested(
       target,
-      allowUncommittedSourceForDevelopment,
+      allowUncommittedSourceForDevelopment || allowDevelopmentImageInputs,
       values,
     )
     historicalFrameworkInput = historicalFrameworkInputRequested(
@@ -1858,6 +1868,18 @@ export function runCandidateBuild(
       historicalFrameworkFlagPresent,
       values,
     )
+    currentFrameworkDevelopmentInput = allowDevelopmentImageInputs &&
+      target === 'runtime-wine-framework-matrix-shared-candidate' &&
+      !historicalFrameworkInput
+    if (currentFrameworkDevelopmentInput && [
+      operatorReceiptInput,
+      operatorReceiptSignatureInput,
+      'WINE_CORECLR_OPERATOR_RECEIPT_SHA256',
+      'WINE_CORECLR_OPERATOR_RECEIPT_KEY_ID',
+      'WINE_CORECLR_OPERATOR_REFERENCE',
+    ].some(name => values?.[name] !== undefined)) {
+      throw new Error('current Framework development mode must not receive formal receipt inputs')
+    }
   } catch (error) {
     output.error(`runtime candidate input error: ${error.message}`)
     return 64
@@ -1918,6 +1940,9 @@ export function runCandidateBuild(
           output.error(`runtime candidate source error: ${failure}`)
         }
         return 1
+      }
+      if (allowDevelopmentImageInputs) {
+        sourceBinding = { ...sourceBinding, promotionEligible: false }
       }
       if (developmentWineOperator && sourceBinding.promotionEligible) {
         throw new Error('development Wine operator requires working-tree-development source context')
@@ -2038,7 +2063,8 @@ export function runCandidateBuild(
 
   let initialWineOperator
   let operatorReceipt
-  if (!nonBuildInvocation && isWineCandidateTarget(target) && !historicalFrameworkInput) {
+  if (!nonBuildInvocation && isWineCandidateTarget(target) &&
+      !historicalFrameworkInput && !currentFrameworkDevelopmentInput) {
     try {
       if (developmentWineOperator) {
         initialWineOperator = inspectWineCoreClrOperator(
@@ -2122,9 +2148,12 @@ export function runCandidateBuild(
         env: dockerEnvironment,
         allowedDirtyPaths,
       })
-      const after = validateGitSourceState(sourceState, values.SOURCE_REVISION, {
+      let after = validateGitSourceState(sourceState, values.SOURCE_REVISION, {
         allowUncommittedSourceForDevelopment,
       })
+      if (allowDevelopmentImageInputs) {
+        after = { ...after, promotionEligible: false }
+      }
       if (after.failures.length > 0 ||
           after.promotionEligible !== sourceBinding.promotionEligible) {
         for (const failure of after.failures) {
@@ -2241,7 +2270,7 @@ export function runCandidateBuild(
       `${imageBinding.labels['io.sharplabnext.operator-image.wine'] ?? '<missing>'}`,
     )
   }
-  if (developmentWineOperator) {
+  if (developmentWineOperator || currentFrameworkDevelopmentInput) {
     for (const label of operatorReceiptLabelNames) {
       if (imageBinding.labels[label] !== undefined) {
         identityFailures.push(`${label} must be absent from development candidates`)

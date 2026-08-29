@@ -44,6 +44,8 @@ import {
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const target = 'operator-wine-coreclr'
 const developmentSourceOverride = '--allow-uncommitted-source-for-development'
+const developmentImageInputsOverride = '--allow-development-image-inputs'
+const developmentImageInputsGrant = 'SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS'
 const sourceContextInput = 'OPERATOR_SOURCE_CONTEXT'
 const promotionEligibilityInput = 'OPERATOR_PROMOTION_ELIGIBLE'
 const developmentOnlyInput = 'OPERATOR_DEVELOPMENT_ONLY'
@@ -257,7 +259,22 @@ export function runWineCoreClrOperatorBuild(
     return 64
   }
   const allowUncommittedSourceForDevelopment = developmentOverrideCount === 1
-  const additionalArguments = argv.filter(argument => argument !== developmentSourceOverride)
+  const developmentImageInputsOverrideCount = argv
+    .filter(argument => argument === developmentImageInputsOverride).length
+  if (developmentImageInputsOverrideCount > 1) {
+    output.error(`Wine operator input error: ${developmentImageInputsOverride} may be specified once`)
+    return 64
+  }
+  const allowDevelopmentImageInputs = developmentImageInputsOverrideCount === 1
+  if (allowDevelopmentImageInputs && values?.[developmentImageInputsGrant] !== 'true') {
+    output.error(
+      `Wine operator input error: ${developmentImageInputsOverride} requires the outer ` +
+      'development image-input grant',
+    )
+    return 64
+  }
+  const additionalArguments = argv.filter(argument =>
+    argument !== developmentSourceOverride && argument !== developmentImageInputsOverride)
   try { validateAdditionalArguments(additionalArguments) } catch (error) {
     output.error(`Wine operator input error: ${error.message}`)
     return 64
@@ -275,7 +292,8 @@ export function runWineCoreClrOperatorBuild(
     output.error(`Wine operator input error: ${error.message}`)
     return 1
   }
-  if (publication !== undefined && (nonBuild || allowUncommittedSourceForDevelopment)) {
+  if (publication !== undefined &&
+      (nonBuild || allowUncommittedSourceForDevelopment || allowDevelopmentImageInputs)) {
     output.error('Wine operator input error: development or non-build invocations may not sign or publish')
     return 1
   }
@@ -293,6 +311,7 @@ export function runWineCoreClrOperatorBuild(
   delete dockerEnvironment[sourceContextInput]
   delete dockerEnvironment[promotionEligibilityInput]
   delete dockerEnvironment[developmentOnlyInput]
+  delete dockerEnvironment[developmentImageInputsGrant]
 
   let binding = { promotionEligible: true }
   let sourceContext
@@ -310,6 +329,9 @@ export function runWineCoreClrOperatorBuild(
       if (binding.failures.length > 0) {
         for (const failure of binding.failures) output.error(`Wine operator source error: ${failure}`)
         return 1
+      }
+      if (allowDevelopmentImageInputs) {
+        binding = { ...binding, promotionEligible: false }
       }
       if (binding.promotionEligible) {
         const createContext = testHooks.createCommittedSourceContext ?? createCommittedSourceContext
@@ -373,12 +395,15 @@ export function runWineCoreClrOperatorBuild(
   let sourceChanged = false
   if (!nonBuild) {
     try {
-      const after = validateGitSourceState(inspectGitSourceState({
+      let after = validateGitSourceState(inspectGitSourceState({
         spawn,
         cwd: effectiveRepositoryRoot,
         env: dockerEnvironment,
         allowedDirtyPaths: testHooks.allowedDirtyPaths ?? [],
       }), values.SOURCE_REVISION, { allowUncommittedSourceForDevelopment })
+      if (allowDevelopmentImageInputs) {
+        after = { ...after, promotionEligible: false }
+      }
       if (after.failures.length > 0 || after.promotionEligible !== binding.promotionEligible) {
         for (const failure of after.failures) output.error(`Wine operator source error: ${failure}`)
         if (after.failures.length === 0) output.error('Wine operator source error: Git source state changed during Bake')

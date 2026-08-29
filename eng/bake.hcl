@@ -14,9 +14,21 @@ variable "SOURCE_DATE_EPOCH" {
   default = ""
 }
 
+variable "DEVELOPMENT_IMAGE_INPUTS" {
+  default = ""
+}
+
 function "required" {
   params = [value]
   result = regex(".+", value)
+}
+
+# These image inputs are produced earlier in the same release build.
+# Bake evaluates every target while loading this file, so unrelated early
+# targets need a non-network placeholder until the real digest is injected.
+function "deferred_image" {
+  params = [value]
+  result = value != "" ? value : "scratch"
 }
 
 function "unix_seconds" {
@@ -711,51 +723,11 @@ variable "IL_ASSEMBLER_VERSION" {
   default = ""
 }
 
-variable "CPPCLI_PRIVATE_IMAGE_VERSION" {
-  default = ""
-}
-
-variable "CPPCLI_PRIVATE_IMAGE_DIGEST" {
-  default = ""
-}
-
-variable "CPPCLI_PRIVATE_IMAGE_SOURCE_URI" {
-  default = ""
-}
-
 variable "CPPCLI_PREPARED_BASE_IMAGE" {
   default = ""
 }
 
-variable "CPPCLI_PREPARED_BASE_VERSION" {
-  default = ""
-}
-
-variable "CPPCLI_PREPARED_BASE_DIGEST" {
-  default = ""
-}
-
-variable "CPPCLI_PREPARED_BASE_SOURCE_URI" {
-  default = ""
-}
-
 variable "JSHARP_TOOLCHAIN_IMAGE" {
-  default = ""
-}
-
-variable "JSHARP_WINE_BASE_IMAGE" {
-  default = ""
-}
-
-variable "JSHARP_WINE_BASE_VERSION" {
-  default = ""
-}
-
-variable "JSHARP_WINE_BASE_DIGEST" {
-  default = ""
-}
-
-variable "JSHARP_WINE_BASE_SOURCE_URI" {
   default = ""
 }
 
@@ -1106,6 +1078,7 @@ target "common" {
     "org.opencontainers.image.revision" = required(SOURCE_REVISION)
     "org.opencontainers.image.source" = "https://github.com/sharplabnext/SharpLabNext"
     "io.sharplabnext.source.revision" = required(SOURCE_REVISION)
+    "io.sharplabnext.development-image-inputs" = required(DEVELOPMENT_IMAGE_INPUTS)
   }
 }
 
@@ -1134,6 +1107,7 @@ target "operator-wine-coreclr" {
     "org.opencontainers.image.revision" = required(SOURCE_REVISION)
     "org.opencontainers.image.source" = "https://github.com/sharplabnext/SharpLabNext"
     "io.sharplabnext.source.revision" = required(SOURCE_REVISION)
+    "io.sharplabnext.development-image-inputs" = required(DEVELOPMENT_IMAGE_INPUTS)
     "io.sharplabnext.base-image.dotnet-runtime-deps" = required(BASE_DOTNET_RUNTIME_DEPS_IMAGE)
     "io.sharplabnext.component.wine-coreclr-userspace.version" = required(WINE_CORECLR_USERSPACE_VERSION)
     "io.sharplabnext.component.wine-coreclr-userspace.digest" = required(WINE_CORECLR_USERSPACE_DIGEST)
@@ -1204,6 +1178,9 @@ target "runtime-const-generics" {
   inherits = ["common"]
   dockerfile = "deploy/docker/Dockerfile.runtime-const-generics"
   tags = ["${required(IMAGE_PREFIX)}/runtime-const-generics:${required(RELEASE_ID)}"]
+  contexts = {
+    "const-generics-fork-packages" = "./artifacts/prerequisites/downloads/const-generics-fork-packages"
+  }
   args = {
     VERSION = RELEASE_ID
     CONST_GENERICS_RUNTIME_COMMIT = required(CONST_GENERICS_RUNTIME_COMMIT)
@@ -1250,7 +1227,7 @@ target "runtime-wine-netfx48" {
   dockerfile = "deploy/docker/Dockerfile.runtime-wine-netfx48"
   tags = ["${required(IMAGE_PREFIX)}/runtime-wine-netfx48:${required(RELEASE_ID)}"]
   contexts = {
-    "cppcli-prepared-base-context" = "docker-image://${required(CPPCLI_PREPARED_BASE_IMAGE)}"
+    "cppcli-prepared-base-context" = "docker-image://${deferred_image(CPPCLI_PREPARED_BASE_IMAGE)}"
   }
   args = {
     VERSION = RELEASE_ID
@@ -1264,16 +1241,16 @@ target "runtime-wine-netfx48" {
     "io.sharplabnext.component.wine-netfx48-linux-x64.version" = required(WINE_NETFX48_RUNTIME_VERSION)
     "io.sharplabnext.component.wine-netfx48-linux-x64.digest" = required(WINE_NETFX48_RUNTIME_DIGEST)
     "io.sharplabnext.component.wine-netfx48-linux-x64.source-uri" = required(WINE_NETFX48_RUNTIME_SOURCE_URI)
-    "io.sharplabnext.component.msvc-cppcli-private-image.version" = required(CPPCLI_PRIVATE_IMAGE_VERSION)
-    "io.sharplabnext.component.msvc-cppcli-private-image.digest" = required(CPPCLI_PRIVATE_IMAGE_DIGEST)
-    "io.sharplabnext.component.msvc-cppcli-private-image.source-uri" = required(CPPCLI_PRIVATE_IMAGE_SOURCE_URI)
-    "io.sharplabnext.component.msvc-cppcli-prepared-base.version" = required(CPPCLI_PREPARED_BASE_VERSION)
-    "io.sharplabnext.component.msvc-cppcli-prepared-base.digest" = required(CPPCLI_PREPARED_BASE_DIGEST)
-    "io.sharplabnext.component.msvc-cppcli-prepared-base.source-uri" = required(CPPCLI_PREPARED_BASE_SOURCE_URI)
+    "io.sharplabnext.component.msvc-cppcli-netfx48.version" = required(CPPCLI_COMPILER_VERSION)
+    "io.sharplabnext.component.msvc-cppcli-netfx48.digest" = required(CPPCLI_TOOLCHAIN_DIGEST)
+    "io.sharplabnext.component.msvc-cppcli-netfx48.source-uri" = required(CPPCLI_TOOLCHAIN_SOURCE_URI)
     "io.sharplabnext.component.msvc-wine-source.version" = required(MSVC_WINE_SOURCE_VERSION)
     "io.sharplabnext.component.msvc-wine-source.commit" = required(MSVC_WINE_SOURCE_COMMIT)
     "io.sharplabnext.component.msvc-wine-source.digest" = required(MSVC_WINE_SOURCE_DIGEST)
     "io.sharplabnext.component.msvc-wine-source.source-uri" = required(MSVC_WINE_SOURCE_URI)
+    "io.sharplabnext.component.netfx48-ref.version" = required(NETFX48_REFERENCE_VERSION)
+    "io.sharplabnext.component.netfx48-ref.digest" = required(NETFX48_REFERENCE_DIGEST)
+    "io.sharplabnext.component.netfx48-ref.source-uri" = required(NETFX48_REFERENCE_SOURCE_URI)
   }
 }
 
@@ -1285,7 +1262,7 @@ target "jsharp-wine-base" {
   args = {
     VERSION = RELEASE_ID
     SOURCE_REVISION = SOURCE_REVISION
-    JSHARP_TOOLCHAIN_IMAGE = required(JSHARP_TOOLCHAIN_IMAGE)
+    JSHARP_TOOLCHAIN_IMAGE = deferred_image(JSHARP_TOOLCHAIN_IMAGE)
     JSHARP_TOOLCHAIN_VERSION = required(JSHARP_TOOLCHAIN_VERSION)
     JSHARP_COMPILER_VERSION = required(JSHARP_COMPILER_VERSION)
     JSHARP_TOOLCHAIN_DIGEST = required(JSHARP_TOOLCHAIN_DIGEST)
@@ -1305,12 +1282,14 @@ target "runtime-wine-jsharp20" {
   dockerfile = "deploy/docker/Dockerfile.runtime-wine-jsharp20"
   tags = ["${required(IMAGE_PREFIX)}/runtime-wine-jsharp20:${required(RELEASE_ID)}"]
   contexts = {
-    "jsharp-wine-base-context" = "docker-image://${required(JSHARP_WINE_BASE_IMAGE)}"
+    "jsharp-wine-base-context" = "target:jsharp-wine-base"
   }
   args = {
     VERSION = RELEASE_ID
     SOURCE_REVISION = SOURCE_REVISION
-    JSHARP_TOOLCHAIN_IMAGE = required(JSHARP_TOOLCHAIN_IMAGE)
+    # The shared Dockerfile declares the toolchain in a global FROM. Bind it
+    # for frontend parsing; the final runtime consumes target:jsharp-wine-base.
+    JSHARP_TOOLCHAIN_IMAGE = deferred_image(JSHARP_TOOLCHAIN_IMAGE)
     JSHARP_TOOLCHAIN_VERSION = required(JSHARP_TOOLCHAIN_VERSION)
     JSHARP_COMPILER_VERSION = required(JSHARP_COMPILER_VERSION)
     JSHARP_TOOLCHAIN_DIGEST = required(JSHARP_TOOLCHAIN_DIGEST)
@@ -1327,9 +1306,6 @@ target "runtime-wine-jsharp20" {
     "io.sharplabnext.component.jsharp20.digest" = required(JSHARP_TOOLCHAIN_DIGEST)
     "io.sharplabnext.component.jsharp20.source-uri" = required(JSHARP_TOOLCHAIN_SOURCE_URI)
     "io.sharplabnext.component.vjc-jsharp20.version" = required(JSHARP_COMPILER_VERSION)
-    "io.sharplabnext.component.jsharp20-prepared-base.version" = required(JSHARP_WINE_BASE_VERSION)
-    "io.sharplabnext.component.jsharp20-prepared-base.digest" = required(JSHARP_WINE_BASE_DIGEST)
-    "io.sharplabnext.component.jsharp20-prepared-base.source-uri" = required(JSHARP_WINE_BASE_SOURCE_URI)
     "io.sharplabnext.component.wine-jsharp20-linux-x64.version" = required(WINE_JSHARP20_RUNTIME_VERSION)
     "io.sharplabnext.component.wine-jsharp20-linux-x64.digest" = required(WINE_JSHARP20_RUNTIME_DIGEST)
     "io.sharplabnext.component.wine-jsharp20-linux-x64.source-uri" = required(WINE_JSHARP20_RUNTIME_SOURCE_URI)
@@ -1834,6 +1810,7 @@ target "worker-roslyn-const-generics" {
   tags = ["${required(IMAGE_PREFIX)}/worker-roslyn-const-generics:${required(RELEASE_ID)}"]
   contexts = {
     "const-generics-runtime" = "target:runtime-const-generics"
+    "const-generics-fork-packages" = "./artifacts/prerequisites/downloads/const-generics-fork-packages"
   }
   args = {
     VERSION = RELEASE_ID
@@ -1984,7 +1961,7 @@ target "worker-cppcli" {
   dockerfile = "deploy/docker/Dockerfile.worker-cppcli"
   tags = ["${required(IMAGE_PREFIX)}/worker-cppcli:${required(RELEASE_ID)}"]
   contexts = {
-    "cppcli-prepared-base" = "docker-image://${required(CPPCLI_PREPARED_BASE_IMAGE)}"
+    "cppcli-prepared-base" = "docker-image://${deferred_image(CPPCLI_PREPARED_BASE_IMAGE)}"
   }
   args = {
     VERSION = RELEASE_ID
@@ -2000,12 +1977,6 @@ target "worker-cppcli" {
     "io.sharplabnext.component.msvc-cppcli-netfx48.version" = required(CPPCLI_COMPILER_VERSION)
     "io.sharplabnext.component.msvc-cppcli-netfx48.digest" = required(CPPCLI_TOOLCHAIN_DIGEST)
     "io.sharplabnext.component.msvc-cppcli-netfx48.source-uri" = required(CPPCLI_TOOLCHAIN_SOURCE_URI)
-    "io.sharplabnext.component.msvc-cppcli-private-image.version" = required(CPPCLI_PRIVATE_IMAGE_VERSION)
-    "io.sharplabnext.component.msvc-cppcli-private-image.digest" = required(CPPCLI_PRIVATE_IMAGE_DIGEST)
-    "io.sharplabnext.component.msvc-cppcli-private-image.source-uri" = required(CPPCLI_PRIVATE_IMAGE_SOURCE_URI)
-    "io.sharplabnext.component.msvc-cppcli-prepared-base.version" = required(CPPCLI_PREPARED_BASE_VERSION)
-    "io.sharplabnext.component.msvc-cppcli-prepared-base.digest" = required(CPPCLI_PREPARED_BASE_DIGEST)
-    "io.sharplabnext.component.msvc-cppcli-prepared-base.source-uri" = required(CPPCLI_PREPARED_BASE_SOURCE_URI)
     "io.sharplabnext.component.msvc-wine-source.version" = required(MSVC_WINE_SOURCE_VERSION)
     "io.sharplabnext.component.msvc-wine-source.commit" = required(MSVC_WINE_SOURCE_COMMIT)
     "io.sharplabnext.component.msvc-wine-source.digest" = required(MSVC_WINE_SOURCE_DIGEST)
@@ -2022,7 +1993,7 @@ target "worker-jsharp" {
   dockerfile = "deploy/docker/Dockerfile.worker-jsharp"
   tags = ["${required(IMAGE_PREFIX)}/worker-jsharp:${required(RELEASE_ID)}"]
   contexts = {
-    "jsharp-wine-base" = "docker-image://${required(JSHARP_WINE_BASE_IMAGE)}"
+    "jsharp-wine-base" = "target:jsharp-wine-base"
   }
   args = {
     VERSION = RELEASE_ID
@@ -2042,9 +2013,6 @@ target "worker-jsharp" {
     "io.sharplabnext.component.jsharp20.digest" = required(JSHARP_TOOLCHAIN_DIGEST)
     "io.sharplabnext.component.jsharp20.source-uri" = required(JSHARP_TOOLCHAIN_SOURCE_URI)
     "io.sharplabnext.component.vjc-jsharp20.version" = required(JSHARP_COMPILER_VERSION)
-    "io.sharplabnext.component.jsharp20-prepared-base.version" = required(JSHARP_WINE_BASE_VERSION)
-    "io.sharplabnext.component.jsharp20-prepared-base.digest" = required(JSHARP_WINE_BASE_DIGEST)
-    "io.sharplabnext.component.jsharp20-prepared-base.source-uri" = required(JSHARP_WINE_BASE_SOURCE_URI)
     "io.sharplabnext.component.jsharp20-ref.version" = required(JSHARP_REFERENCE_VERSION)
     "io.sharplabnext.component.jsharp20-ref.digest" = required(JSHARP_REFERENCE_DIGEST)
     "io.sharplabnext.component.jsharp20-ref.source-uri" = required(JSHARP_REFERENCE_SOURCE_URI)
@@ -2191,6 +2159,7 @@ target "worker-artifacts-const-generics" {
   tags = ["${required(IMAGE_PREFIX)}/worker-artifacts-const-generics:${required(RELEASE_ID)}"]
   contexts = {
     "const-generics-runtime" = "target:runtime-const-generics"
+    "const-generics-fork-packages" = "./artifacts/prerequisites/downloads/const-generics-fork-packages"
   }
   args = {
     VERSION = RELEASE_ID

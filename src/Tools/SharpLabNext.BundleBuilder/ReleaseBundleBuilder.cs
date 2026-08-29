@@ -61,6 +61,8 @@ public sealed class ReleaseBundleBuilder
     public const string ReferenceSetLabelPrefix = "io.sharplabnext.reference-set.";
     public const string ComponentLabelPrefix = "io.sharplabnext.component.";
     public const string BaseImageLabelPrefix = "io.sharplabnext.base-image.";
+    public const string DevelopmentImageInputsLabel = "io.sharplabnext.development-image-inputs";
+    public const string ComposeEnvironmentFileName = ".env";
     public const string DisabledGitHubOAuthSecretFileName = "github-oauth-client-secret.disabled";
     public const string SecurityAssetsDirectoryName = "security";
     public const string PromotionEvidenceDirectoryName = "promotion-evidence";
@@ -123,10 +125,11 @@ public sealed class ReleaseBundleBuilder
             command.AllowUncommittedSourceForDevelopment,
             sourceInspector,
             cancellationToken);
-        if (source.DevelopmentOverrideUsed && command.SigningKeyPath is not null)
+        if ((source.DevelopmentOverrideUsed || command.AllowDevelopmentImageInputs) &&
+            command.SigningKeyPath is not null)
         {
             throw new BundleValidationException(
-                "Development source override cannot be used to create a signed release bundle.");
+                "Development source or image-input overrides cannot be used to create a signed release bundle.");
         }
         EnsureInputFile(command.CatalogPath);
         EnsureInputFile(command.LockPath);
@@ -150,17 +153,22 @@ public sealed class ReleaseBundleBuilder
         var lockTask = CatalogLoader.LoadReleaseLockAsync(command.LockPath, cancellationToken);
         var deploymentTask = LoadDeploymentImagesAsync(command.DeploymentImagesPath, cancellationToken);
         var baseImagesTask = LoadBaseImagesAsync(baseImagesPath, cancellationToken);
+        var runtimeMatrixBaseImagesTask = RuntimeMatrixBaseImageBindings.LoadAsync(
+            command.RepositoryRoot,
+            cancellationToken);
         var runtimeProfilesTask = LoadRuntimeProfilesAsync(runtimeProfilesPath, cancellationToken);
         await Task.WhenAll(
             catalogTask,
             lockTask,
             deploymentTask,
             baseImagesTask,
+            runtimeMatrixBaseImagesTask,
             runtimeProfilesTask);
         var catalog = await catalogTask;
         var releaseLock = await lockTask;
         var deployment = await deploymentTask;
         var baseImages = await baseImagesTask;
+        var runtimeMatrixBaseImages = await runtimeMatrixBaseImagesTask;
         var activeRuntimeProfiles = await runtimeProfilesTask;
         var wineManifestSnapshot = await wineManifestProvider.LoadValidatedAsync(
             command.RepositoryRoot,
@@ -191,17 +199,50 @@ public sealed class ReleaseBundleBuilder
             .Select(static profile => profile.Id)
             .ToHashSet(StringComparer.Ordinal);
 
-        var definitions = SelectImages(catalog, deployment);
-        var inspectedImages = new List<InspectedImage>(definitions.Count);
-        foreach (var definition in definitions)
+        var imagePlan = CreateImagePlan(
+            catalog,
+            deployment,
+            command.ImagePrefix,
+            command.ImageOverrides);
+        var definitionsById = deployment.Images.ToDictionary(static image => image.Id, StringComparer.Ordinal);
+        var pendingInspections = new List<(
+            DeploymentImageDefinition Definition,
+            string Reference,
+            DockerImageInspection Inspection)>(imagePlan.Images.Count);
+        foreach (var plannedImage in imagePlan.Images)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var reference = ResolveImageReference(
-                definition,
-                catalog.ReleaseId,
-                command.ImagePrefix,
-                command.ImageOverrides);
+            var definition = definitionsById[plannedImage.Id];
+            var reference = plannedImage.Reference;
             var inspection = await docker.InspectImageAsync(reference, cancellationToken);
+            pendingInspections.Add((definition, reference, inspection));
+        }
+
+        var inspectedImages = pendingInspections.Select(item => new InspectedImage(
+            item.Definition.Id,
+            item.Reference,
+            item.Inspection.ImageId,
+            item.Inspection.OperatingSystem,
+            item.Inspection.Architecture,
+            item.Inspection.SizeBytes,
+            item.Inspection.RepoDigests,
+            item.Inspection.Labels,
+            item.Definition.ComposeService,
+            item.Definition.ToolchainId,
+            item.Definition.RuntimeId,
+            item.Definition.ArtifactProcessorId,
+            item.Definition.LockComponentId ?? item.Definition.ToolchainId ?? item.Definition.RuntimeId ??
+            item.Definition.ArtifactProcessorId ?? item.Definition.Id,
+            item.Definition.ReleaseIdEnvironment,
+            item.Definition.ImageIdEnvironment)).ToArray();
+        releaseLock = ResolveDevelopmentFrameworkComponentIdentities(
+            catalog,
+            releaseLock,
+            inspectedImages,
+            command.AllowDevelopmentImageInputs);
+
+        foreach (var (definition, reference, inspection) in pendingInspections)
+        {
             ValidateInspection(
                 definition,
                 reference,
@@ -210,27 +251,12 @@ public sealed class ReleaseBundleBuilder
                 source,
                 releaseLock,
                 baseImages,
+                runtimeMatrixBaseImages,
                 catalog,
                 expectedReferenceSetDigests,
                 definition.RuntimeId is not null &&
-                promotionBoundRuntimeIds.Contains(definition.RuntimeId));
-            inspectedImages.Add(new InspectedImage(
-                definition.Id,
-                reference,
-                inspection.ImageId,
-                inspection.OperatingSystem,
-                inspection.Architecture,
-                inspection.SizeBytes,
-                inspection.RepoDigests,
-                inspection.Labels,
-                definition.ComposeService,
-                definition.ToolchainId,
-                definition.RuntimeId,
-                definition.ArtifactProcessorId,
-                definition.LockComponentId ?? definition.ToolchainId ?? definition.RuntimeId ??
-                definition.ArtifactProcessorId ?? definition.Id,
-                definition.ReleaseIdEnvironment,
-                definition.ImageIdEnvironment));
+                promotionBoundRuntimeIds.Contains(definition.RuntimeId),
+                command.AllowDevelopmentImageInputs);
         }
         var runtimePromotionTrust = await RuntimePromotionTrust.CaptureAsync(
             command.RepositoryRoot,
@@ -282,6 +308,7 @@ public sealed class ReleaseBundleBuilder
                 dependencies,
                 wineManifestSnapshot,
                 baseImages,
+                runtimeMatrixBaseImages,
                 baseImagesPath,
                 maintainedProvenance,
                 source,
@@ -302,6 +329,147 @@ public sealed class ReleaseBundleBuilder
             inspectedImages,
             !command.MetadataOnly,
             command.SigningKeyPath is not null);
+    }
+
+    public static async Task<ReleaseImagePlan> CreateImagePlanAsync(
+        BundleBuilderCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        EnsureInputFile(command.CatalogPath);
+        EnsureInputFile(command.LockPath);
+        EnsureInputFile(command.DeploymentImagesPath);
+        var baseImagesPath = Path.Combine(command.RepositoryRoot, "profiles", "base-images.json");
+        EnsureInputFile(baseImagesPath);
+        EnsureInputFile(command.LicensePolicyPath);
+        EnsureInputFile(command.ComposePath);
+        EnsureInputFile(command.NoticesPath);
+        var runtimeProfilesPath = command.RuntimeProfilesPath ??
+            Path.Combine(command.RepositoryRoot, "profiles", "runtimes");
+        EnsureInputDirectory(runtimeProfilesPath);
+        EnsureInputDirectory(Path.Combine(command.RepositoryRoot, "deploy", SecurityAssetsDirectoryName));
+        var catalogTask = CatalogLoader.LoadCatalogAsync(command.CatalogPath, cancellationToken);
+        var lockTask = CatalogLoader.LoadReleaseLockAsync(command.LockPath, cancellationToken);
+        var deploymentTask = LoadDeploymentImagesAsync(command.DeploymentImagesPath, cancellationToken);
+        var baseImagesTask = LoadBaseImagesAsync(baseImagesPath, cancellationToken);
+        var runtimeProfilesTask = LoadRuntimeProfilesAsync(runtimeProfilesPath, cancellationToken);
+        await Task.WhenAll(
+            catalogTask,
+            lockTask,
+            deploymentTask,
+            baseImagesTask,
+            runtimeProfilesTask);
+        var catalog = await catalogTask;
+        var releaseLock = await lockTask;
+        var deployment = await deploymentTask;
+        var baseImages = await baseImagesTask;
+        var runtimeProfiles = await runtimeProfilesTask;
+        var wineManifestSnapshot = await new RepositoryWineRuntimePackageManifestSnapshotProvider()
+            .LoadValidatedAsync(command.RepositoryRoot, releaseLock, cancellationToken);
+        ValidateBaseImages(baseImages);
+        WineRuntimePackageManifestLoader.ValidateResolvedPackagesForBundle(
+            wineManifestSnapshot.Manifest);
+        WineRuntimePackageManifestLoader.ValidateBaseImage(
+            wineManifestSnapshot.Manifest,
+            baseImages);
+        _ = await MaintainedProvenanceLoader.LoadAsync(
+            command.RepositoryRoot,
+            releaseLock,
+            baseImages,
+            cancellationToken);
+        _ = await DependencyInventory.LoadAsync(
+            command.RepositoryRoot,
+            command.LicensePolicyPath,
+            cancellationToken);
+        _ = ValidateInputs(catalog, releaseLock, deployment, command.ImageOverrides);
+        ValidateRuntimeProfileBindings(catalog, releaseLock, runtimeProfiles);
+        ValidateRuntimePromotionBindings(catalog, deployment, runtimeProfiles);
+        return CreateImagePlan(
+            catalog,
+            deployment,
+            command.ImagePrefix,
+            command.ImageOverrides);
+    }
+
+    public static ReleaseImagePlan CreateImagePlan(
+        CatalogDocument catalog,
+        DeploymentImageManifest deployment,
+        string? imagePrefix,
+        IReadOnlyDictionary<string, string>? imageOverrides = null)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(deployment);
+        imageOverrides ??= new Dictionary<string, string>(StringComparer.Ordinal);
+        var selected = SelectImages(catalog, deployment);
+        var images = selected.Select(definition =>
+        {
+            var reference = ResolveImageReference(
+                definition,
+                catalog.ReleaseId,
+                imagePrefix,
+                imageOverrides);
+            return new ReleaseImagePlanEntry
+            {
+                Id = definition.Id,
+                Reference = reference,
+                RuntimeId = definition.RuntimeId,
+                Producer = ImageProducer(definition)
+            };
+        }).ToArray();
+        if (images.Select(static image => image.Id).Distinct(StringComparer.Ordinal).Count() != images.Length ||
+            images.Select(static image => image.Reference).Distinct(StringComparer.Ordinal).Count() != images.Length)
+        {
+            throw new BundleValidationException(
+                "Selected deployment images must have unique IDs and final references.");
+        }
+
+        return new ReleaseImagePlan
+        {
+            SchemaVersion = 1,
+            ReleaseId = catalog.ReleaseId,
+            ImagePrefix = imagePrefix ?? "sharplabnext",
+            Images = images
+        };
+    }
+
+    private static ReleaseImageProducer ImageProducer(DeploymentImageDefinition definition)
+    {
+        if (definition.ImmutableReference is not null)
+        {
+            return new ReleaseImageProducer
+            {
+                Kind = "pull",
+                Id = definition.ImmutableReference
+            };
+        }
+
+        if (definition.RuntimeId is not null)
+        {
+            return definition.RuntimeId switch
+            {
+                "const-generics-linux-x64" => new ReleaseImageProducer
+                {
+                    Kind = "bake",
+                    Id = "runtime-const-generics"
+                },
+                "wine-jsharp20-linux-x64" => new ReleaseImageProducer
+                {
+                    Kind = "bake",
+                    Id = "runtime-wine-jsharp20"
+                },
+                _ => new ReleaseImageProducer
+                {
+                    Kind = "runtime-candidate",
+                    Id = definition.RuntimeId
+                }
+            };
+        }
+
+        return new ReleaseImageProducer
+        {
+            Kind = "bake",
+            Id = definition.Id
+        };
     }
 
     public static IReadOnlyList<DeploymentImageDefinition> SelectImages(
@@ -517,6 +685,36 @@ public sealed class ReleaseBundleBuilder
         return builder.ToString().ReplaceLineEndings("\n");
     }
 
+    public static string CreateComposeEnvironment(string releaseId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(releaseId);
+        if (releaseId.Contains('\r') || releaseId.Contains('\n'))
+        {
+            throw new ArgumentException("Release ID cannot contain a line break.", nameof(releaseId));
+        }
+
+        return string.Join(
+            "\n",
+            [
+                "# Docker Compose reads this file automatically.",
+                "# Keep credentials outside the bundle.",
+                "COMPOSE_PROJECT_NAME=sharplabnext",
+                "COMPOSE_PATH_SEPARATOR=:",
+                "COMPOSE_FILE=compose.prod.yaml:compose.generated.yaml",
+                $"SHARPLABNEXT_RELEASE_ID={releaseId}",
+                "SHARPLABNEXT_BIND_ADDRESS=127.0.0.1",
+                "SHARPLABNEXT_HTTP_PORT=8080",
+                "# deploy.sh creates this file during the first installation.",
+                "SHARPLABNEXT_INTERNAL_SERVICE_TOKEN_FILE=./secrets/internal-service-token",
+                "SHARPLABNEXT_GITHUB_OAUTH_ENABLED=false",
+                "SHARPLABNEXT_RUNTIME_SESSION_REUSE_ENABLED=true",
+                "SHARPLABNEXT_RUNTIME_APPARMOR_PROFILE=",
+                "# On Linux, use the group ID from: stat -c '%g' /var/run/docker.sock",
+                "DOCKER_GID=0",
+                ""
+            ]);
+    }
+
     private static Dictionary<string, InspectedImage> IndexToolchainWorkerImages(
         CatalogDocument catalog,
         IReadOnlyList<InspectedImage> images)
@@ -577,6 +775,7 @@ public sealed class ReleaseBundleBuilder
         IReadOnlyList<DependencyComponent> dependencies,
         WineRuntimePackageManifestSnapshot wineManifestSnapshot,
         BaseImageManifest baseImages,
+        RuntimeMatrixBaseImageBindings runtimeMatrixBaseImages,
         string baseImagesPath,
         IReadOnlyList<MaintainedProvenanceInput> maintainedProvenance,
         RepositorySourceProvenance source,
@@ -609,6 +808,10 @@ public sealed class ReleaseBundleBuilder
             Path.Combine(staging, "compose.generated.yaml"),
             CreateComposeOverlay(catalog, images, runtimeProfiles),
             cancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(staging, ComposeEnvironmentFileName),
+            CreateComposeEnvironment(catalog.ReleaseId),
+            cancellationToken);
 
         var bundleLock = CreateBundleLock(releaseLock, images);
         await WriteJsonAsync(Path.Combine(staging, "lock.json"), bundleLock, cancellationToken);
@@ -630,7 +833,10 @@ public sealed class ReleaseBundleBuilder
                 HeadRevision = source.HeadRevision,
                 Dirty = source.IsDirty,
                 Verified = source.IsVerified,
-                DevelopmentOverrideUsed = source.DevelopmentOverrideUsed
+                DevelopmentOverrideUsed = source.DevelopmentOverrideUsed,
+                DevelopmentImageInputsUsed = images.Any(static image =>
+                    image.Labels.TryGetValue(DevelopmentImageInputsLabel, out var value) &&
+                    StringComparer.Ordinal.Equals(value, "true"))
             },
             SignatureAlgorithm = command.SigningKeyPath is null ? null : "ed25519",
             SignatureKeyId = command.SigningKeyPath is null
@@ -693,6 +899,7 @@ public sealed class ReleaseBundleBuilder
                 dependencies,
                 wineManifestSnapshot,
                 baseImages,
+                runtimeMatrixBaseImages,
                 maintainedProvenance,
                 source),
             cancellationToken);
@@ -1736,6 +1943,7 @@ public sealed class ReleaseBundleBuilder
         IReadOnlyList<DependencyComponent> dependencies,
         WineRuntimePackageManifestSnapshot wineManifestSnapshot,
         BaseImageManifest baseImages,
+        RuntimeMatrixBaseImageBindings runtimeMatrixBaseImages,
         IReadOnlyList<MaintainedProvenanceInput> maintainedProvenance,
         RepositorySourceProvenance source)
     {
@@ -1745,6 +1953,26 @@ public sealed class ReleaseBundleBuilder
             uri = $"pkg:docker/{Uri.EscapeDataString(image.Id)}",
             digest = new Dictionary<string, string> { ["sha256"] = image.ImageId[7..] }
         }));
+        foreach (var operatorImage in images
+                     .Select(static image => image.Labels.TryGetValue(
+                         "io.sharplabnext.framework.row-operator-image",
+                         out var reference)
+                             ? reference
+                             : null)
+                     .OfType<string>()
+                     .Distinct(StringComparer.Ordinal))
+        {
+            var operatorDigest = BaseImageDigest(operatorImage);
+            var separator = operatorImage.LastIndexOf('@');
+            resolvedDependencies.Add(new
+            {
+                uri = $"pkg:docker/{Uri.EscapeDataString(operatorImage[..separator])}",
+                digest = new Dictionary<string, string>
+                {
+                    ["sha256"] = operatorDigest
+                }
+            });
+        }
         resolvedDependencies.AddRange(dependencies.Select(dependency => (object)new
         {
             uri = $"pkg:{dependency.PackageManager}/{Uri.EscapeDataString(dependency.Name)}@{Uri.EscapeDataString(dependency.Version)}",
@@ -1781,10 +2009,21 @@ public sealed class ReleaseBundleBuilder
                 ["sha256"] = WineManifestSha256(wineManifestSnapshot)
             }
         });
-        resolvedDependencies.AddRange(baseImages.Images.Select(image => (object)new
+        var resolvedBaseImageReferences = baseImages.Images
+            .Select(static image => image.Reference)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var image in images)
         {
-            uri = $"pkg:docker/{Uri.EscapeDataString(image.Reference[..image.Reference.LastIndexOf('@')])}",
-            digest = new Dictionary<string, string> { ["sha256"] = BaseImageDigest(image.Reference) }
+            if (image.RuntimeId is not null &&
+                runtimeMatrixBaseImages.LinuxRuntimeBaseImages.TryGetValue(image.RuntimeId, out var reference))
+            {
+                resolvedBaseImageReferences.Add(reference);
+            }
+        }
+        resolvedDependencies.AddRange(resolvedBaseImageReferences.Order(StringComparer.Ordinal).Select(reference => (object)new
+        {
+            uri = $"pkg:docker/{Uri.EscapeDataString(reference[..reference.LastIndexOf('@')])}",
+            digest = new Dictionary<string, string> { ["sha256"] = BaseImageDigest(reference) }
         }));
         resolvedDependencies.AddRange(maintainedProvenance
             .SelectMany(static provenance => provenance.ReferencedComponentIds)
@@ -1841,6 +2080,9 @@ public sealed class ReleaseBundleBuilder
                         sourceDirty = source.IsDirty,
                         sourceVerified = source.IsVerified,
                         developmentSourceOverride = source.DevelopmentOverrideUsed,
+                        developmentImageInputs = images.Any(static image =>
+                            image.Labels.TryGetValue(DevelopmentImageInputsLabel, out var value) &&
+                            StringComparer.Ordinal.Equals(value, "true")),
                         deploymentManifest = Path.GetRelativePath(command.RepositoryRoot, command.DeploymentImagesPath).Replace('\\', '/'),
                         baseImageManifest = "profiles/base-images.json",
                         maintainedProvenance = maintainedParameters
@@ -2512,7 +2754,7 @@ public sealed class ReleaseBundleBuilder
         }
     }
 
-    private static string BaseImageDigest(string reference)
+    internal static string BaseImageDigest(string reference)
     {
         var separator = reference.LastIndexOf("@sha256:", StringComparison.Ordinal);
         if (separator <= 0 || separator + 72 != reference.Length)
@@ -2774,9 +3016,11 @@ public sealed class ReleaseBundleBuilder
         RepositorySourceProvenance source,
         ReleaseLockDocument releaseLock,
         BaseImageManifest baseImages,
+        RuntimeMatrixBaseImageBindings runtimeMatrixBaseImages,
         CatalogDocument catalog,
         IReadOnlyDictionary<string, string> expectedReferenceSetDigests,
-        bool promotionBoundRuntime)
+        bool promotionBoundRuntime,
+        bool allowDevelopmentImageInputs)
     {
         if (!IsSha256(inspection.ImageId))
         {
@@ -2805,6 +3049,22 @@ public sealed class ReleaseBundleBuilder
                 $"Image '{definition.Id}' does not carry release label '{releaseId}'.");
         }
 
+        if (inspection.Labels.TryGetValue(DevelopmentImageInputsLabel, out var developmentInputs))
+        {
+            if (developmentInputs is not ("true" or "false"))
+            {
+                throw new BundleValidationException(
+                    $"Image '{definition.Id}' has invalid development image-input label '{developmentInputs}'.");
+            }
+            if (StringComparer.Ordinal.Equals(developmentInputs, "true") &&
+                !allowDevelopmentImageInputs)
+            {
+                throw new BundleValidationException(
+                    $"Image '{definition.Id}' uses development image inputs; " +
+                    "--allow-development-image-inputs is required for an unsigned bundle.");
+            }
+        }
+
         ValidateInspectionSourceRevision(
             definition,
             inspection.Labels,
@@ -2817,7 +3077,7 @@ public sealed class ReleaseBundleBuilder
             inspection.Labels,
             releaseLock,
             expectedReferenceSetDigests);
-        ValidateBaseImageLabels(definition.Id, inspection.Labels, baseImages);
+        ValidateBaseImageLabels(definition, inspection.Labels, baseImages, runtimeMatrixBaseImages);
 
         if (definition.RuntimeId is not null)
         {
@@ -2889,25 +3149,41 @@ public sealed class ReleaseBundleBuilder
     }
 
     private static void ValidateBaseImageLabels(
-        string imageId,
+        DeploymentImageDefinition definition,
         IReadOnlyDictionary<string, string> labels,
-        BaseImageManifest baseImages)
+        BaseImageManifest baseImages,
+        RuntimeMatrixBaseImageBindings runtimeMatrixBaseImages)
     {
         var expected = baseImages.Images.ToDictionary(static image => image.Id, static image => image.Reference, StringComparer.Ordinal);
+        string? matrixBaseImage = null;
+        var matrixBaseImageBound = definition.RuntimeId is not null &&
+            runtimeMatrixBaseImages.LinuxRuntimeBaseImages.TryGetValue(
+                definition.RuntimeId,
+                out matrixBaseImage);
+        if (matrixBaseImageBound)
+            expected[RuntimeMatrixBaseImageBindings.LinuxRuntimeBaseImageId] = matrixBaseImage!;
+
         var observed = labels
             .Where(static pair => pair.Key.StartsWith(BaseImageLabelPrefix, StringComparison.Ordinal))
             .ToArray();
         if (observed.Length == 0)
-            throw new BundleValidationException($"Image '{imageId}' does not declare any pinned base image labels.");
+            throw new BundleValidationException($"Image '{definition.Id}' does not declare any pinned base image labels.");
         foreach (var pair in observed)
         {
             var baseImageId = pair.Key[BaseImageLabelPrefix.Length..];
             if (!expected.TryGetValue(baseImageId, out var reference))
-                throw new BundleValidationException($"Image '{imageId}' declares unknown base image '{baseImageId}'.");
+                throw new BundleValidationException($"Image '{definition.Id}' declares unknown base image '{baseImageId}'.");
             if (!string.Equals(reference, pair.Value, StringComparison.Ordinal))
             {
+                var requiredBy = matrixBaseImageBound &&
+                    StringComparer.Ordinal.Equals(
+                        baseImageId,
+                        RuntimeMatrixBaseImageBindings.LinuxRuntimeBaseImageId)
+                            ? "runtime matrix"
+                            : "base image manifest";
                 throw new BundleValidationException(
-                    $"Image '{imageId}' base image '{baseImageId}' is '{pair.Value}', but the manifest requires '{reference}'.");
+                    $"Image '{definition.Id}' base image '{baseImageId}' is '{pair.Value}', " +
+                    $"but the {requiredBy} requires '{reference}'.");
             }
         }
     }
@@ -2955,6 +3231,127 @@ public sealed class ReleaseBundleBuilder
                 "patch-digest",
                 component.PatchDigest,
                 ignoreCase: false);
+        }
+    }
+
+    private static ReleaseLockDocument ResolveDevelopmentFrameworkComponentIdentities(
+        CatalogDocument catalog,
+        ReleaseLockDocument releaseLock,
+        IReadOnlyList<InspectedImage> images,
+        bool allowDevelopmentImageInputs)
+    {
+        Dictionary<string, LockedComponent>? components = null;
+        foreach (var image in images)
+        {
+            if (image.RuntimeId is null)
+                continue;
+
+            var runtime = catalog.Runtimes.Single(item =>
+                StringComparer.Ordinal.Equals(item.Id, image.RuntimeId));
+            if (!StringComparer.Ordinal.Equals(runtime.Family, "netfx-clr-wine"))
+                continue;
+
+            var component = releaseLock.Components[image.LockComponentId];
+            var componentPrefix = $"{ComponentLabelPrefix}{image.LockComponentId}.";
+            if (!image.Labels.TryGetValue(componentPrefix + "digest", out var observedDigest) ||
+                !image.Labels.TryGetValue(componentPrefix + "source-uri", out var observedSourceUri))
+            {
+                continue;
+            }
+            var identityDiffers = !StringComparer.Ordinal.Equals(observedDigest, component.Digest) ||
+                !StringComparer.Ordinal.Equals(observedSourceUri, component.SourceUri);
+            var hasRowBinding = image.Labels.ContainsKey(
+                "io.sharplabnext.framework.row-operator-image");
+            if (!identityDiffers && !hasRowBinding)
+                continue;
+
+            var rowOperatorImage = RequiredImageLabel(
+                image,
+                "io.sharplabnext.framework.row-operator-image");
+            var operatorDigest = $"sha256:{BaseImageDigest(rowOperatorImage)}";
+            var operatorSourceUri = $"docker://{rowOperatorImage}";
+            RequireImageLabel(
+                image,
+                "io.sharplabnext.framework.matrix-selector",
+                "true");
+            RequireImageLabel(
+                image,
+                $"{ComponentLabelPrefix}runtime-matrix.profile-id",
+                image.RuntimeId);
+            RequireImageLabel(
+                image,
+                $"{ComponentLabelPrefix}runtime-matrix.version",
+                component.ResolvedVersion);
+            RequireImageLabel(
+                image,
+                $"{ComponentLabelPrefix}runtime-matrix.digest",
+                operatorDigest);
+            RequireImageLabel(
+                image,
+                $"{ComponentLabelPrefix}runtime-matrix.source-uri",
+                operatorSourceUri);
+            RequireImageLabel(image, componentPrefix + "digest", operatorDigest);
+            RequireImageLabel(image, componentPrefix + "source-uri", operatorSourceUri);
+
+            var rowDigest = RequiredImageLabel(image, "io.sharplabnext.framework.row-digest");
+            if (!IsSha256(rowDigest))
+            {
+                throw new BundleValidationException(
+                    $"Image '{image.Id}' has invalid Framework row digest '{rowDigest}'.");
+            }
+            _ = BaseImageDigest(RequiredImageLabel(
+                image,
+                "io.sharplabnext.framework.matrix-parent"));
+            var matrixSourceUri = RequiredImageLabel(
+                image,
+                "io.sharplabnext.framework.matrix-source-uri");
+            if (!matrixSourceUri.StartsWith("docker://", StringComparison.Ordinal))
+            {
+                throw new BundleValidationException(
+                    $"Image '{image.Id}' Framework matrix source is not an immutable docker URI.");
+            }
+            _ = BaseImageDigest(matrixSourceUri["docker://".Length..]);
+
+            if (!identityDiffers)
+                continue;
+            if (!allowDevelopmentImageInputs ||
+                !image.Labels.TryGetValue(DevelopmentImageInputsLabel, out var developmentInputs) ||
+                !StringComparer.Ordinal.Equals(developmentInputs, "true"))
+            {
+                continue;
+            }
+
+            components ??= releaseLock.Components.ToDictionary(
+                static pair => pair.Key,
+                static pair => pair.Value,
+                StringComparer.Ordinal);
+            components[image.LockComponentId] = component with
+            {
+                Digest = operatorDigest,
+                SourceUri = operatorSourceUri
+            };
+        }
+
+        return components is null ? releaseLock : releaseLock with { Components = components };
+    }
+
+    private static string RequiredImageLabel(InspectedImage image, string label)
+    {
+        if (!image.Labels.TryGetValue(label, out var value) || string.IsNullOrWhiteSpace(value))
+        {
+            throw new BundleValidationException(
+                $"Image '{image.Id}' does not carry required label '{label}'.");
+        }
+        return value;
+    }
+
+    private static void RequireImageLabel(InspectedImage image, string label, string expected)
+    {
+        var actual = RequiredImageLabel(image, label);
+        if (!StringComparer.Ordinal.Equals(actual, expected))
+        {
+            throw new BundleValidationException(
+                $"Image '{image.Id}' label '{label}' is '{actual}', but its verified Framework row requires '{expected}'.");
         }
     }
 

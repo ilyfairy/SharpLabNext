@@ -94,6 +94,10 @@ public sealed class ConstGenericsRuntimeTests
         Assert.Null(releaseLock.Components["artifacts-const-generics"].ImageId);
         Assert.All(releaseLock.Components.Values, static component => Assert.Null(component.PatchDigest));
         AssertMaintainedSourceReference(provenance.RootElement, releaseLock, "const-generics-runtime-source");
+        AssertPatchSeriesIsDerivedFromFiles(
+            root,
+            provenance.RootElement,
+            "eng/patches/const-generics-runtime");
         Assert.Equal(
             "const-generics-ref",
             provenance.RootElement.GetProperty("build").GetProperty("referenceSet").GetProperty("componentId").GetString());
@@ -129,6 +133,7 @@ public sealed class ConstGenericsRuntimeTests
         AssertPatchSeriesIsDerivedFromFiles(
             root,
             ilspyProvenance.RootElement,
+            "eng/patches/const-generics-runtime",
             "eng/patches/ilspy-const-generics");
         var runtimeDependency = ilspyProvenance.RootElement.GetProperty("runtimeDependency");
         Assert.Equal("const-generics-runtime-source", runtimeDependency.GetProperty("sourceComponentId").GetString());
@@ -405,10 +410,12 @@ public sealed class ConstGenericsRuntimeTests
     private static void AssertPatchSeriesIsDerivedFromFiles(
         string repositoryRoot,
         JsonElement provenance,
-        string patchDirectory)
+        params string[] patchDirectories)
     {
-        var expectedPaths = Directory
-            .EnumerateFiles(Path.Combine(repositoryRoot, patchDirectory), "*.patch")
+        var expectedPaths = patchDirectories
+            .SelectMany(patchDirectory => Directory.EnumerateFiles(
+                Path.Combine(repositoryRoot, patchDirectory),
+                "*.patch"))
             .Select(path => Path.GetRelativePath(repositoryRoot, path).Replace('\\', '/'))
             .Order(StringComparer.Ordinal)
             .ToArray();

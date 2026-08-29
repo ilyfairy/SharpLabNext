@@ -52,6 +52,35 @@ public sealed record DeploymentImageDefinition
     public string? ImageIdEnvironment { get; init; }
 }
 
+public sealed record ReleaseImagePlan
+{
+    public required int SchemaVersion { get; init; }
+
+    public required string ReleaseId { get; init; }
+
+    public required string ImagePrefix { get; init; }
+
+    public required IReadOnlyList<ReleaseImagePlanEntry> Images { get; init; }
+}
+
+public sealed record ReleaseImagePlanEntry
+{
+    public required string Id { get; init; }
+
+    public required string Reference { get; init; }
+
+    public required ReleaseImageProducer Producer { get; init; }
+
+    public string? RuntimeId { get; init; }
+}
+
+public sealed record ReleaseImageProducer
+{
+    public required string Kind { get; init; }
+
+    public required string Id { get; init; }
+}
+
 public sealed record InspectedImage(
     string Id,
     string SourceReference,
@@ -109,6 +138,8 @@ public sealed record BundleSourceDocument
     public required bool Verified { get; init; }
 
     public required bool DevelopmentOverrideUsed { get; init; }
+
+    public required bool DevelopmentImageInputsUsed { get; init; }
 }
 
 public sealed record BundleImageDocument

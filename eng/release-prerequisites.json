@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 3,
+  "localRegistry": {
+    "image": "registry@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373",
+    "imageId": "sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373",
+    "containerName": "sharplabnext-release-registry",
+    "host": "127.0.0.1",
+    "port": 5000
+  },
+  "downloads": [
+    {
+      "kind": "file",
+      "id": "netfx35sp1-installer",
+      "path": "downloads/dotnetfx35.exe",
+      "url": "https://download.microsoft.com/download/2/0/e/20e90413-712f-438c-988e-fdaa79a8ac3d/dotnetfx35.exe",
+      "sizeBytes": 242743296,
+      "sha256": "0582515bde321e072f8673e829e175ed2e7a53e803127c50253af76528e66bc1",
+      "license": "Microsoft .NET Framework Redistributable EULA"
+    },
+    {
+      "kind": "file",
+      "id": "netfx451-installer",
+      "path": "downloads/NDP451-KB2858728-x86-x64-AllOS-ENU.exe",
+      "url": "https://download.microsoft.com/download/1/6/7/167F0D79-9317-48AE-AEDB-17120579F8E2/NDP451-KB2858728-x86-x64-AllOS-ENU.exe",
+      "sizeBytes": 70087104,
+      "sha256": "5ded8628ce233a5afa8e0efc19ad34690f05e9bb492f2ed0413508546af890fe",
+      "license": "Microsoft .NET Framework Redistributable EULA"
+    },
+    {
+      "kind": "file",
+      "id": "netfx47-installer",
+      "path": "downloads/NDP47-KB3186497-x86-x64-AllOS-ENU.exe",
+      "url": "https://download.visualstudio.microsoft.com/download/pr/2dfcc711-bb60-421a-a17b-76c63f8d1907/e5c0231bd5d51fffe65f8ed7516de46a/ndp47-kb3186497-x86-x64-allos-enu.exe",
+      "sizeBytes": 61584232,
+      "sha256": "d9690c83d7ce56b2804ea34aef79ce34b242d60b9cec16385bce1340cfe00883",
+      "license": "Microsoft .NET Framework Redistributable EULA"
+    },
+    {
+      "kind": "nuget-package",
+      "id": "const-generics-system-collections-immutable",
+      "path": "downloads/const-generics-fork-packages/system.collections.immutable.8.0.0-dev.nupkg",
+      "url": "https://pkgs.dev.azure.com/hez2010/20ccb654-b3c8-4f40-9c42-7d84d39993fd/_packaging/c52a6fa0-f11c-489f-bb91-743b56cf080f/nuget/v3/flat2/system.collections.immutable/8.0.0-dev/system.collections.immutable.8.0.0-dev.nupkg",
+      "package": "System.Collections.Immutable",
+      "version": "8.0.0-dev",
+      "sizeBytes": 705507,
+      "sha256": "204d96f613cb1e19a063ccefebb3e58a8ca2a7cdfef9a8bd52e956bab17d5341",
+      "license": "MIT"
+    },
+    {
+      "kind": "nuget-package",
+      "id": "const-generics-system-reflection-metadata",
+      "path": "downloads/const-generics-fork-packages/system.reflection.metadata.8.0.0-dev.nupkg",
+      "url": "https://pkgs.dev.azure.com/hez2010/20ccb654-b3c8-4f40-9c42-7d84d39993fd/_packaging/c52a6fa0-f11c-489f-bb91-743b56cf080f/nuget/v3/flat2/system.reflection.metadata/8.0.0-dev/system.reflection.metadata.8.0.0-dev.nupkg",
+      "package": "System.Reflection.Metadata",
+      "version": "8.0.0-dev",
+      "sizeBytes": 1248015,
+      "sha256": "f5faf1a6f2a65c68be3eb1bcf4deeeea43a5af9f31fa661be06c4a9786884904",
+      "license": "MIT"
+    },
+    {
+      "kind": "file",
+      "id": "msvc-wine-source",
+      "path": "downloads/msvc-wine-514f8ea34842cd6d831804d0e9658d3a32870ae1.tar.gz",
+      "url": "https://codeload.github.com/mstorsjo/msvc-wine/tar.gz/514f8ea34842cd6d831804d0e9658d3a32870ae1",
+      "sizeBytes": 46708,
+      "sha256": "ad0d0aef7590fbe2c2338abc289be36c869ff9a076e7790f7d62b483458f5e55",
+      "license": "ISC"
+    },
+    {
+      "kind": "file",
+      "id": "visual-studio-manifest",
+      "path": "downloads/VisualStudio-18.8.0.vsman",
+      "url": "https://download.visualstudio.microsoft.com/download/pr/e05c0bc8-d058-4b2b-937c-1c80073d7633/6bc8ae0aa34a6dfb62a5d4b83673949165d7bbc4c6dd59979f45a68f62ff2358/VisualStudio.vsman",
+      "sizeBytes": 18366600,
+      "sha256": "b20492a4acb679cabdd4c7f7168a82d56b8c1079c9d8f5a3ef3550fea08ba4e8",
+      "license": "Microsoft Visual Studio Build Tools license"
+    },
+    {
+      "kind": "file",
+      "id": "netfx48-developer-pack",
+      "path": "downloads/NDP48-DevPack-ENU.exe",
+      "url": "https://download.microsoft.com/download/6/4/2/642ec242-448b-49a1-8371-5d9c202eaa46/NDP48-DevPack-ENU.exe",
+      "sizeBytes": 147605328,
+      "sha256": "b37882cda5610b291b2a984e4c2270f67a448f79d6b1f78337736c95b35c5a7f",
+      "license": "Microsoft .NET Framework Developer Pack EULA"
+    }
+  ],
+  "repositoryFiles": [
+    {
+      "id": "jsharp20-installer",
+      "path": "eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe",
+      "sizeBytes": 6110048,
+      "sha256": "3a7a6ff79eeb5d51f8bf4cab188f74de0a220722e3d9d97858092ea3ef41b2b0",
+      "gitLfs": true,
+      "license": "Microsoft Visual J# 2.0 Redistributable Package Second Edition EULA"
+    }
+  ],
+  "generatedImages": [
+    {
+      "id": "jsharp20-development-base",
+      "reference": "sharplabnext/operator-jsharp20:source-v2",
+      "buildKind": "jsharp20",
+      "license": "Microsoft Visual J# 2.0 and .NET Framework operator-only inputs"
+    },
+    {
+      "id": "cppcli-prepared-base",
+      "reference": "sharplabnext/msvc-cppcli-prepared-base:source-v2",
+      "buildKind": "cppcli",
+      "license": "Microsoft Visual C++, Windows SDK and .NET Framework operator-only inputs"
+    }
+  ]
+}

@@ -1,0 +1,248 @@
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+
+ARG FRAMEWORK_SEED_IMAGE
+FROM ${FRAMEWORK_SEED_IMAGE} AS toolchain-build
+
+ARG FRAMEWORK_SEED_IMAGE
+ARG MSVC_WINE_SOURCE_SHA256
+ARG VISUAL_STUDIO_MANIFEST_SHA256
+ARG NETFX48_DEVELOPER_PACK_SHA256
+ARG MSVC_WINE_SOURCE_FILE
+ARG VISUAL_STUDIO_MANIFEST_FILE
+ARG NETFX48_DEVELOPER_PACK_FILE
+ARG OPERATOR_BUILD_INPUT_SHA256
+ARG ACCEPT_MICROSOFT_CPP_BUILD_TOOLS_LICENSE
+ARG ACCEPT_MICROSOFT_DOTNET_EULA
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ENV WINEPREFIX=/opt/wine-netfx-clr4 \
+    WINEARCH=win64 \
+    WINEDEBUG=-all
+
+# msiextract is a build-only parser. The immutable Ubuntu snapshot inherited
+# from the Framework seed keeps this package acquisition reproducible, and the
+# package does not cross into the prepared final image.
+RUN set -euo pipefail; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+      msitools=0.103+repack-1build3; \
+    test "$(dpkg-query -W -f='${Version}' msitools)" = 0.103+repack-1build3; \
+    command -v msiextract >/dev/null; \
+    command -v msiinfo >/dev/null; \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+
+COPY --chmod=0555 deploy/docker/cppcli-netfx-env.sh /usr/local/bin/sharplabnext-cppcli-netfx-env
+COPY --chmod=0555 deploy/docker/extract-netfx48-sdk.py /usr/local/bin/sharplabnext-extract-netfx48-sdk
+
+RUN --mount=type=cache,id=sharplabnext-msvc-19.51.36248-packages,target=/var/cache/sharplabnext-msvc,sharing=locked \
+    --mount=type=bind,from=cppcli-prerequisite-context,target=/run/operator-assets/cppcli,ro <<'SH'
+set -euo pipefail
+
+[[ "${FRAMEWORK_SEED_IMAGE}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]
+[[ "${MSVC_WINE_SOURCE_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+[[ "${VISUAL_STUDIO_MANIFEST_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+[[ "${NETFX48_DEVELOPER_PACK_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+[[ "${OPERATOR_BUILD_INPUT_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+test "${ACCEPT_MICROSOFT_CPP_BUILD_TOOLS_LICENSE}" = true
+test "${ACCEPT_MICROSOFT_DOTNET_EULA}" = true
+test -d /opt/wine-netfx-clr4
+[[ "${MSVC_WINE_SOURCE_FILE}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+[[ "${VISUAL_STUDIO_MANIFEST_FILE}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+[[ "${NETFX48_DEVELOPER_PACK_FILE}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+for command in awk python3 perl tar sha256sum cabextract msiextract msiinfo xvfb-run; do
+    command -v "${command}" >/dev/null
+done
+msvc_source="/run/operator-assets/cppcli/${MSVC_WINE_SOURCE_FILE}"
+vs_manifest="/run/operator-assets/cppcli/${VISUAL_STUDIO_MANIFEST_FILE}"
+developer_pack="/run/operator-assets/cppcli/${NETFX48_DEVELOPER_PACK_FILE}"
+for input in "${msvc_source}" "${vs_manifest}" "${developer_pack}"; do
+    test -f "${input}"
+    test ! -L "${input}"
+done
+printf '%s  %s\n' \
+    "${MSVC_WINE_SOURCE_SHA256}" "${msvc_source}" \
+    "${VISUAL_STUDIO_MANIFEST_SHA256}" "${vs_manifest}" \
+    "${NETFX48_DEVELOPER_PACK_SHA256}" "${developer_pack}" \
+    | sha256sum --check --strict
+
+work="$(mktemp -d /tmp/sharplabnext-cppcli.XXXXXX)"
+cleanup() {
+    rm -rf "${work}"
+}
+trap cleanup EXIT
+
+printf '[cppcli-bootstrap] stage=extract-msvc-wine\n'
+source_root="${work}/msvc-wine"
+mkdir -p "${source_root}"
+tar -xzf "${msvc_source}" --strip-components=1 -C "${source_root}"
+test -f "${source_root}/vsdownload.py"
+test -f "${source_root}/install.sh"
+test -f "${source_root}/LICENSE.txt"
+# Framework images expose the distro's explicit stable launcher. Teach the
+# pinned msvc-wine wrapper that name without adding a generic Wine alias.
+sed -i \
+    's/command -v wine64 || command -v wine || false/command -v wine-stable || command -v wine64 || command -v wine || false/' \
+    "${source_root}/wrappers/wine-msvc.sh"
+grep --fixed-strings --quiet \
+    'WINE=$(command -v wine-stable || command -v wine64 || command -v wine || false)' \
+    "${source_root}/wrappers/wine-msvc.sh"
+
+printf '[cppcli-bootstrap] stage=download-and-unpack-msvc\n'
+PYTHONUNBUFFERED=1 python3 "${source_root}/vsdownload.py" \
+    --accept-license \
+    --manifest "${vs_manifest}" \
+    --cache /var/cache/sharplabnext-msvc \
+    --dest /opt/msvc \
+    --architecture x64 \
+    --host-arch x64 \
+    --language en \
+    --skip-patch \
+    Microsoft.VisualStudio.Component.VC.14.51.x86.x64 \
+    Microsoft.VC.14.51.CLI.X64 \
+    Win11SDK_10.0.26100
+
+printf '[cppcli-bootstrap] stage=install-msvc-wrappers\n'
+xvfb-run -a "${source_root}/install.sh" /opt/msvc
+test -x /opt/msvc/bin/x64/cl
+printf '[cppcli-bootstrap] stage=validate-msvc-wrapper\n'
+(
+    source /opt/msvc/bin/x64/msvcenv.sh
+    test -n "${MSVCVER}"
+    test -f "${BINDIR}/cl.exe"
+)
+test "$(
+    find /opt/msvc/VC/Tools/MSVC -type f \
+        -path '*/bin/Hostx64/x64/cl.exe' | wc -l
+)" -eq 1
+grep --fixed-strings --quiet 'command -v wine-stable' \
+    /opt/msvc/bin/x64/wine-msvc.sh
+
+printf '[cppcli-bootstrap] stage=extract-netfx48-developer-pack\n'
+developer_pack_root="${work}/developer-pack"
+mkdir -p "${developer_pack_root}"
+cabextract -q -d "${developer_pack_root}" "${developer_pack}"
+sdk_payload_root="${work}/netfxsdk-payloads"
+python3 /usr/local/bin/sharplabnext-extract-netfx48-sdk \
+    --bundle-root "${developer_pack_root}" \
+    --output "${sdk_payload_root}"
+sdk_msi="${sdk_payload_root}/sdk_tools48.msi"
+sdk_cab="${sdk_payload_root}/sdk_tools48.cab"
+test -f "${sdk_msi}"
+test -f "${sdk_cab}"
+sdk_properties="${work}/netfxsdk-properties.tsv"
+msiinfo export "${sdk_msi}" Property > "${sdk_properties}"
+msi_property() {
+    awk -F '\t' -v key="$1" \
+        '$1 == key { sub(/\r$/, "", $2); print $2 }' \
+        "${sdk_properties}"
+}
+test "$(msi_property ProductCode)" = '{949C0535-171C-480F-9CF4-D25C9E60FE88}'
+test "$(msi_property ProductName)" = 'Microsoft .NET Framework 4.8 SDK'
+test "$(msi_property ProductVersion)" = '4.8.03928'
+test "$(msi_property Manufacturer)" = 'Microsoft Corporation'
+sdk_media="${work}/netfxsdk-media.tsv"
+msiinfo export "${sdk_msi}" Media > "${sdk_media}"
+sdk_cabinet="$(
+    awk -F '\t' '$1 == "1" { sub(/\r$/, "", $4); print $4 }' "${sdk_media}"
+)"
+test "${sdk_cabinet}" = 'sdk_tools48.cab'
+sdk_unpack="${work}/netfxsdk-unpacked"
+mkdir -p "${sdk_unpack}"
+msiextract -C "${sdk_unpack}" "${sdk_msi}" >/dev/null
+mapfile -t mscoree_candidates < <(
+    find "${sdk_unpack}" -type f -iname mscoree.lib \
+        | grep -i '/netfxsdk/4.8/lib/um/x64/mscoree.lib$'
+)
+test "${#mscoree_candidates[@]}" -eq 1
+mscoree="${mscoree_candidates[0]}"
+sdk_root="$(dirname "$(dirname "$(dirname "$(dirname "${mscoree}")")")")"
+test -d "${sdk_root}/Include/um"
+test -f "${sdk_root}/Lib/um/x64/mscoree.lib"
+test ! -e /opt/netfxsdk
+mkdir /opt/netfxsdk
+cp -a "${sdk_root}/." /opt/netfxsdk/
+
+install -m 0555 /usr/local/bin/sharplabnext-cppcli-netfx-env \
+    /opt/msvc/netfx-env.sh
+while IFS= read -r environment; do
+    if ! grep --fixed-strings --quiet '. /opt/msvc/netfx-env.sh' "${environment}"; then
+        printf '\n. /opt/msvc/netfx-env.sh\n' >> "${environment}"
+    fi
+done < <(find /opt/msvc/bin -mindepth 2 -maxdepth 2 -type f -name msvcenv.sh)
+test "$(find /opt/msvc/bin -mindepth 2 -maxdepth 2 -type f -name msvcenv.sh | wc -l)" -ge 1
+
+printf '[cppcli-bootstrap] stage=cleanup\n'
+cleanup
+trap - EXIT
+SH
+
+FROM ${FRAMEWORK_SEED_IMAGE} AS final
+
+ARG FRAMEWORK_SEED_IMAGE
+ARG OPERATOR_BUILD_INPUT_SHA256
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ENV WINEPREFIX=/opt/wine-dotnet \
+    WINEARCH=win64 \
+    WINEDEBUG=-all
+
+RUN set -euo pipefail; \
+    test -d /opt/wine-netfx-clr4; \
+    test ! -e /opt/wine-dotnet; \
+    mv /opt/wine-netfx-clr4 /opt/wine-dotnet; \
+    test ! -e /opt/wine-netfx-clr4
+
+COPY --from=toolchain-build /opt/msvc/ /opt/msvc/
+COPY --from=toolchain-build /opt/netfxsdk/ /opt/netfxsdk/
+
+RUN set -euo pipefail <<'SH'
+/usr/local/bin/sharplabnext-wine-netfx-preflight /opt/wine-dotnet 4.8
+test -x /opt/msvc/bin/x64/cl
+test -f /opt/netfxsdk/Lib/um/x64/mscoree.lib
+test -f /opt/msvc/netfx-env.sh
+test "$(
+    grep --fixed-strings --count '. /opt/msvc/netfx-env.sh' \
+        /opt/msvc/bin/x64/msvcenv.sh
+)" -eq 1
+
+work="$(mktemp -d /tmp/sharplabnext-cppcli-preflight.XXXXXX)"
+cleanup() {
+    rm -rf "${work}"
+}
+trap cleanup EXIT
+cat > "${work}/probe.cpp" <<'CPP'
+#using <mscorlib.dll>
+using namespace System;
+int main() {
+    Console::WriteLine("SharpLabNext C++/CLI preflight");
+    return 0;
+}
+CPP
+(
+    cd "${work}"
+    timeout --signal=KILL 180 xvfb-run -a \
+        /opt/msvc/bin/x64/cl \
+        /nologo /EHa /clr /MD /O2 /Z7 /utf-8 \
+        probe.cpp /Feprobe.exe /link /Brepro
+)
+test -f "${work}/probe.exe"
+objdump -f "${work}/probe.exe" \
+    | grep --fixed-strings --quiet 'architecture: i386:x86-64'
+cleanup
+trap - EXIT
+printf '[cppcli-verify] status=ok compiler=19.51.36248 framework=4.8\n'
+SH
+
+LABEL org.opencontainers.image.title="SharpLabNext Source-Built MSVC C++/CLI 19.51 Base" \
+      io.sharplabnext.operator-build.strategy="source-built-operator-image-v1" \
+      io.sharplabnext.operator-build.input-sha256="${OPERATOR_BUILD_INPUT_SHA256}" \
+      io.sharplabnext.operator-build.image-id="cppcli-prepared-base" \
+      io.sharplabnext.operator-build.build-kind="cppcli" \
+      io.sharplabnext.operator-build.framework-seed-image="${FRAMEWORK_SEED_IMAGE}" \
+      io.sharplabnext.operator-only="true" \
+      io.sharplabnext.redistribution="operator-supplied-only"
+
+WORKDIR /opt
+USER 0:0

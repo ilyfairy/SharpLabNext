@@ -99,10 +99,11 @@ COPY src/ ./src/
 COPY eng/extract-zip.cs /tools/extract-zip.cs
 COPY eng/create-reference-set-attestation.cs /tools/create-reference-set-attestation.cs
 COPY --chmod=0555 deploy/docker/fetch-verified-reference-package.sh /tools/fetch-verified-reference-package
-RUN dotnet restore \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore \
       src/Workers/GSharp/SharpLabNext.Worker.GSharp/SharpLabNext.Worker.GSharp.csproj \
-      --locked-mode
-RUN dotnet publish \
+      --locked-mode \
+    && dotnet publish \
       src/Workers/GSharp/SharpLabNext.Worker.GSharp/SharpLabNext.Worker.GSharp.csproj \
       --configuration Release \
       --no-restore \

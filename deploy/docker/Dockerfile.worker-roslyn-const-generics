@@ -44,9 +44,18 @@ RUN git apply --check /tmp/0001-use-source-built-metadata.patch \
     && git apply /tmp/0001-use-source-built-metadata.patch \
     && ! grep --fixed-strings --quiet '<PackageReference Include="System.Reflection.Metadata"' src/Compilers/Core/Portable/Microsoft.CodeAnalysis.csproj \
     && ! grep --fixed-strings --quiet '<PackageReference Include="System.Collections.Immutable"' src/Compilers/Core/Portable/Microsoft.CodeAnalysis.csproj
+COPY --from=const-generics-fork-packages / /const-generics-fork-packages/
+COPY eng/patches/roslyn-const-generics/0002-use-local-fork-packages.patch /tmp/0002-use-local-fork-packages.patch
+RUN --network=none set -eux; \
+    test "$(find /const-generics-fork-packages -mindepth 1 -maxdepth 1 | wc -l)" -eq 2; \
+    test "$(find /const-generics-fork-packages -mindepth 1 -maxdepth 1 -type f -name '*.nupkg' | wc -l)" -eq 2; \
+    git apply --check /tmp/0002-use-local-fork-packages.patch; \
+    git apply /tmp/0002-use-local-fork-packages.patch; \
+    grep --fixed-strings --quiet 'value="/const-generics-fork-packages"' NuGet.config; \
+    ! grep --fixed-strings --quiet 'pkgs.dev.azure.com/hez2010' NuGet.config
 COPY eng/roslyn-const-generics.slnf ./SharpLabNext.Roslyn.ConstGenerics.slnf
-RUN --mount=type=cache,id=sharplabnext-const-roslyn-nuget,target=/root/.nuget/packages \
-    --mount=type=cache,id=sharplabnext-const-roslyn-dotnet,target=/roslyn-source/.dotnet \
+RUN --mount=type=cache,id=sharplabnext-const-roslyn-nuget,target=/root/.nuget/packages,sharing=locked \
+    --mount=type=cache,id=sharplabnext-const-roslyn-dotnet,target=/roslyn-source/.dotnet,sharing=locked \
     ./build.sh \
       --restore \
       --configuration Release \
@@ -89,9 +98,13 @@ RUN set -eux; \
     find /roslyn-const-generics -maxdepth 1 -type f -name '*.dll' -print0 | sort -z | xargs -0 sha256sum \
       > /roslyn-const-generics/assemblies.sha256
 COPY eng/verify-roslyn-const-generics.cs /tools/verify-roslyn-const-generics.cs
-RUN cd /tools \
-    && NUGET_PACKAGES=/tmp/verify-nuget \
-    dotnet run verify-roslyn-const-generics.cs -- \
+COPY eng/NuGet.verifier.config /tools/NuGet.verifier.config
+WORKDIR /tools
+RUN --network=none \
+    dotnet restore /tools/verify-roslyn-const-generics.cs \
+      --configfile /tools/NuGet.verifier.config \
+      -p:NuGetAudit=false \
+    && dotnet run --no-restore /tools/verify-roslyn-const-generics.cs -- \
       /roslyn-const-generics "${CONST_GENERICS_ROSLYN_VERSION}" "${CONST_GENERICS_ROSLYN_COMMIT}"
 
 FROM ${SDK_IMAGE} AS publish
@@ -113,7 +126,8 @@ COPY src/ ./src/
 COPY eng/create-reference-set-attestation.cs /tools/create-reference-set-attestation.cs
 COPY --from=roslyn-source-build /roslyn-const-generics/ /roslyn-const-generics/
 COPY --from=runtime-assets /reference-sets/const-generics-ref/ /reference-sets/const-generics-ref/
-RUN dotnet restore \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore \
       src/Workers/Roslyn.ConstGenerics/SharpLabNext.Worker.Roslyn.ConstGenerics/SharpLabNext.Worker.Roslyn.ConstGenerics.csproj \
       --locked-mode \
       /p:ConstGenericsSourceBuild=true \
@@ -124,16 +138,16 @@ RUN dotnet restore \
       --locked-mode \
       /p:ConstGenericsSourceBuild=true \
       /p:ConstGenericsAssemblyDirectory=/roslyn-const-generics \
-      /p:ConstGenericsMetadataAssemblyPath=/roslyn-const-generics/System.Reflection.Metadata.dll
-RUN dotnet publish \
+      /p:ConstGenericsMetadataAssemblyPath=/roslyn-const-generics/System.Reflection.Metadata.dll \
+    && dotnet publish \
       src/Workers/Roslyn.ConstGenerics/SharpLabNext.Worker.Roslyn.ConstGenerics.Tests/SharpLabNext.Worker.Roslyn.ConstGenerics.Tests.csproj \
       --configuration ${CONFIGURATION} \
       --no-restore \
       --output /app/tests \
       /p:ConstGenericsSourceBuild=true \
       /p:ConstGenericsAssemblyDirectory=/roslyn-const-generics \
-      /p:ConstGenericsMetadataAssemblyPath=/roslyn-const-generics/System.Reflection.Metadata.dll
-RUN dotnet publish \
+      /p:ConstGenericsMetadataAssemblyPath=/roslyn-const-generics/System.Reflection.Metadata.dll \
+    && dotnet publish \
       src/Workers/Roslyn.ConstGenerics/SharpLabNext.Worker.Roslyn.ConstGenerics/SharpLabNext.Worker.Roslyn.ConstGenerics.csproj \
       --configuration ${CONFIGURATION} \
       --no-restore \

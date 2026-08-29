@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 
 import {
   buildRuntimeMatrixDeploymentBridge,
+  renameSyncWithRetry,
   runRuntimeMatrixDeploymentBridgeCli,
 } from './runtime-matrix-deployment-bridge.mjs'
 import {
@@ -292,6 +293,33 @@ test('output transaction preserves a pre-existing non-directory target on failur
   assert.throws(() => buildRuntimeMatrixDeploymentBridge(fixture.options), /must be a non-link directory/)
   assert.equal(fs.readFileSync(fixture.options.outputDirectory, 'utf8'), 'keep-existing-target')
   assert.equal(fs.readdirSync(fixture.root).some(name => name.includes('.staging') || name.includes('.backup')), false)
+})
+
+test('output transaction retries transient Windows rename failures', () => {
+  const waits = []
+  let attempts = 0
+  renameSyncWithRetry('staging', 'output', {
+    renameSync: () => {
+      attempts += 1
+      if (attempts < 3) throw Object.assign(new Error('sharing violation'), { code: 'EPERM' })
+    },
+    wait: milliseconds => waits.push(milliseconds),
+  })
+
+  assert.equal(attempts, 3)
+  assert.deepEqual(waits, [25, 50])
+})
+
+test('output transaction does not retry non-transient rename failures', () => {
+  let attempts = 0
+  assert.throws(() => renameSyncWithRetry('staging', 'output', {
+    renameSync: () => {
+      attempts += 1
+      throw Object.assign(new Error('destination exists'), { code: 'EEXIST' })
+    },
+    wait: () => assert.fail('non-transient rename failure must not wait'),
+  }), /destination exists/)
+  assert.equal(attempts, 1)
 })
 
 test('CLI reports help, invalid arguments and a successful 34-profile bridge', t => {

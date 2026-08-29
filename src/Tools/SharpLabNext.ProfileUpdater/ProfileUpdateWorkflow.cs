@@ -1396,6 +1396,7 @@ public static class BakeEnvironmentResolver
             ["IMAGE_PREFIX"] = RequiredValue(imagePrefix, "imagePrefix"),
             ["SOURCE_REVISION"] = RequiredValue(sourceRevision, "sourceRevision"),
             ["SOURCE_DATE_EPOCH"] = SourceDateEpochResolver.Validate(sourceDateEpoch),
+            ["DEVELOPMENT_IMAGE_INPUTS"] = "false",
             // The Wine images use the same shared control-plane bridge as the
             // rest of the runtime fleet.  Keep this selection in the Bake
             // environment rather than in a Dockerfile ARG default so a
@@ -1540,66 +1541,10 @@ public static class BakeEnvironmentResolver
         Dictionary<string, string> environment,
         ReleaseLockDocument releaseLock)
     {
-        const string dockerSourcePrefix = "docker://";
-        var privateImage = RequiredComponent(releaseLock, "msvc-cppcli-private-image");
-        var privateImageDigest = RequiredDigest(
-            privateImage.Digest,
-            "msvc-cppcli-private-image.digest");
-        var privateImageSource = RequiredValue(
-            privateImage.SourceUri,
-            "msvc-cppcli-private-image.sourceUri");
-        if (!privateImageSource.StartsWith(dockerSourcePrefix, StringComparison.Ordinal))
-        {
-            throw new BakeEnvironmentValidationException(
-                "msvc-cppcli-private-image.sourceUri must use docker://repository@sha256:<64 lowercase hex>.");
-        }
-
-        var privateImageReference = privateImageSource[dockerSourcePrefix.Length..];
-        if (!privateImageReference.EndsWith($"@{privateImageDigest}", StringComparison.Ordinal) ||
-            privateImageReference.Length <= privateImageDigest.Length + 1 ||
-            privateImageReference.Any(char.IsWhiteSpace))
-        {
-            throw new BakeEnvironmentValidationException(
-                "msvc-cppcli-private-image.sourceUri must be immutable and match its locked digest.");
-        }
-
-        var preparedBase = RequiredComponent(releaseLock, "msvc-cppcli-prepared-base");
-        var preparedBaseDigest = RequiredDigest(
-            preparedBase.Digest,
-            "msvc-cppcli-prepared-base.digest");
-        var preparedBaseSource = RequiredValue(
-            preparedBase.SourceUri,
-            "msvc-cppcli-prepared-base.sourceUri");
-        if (!preparedBaseSource.StartsWith(dockerSourcePrefix, StringComparison.Ordinal))
-        {
-            throw new BakeEnvironmentValidationException(
-                "msvc-cppcli-prepared-base.sourceUri must use docker://repository@sha256:<64 lowercase hex>.");
-        }
-
-        var preparedBaseReference = preparedBaseSource[dockerSourcePrefix.Length..];
-        if (!preparedBaseReference.EndsWith($"@{preparedBaseDigest}", StringComparison.Ordinal) ||
-            preparedBaseReference.Length <= preparedBaseDigest.Length + 1 ||
-            preparedBaseReference.Any(char.IsWhiteSpace))
-        {
-            throw new BakeEnvironmentValidationException(
-                "msvc-cppcli-prepared-base.sourceUri must be immutable and match its locked digest.");
-        }
-
         var toolchain = RequiredComponent(releaseLock, "msvc-cppcli-netfx48");
         var msvcWineSource = RequiredComponent(releaseLock, "msvc-wine-source");
         var referenceSet = RequiredComponent(releaseLock, "netfx48-ref");
         var runtime = RequiredComponent(releaseLock, "wine-netfx48-linux-x64");
-        environment["CPPCLI_PRIVATE_IMAGE_VERSION"] = RequiredVersion(
-            privateImage,
-            "msvc-cppcli-private-image");
-        environment["CPPCLI_PRIVATE_IMAGE_DIGEST"] = privateImageDigest;
-        environment["CPPCLI_PRIVATE_IMAGE_SOURCE_URI"] = privateImageSource;
-        environment["CPPCLI_PREPARED_BASE_IMAGE"] = preparedBaseReference;
-        environment["CPPCLI_PREPARED_BASE_VERSION"] = RequiredVersion(
-            preparedBase,
-            "msvc-cppcli-prepared-base");
-        environment["CPPCLI_PREPARED_BASE_DIGEST"] = preparedBaseDigest;
-        environment["CPPCLI_PREPARED_BASE_SOURCE_URI"] = preparedBaseSource;
         environment["CPPCLI_COMPILER_VERSION"] = RequiredVersion(toolchain, "msvc-cppcli-netfx48");
         environment["CPPCLI_TOOLCHAIN_DIGEST"] = RequiredDigest(
             toolchain.Digest,
@@ -1639,65 +1584,20 @@ public static class BakeEnvironmentResolver
         Dictionary<string, string> environment,
         ReleaseLockDocument releaseLock)
     {
-        const string dockerSourcePrefix = "docker://";
-        var operatorImage = RequiredComponent(releaseLock, "jsharp20");
-        var operatorDigest = RequiredDigest(operatorImage.Digest, "jsharp20.digest");
-        var operatorSource = RequiredValue(operatorImage.SourceUri, "jsharp20.sourceUri");
-        if (!operatorSource.StartsWith(dockerSourcePrefix, StringComparison.Ordinal))
-        {
-            throw new BakeEnvironmentValidationException(
-                "jsharp20.sourceUri must use docker://repository@sha256:<64 lowercase hex>.");
-        }
-
-        var operatorReference = operatorSource[dockerSourcePrefix.Length..];
-        if (!operatorReference.EndsWith($"@{operatorDigest}", StringComparison.Ordinal) ||
-            operatorReference.Length <= operatorDigest.Length + 1 ||
-            operatorReference.Any(char.IsWhiteSpace))
-        {
-            throw new BakeEnvironmentValidationException(
-                "jsharp20.sourceUri must be immutable and match its locked digest.");
-        }
-
-        var preparedBase = RequiredComponent(releaseLock, "jsharp20-prepared-base");
-        var preparedBaseDigest = RequiredDigest(
-            preparedBase.Digest,
-            "jsharp20-prepared-base.digest");
-        var preparedBaseSource = RequiredValue(
-            preparedBase.SourceUri,
-            "jsharp20-prepared-base.sourceUri");
-        if (!preparedBaseSource.StartsWith(dockerSourcePrefix, StringComparison.Ordinal))
-        {
-            throw new BakeEnvironmentValidationException(
-                "jsharp20-prepared-base.sourceUri must use docker://repository@sha256:<64 lowercase hex>.");
-        }
-
-        var preparedBaseReference = preparedBaseSource[dockerSourcePrefix.Length..];
-        if (!preparedBaseReference.EndsWith($"@{preparedBaseDigest}", StringComparison.Ordinal) ||
-            preparedBaseReference.Length <= preparedBaseDigest.Length + 1 ||
-            preparedBaseReference.Any(char.IsWhiteSpace))
-        {
-            throw new BakeEnvironmentValidationException(
-                "jsharp20-prepared-base.sourceUri must be immutable and match its locked digest.");
-        }
-
+        var sourceInput = RequiredComponent(releaseLock, "jsharp20");
+        var sourceDigest = RequiredDigest(sourceInput.Digest, "jsharp20.digest");
+        var sourceUri = RequiredValue(sourceInput.SourceUri, "jsharp20.sourceUri");
         var compiler = RequiredComponent(releaseLock, "vjc-jsharp20");
         var referenceSet = RequiredComponent(releaseLock, "jsharp20-ref");
         var runtime = RequiredComponent(releaseLock, "wine-jsharp20-linux-x64");
-        RequireEqual(runtime.Digest, operatorDigest, "J# runtime operator-image digest");
-        RequireEqual(runtime.SourceUri, operatorSource, "J# runtime operator-image source");
-        RequireEqual(referenceSet.SourceUri, operatorSource, "J# reference-set operator-image source");
+        RequireEqual(runtime.Digest, sourceDigest, "J# runtime source-input digest");
+        RequireEqual(runtime.SourceUri, sourceUri, "J# runtime source-input URI");
+        RequireEqual(referenceSet.SourceUri, sourceUri, "J# reference-set source-input URI");
 
-        environment["JSHARP_TOOLCHAIN_IMAGE"] = operatorReference;
-        environment["JSHARP_WINE_BASE_IMAGE"] = preparedBaseReference;
-        environment["JSHARP_WINE_BASE_VERSION"] = RequiredVersion(
-            preparedBase,
-            "jsharp20-prepared-base");
-        environment["JSHARP_WINE_BASE_DIGEST"] = preparedBaseDigest;
-        environment["JSHARP_WINE_BASE_SOURCE_URI"] = preparedBaseSource;
-        environment["JSHARP_TOOLCHAIN_VERSION"] = RequiredVersion(operatorImage, "jsharp20");
+        environment["JSHARP_TOOLCHAIN_VERSION"] = RequiredVersion(sourceInput, "jsharp20");
         environment["JSHARP_COMPILER_VERSION"] = RequiredVersion(compiler, "vjc-jsharp20");
-        environment["JSHARP_TOOLCHAIN_DIGEST"] = operatorDigest;
-        environment["JSHARP_TOOLCHAIN_SOURCE_URI"] = operatorSource;
+        environment["JSHARP_TOOLCHAIN_DIGEST"] = sourceDigest;
+        environment["JSHARP_TOOLCHAIN_SOURCE_URI"] = sourceUri;
         environment["JSHARP_REFERENCE_VERSION"] = RequiredVersion(referenceSet, "jsharp20-ref");
         environment["JSHARP_REFERENCE_DIGEST"] = RequiredDigest(
             referenceSet.Digest,

@@ -121,16 +121,16 @@ const expectedComponentLabels = new Map([
     'wine-netfx48-linux-x64.version',
     'wine-netfx48-linux-x64.digest',
     'wine-netfx48-linux-x64.source-uri',
-    'msvc-cppcli-private-image.version',
-    'msvc-cppcli-private-image.digest',
-    'msvc-cppcli-private-image.source-uri',
-    'msvc-cppcli-prepared-base.version',
-    'msvc-cppcli-prepared-base.digest',
-    'msvc-cppcli-prepared-base.source-uri',
+    'msvc-cppcli-netfx48.version',
+    'msvc-cppcli-netfx48.digest',
+    'msvc-cppcli-netfx48.source-uri',
     'msvc-wine-source.version',
     'msvc-wine-source.commit',
     'msvc-wine-source.digest',
     'msvc-wine-source.source-uri',
+    'netfx48-ref.version',
+    'netfx48-ref.digest',
+    'netfx48-ref.source-uri',
   ]],
   ['jsharp-wine-base', [
     'jsharp20.version',
@@ -143,9 +143,6 @@ const expectedComponentLabels = new Map([
     'jsharp20.digest',
     'jsharp20.source-uri',
     'vjc-jsharp20.version',
-    'jsharp20-prepared-base.version',
-    'jsharp20-prepared-base.digest',
-    'jsharp20-prepared-base.source-uri',
     'wine-jsharp20-linux-x64.version',
     'wine-jsharp20-linux-x64.digest',
     'wine-jsharp20-linux-x64.source-uri',
@@ -217,12 +214,6 @@ const expectedComponentLabels = new Map([
     'msvc-cppcli-netfx48.version',
     'msvc-cppcli-netfx48.digest',
     'msvc-cppcli-netfx48.source-uri',
-    'msvc-cppcli-private-image.version',
-    'msvc-cppcli-private-image.digest',
-    'msvc-cppcli-private-image.source-uri',
-    'msvc-cppcli-prepared-base.version',
-    'msvc-cppcli-prepared-base.digest',
-    'msvc-cppcli-prepared-base.source-uri',
     'msvc-wine-source.version',
     'msvc-wine-source.commit',
     'msvc-wine-source.digest',
@@ -236,9 +227,6 @@ const expectedComponentLabels = new Map([
     'jsharp20.digest',
     'jsharp20.source-uri',
     'vjc-jsharp20.version',
-    'jsharp20-prepared-base.version',
-    'jsharp20-prepared-base.digest',
-    'jsharp20-prepared-base.source-uri',
     'jsharp20-ref.version',
     'jsharp20-ref.digest',
     'jsharp20-ref.source-uri',
@@ -493,11 +481,23 @@ function validateWinePackageManifest(document) {
 
 function validateBake(source, candidateSource) {
   const blocks = variableBlocks(source)
+  const deferredImageInputs = new Map([
+    ['CPPCLI_PREPARED_BASE_IMAGE', 2],
+    ['JSHARP_TOOLCHAIN_IMAGE', 2],
+  ])
   for (const [name, body] of blocks) {
     if (!/^\s*default\s*=\s*""\s*$/m.test(body)) {
       failures.push(`Bake variable '${name}' must have an empty default`)
     }
-    if (!source.includes(`required(${name})`)) {
+    if (deferredImageInputs.has(name)) {
+      const uses = source.match(new RegExp(`deferred_image\\(${name}\\)`, 'g')) ?? []
+      const expectedUses = deferredImageInputs.get(name)
+      if (uses.length !== expectedUses || source.includes(`required(${name})`)) {
+        failures.push(
+          `Bake-generated image input '${name}' must have exactly ${expectedUses} deferred consumers`,
+        )
+      }
+    } else if (!source.includes(`required(${name})`)) {
       failures.push(`Bake variable '${name}' is not consumed through required()`)
     }
   }
@@ -508,6 +508,11 @@ function validateBake(source, candidateSource) {
 
   if (!source.includes('function "required"')) {
     failures.push('eng/bake.hcl must define the required() fail-closed helper')
+  }
+  if (!source.includes(
+    'function "deferred_image" {\n  params = [value]\n  result = value != "" ? value : "scratch"\n}',
+  )) {
+    failures.push('eng/bake.hcl must define the exact deferred generated-image helper')
   }
   if (/\b[0-9a-f]{40}\b/.test(source) || /@sha256:[0-9a-f]{64}/.test(source)) {
     failures.push('eng/bake.hcl must not contain source commits or base image digests')
@@ -1234,8 +1239,9 @@ function validateDockerfiles() {
       'io.sharplabnext.operator-root="${ROOT_IMAGE}"',
     ]],
     ['Dockerfile.operator-wine-framework-matrix-parent', [
-      'FROM ${WINE_IMAGE} AS wine-source',
+      'FROM framework-row-netfx20 AS framework-tool-source',
       'FROM ${ROOT_IMAGE} AS final',
+      'COPY --from=framework-tool-source /usr/ /usr/',
       'ARG VERSION',
       'ARG SOURCE_REVISION',
       'from=framework-matrix-metadata',
@@ -1587,16 +1593,17 @@ function validateDockerfiles() {
   if (!/RUN rm -rf\s*\\\r?\n\s*\/usr\/share\/dotnet\s*\\\r?\n\s*\/usr\/local\/bin\/sharplabnext-service/.test(netfxRuntime)) {
     failures.push('C++/CLI runtime source must remove historical worker control-plane payloads')
   }
-  if (!bake.includes('"cppcli-prepared-base-context" = "docker-image://${required(CPPCLI_PREPARED_BASE_IMAGE)}"') ||
-      !bake.includes('"cppcli-prepared-base" = "docker-image://${required(CPPCLI_PREPARED_BASE_IMAGE)}"')) {
+  if (!bake.includes('"cppcli-prepared-base-context" = "docker-image://${deferred_image(CPPCLI_PREPARED_BASE_IMAGE)}"') ||
+      !bake.includes('"cppcli-prepared-base" = "docker-image://${deferred_image(CPPCLI_PREPARED_BASE_IMAGE)}"')) {
     failures.push('C++/CLI runtime and worker must use digest-pinned prepared-base contexts')
   }
   if (netfxRuntime.includes('CPPCLI_TOOLCHAIN_IMAGE') || cppCliWorker.includes('CPPCLI_TOOLCHAIN_IMAGE')) {
     failures.push('C++/CLI product Dockerfiles must not consume the raw private operator directly')
   }
-  if (!bake.includes('"jsharp-wine-base-context" = "docker-image://${required(JSHARP_WINE_BASE_IMAGE)}"') ||
-      !bake.includes('"jsharp-wine-base" = "docker-image://${required(JSHARP_WINE_BASE_IMAGE)}"')) {
-    failures.push('J# runtime and worker must consume the immutable prepared Wine base input')
+  if (!bake.includes('"jsharp-wine-base-context" = "target:jsharp-wine-base"') ||
+      !bake.includes('"jsharp-wine-base" = "target:jsharp-wine-base"') ||
+      bake.includes('JSHARP_WINE_BASE_IMAGE')) {
+    failures.push('J# runtime and worker must consume the shared prepared Wine base target')
   }
   if (!jsharpWorker.includes('JSharp__CompilerHostPath=/usr/lib/wine/wine64') ||
       !jsharpWorker.includes('JSharp__CompilerPath=/opt/sharplabnext/jsharp20/vjc.exe')) {

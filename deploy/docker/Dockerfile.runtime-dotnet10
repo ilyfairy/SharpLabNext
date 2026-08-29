@@ -15,10 +15,11 @@ WORKDIR /source
 COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
 COPY profiles/versions.props ./profiles/versions.props
 COPY src/ ./src/
-RUN dotnet restore src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj --locked-mode \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj --locked-mode \
     && dotnet restore src/RuntimeJobs/SharpLabNext.JitInspector/SharpLabNext.JitInspector.csproj --locked-mode \
-    && dotnet restore src/RuntimeJobs/SharpLabNext.JitProfiler.Native/Smoke/SharpLabNext.JitProfilerSmoke.csproj --locked-mode
-RUN dotnet publish src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj \
+    && dotnet restore src/RuntimeJobs/SharpLabNext.JitProfiler.Native/Smoke/SharpLabNext.JitProfilerSmoke.csproj --locked-mode \
+    && dotnet publish src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj \
     --configuration Release \
     --framework net10.0 \
     --no-restore \

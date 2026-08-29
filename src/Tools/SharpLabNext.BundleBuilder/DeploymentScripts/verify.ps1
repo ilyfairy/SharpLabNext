@@ -173,6 +173,7 @@ if ($InstalledCopy) {
         throw 'An installed copy requires a regular non-link deployment.sha256 file.'
     }
     $expectedDeploymentPaths = @(
+        '.env',
         'bundle.json',
         'catalog.json',
         'lock.json',
@@ -611,6 +612,12 @@ Get-Content -LiteralPath (Join-Path $root 'images.expected') | ForEach-Object {
     $actual = (docker image inspect --format '{{.Id}}' $Matches[2]).Trim()
     if ($LASTEXITCODE -ne 0 -or $actual -cne $Matches[2]) { throw "Image identity mismatch: $($Matches[1])" }
 }
-docker compose -f (Join-Path $root 'compose.prod.yaml') -f (Join-Path $root 'compose.generated.yaml') config --quiet
-if ($LASTEXITCODE -ne 0) { throw 'Compose validation failed.' }
+Push-Location $root
+try {
+    docker compose config --quiet
+    if ($LASTEXITCODE -ne 0) { throw 'Compose validation failed.' }
+}
+finally {
+    Pop-Location
+}
 Write-Host "Verified SharpLabNext release $($bundle.releaseId)."

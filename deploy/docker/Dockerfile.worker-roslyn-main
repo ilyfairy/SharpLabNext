@@ -34,7 +34,8 @@ RUN --mount=type=cache,id=sharplabnext-roslyn-main-nuget,target=/root/.nuget/pac
       /p:OfficialBuild=true \
       /p:SourceRevisionId=${ROSLYN_MAIN_COMMIT} \
       /p:ContinuousIntegrationBuild=true \
-      /p:RestoreDisableParallel=true \
+      /p:RestoreUseStaticGraphEvaluation=false \
+      /p:RestoreDisableParallel=false \
       /p:UseSharedCompilation=false \
       /p:UsingToolVisualStudioIbcTraining=false
 RUN set -eux; \
@@ -54,8 +55,14 @@ RUN set -eux; \
       cp "artifacts/bin/${name}/Release/net10.0/${name}.dll" /roslyn-main/; \
     done
 COPY eng/verify-roslyn-main.cs /tools/verify-roslyn-main.cs
-RUN NUGET_PACKAGES=/tmp/verify-nuget \
-    dotnet run /tools/verify-roslyn-main.cs -- /roslyn-main "${ROSLYN_MAIN_VERSION}" "${ROSLYN_MAIN_COMMIT}"
+COPY eng/NuGet.verifier.config /tools/NuGet.verifier.config
+WORKDIR /tools
+RUN --network=none \
+    dotnet restore /tools/verify-roslyn-main.cs \
+      --configfile /tools/NuGet.verifier.config \
+      -p:NuGetAudit=false \
+    && dotnet run --no-restore /tools/verify-roslyn-main.cs -- \
+      /roslyn-main "${ROSLYN_MAIN_VERSION}" "${ROSLYN_MAIN_COMMIT}"
 
 FROM ${SDK_IMAGE} AS publish
 ARG CONFIGURATION=Release
@@ -115,12 +122,13 @@ COPY profiles/lock.json /inputs/lock.json
 COPY src/ ./src/
 COPY eng/materialize-coreclr-reference-sets.cs /tools/materialize-coreclr-reference-sets.cs
 COPY --from=roslyn-main /roslyn-main/ /roslyn-main/
-RUN dotnet restore \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore \
       src/Workers/Roslyn.Main/SharpLabNext.Worker.Roslyn.Main/SharpLabNext.Worker.Roslyn.Main.csproj \
       --locked-mode \
       /p:RoslynMainSourceBuild=true \
-      /p:RoslynMainAssemblyDirectory=/roslyn-main
-RUN dotnet publish \
+      /p:RoslynMainAssemblyDirectory=/roslyn-main \
+    && dotnet publish \
       src/Workers/Roslyn.Main/SharpLabNext.Worker.Roslyn.Main/SharpLabNext.Worker.Roslyn.Main.csproj \
       --configuration ${CONFIGURATION} \
       --no-restore \
@@ -128,7 +136,11 @@ RUN dotnet publish \
       /p:UseAppHost=false \
       /p:RoslynMainSourceBuild=true \
       /p:RoslynMainAssemblyDirectory=/roslyn-main
-RUN dotnet build --no-restore \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore \
+      src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj \
+      --locked-mode \
+    && dotnet build --no-restore \
       src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj \
       --configuration "${CONFIGURATION}" \
       --framework netstandard2.1 \

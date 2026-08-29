@@ -4,13 +4,6 @@ namespace SharpLabNext.UnitTests;
 
 public sealed class CatalogTests
 {
-    private static readonly string[] CppCliSharedReleaseComponentIds =
-    [
-        "msvc-cppcli-private-image",
-        "msvc-cppcli-netfx48",
-        "netfx48-ref"
-    ];
-
     private static readonly string[] FrameworkManagedReferenceSetIds =
     [
         "netfx20-managed-ref",
@@ -285,10 +278,14 @@ public sealed class CatalogTests
         Assert.Null(releaseLock.Components["artifacts-const-generics"].ImageId);
         Assert.Null(releaseLock.Components["gsharp-stable"].ImageId);
         Assert.Equal("source", releaseLock.Components["msvc-wine-source"].Kind);
-        Assert.Equal("operator-image", releaseLock.Components["msvc-cppcli-private-image"].Kind);
-        Assert.Equal("operator-image", releaseLock.Components["msvc-cppcli-prepared-base"].Kind);
         Assert.Equal("toolchain", releaseLock.Components["msvc-cppcli-netfx48"].Kind);
+        Assert.Equal(
+            "sha256:b20492a4acb679cabdd4c7f7168a82d56b8c1079c9d8f5a3ef3550fea08ba4e8",
+            releaseLock.Components["msvc-cppcli-netfx48"].Digest);
         Assert.Equal("reference-set", releaseLock.Components["netfx48-ref"].Kind);
+        Assert.Equal(
+            "sha256:b37882cda5610b291b2a984e4c2270f67a448f79d6b1f78337736c95b35c5a7f",
+            releaseLock.Components["netfx48-ref"].Digest);
         Assert.Equal("reference-set", releaseLock.Components["netfx48-managed-ref"].Kind);
         Assert.Equal(
             "Microsoft.NETFramework.ReferenceAssemblies.net48",
@@ -297,20 +294,19 @@ public sealed class CatalogTests
             "sha512-XWKgyeNadNcTQaIVvQB8BrdCNrEar6fo/de1OdQRZ9HFy0jcBSaM8IV5q64ZampsSnC8AlTsACaGZUuoFw41RA==",
             releaseLock.Components["netfx48-managed-ref"].PackageContentHash);
         Assert.Equal("runtime", releaseLock.Components["wine-netfx48-linux-x64"].Kind);
-        Assert.All(
-            CppCliSharedReleaseComponentIds,
-            id => Assert.Equal(
-                "sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743",
-                releaseLock.Components[id].Digest));
+        Assert.DoesNotContain("msvc-cppcli-private-image", releaseLock.Components.Keys);
+        Assert.DoesNotContain("msvc-cppcli-prepared-base", releaseLock.Components.Keys);
+        Assert.DoesNotContain("jsharp20-prepared-base", releaseLock.Components.Keys);
+        Assert.Equal("toolchain-input", releaseLock.Components["jsharp20"].Kind);
+        Assert.Equal(
+            "sha256:3a7a6ff79eeb5d51f8bf4cab188f74de0a220722e3d9d97858092ea3ef41b2b0",
+            releaseLock.Components["jsharp20"].Digest);
+        Assert.Equal(
+            releaseLock.Components["jsharp20"].Digest,
+            releaseLock.Components["wine-jsharp20-linux-x64"].Digest);
         Assert.Equal(
             "sha256:dedd9a2d14337930bbe73870a3b4a814838a96401657dc19f3c4a91fe34b0458",
             releaseLock.Components["wine-netfx48-linux-x64"].Digest);
-        Assert.Equal(
-            "sha256:dfd2473d9faae804d8514e583cec77fe5622c3c955d2e97eeaa3a7952969e3e8",
-            releaseLock.Components["msvc-cppcli-prepared-base"].Digest);
-        Assert.Equal(
-            "docker://localhost:5000/sharplabnext/msvc-cppcli-prepared-base@sha256:dfd2473d9faae804d8514e583cec77fe5622c3c955d2e97eeaa3a7952969e3e8",
-            releaseLock.Components["msvc-cppcli-prepared-base"].SourceUri);
     }
 
     [Fact]

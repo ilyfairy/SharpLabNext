@@ -403,6 +403,7 @@ function Install-ReleaseAssets([string]$BundleRoot, [string]$InstallRoot, [strin
             Copy-Item -Recurse -Force -LiteralPath $_.FullName -Destination $staging
         }
         $deploymentFiles = @(
+            '.env',
             'bundle.json',
             'catalog.json',
             'lock.json',

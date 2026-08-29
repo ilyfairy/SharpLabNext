@@ -537,11 +537,13 @@ target "runtime-wine-framework-matrix-shared-candidate" {
     "io.sharplabnext.framework.matrix-selector" = "true"
     "io.sharplabnext.base-image.dotnet-sdk" = BASE_DOTNET_SDK_IMAGE
   }, RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT != "true" ? {
-    "io.sharplabnext.operator.receipt-sha256" = WINE_CORECLR_OPERATOR_RECEIPT_SHA256
-    "io.sharplabnext.operator.receipt-key-id" = WINE_CORECLR_OPERATOR_RECEIPT_KEY_ID
-    "io.sharplabnext.operator.userspace-reference" = WINE_CORECLR_OPERATOR_REFERENCE
     "io.sharplabnext.component.wine-coreclr-userspace.version" = WINE_CORECLR_USERSPACE_VERSION
     "io.sharplabnext.component.wine-coreclr-userspace.digest" = WINE_CORECLR_USERSPACE_DIGEST
     "io.sharplabnext.component.wine-coreclr-userspace.source-uri" = WINE_CORECLR_USERSPACE_SOURCE_URI
+  } : {}, RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT != "true" &&
+      WINE_CORECLR_OPERATOR_RECEIPT_SHA256 != "" ? {
+    "io.sharplabnext.operator.receipt-sha256" = WINE_CORECLR_OPERATOR_RECEIPT_SHA256
+    "io.sharplabnext.operator.receipt-key-id" = WINE_CORECLR_OPERATOR_RECEIPT_KEY_ID
+    "io.sharplabnext.operator.userspace-reference" = WINE_CORECLR_OPERATOR_REFERENCE
   } : {})
 }

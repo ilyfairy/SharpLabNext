@@ -136,8 +136,11 @@ internal static class MaintainedProvenanceLoader
             AddReference(referenceSetId.GetString(), "reference-set", releaseLock, referenced, path);
         if (build.TryGetProperty("metadataRuntimeSourceComponentId", out var metadataSource))
             AddReference(metadataSource.GetString(), "source", releaseLock, referenced, path);
-        if (build.TryGetProperty("operatorImageComponentId", out var operatorImage))
-            AddReference(operatorImage.GetString(), "operator-image", releaseLock, referenced, path);
+        if (build.TryGetProperty("sourceInputComponentIds", out var sourceInputs))
+        {
+            foreach (var sourceInput in sourceInputs.EnumerateArray())
+                AddReference(sourceInput.GetString(), null, releaseLock, referenced, path);
+        }
         if (build.TryGetProperty("runtimeComponentId", out var runtimeComponent))
             AddReference(runtimeComponent.GetString(), "runtime", releaseLock, referenced, path);
         if (build.TryGetProperty("bootstrapDependencyOverrides", out var bootstrapOverrides))

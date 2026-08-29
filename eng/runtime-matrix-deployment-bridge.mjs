@@ -19,6 +19,9 @@ const defaultOutput = path.join(root, '.tmp', 'runtime-matrix-deployment-bridge'
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const idPattern = /^[a-z0-9][a-z0-9._-]{0,127}$/
 const maxBytes = 16 * 1024 * 1024
+const transientRenameErrorCodes = new Set(['EACCES', 'EBUSY', 'EPERM'])
+const renameRetryDelays = Object.freeze([25, 50, 100, 200, 400, 800])
+const renameRetryWaitBuffer = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT))
 const outputNames = Object.freeze({
   catalog: 'catalog.json',
   lock: 'lock.json',
@@ -81,6 +84,20 @@ function requireSeparatedOutput(outputDirectory, inputs) {
   return output
 }
 
+export function renameSyncWithRetry(source, destination, options = {}) {
+  const renameSync = options.renameSync ?? fs.renameSync
+  const wait = options.wait ?? (milliseconds => Atomics.wait(renameRetryWaitBuffer, 0, 0, milliseconds))
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      renameSync(source, destination)
+      return
+    } catch (error) {
+      if (!transientRenameErrorCodes.has(error?.code) || attempt >= renameRetryDelays.length) throw error
+      wait(renameRetryDelays[attempt])
+    }
+  }
+}
+
 function commitOutputDirectory(outputDirectory, files) {
   const parent = path.dirname(outputDirectory)
   const name = path.basename(outputDirectory)
@@ -100,14 +117,14 @@ function commitOutputDirectory(outputDirectory, files) {
       if (!stat.isDirectory() || stat.isSymbolicLink()) {
         fail(`Output '${outputDirectory}' must be a non-link directory when it already exists.`)
       }
-      fs.renameSync(outputDirectory, backup)
+      renameSyncWithRetry(outputDirectory, backup)
       previousMoved = true
     }
-    fs.renameSync(staging, outputDirectory)
+    renameSyncWithRetry(staging, outputDirectory)
     committed = true
   } catch (error) {
     if (previousMoved && !fs.existsSync(outputDirectory) && fs.existsSync(backup)) {
-      try { fs.renameSync(backup, outputDirectory) } catch (rollbackError) {
+      try { renameSyncWithRetry(backup, outputDirectory) } catch (rollbackError) {
         fail(`Output transaction failed and rollback also failed: ${rollbackError.message}`, { cause: error })
       }
     }

@@ -32,39 +32,120 @@ public sealed class PrepareFrameworkRuntimeTests
         Assert.Contains("FRAMEWORK_TARGET_ID=netfx48", result.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("FRAMEWORK_VERSION=4.8", result.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("CLR_GENERATION=clr4", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("FRAMEWORK_SEED_GENERATION=clr2", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("FRAMEWORK_SEED_VERSION=3.5", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("FRAMEWORK_SEED_PREFIX=/opt/wine-netfx-clr2", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("FRAMEWORK_SEED_INPUT_SHA256=", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("FRAMEWORK_SEED_IMAGE=operator/framework-seed:cache@sha256:", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("FRAMEWORK_WOW64_BASE_IMAGE=operator/root:10.0@sha256:", result.StandardOutput, StringComparison.Ordinal);
         Assert.Contains($"SOURCE_REVISION={RepositoryRevision}", result.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("ROOT_IMAGE=operator/root:10.0@sha256:", result.StandardOutput, StringComparison.Ordinal);
-        Assert.Contains("<committed-source-context>", result.StandardOutput, StringComparison.Ordinal);
-        Assert.Contains("framework-installer-context=<staged-local-context>", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("<repository-context>", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("framework-vendored-context=<direct-input-directory>", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("framework-cached-context=<direct-input-directory>", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("framework-installer-context=<direct-input-directory>", result.StandardOutput, StringComparison.Ordinal);
         Assert.DoesNotContain(RepositoryRoot, result.StandardOutput, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("id=framework-installer-url", result.StandardOutput, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void CommittedSourceContextHasAnExplicitMinimalAllowlist()
+    public void PreparationUsesDirectInputsWithoutHostStaging()
     {
         var source = File.ReadAllText(ScriptPath);
-        string[] requiredFiles =
-        [
-            "deploy/docker/Dockerfile.operator-wine-framework-matrix",
-            "profiles/runtime-framework-installers.json",
-            "profiles/runtime-matrix.json",
-            "deploy/docker/wine-netfx-framework-preflight.sh",
-            "deploy/docker/dedupe-wine-prefixes.py",
-            "deploy/docker/certificates/microsoft-tls-rsa-root-g2-xsign.crt",
-            "deploy/docker/certificates/microsoft-tls-g2-rsa-ca-ocsp-04.crt"
-        ];
+        Assert.Contains("framework-vendored-context", source, StringComparison.Ordinal);
+        Assert.Contains("framework-cached-context", source, StringComparison.Ordinal);
+        Assert.Contains("framework-installer-context", source, StringComparison.Ordinal);
+        Assert.Contains("--build-context", source, StringComparison.Ordinal);
+        Assert.Contains("ContextDirectory", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("CommittedSourceContext", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("StagedBuildContext", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Guid.NewGuid", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("File.Copy", source, StringComparison.Ordinal);
+    }
 
-        Assert.Contains("CommittedSourceFiles", source, StringComparison.Ordinal);
-        Assert.Contains("git", source, StringComparison.Ordinal);
-        Assert.Contains("show", source, StringComparison.Ordinal);
-        Assert.Contains("--no-textconv", source, StringComparison.Ordinal);
-        foreach (var file in requiredFiles)
-            Assert.Contains(file, source, StringComparison.Ordinal);
-        Assert.Contains(
-            "ValidateSourceState(inputs.RepositoryRoot, sourceRevision, dryRun: false)",
-            source,
-            StringComparison.Ordinal);
+    [Fact]
+    public async Task Wow64BaseBuildHasNoTargetOrPrivateContext()
+    {
+        var arguments = CommonArguments("wow64-base");
+
+        var result = await RunAsync(arguments);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Empty(result.StandardError);
+        Assert.Contains("--target framework-wow64-base", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("FRAMEWORK_WOW64_BASE_IMAGE=operator/root:10.0@sha256:", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("FRAMEWORK_SEED_IMAGE=operator/root:10.0@sha256:", result.StandardOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("FRAMEWORK_TARGET_ID=", result.StandardOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("framework-installer-context=", result.StandardOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("clr2", "3.5", "/opt/wine-netfx-clr2")]
+    [InlineData("clr4", "4.8", "/opt/wine-netfx-clr4")]
+    public async Task CompanionSeedUsesOneDigestPinnedWow64Base(
+        string generation,
+        string version,
+        string prefix)
+    {
+        var arguments = CommonArguments("companion-seed").ToList();
+        arguments.InsertRange(arguments.Count - 1, [
+            "--seed-generation", generation,
+            "--framework-wow64-base-image",
+            $"operator/framework-wow64:cache@sha256:{new string('f', 64)}",
+        ]);
+        if (generation == "clr2")
+        {
+            arguments.InsertRange(arguments.Count - 1, [
+                "--cached-winetricks-payload-file",
+                Path.Combine(Path.GetTempPath(), "dotnetfx35.dry-run.exe"),
+            ]);
+        }
+
+        var result = await RunAsync(arguments);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Empty(result.StandardError);
+        Assert.Contains("--target framework-companion-seed", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains($"FRAMEWORK_SEED_GENERATION={generation}", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains($"FRAMEWORK_SEED_VERSION={version}", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains($"FRAMEWORK_SEED_PREFIX={prefix}", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("FRAMEWORK_WOW64_BASE_IMAGE=operator/framework-wow64:cache@sha256:", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("FRAMEWORK_SEED_IMAGE=operator/root:10.0@sha256:", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("framework-installer-context=<direct-input-directory>", result.StandardOutput, StringComparison.Ordinal);
+        if (generation == "clr2")
+            Assert.Contains("FRAMEWORK_INSTALLER_NETWORK=none", result.StandardOutput, StringComparison.Ordinal);
+        else
+            Assert.Contains("FRAMEWORK_INSTALLER_NETWORK=default", result.StandardOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("--network none", result.StandardOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("netfx30")]
+    [InlineData("netfx35")]
+    public async Task DotNet35Sp1TargetsRequireTheCachedWinetricksPayload(string targetId)
+    {
+        using var secrets = new SecretFiles();
+        var missing = await RunAsync(ValidArguments(
+            targetId,
+            secrets,
+            includeInstallerSource: false));
+
+        Assert.Equal(64, missing.ExitCode);
+        Assert.Contains("--cached-winetricks-payload-file", missing.StandardError, StringComparison.Ordinal);
+
+        var arguments = ValidArguments(targetId, secrets, includeInstallerSource: false).ToList();
+        arguments.InsertRange(arguments.Count - 1, [
+            "--cached-winetricks-payload-file",
+            Path.Combine(secrets.Root, "dotnetfx35.dry-run.exe"),
+        ]);
+        var accepted = await RunAsync(arguments);
+
+        Assert.Equal(0, accepted.ExitCode);
+        Assert.Empty(accepted.StandardError);
+        Assert.Contains("FRAMEWORK_INSTALLER_NETWORK=none", accepted.StandardOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("--network none", accepted.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("framework-installer-context=<direct-input-directory>", accepted.StandardOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain(secrets.Root, accepted.StandardOutput, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -186,20 +267,50 @@ public sealed class PrepareFrameworkRuntimeTests
         Assert.Contains("does not match Git HEAD", result.StandardError, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(VendoredPayloadState.Missing, "Git LFS object is missing")]
+    [InlineData(VendoredPayloadState.UnexpandedLfsObject, "unexpanded Git LFS pointer")]
+    [InlineData(VendoredPayloadState.Corrupt, "SHA-256 does not match")]
+    public async Task VendoredPayloadFailureStopsBeforeDocker(
+        VendoredPayloadState state,
+        string expectedError)
+    {
+        using var fixture = new FrameworkRepositoryFixture(state);
+        using var secrets = new SecretFiles();
+
+        var result = await RunAsync(ValidArguments(
+            "netfx48",
+            secrets,
+            includeInstallerSource: false,
+            fixture.Root,
+            fixture.Revision));
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(expectedError, result.StandardError, StringComparison.Ordinal);
+        Assert.DoesNotContain("docker buildx build", result.StandardOutput, StringComparison.Ordinal);
+    }
+
     private static string[] ValidArguments(
         string targetId,
         SecretFiles secrets,
-        bool includeInstallerSource)
+        bool includeInstallerSource,
+        string? repositoryRoot = null,
+        string? sourceRevision = null)
     {
+        repositoryRoot ??= RepositoryRoot;
+        sourceRevision ??= RepositoryRevision;
         var arguments = new List<string>
         {
-            "--repository-root", RepositoryRoot,
+            "--repository-root", repositoryRoot,
             "--target-id", targetId,
             "--base-image", $"operator/wine:9.0@sha256:{new string('c', 64)}",
             "--root-image", $"operator/root:10.0@sha256:{new string('d', 64)}",
+            "--framework-seed-image", $"operator/framework-seed:cache@sha256:{new string('e', 64)}",
+            "--seed-input-sha256", new string('a', 64),
             "--output-image", $"sharplabnext/operator-{targetId}:test",
-            "--source-revision", RepositoryRevision,
+            "--source-revision", sourceRevision,
             "--accept-microsoft-dotnet-framework-eula",
+            "--allow-uncommitted-source-for-development",
         };
         if (includeInstallerSource)
         {
@@ -209,6 +320,20 @@ public sealed class PrepareFrameworkRuntimeTests
         arguments.Add("--dry-run");
         return arguments.ToArray();
     }
+
+    private static string[] CommonArguments(string buildKind) =>
+    [
+        "--repository-root", RepositoryRoot,
+        "--build-kind", buildKind,
+        "--base-image", $"operator/wine:9.0@sha256:{new string('c', 64)}",
+        "--root-image", $"operator/root:10.0@sha256:{new string('d', 64)}",
+        "--seed-input-sha256", new string('a', 64),
+        "--output-image", $"sharplabnext/framework-{buildKind}:test",
+        "--source-revision", RepositoryRevision,
+        "--accept-microsoft-dotnet-framework-eula",
+        "--allow-uncommitted-source-for-development",
+        "--dry-run",
+    ];
 
     private static async Task<ProcessResult> RunAsync(IEnumerable<string> arguments)
     {
@@ -310,6 +435,109 @@ public sealed class PrepareFrameworkRuntimeTests
             catch (UnauthorizedAccessException)
             {
             }
+        }
+    }
+
+    public enum VendoredPayloadState
+    {
+        Missing,
+        UnexpandedLfsObject,
+        Corrupt
+    }
+
+    private sealed class FrameworkRepositoryFixture : IDisposable
+    {
+        private const string PayloadRelativePath =
+            "eng/prerequisites/dotnet-framework-2.0/NetFx64.exe";
+
+        public FrameworkRepositoryFixture(VendoredPayloadState state)
+        {
+            Root = Path.Combine(
+                Path.GetTempPath(),
+                $"SharpLabNext.FrameworkRepository.Tests.{Guid.NewGuid():N}");
+            Directory.CreateDirectory(Root);
+            RunGit("init", "--quiet");
+            File.WriteAllText(Path.Combine(Root, "SharpLabNext.slnx"), "<Solution />\n");
+            File.WriteAllText(Path.Combine(Root, "fixture.txt"), "fixture\n");
+            RunGit("add", "fixture.txt");
+            RunGit(
+                "-c", "user.name=SharpLabNext Tests",
+                "-c", "user.email=tests@sharplabnext.invalid",
+                "commit", "--quiet", "-m", "fixture");
+            Revision = RunGit("rev-parse", "--verify", "HEAD").Trim();
+
+            var profiles = Path.Combine(Root, "profiles");
+            Directory.CreateDirectory(profiles);
+            File.Copy(
+                Path.Combine(RepositoryRoot, "profiles", "runtime-framework-installers.json"),
+                Path.Combine(profiles, "runtime-framework-installers.json"));
+            File.Copy(
+                Path.Combine(RepositoryRoot, "profiles", "runtime-matrix.json"),
+                Path.Combine(profiles, "runtime-matrix.json"));
+            File.WriteAllText(
+                Path.Combine(Root, ".gitattributes"),
+                $"{PayloadRelativePath} filter=lfs diff=lfs merge=lfs -text\n");
+
+            var payloadPath = Path.Combine(
+                Root,
+                PayloadRelativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(payloadPath)!);
+            switch (state)
+            {
+                case VendoredPayloadState.Missing:
+                    break;
+                case VendoredPayloadState.UnexpandedLfsObject:
+                    File.WriteAllText(
+                        payloadPath,
+                        "version https://git-lfs.github.com/spec/v1\n" +
+                        "oid sha256:7ea86dca8eeaedcaa4a17370547ca2cea9e9b6774972b8e03d2cb1fb0e798669\n" +
+                        "size 47400128\n");
+                    break;
+                case VendoredPayloadState.Corrupt:
+                    using (var stream = new FileStream(payloadPath, FileMode.CreateNew, FileAccess.Write))
+                        stream.SetLength(47_400_128);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(state));
+            }
+        }
+
+        public string Root { get; }
+        public string Revision { get; }
+
+        public void Dispose()
+        {
+            try
+            {
+                Directory.Delete(Root, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
+        private string RunGit(params string[] arguments)
+        {
+            var startInfo = new ProcessStartInfo("git")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                WorkingDirectory = Root
+            };
+            foreach (var argument in arguments)
+                startInfo.ArgumentList.Add(argument);
+            using var process = Process.Start(startInfo)
+                ?? throw new InvalidOperationException("Could not start Git for the Framework fixture.");
+            var output = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0)
+                throw new InvalidOperationException($"Framework fixture Git failed: {error}");
+            return output;
         }
     }
 

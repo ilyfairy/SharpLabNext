@@ -22,16 +22,17 @@ RUN chmod 0555 /usr/local/bin/sharplabnext-validate-image \
 COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
 COPY profiles/versions.props ./profiles/versions.props
 COPY src/ ./src/
-RUN dotnet restore \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore \
       src/RuntimeJobs/SharpLabNext.LegacyJitInspector/SharpLabNext.LegacyJitInspector.csproj \
-      --locked-mode
-RUN dotnet restore \
+      --locked-mode \
+    && dotnet restore \
       src/RuntimeJobs/SharpLabNext.CheckedJitBridge/SharpLabNext.CheckedJitBridge.csproj \
-      --locked-mode
-RUN dotnet restore \
+      --locked-mode \
+    && dotnet restore \
       src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj \
-      --locked-mode
-RUN dotnet restore \
+      --locked-mode \
+    && dotnet restore \
       src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj \
       --locked-mode \
     && dotnet restore \
@@ -39,38 +40,38 @@ RUN dotnet restore \
       --locked-mode \
     && dotnet restore \
       src/RuntimeJobs/SharpLabNext.JitProfiler.Native/Smoke/SharpLabNext.JitProfilerSmoke.csproj \
-      --locked-mode
-RUN dotnet publish \
+      --locked-mode \
+    && dotnet publish \
       src/RuntimeJobs/SharpLabNext.LegacyJitInspector/SharpLabNext.LegacyJitInspector.csproj \
       --configuration Release \
       --framework netcoreapp2.0 \
       --no-restore \
       --output /helper \
       /p:UseAppHost=false \
-      /p:ContinuousIntegrationBuild=true
-RUN dotnet publish \
+      /p:ContinuousIntegrationBuild=true \
+    && dotnet publish \
       src/RuntimeJobs/SharpLabNext.CheckedJitBridge/SharpLabNext.CheckedJitBridge.csproj \
       --configuration Release \
       --framework net5.0 \
       --no-restore \
       --output /checked-jit-bridge \
       /p:UseAppHost=false \
-      /p:ContinuousIntegrationBuild=true
-RUN dotnet publish \
+      /p:ContinuousIntegrationBuild=true \
+    && dotnet publish \
       src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj \
       --configuration Release \
       --framework netstandard2.1 \
       --no-restore \
       --output /runtime-api \
-      /p:ContinuousIntegrationBuild=true
-RUN dotnet publish \
+      /p:ContinuousIntegrationBuild=true \
+    && dotnet publish \
       src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj \
       --configuration Release \
       --framework net10.0 \
       --no-restore \
       --output /runtime-api-modern \
-      /p:ContinuousIntegrationBuild=true
-RUN dotnet publish \
+      /p:ContinuousIntegrationBuild=true \
+    && dotnet publish \
       src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj \
       --configuration Release \
       --framework net10.0 \
@@ -165,6 +166,25 @@ RUN chmod 0555 /usr/local/bin/sharplabnext-validate-image \
     && /usr/local/bin/sharplabnext-validate-image \
          CHECKED_JIT_BUILD_IMAGE "${CHECKED_JIT_BUILD_IMAGE}"
 RUN set -eu; \
+    download_with_retry() { \
+      retry_output="$1"; \
+      retry_url="$2"; \
+      for retry_attempt in 1 2 3 4; do \
+        rm -f "${retry_output}"; \
+        if curl --fail --location \
+          --proto '=https' --tlsv1.2 \
+          --output "${retry_output}" "${retry_url}"; then \
+          return 0; \
+        fi; \
+        if [ "${retry_attempt}" -eq 4 ]; then \
+          echo "Download failed after ${retry_attempt} attempts: ${retry_url}" >&2; \
+          return 1; \
+        fi; \
+        echo "Download attempt ${retry_attempt}/4 failed; retrying: ${retry_url}" >&2; \
+        sleep "${retry_attempt}"; \
+      done; \
+      return 1; \
+    }; \
     mkdir -p /checked-jit; \
     : > /checked-jit/libclrjit.so.sha256; \
     if [ -z "${DOTNET_CHECKED_JIT_SOURCE_URL}" ]; then \
@@ -180,9 +200,8 @@ RUN set -eu; \
     test "${DOTNET_CHECKED_JIT_SOURCE_URL}" = \
       "https://github.com/dotnet/runtime/archive/${DOTNET_CHECKED_JIT_COMMIT}.tar.gz"; \
     test "$(printf '%s' "${DOTNET_CHECKED_JIT_SOURCE_SHA512}" | wc -c)" -eq 128; \
-    curl --fail --location --retry 3 --retry-delay 1 --retry-connrefused \
-      --proto '=https' --tlsv1.2 \
-      --output /tmp/dotnet-runtime-source.tar.gz \
+    download_with_retry \
+      /tmp/dotnet-runtime-source.tar.gz \
       "${DOTNET_CHECKED_JIT_SOURCE_URL}"; \
     echo "${DOTNET_CHECKED_JIT_SOURCE_SHA512}  /tmp/dotnet-runtime-source.tar.gz" \
       | sha512sum --check --strict; \
@@ -204,9 +223,8 @@ RUN set -eu; \
       command -v python3; \
       source_sdk_version="$(python3 -c 'import json; print(json.load(open("/runtime-source/global.json", encoding="utf-8"))["tools"]["dotnet"])')"; \
       test "${source_sdk_version}" = "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_VERSION}"; \
-      curl --fail --location --retry 3 --retry-delay 1 --retry-connrefused \
-        --proto '=https' --tlsv1.2 \
-        --output /tmp/dotnet-bootstrap-sdk.tar.gz \
+      download_with_retry \
+        /tmp/dotnet-bootstrap-sdk.tar.gz \
         "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_URL}"; \
       echo "${DOTNET_CHECKED_JIT_BOOTSTRAP_SDK_SHA512}  /tmp/dotnet-bootstrap-sdk.tar.gz" \
         | sha512sum --check --strict; \
@@ -282,28 +300,46 @@ ARG DOTNET_JIT_COMMIT
 ARG DOTNET_RUNTIME_URL
 ARG DOTNET_RUNTIME_SHA512
 ARG DOTNET_CHECKED_JIT_SOURCE_URL
-RUN test -n "${DOTNET_RUNTIME_VERSION}" \
-    && test -n "${DOTNET_RUNTIME_COMMIT}" \
-    && test -n "${DOTNET_JIT_COMMIT}" \
-    && test -n "${DOTNET_RUNTIME_URL}" \
-    && test -n "${DOTNET_RUNTIME_SHA512}" \
-    && curl --fail --location --retry 3 --retry-delay 1 --retry-connrefused \
-         --proto '=https' --tlsv1.2 \
-         --output /tmp/dotnet-runtime.tar.gz "${DOTNET_RUNTIME_URL}" \
-    && echo "${DOTNET_RUNTIME_SHA512}  /tmp/dotnet-runtime.tar.gz" \
-         | sha512sum --check --strict \
-    && mkdir /runtime \
-    && tar --extract --gzip --file /tmp/dotnet-runtime.tar.gz --directory /runtime \
-    && test -x /runtime/dotnet \
-    && test -d "/runtime/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}" \
-    && test -f "/runtime/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}/System.Private.CoreLib.dll" \
-    && version_file="/runtime/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}/.version" \
-    && test -f "${version_file}" \
-    && actual_commit="$(sed -n '1{s/\r$//;p;}' "${version_file}")" \
-    && actual_version="$(sed -n '2{s/\r$//;p;}' "${version_file}")" \
-    && test "${actual_commit}" = "${DOTNET_RUNTIME_COMMIT}" \
-    && test "${actual_commit}" = "${DOTNET_JIT_COMMIT}" \
-    && test "${actual_version}" = "${DOTNET_RUNTIME_VERSION}"
+RUN set -eu; \
+    download_with_retry() { \
+      retry_output="$1"; \
+      retry_url="$2"; \
+      for retry_attempt in 1 2 3 4; do \
+        rm -f "${retry_output}"; \
+        if curl --fail --location \
+          --proto '=https' --tlsv1.2 \
+          --output "${retry_output}" "${retry_url}"; then \
+          return 0; \
+        fi; \
+        if [ "${retry_attempt}" -eq 4 ]; then \
+          echo "Download failed after ${retry_attempt} attempts: ${retry_url}" >&2; \
+          return 1; \
+        fi; \
+        echo "Download attempt ${retry_attempt}/4 failed; retrying: ${retry_url}" >&2; \
+        sleep "${retry_attempt}"; \
+      done; \
+      return 1; \
+    }; \
+    test -n "${DOTNET_RUNTIME_VERSION}"; \
+    test -n "${DOTNET_RUNTIME_COMMIT}"; \
+    test -n "${DOTNET_JIT_COMMIT}"; \
+    test -n "${DOTNET_RUNTIME_URL}"; \
+    test -n "${DOTNET_RUNTIME_SHA512}"; \
+    download_with_retry /tmp/dotnet-runtime.tar.gz "${DOTNET_RUNTIME_URL}"; \
+    echo "${DOTNET_RUNTIME_SHA512}  /tmp/dotnet-runtime.tar.gz" \
+      | sha512sum --check --strict; \
+    mkdir /runtime; \
+    tar --extract --gzip --file /tmp/dotnet-runtime.tar.gz --directory /runtime; \
+    test -x /runtime/dotnet; \
+    test -d "/runtime/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}"; \
+    test -f "/runtime/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}/System.Private.CoreLib.dll"; \
+    version_file="/runtime/shared/Microsoft.NETCore.App/${DOTNET_RUNTIME_VERSION}/.version"; \
+    test -f "${version_file}"; \
+    actual_commit="$(sed -n '1{s/\r$//;p;}' "${version_file}")"; \
+    actual_version="$(sed -n '2{s/\r$//;p;}' "${version_file}")"; \
+    test "${actual_commit}" = "${DOTNET_RUNTIME_COMMIT}"; \
+    test "${actual_commit}" = "${DOTNET_JIT_COMMIT}"; \
+    test "${actual_version}" = "${DOTNET_RUNTIME_VERSION}"
 COPY --from=checked-jit /checked-jit/ /checked-jit/
 RUN set -eu; \
     if [ -n "${DOTNET_CHECKED_JIT_SOURCE_URL}" ]; then \

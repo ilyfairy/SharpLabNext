@@ -987,6 +987,99 @@ test('shared Framework historical development build rejects Wine userspace and r
   assert.equal(formalBakeEnvironment.WINE_CORECLR_USERSPACE_DIGEST, wineUserspace.digest)
 })
 
+test('development image inputs keep Linux and Mono candidates local and non-promotable', () => {
+  for (const [target, environment] of [
+    ['runtime-dotnet-matrix-candidate', dotnetCandidateEnvironment('dotnet-5')],
+    ['runtime-mono-matrix-candidate', monoCandidateEnvironment()],
+  ]) {
+    const bound = {
+      ...environment,
+      RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-development',
+      RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE: 'false',
+    }
+    const docker = fakeDocker(candidateLabels(target, bound))
+    const output = {
+      errors: [], logs: [],
+      log(message) { this.logs.push(message) },
+      error(message) { this.errors.push(message) },
+    }
+    let bakeEnvironment
+    const spawn = (command, arguments_, options) => {
+      if (command === 'docker' && arguments_[0] === 'buildx') bakeEnvironment = options.env
+      return docker.spawn(command, arguments_, options)
+    }
+
+    assert.equal(runCandidateBuild([
+      target,
+      '--allow-development-image-inputs',
+    ], environment, spawn, output), 0, `${target}: ${output.errors.join('\n')}`)
+    assert.equal(bakeEnvironment.RUNTIME_CANDIDATE_SOURCE_CONTEXT, 'working-tree-development')
+    assert.equal(bakeEnvironment.RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE, 'false')
+    assert.equal(bakeEnvironment.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT, 'false')
+    assert.match(output.logs.join('\n'), /promotion output remains disabled/)
+  }
+})
+
+test('development image inputs bind current Framework operators without formal receipt labels', () => {
+  const target = 'runtime-wine-framework-matrix-shared-candidate'
+  const bake = fs.readFileSync(
+    path.join(repositoryRoot, 'eng', 'bake.runtime-candidates.hcl'),
+    'utf8',
+  )
+  const targetText = bake.slice(
+    bake.indexOf(`target "${target}"`),
+    bake.indexOf('\ntarget "', bake.indexOf(`target "${target}"`) + 1),
+  )
+  assert.match(
+    targetText,
+    /WINE_CORECLR_OPERATOR_RECEIPT_SHA256 != "" \? \{\s+"io\.sharplabnext\.operator\.receipt-sha256"/,
+  )
+  const environment = sharedWineFrameworkCandidateEnvironment()
+  const bound = {
+    ...environment,
+    RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-development',
+    RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE: 'false',
+    RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT: 'false',
+  }
+  const labels = candidateLabels(target, bound)
+  for (const label of [
+    'io.sharplabnext.operator.receipt-sha256',
+    'io.sharplabnext.operator.receipt-key-id',
+    'io.sharplabnext.operator.userspace-reference',
+  ]) delete labels[label]
+  const docker = fakeDocker(labels)
+  const output = {
+    errors: [], logs: [],
+    log(message) { this.logs.push(message) },
+    error(message) { this.errors.push(message) },
+  }
+  let bakeEnvironment
+  const spawn = (command, arguments_, options) => {
+    if (command === 'docker' && arguments_[0] === 'buildx') bakeEnvironment = options.env
+    return docker.spawn(command, arguments_, options)
+  }
+
+  assert.equal(runCandidateBuild([
+    target,
+    '--allow-development-image-inputs',
+  ], environment, spawn, output, {
+    loadWineCoreClrOperatorReceipt() {
+      throw new Error('development Framework build must not load a formal receipt')
+    },
+  }), 0, output.errors.join('\n'))
+  assert.equal(
+    bakeEnvironment.RUNTIME_CANDIDATE_SOURCE_CONTEXT,
+    'working-tree-development',
+  )
+  assert.equal(bakeEnvironment.RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE, 'false')
+  assert.equal(bakeEnvironment.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT, 'false')
+  assert.equal(bakeEnvironment.WINE_CORECLR_OPERATOR_RECEIPT_SHA256, undefined)
+  assert.equal(
+    labels['io.sharplabnext.component.wine-coreclr-userspace.digest'],
+    wineUserspace.digest,
+  )
+})
+
 test('shared Framework build revalidates immutable provenance before Bake', () => {
   const target = 'runtime-wine-framework-matrix-shared-candidate'
   const environment = sharedWineFrameworkCandidateEnvironment()

@@ -7,7 +7,7 @@ ARG ASPNET_IMAGE
 FROM ${NODE_IMAGE} AS frontend
 WORKDIR /source/frontend
 COPY frontend/package.json frontend/package-lock.json ./
-RUN --mount=type=cache,id=sharplabnext-frontend-npm,target=/root/.npm \
+RUN --mount=type=cache,id=sharplabnext-frontend-npm,target=/root/.npm,sharing=locked \
     npm ci --no-audit --no-fund --prefer-offline \
       --fetch-retries=5 \
       --fetch-retry-mintimeout=2000 \
@@ -22,8 +22,9 @@ WORKDIR /source
 COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
 COPY src/ ./src/
 COPY profiles/ ./profiles/
-RUN dotnet restore src/Gateway/SharpLabNext.Gateway/SharpLabNext.Gateway.csproj --locked-mode
-RUN dotnet publish src/Gateway/SharpLabNext.Gateway/SharpLabNext.Gateway.csproj \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore src/Gateway/SharpLabNext.Gateway/SharpLabNext.Gateway.csproj --locked-mode \
+    && dotnet publish src/Gateway/SharpLabNext.Gateway/SharpLabNext.Gateway.csproj \
     --configuration ${CONFIGURATION} \
     --no-restore \
     --output /app/publish \

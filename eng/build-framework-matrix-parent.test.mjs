@@ -189,6 +189,11 @@ test('shared parent accepts the exact metadata-only matrix and emits 14 target-p
     }
     assert.doesNotMatch(generated, /SHARPLABNEXT_FRAMEWORK_ROW_MOUNTS/)
     assert.doesNotMatch(generated, /COPY --from=framework-matrix/)
+    assert.match(generated, /FROM framework-row-netfx20 AS framework-tool-source/)
+    assert.match(generated, /COPY --from=framework-tool-source \/usr\/ \/usr\//)
+    assert.match(generated, /command -v python3 >\/dev\/null/)
+    assert.doesNotMatch(generated, /FROM \$\{WINE_IMAGE\}/)
+    assert.doesNotMatch(generated, /COPY --from=wine-source \/usr\/ \/usr\//)
     assert.match(generated, /--output \/opt\/sharplabnext/)
 
     const args = createParentBuildArguments(

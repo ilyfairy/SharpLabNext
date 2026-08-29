@@ -23,12 +23,8 @@ COPY profiles/runtime-wine-packages.json /usr/local/share/sharplabnext/runtime-w
 RUN set -euo pipefail; \
     [[ "${RUNTIME_DEPS_IMAGE}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; \
     [[ "${WINE_CORECLR_USERSPACE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; \
-    test -n "${VERSION}"; \
-    test -n "${SOURCE_REVISION}"; \
     test -n "${WINE_CORECLR_USERSPACE_VERSION}"; \
     test -n "${WINE_CORECLR_USERSPACE_SOURCE_URI}"; \
-    { test "${OPERATOR_SOURCE_CONTEXT}:${OPERATOR_PROMOTION_ELIGIBLE}:${OPERATOR_DEVELOPMENT_ONLY}" = "committed:true:false" \
-      || test "${OPERATOR_SOURCE_CONTEXT}:${OPERATOR_PROMOTION_ELIGIBLE}:${OPERATOR_DEVELOPMENT_ONLY}" = "working-tree-development:false:true"; }; \
     manifest=/usr/local/share/sharplabnext/runtime-wine-packages.json; \
     test "$(sha256sum "${manifest}" | awk '{print "sha256:" $1}')" = "${WINE_CORECLR_USERSPACE_DIGEST}"; \
     grep -F '"id": "wine-coreclr-userspace"' "${manifest}" >/dev/null; \
@@ -129,6 +125,9 @@ RUN set -euo pipefail; \
     notice_size="$(awk '/"noticeArchive": \{/ { in_notice = 1; next } in_notice && /"sizeBytes":/ { value = $0; sub(/^[[:space:]]*"sizeBytes": /, "", value); sub(/,?$/, "", value); print value; exit }' "${manifest}")"; \
     test "$(sha256sum "${notice_archive}" | awk '{print $1}')" = "${notice_sha256}"; \
     test "$(stat -c '%s' "${notice_archive}")" -eq "${notice_size}"; \
+    rm -rf /usr/lib/x86_64-linux-gnu/wine/i386-windows; \
+    test ! -e /usr/lib/x86_64-linux-gnu/wine/i386-windows \
+      || { echo 'Wine userspace retained the i386 Wine payload.' >&2; exit 1; }; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /tmp/sharplabnext-wine-packages "${snapshot_indexes}" "${expected}" "${actual}" \
       "${copyright_evidence}" "${copyright_checks}" "${copyright_paths}" /tmp/sharplabnext-wine-copyrights-actual.list
 
@@ -146,7 +145,14 @@ RUN set -euo pipefail; \
     test "$(awk 'index($0, "#arch=") == 1 { value=substr($0, 7); sub(/\r$/, "", value); print value; exit }' "${WINEPREFIX}/system.reg")" = win64 || { echo 'Wine prefix system.reg does not declare win64.' >&2; exit 1; }; \
     test -d "${WINEPREFIX}/drive_c/windows/system32" || { echo 'Wine prefix is missing system32.' >&2; exit 1; }; \
     test "$(od -An -t x1 -j 4 -N 1 /usr/lib/wine/wine64 | tr -d '[:space:]')" = 02 || { echo 'Wine loader is not an ELF64 executable.' >&2; exit 1; }; \
+    test ! -e /usr/lib/x86_64-linux-gnu/wine/i386-windows || { echo 'Wine prefix initialization restored the i386 Wine payload.' >&2; exit 1; }; \
     rm -rf "${WINEPREFIX}/drive_c/users/root/Temp"/* "${WINEPREFIX}/drive_c/windows/temp"/* /tmp/.wine-* /tmp/.X*-lock /tmp/.X11-unix
+
+RUN set -euo pipefail; \
+    test -n "${VERSION}"; \
+    test -n "${SOURCE_REVISION}"; \
+    { test "${OPERATOR_SOURCE_CONTEXT}:${OPERATOR_PROMOTION_ELIGIBLE}:${OPERATOR_DEVELOPMENT_ONLY}" = "committed:true:false" \
+      || test "${OPERATOR_SOURCE_CONTEXT}:${OPERATOR_PROMOTION_ELIGIBLE}:${OPERATOR_DEVELOPMENT_ONLY}" = "working-tree-development:false:true"; }
 
 LABEL org.opencontainers.image.title="SharpLabNext Wine CoreCLR Operator" \
       org.opencontainers.image.version="wine-9.0-noble-amd64" \

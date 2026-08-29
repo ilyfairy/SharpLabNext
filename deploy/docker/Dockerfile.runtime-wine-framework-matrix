@@ -27,7 +27,8 @@ RUN chmod 0555 /usr/local/bin/sharplabnext-validate-image \
 COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
 COPY profiles/versions.props ./profiles/versions.props
 COPY src/ ./src/
-RUN dotnet restore \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore \
       src/RuntimeJobs/SharpLabNext.TargetRuntimeRunner/SharpLabNext.TargetRuntimeRunner.csproj \
       --locked-mode \
     && dotnet restore \
@@ -35,8 +36,8 @@ RUN dotnet restore \
       --locked-mode \
     && dotnet restore \
       src/RuntimeJobs/SharpLabNext.WineRunner/SharpLabNext.WineRunner.csproj \
-      --locked-mode
-RUN dotnet publish \
+      --locked-mode \
+    && dotnet publish \
       src/RuntimeJobs/SharpLabNext.TargetRuntimeRunner/SharpLabNext.TargetRuntimeRunner.csproj \
       --configuration Release \
       --framework net20 \
@@ -44,8 +45,8 @@ RUN dotnet publish \
       --output /target-runtime-runner \
       /p:UseAppHost=false \
       /p:ContinuousIntegrationBuild=true \
-      /p:SourceRevisionId=${SOURCE_REVISION}
-RUN dotnet publish \
+      /p:SourceRevisionId=${SOURCE_REVISION} \
+    && dotnet publish \
       src/RuntimeJobs/SharpLabNext.DesktopClrJitInspector/SharpLabNext.DesktopClrJitInspector.csproj \
       --configuration Release \
       --framework net20 \
@@ -166,18 +167,27 @@ ENV DOTNET_EnableDiagnostics=0 \
 FROM runtime-base AS preflight
 ARG NETFX_RUNTIME_VERSION
 RUN set -eu; \
+    run_clean() { \
+      stdout="$1"; stderr="$2"; shift 2; \
+      if ! "$@" >"${stdout}" 2>"${stderr}"; then cat "${stderr}" >&2; return 1; fi; \
+      if test -s "${stderr}"; then cat "${stderr}" >&2; return 1; fi; \
+    }; \
     /usr/share/dotnet/dotnet --info >/dev/null; \
     prefix="$(case "${NETFX_RUNTIME_VERSION}" in 2.0|3.0|3.5) printf /opt/wine-netfx-clr2 ;; *) printf /opt/wine-netfx-clr4 ;; esac)"; \
-    frames="$(WINEPREFIX="${prefix}" /usr/lib/wine/wine64 \
-      'Z:\\opt\\sharplabnext\\SharpLabNext.TargetRuntimeRunner.exe' self-test)"; \
+    run_clean /tmp/target-runtime-runner.stdout /tmp/target-runtime-runner.stderr \
+      env WINEPREFIX="${prefix}" /usr/lib/wine/wine64 \
+      'Z:\\opt\\sharplabnext\\SharpLabNext.TargetRuntimeRunner.exe' self-test; \
+    frames="$(cat /tmp/target-runtime-runner.stdout)"; \
     test "$(printf '%s\n' "${frames}" | grep --count .)" -eq 1; \
     install -d -m 0755 /workspace; \
     cp /opt/sharplabnext/SharpLabNext.DesktopClrJitInspector.exe* /workspace/; \
-    jit_frames="$(WINEPREFIX="${prefix}" /usr/share/dotnet/dotnet \
+    run_clean /tmp/desktop-clr-jit.stdout /tmp/desktop-clr-jit.stderr \
+      env WINEPREFIX="${prefix}" /usr/share/dotnet/dotnet \
       /opt/sharplabnext/SharpLabNext.WineRunner.dll \
       desktop-jit \
       /workspace/SharpLabNext.DesktopClrJitInspector.exe \
-      WindowsAbi)"; \
+      WindowsAbi; \
+    jit_frames="$(cat /tmp/desktop-clr-jit.stdout)"; \
     test "$(printf '%s\n' "${jit_frames}" | grep --count .)" -eq 3; \
     printf '%s\n' "${jit_frames}" | sed -n '1p' | base64 -d | grep -aq 'rcx'; \
     printf '%s\n' "${jit_frames}" | sed -n '1p' | base64 -d | grep -aq 'rdx'; \

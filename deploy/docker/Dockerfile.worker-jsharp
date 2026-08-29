@@ -8,10 +8,11 @@ WORKDIR /source
 COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
 COPY profiles/versions.props ./profiles/versions.props
 COPY src/ ./src/
-RUN dotnet restore \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore \
       src/Workers/JSharp/SharpLabNext.Worker.JSharp/SharpLabNext.Worker.JSharp.csproj \
-      --locked-mode
-RUN dotnet publish \
+      --locked-mode \
+    && dotnet publish \
       src/Workers/JSharp/SharpLabNext.Worker.JSharp/SharpLabNext.Worker.JSharp.csproj \
       --configuration Release \
       --no-restore \

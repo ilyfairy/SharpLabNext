@@ -7,6 +7,10 @@
   "license": "MIT",
   "patchSeries": [
     {
+      "path": "eng/patches/const-generics-runtime/0001-use-local-fork-packages.patch",
+      "purpose": "Replace the embedded runtime source's remote fork feed with the checksum-verified local package source before building ILVerification."
+    },
+    {
       "path": "eng/patches/ilspy-const-generics/0001-use-source-built-metadata.patch",
       "purpose": "Build ILSpy against the metadata and immutable assemblies produced by the locked runtime source target, replacing the Immutable package while explicitly retaining ILSpy's locked System.Memory and Unsafe dependencies."
     },

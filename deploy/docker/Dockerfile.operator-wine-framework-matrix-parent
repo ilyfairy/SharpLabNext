@@ -8,7 +8,7 @@
 ARG ROOT_IMAGE
 ARG WINE_IMAGE
 
-FROM ${WINE_IMAGE} AS wine-source
+FROM framework-row-netfx20 AS framework-tool-source
 
 FROM ${ROOT_IMAGE} AS final
 ARG ROOT_IMAGE
@@ -20,8 +20,11 @@ ARG FRAMEWORK_MATRIX_SOURCE_URI
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-COPY --from=wine-source /usr/ /usr/
-COPY --from=wine-source /etc/fonts/ /etc/fonts/
+# Every Framework row carries the same locked bootstrap-tool userspace, while
+# the Wine-only operator intentionally does not include Python. Use one
+# canonical, provenance-validated row for /usr without copying either prefix.
+COPY --from=framework-tool-source /usr/ /usr/
+COPY --from=framework-tool-source /etc/fonts/ /etc/fonts/
 COPY deploy/docker/assemble-framework-prefix-matrix.py /usr/local/bin/sharplabnext-assemble-framework-prefix-matrix
 COPY deploy/docker/dedupe-wine-prefixes.py /usr/local/bin/sharplabnext-dedupe-wine-prefixes
 COPY deploy/docker/wine-netfx-framework-preflight.sh /usr/local/bin/sharplabnext-wine-netfx-preflight
@@ -42,6 +45,8 @@ RUN --mount=type=bind,from=framework-matrix-metadata,source=/,target=/run/sharpl
     chmod 0555 /usr/local/bin/sharplabnext-assemble-framework-prefix-matrix \
       /usr/local/bin/sharplabnext-dedupe-wine-prefixes \
       /usr/local/bin/sharplabnext-wine-netfx-preflight; \
+    command -v python3 >/dev/null; \
+    python3 --version; \
     test -s /run/sharplabnext-framework-matrix-metadata/matrix-input.json; \
     printf '%s  %s\n' "${FRAMEWORK_MATRIX_INPUT_SHA256#sha256:}" \
       /run/sharplabnext-framework-matrix-metadata/matrix-input.json | sha256sum --check --status; \

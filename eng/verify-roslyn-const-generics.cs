@@ -1,4 +1,5 @@
 #:property TargetFramework=net10.0
+#:property PublishAot=false
 #:property NoWarn=IL2026
 
 using System.Reflection;

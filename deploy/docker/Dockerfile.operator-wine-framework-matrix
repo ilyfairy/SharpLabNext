@@ -2,15 +2,105 @@
 
 ARG BASE_IMAGE
 ARG ROOT_IMAGE
+ARG FRAMEWORK_WOW64_BASE_IMAGE
+ARG FRAMEWORK_SEED_IMAGE
+ARG FRAMEWORK_INSTALLER_NETWORK
 FROM ${BASE_IMAGE} AS wine-source
 
-FROM ${ROOT_IMAGE} AS final
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+COPY profiles/runtime-framework-installers.json /usr/local/share/sharplabnext/runtime-framework-installers.json
+
+# Framework installation needs a small tool closure that is deliberately not
+# part of the deployable Wine userspace component. Resolve it from the same
+# immutable, signed Ubuntu snapshot as the source operator and verify the exact
+# package delta before any installer or downloaded Winetricks payload executes.
+RUN <<'SH'
+set -euo pipefail
+
+manifest=/usr/local/share/sharplabnext/runtime-framework-installers.json
+before=/tmp/sharplabnext-framework-bootstrap.before
+after=/tmp/sharplabnext-framework-bootstrap.after
+expected=/tmp/sharplabnext-framework-bootstrap.expected
+actual=/tmp/sharplabnext-framework-bootstrap.actual
+removed=/tmp/sharplabnext-framework-bootstrap.removed
+cleanup() {
+    rm -f "${before}" "${after}" "${expected}" "${actual}" "${removed}"
+}
+trap cleanup EXIT
+
+test "$(find /etc/apt \( -name '*.list' -o -name '*.sources' \) -print)" = \
+    '/etc/apt/sources.list.d/sharplabnext-snapshot.sources'
+grep --fixed-strings --quiet '20260810T000000Z' \
+    /etc/apt/sources.list.d/sharplabnext-snapshot.sources
+dpkg-query -W -f='${binary:Package}=${Version}\n' | LC_ALL=C sort > "${before}"
+apt-get update
+printf '%s  %s\n' \
+    'cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0' \
+    '/var/lib/apt/lists/snapshot.ubuntu.com_ubuntu_20260810T000000Z_dists_noble_InRelease' \
+    'ef81441269d3a8bdd8cdfe9095de7deb7f1af70d42191f61f1af3c8fb72cfb32' \
+    '/var/lib/apt/lists/snapshot.ubuntu.com_ubuntu_20260810T000000Z_dists_noble-updates_InRelease' \
+    '3cfb1c8d7499c0bac1bfbe1e32675d200f0ca74b18afc4248c45325a073d0fd0' \
+    '/var/lib/apt/lists/snapshot.ubuntu.com_ubuntu_20260810T000000Z_dists_noble-security_InRelease' \
+    | sha256sum --check --strict
+apt-get install --yes --no-install-recommends \
+    python3=3.12.3-0ubuntu2.1 \
+    cabextract=1.11-2 \
+    winetricks=20240105-2
+
+python3 - "${manifest}" "${expected}" <<'PY'
+import hashlib
+import json
+import pathlib
+import re
+import sys
+
+manifest_path, output_path = sys.argv[1:]
+try:
+    manifest = json.loads(pathlib.Path(manifest_path).read_text(encoding="utf-8"))
+    tools = manifest["bootstrapTools"]
+    if tools["archiveSnapshotId"] != "20260810T000000Z":
+        raise ValueError
+    if tools["directPackages"] != [
+        {"name": "python3", "version": "3.12.3-0ubuntu2.1"},
+        {"name": "cabextract", "version": "1.11-2"},
+        {"name": "winetricks", "version": "20240105-2"},
+    ]:
+        raise ValueError
+    packages = tools["resolvedPackages"]
+    if (len(packages) != 28 or len(set(packages)) != 28 or
+            packages != sorted(packages) or
+            any(not isinstance(package, str) or not re.fullmatch(
+                r"[a-z0-9][a-z0-9.+-]*(?::amd64)?=[A-Za-z0-9][A-Za-z0-9.+:~_-]*",
+                package,
+            ) for package in packages)):
+        raise ValueError
+    lock_bytes = "".join(f"{package}\n" for package in packages).encode("utf-8")
+    if hashlib.sha256(lock_bytes).hexdigest() != tools["resolvedPackageListSha256"]:
+        raise ValueError
+    pathlib.Path(output_path).write_bytes(lock_bytes)
+except Exception:
+    print("Framework bootstrap tool manifest validation failed.", file=sys.stderr)
+    raise SystemExit(1) from None
+PY
+
+dpkg-query -W -f='${binary:Package}=${Version}\n' | LC_ALL=C sort > "${after}"
+comm -23 "${before}" "${after}" > "${removed}"
+test ! -s "${removed}"
+comm -13 "${before}" "${after}" > "${actual}"
+cmp --silent "${expected}" "${actual}"
+test "$(winetricks --version | awk 'NR == 1 { print $1; exit }')" = 20240105
+python3 --version
+cabextract --version | head -n 1
+rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+cleanup
+trap - EXIT
+SH
+
+FROM ${ROOT_IMAGE} AS framework-wow64-base
 
 ARG BASE_IMAGE
 ARG ROOT_IMAGE
-ARG FRAMEWORK_TARGET_ID
-ARG FRAMEWORK_VERSION
-ARG CLR_GENERATION
 ARG INSTALLER_MANIFEST_SHA256
 ARG ACCEPT_MICROSOFT_DOTNET_FRAMEWORK_EULA
 
@@ -20,17 +110,138 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # source image may contain a runtime prefix (for example /opt/wine-dotnet) and
 # other operator payloads; copying only its userspace keeps those unrelated
 # files out of every Framework operator image while preserving the exact Wine
-# loader, Winetricks and native library closure.
+# loader and the verified Framework bootstrap tool closure. The source and root
+# share one pinned base, so its package database accurately describes /usr.
 COPY --from=wine-source /usr/ /usr/
 COPY --from=wine-source /etc/fonts/ /etc/fonts/
+COPY --from=wine-source /etc/apt/sources.list.d/sharplabnext-snapshot.sources /etc/apt/sources.list.d/sharplabnext-snapshot.sources
+COPY --from=wine-source /var/lib/dpkg/ /var/lib/dpkg/
+COPY --from=wine-source /var/lib/apt/extended_states /var/lib/apt/extended_states
+
+# Microsoft Framework installers include 32-bit bootstrap executables even for
+# x64 payloads. Build the prefixes with a complete, transition-locked classic
+# WoW64 userspace, then copy only /opt into the clean amd64 final stage below.
+# No i386 package, Unix loader, or upgraded native library crosses that stage.
+RUN <<'SH'
+set -euo pipefail
+
+manifest=/usr/local/share/sharplabnext/runtime-framework-installers.json
+before=/tmp/sharplabnext-framework-wow64.before
+after=/tmp/sharplabnext-framework-wow64.after
+expected_replaced=/tmp/sharplabnext-framework-wow64.expected-replaced
+expected_resolved=/tmp/sharplabnext-framework-wow64.expected-resolved
+actual_replaced=/tmp/sharplabnext-framework-wow64.actual-replaced
+actual_resolved=/tmp/sharplabnext-framework-wow64.actual-resolved
+cleanup() {
+    rm -f \
+        "${before}" "${after}" \
+        "${expected_replaced}" "${expected_resolved}" \
+        "${actual_replaced}" "${actual_resolved}"
+}
+trap cleanup EXIT
+
+find /etc/apt \( -name '*.list' -o -name '*.sources' \) \
+    ! -path /etc/apt/sources.list.d/sharplabnext-snapshot.sources -delete
+test "$(find /etc/apt \( -name '*.list' -o -name '*.sources' \) -print)" = \
+    '/etc/apt/sources.list.d/sharplabnext-snapshot.sources'
+test -z "$(dpkg --print-foreign-architectures)"
+dpkg-query -W -f='${binary:Package}=${Version}\n' | LC_ALL=C sort > "${before}"
+python3 - "${manifest}" "${expected_replaced}" "${expected_resolved}" <<'PY'
+import hashlib
+import json
+import pathlib
+import re
+import sys
+
+manifest_path, replaced_path, resolved_path = sys.argv[1:]
+try:
+    manifest = json.loads(pathlib.Path(manifest_path).read_text(encoding="utf-8"))
+    installer = manifest["classicWow64Installer"]
+    if installer["archiveSnapshotId"] != "20260810T000000Z":
+        raise ValueError
+    if installer["foreignArchitecture"] != "i386":
+        raise ValueError
+    if installer["directPackage"] != {
+        "name": "wine32",
+        "architecture": "i386",
+        "version": "9.0~repack-4build3",
+    }:
+        raise ValueError
+    package_pattern = re.compile(
+        r"[a-z0-9][a-z0-9.+-]*(?::(?:amd64|i386))?="
+        r"[A-Za-z0-9][A-Za-z0-9.+:~_-]*"
+    )
+    locks = [
+        (
+            "replacedPackages",
+            "replacedPackageListSha256",
+            4,
+            "4a69f0e49c3ffd2cd0a5ef4001395cc5df87748ceb903a5595dea5872c3d1a45",
+            pathlib.Path(replaced_path),
+        ),
+        (
+            "resolvedPackages",
+            "resolvedPackageListSha256",
+            109,
+            "e96dce12a7d0347874522dce2a520588fe4f3860feafd55a5736f11241b0ec8e",
+            pathlib.Path(resolved_path),
+        ),
+    ]
+    for packages_key, digest_key, count, expected_digest, output in locks:
+        packages = installer[packages_key]
+        if (len(packages) != count or len(set(packages)) != count or
+                packages != sorted(packages) or
+                any(not isinstance(package, str) or
+                    package_pattern.fullmatch(package) is None
+                    for package in packages)):
+            raise ValueError
+        lock_bytes = "".join(f"{package}\n" for package in packages).encode("utf-8")
+        if (installer[digest_key] != expected_digest or
+                hashlib.sha256(lock_bytes).hexdigest() != expected_digest):
+            raise ValueError
+        output.write_bytes(lock_bytes)
+except Exception:
+    print("Framework classic WoW64 package manifest validation failed.", file=sys.stderr)
+    raise SystemExit(1) from None
+PY
+
+dpkg --add-architecture i386
+test "$(dpkg --print-foreign-architectures)" = i386
+apt-get update
+printf '%s  %s\n' \
+    'cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0' \
+    '/var/lib/apt/lists/snapshot.ubuntu.com_ubuntu_20260810T000000Z_dists_noble_InRelease' \
+    'ef81441269d3a8bdd8cdfe9095de7deb7f1af70d42191f61f1af3c8fb72cfb32' \
+    '/var/lib/apt/lists/snapshot.ubuntu.com_ubuntu_20260810T000000Z_dists_noble-updates_InRelease' \
+    '3cfb1c8d7499c0bac1bfbe1e32675d200f0ca74b18afc4248c45325a073d0fd0' \
+    '/var/lib/apt/lists/snapshot.ubuntu.com_ubuntu_20260810T000000Z_dists_noble-security_InRelease' \
+    | sha256sum --check --strict
+DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+    wine32:i386=9.0~repack-4build3
+
+dpkg-query -W -f='${binary:Package}=${Version}\n' | LC_ALL=C sort > "${after}"
+comm -23 "${before}" "${after}" > "${actual_replaced}"
+comm -13 "${before}" "${after}" > "${actual_resolved}"
+cmp --silent "${expected_replaced}" "${actual_replaced}"
+cmp --silent "${expected_resolved}" "${actual_resolved}"
+test "$(dpkg-query -W -f='${Version}' wine32:i386)" = '9.0~repack-4build3'
+test -x /usr/lib/wine/wine
+test -x /usr/lib/wine/wine64
+test -x /usr/lib/wine/wineserver64
+test "$(od -An -t x1 -j 4 -N 1 /usr/lib/wine/wine | tr -d '[:space:]')" = 01
+test "$(od -An -t x1 -j 4 -N 1 /usr/lib/wine/wine64 | tr -d '[:space:]')" = 02
+rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+cleanup
+trap - EXIT
+SH
 
 ENV WINEARCH=win64 \
     WINEDEBUG=-all \
     WINE=/usr/lib/wine/wine \
-    WINELOADER=/usr/lib/wine/wine64 \
     WINESERVER=/usr/lib/wine/wineserver64
 
 COPY profiles/runtime-framework-installers.json /usr/local/share/sharplabnext/runtime-framework-installers.json
+COPY --chmod=0555 deploy/docker/wine-netfx-framework-bootstrap.sh /usr/local/bin/sharplabnext-wine-netfx-bootstrap
 COPY deploy/docker/wine-netfx-framework-preflight.sh /usr/local/bin/sharplabnext-wine-netfx-preflight
 COPY deploy/docker/dedupe-wine-prefixes.py /usr/local/bin/sharplabnext-dedupe-wine-prefixes
 COPY deploy/docker/certificates/microsoft-tls-rsa-root-g2-xsign.crt /usr/local/share/ca-certificates/
@@ -48,318 +259,144 @@ RUN set -euo pipefail; \
       /usr/local/share/ca-certificates/microsoft-tls-g2-rsa-ca-ocsp-04.crt; \
     update-ca-certificates >/dev/null
 
+ARG FRAMEWORK_SEED_INPUT_SHA256
+
+RUN set -euo pipefail; \
+    [[ "${FRAMEWORK_SEED_INPUT_SHA256}" =~ ^[0-9a-f]{64}$ ]]; \
+    printf '{"schemaVersion":1,"strategy":"framework-wow64-base-v1","seedInputSha256":"%s"}\n' \
+      "${FRAMEWORK_SEED_INPUT_SHA256}" \
+      > /usr/local/share/sharplabnext/framework-wow64-base.json; \
+    chmod 0444 /usr/local/share/sharplabnext/framework-wow64-base.json
+
+LABEL io.sharplabnext.framework.build-role="wow64-base" \
+      io.sharplabnext.framework.seed-input-sha256="${FRAMEWORK_SEED_INPUT_SHA256}" \
+      io.sharplabnext.operator-only="true" \
+      io.sharplabnext.redistribution="operator-supplied-only"
+
+FROM ${FRAMEWORK_WOW64_BASE_IMAGE} AS framework-companion-seed-input
+
+ARG FRAMEWORK_WOW64_BASE_IMAGE
+ARG FRAMEWORK_SEED_GENERATION
+ARG FRAMEWORK_SEED_VERSION
+ARG FRAMEWORK_SEED_PREFIX
+ARG FRAMEWORK_SEED_INPUT_SHA256
+ARG INSTALLER_MANIFEST_SHA256
+ARG ACCEPT_MICROSOFT_DOTNET_FRAMEWORK_EULA
+ARG FRAMEWORK_INSTALLER_NETWORK
+ARG FRAMEWORK_INSTALLER_FILE
+
+FROM framework-companion-seed-input AS framework-companion-seed-default
+
 RUN --mount=type=secret,id=framework-installer-url \
-    --mount=type=bind,from=framework-installer-context,target=/run/operator-assets/framework <<'SH'
-set -euo pipefail
+    --mount=type=bind,from=framework-vendored-context,target=/run/operator-assets/framework-vendored,ro \
+    --mount=type=bind,from=framework-cached-context,target=/run/operator-assets/framework-cached,ro \
+    --mount=type=bind,from=framework-installer-context,target=/run/operator-assets/framework-installer,ro \
+    /usr/local/bin/sharplabnext-wine-netfx-bootstrap seed
 
-fail_bootstrap() {
-    printf '[framework-bootstrap] failed=%s\n' "$1" >&2
-    exit 1
-}
+FROM framework-companion-seed-input AS framework-companion-seed-none
 
-printf '[framework-bootstrap] stage=validate-inputs\n'
-[[ "${BASE_IMAGE}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]] \
-    || fail_bootstrap base-image
-[[ "${FRAMEWORK_TARGET_ID}" =~ ^netfx[0-9]+$ ]] \
-    || fail_bootstrap target-id
-[[ "${FRAMEWORK_VERSION}" =~ ^[0-9]+(\.[0-9]+){1,2}$ ]] \
-    || fail_bootstrap framework-version
-[[ "${CLR_GENERATION}" =~ ^clr[24]$ ]] \
-    || fail_bootstrap clr-generation
-[[ "${INSTALLER_MANIFEST_SHA256}" =~ ^[0-9a-f]{64}$ ]] \
-    || fail_bootstrap manifest-sha256
-test "${ACCEPT_MICROSOFT_DOTNET_FRAMEWORK_EULA}" = "true" \
-    || fail_bootstrap eula
-for command in python3 sha256sum openssl winetricks cabextract xvfb-run timeout tail awk find; do
-    command -v "${command}" >/dev/null || fail_bootstrap "tool-${command}"
-done
-test -x "${WINE}" || fail_bootstrap tool-wine
-test -x "${WINELOADER}" || fail_bootstrap tool-wine-loader
-test -x "${WINESERVER}" || fail_bootstrap tool-wineserver
-test -x /usr/bin/wine-stable || fail_bootstrap tool-wine-stable
+RUN --network=none \
+    --mount=type=secret,id=framework-installer-url \
+    --mount=type=bind,from=framework-vendored-context,target=/run/operator-assets/framework-vendored,ro \
+    --mount=type=bind,from=framework-cached-context,target=/run/operator-assets/framework-cached,ro \
+    --mount=type=bind,from=framework-installer-context,target=/run/operator-assets/framework-installer,ro \
+    /usr/local/bin/sharplabnext-wine-netfx-bootstrap seed
 
-manifest=/usr/local/share/sharplabnext/runtime-framework-installers.json
-printf '%s  %s\n' "${INSTALLER_MANIFEST_SHA256}" "${manifest}" | sha256sum --check --status - \
-    || fail_bootstrap manifest-digest
-chmod 0555 /usr/local/bin/sharplabnext-wine-netfx-preflight
-chmod 0555 /usr/local/bin/sharplabnext-dedupe-wine-prefixes
+FROM framework-companion-seed-${FRAMEWORK_INSTALLER_NETWORK} AS framework-companion-seed
 
-installer_root="$(mktemp -d /tmp/sharplabnext-framework.XXXXXX)"
-config_root="${installer_root}/config"
-mkdir -p "${config_root}"
-cleanup() {
-    rm -rf "${installer_root}"
-}
-trap cleanup EXIT
+LABEL io.sharplabnext.framework.build-role="companion-seed" \
+      io.sharplabnext.framework.seed-schema="framework-companion-seed-v1" \
+      io.sharplabnext.framework.seed-generation="${FRAMEWORK_SEED_GENERATION}" \
+      io.sharplabnext.framework.seed-version="${FRAMEWORK_SEED_VERSION}" \
+      io.sharplabnext.framework.seed-prefix="${FRAMEWORK_SEED_PREFIX}" \
+      io.sharplabnext.framework.seed-input-sha256="${FRAMEWORK_SEED_INPUT_SHA256}" \
+      io.sharplabnext.framework.installer-manifest-sha256="${INSTALLER_MANIFEST_SHA256}" \
+      io.sharplabnext.framework.wow64-base-image="${FRAMEWORK_WOW64_BASE_IMAGE}" \
+      io.sharplabnext.operator-only="true" \
+      io.sharplabnext.redistribution="operator-supplied-only"
 
-python3 - "${manifest}" "${FRAMEWORK_TARGET_ID}" "${config_root}" <<'PY'
-import json
-import pathlib
-import sys
+FROM ${FRAMEWORK_SEED_IMAGE} AS framework-installer-input
 
-manifest_path, target_id, output_path = sys.argv[1:]
-try:
-    manifest = json.loads(pathlib.Path(manifest_path).read_text(encoding="utf-8"))
-    targets = [target for target in manifest["targets"] if target["id"] == target_id]
-    if len(targets) != 1:
-        raise ValueError
-    target = targets[0]
-    recipe = target["recipe"]
-    companion = manifest["companionPrefixes"]
-    values = {
-        "winetricks-version": manifest["winetricksVersion"],
-        "target-version": target["version"],
-        "target-generation": target["clrGeneration"],
-        "target-prefix": target["prefix"],
-        "recipe-kind": recipe["kind"],
-        "recipe-verb": recipe.get("verb", ""),
-        "installer-file": recipe.get("fileName", ""),
-        "installer-sha256": recipe.get("sha256", ""),
-        "prerequisite-verb": recipe.get("prerequisiteVerb", ""),
-        "clr2-prefix": companion["clr2"]["prefix"],
-        "clr2-verb": companion["clr2"]["winetricksVerb"],
-        "clr4-prefix": companion["clr4"]["prefix"],
-        "clr4-verb": companion["clr4"]["winetricksVerb"],
-    }
-    output = pathlib.Path(output_path)
-    for name, value in values.items():
-        if not isinstance(value, str) or "\0" in value or "\n" in value or "\r" in value:
-            raise ValueError
-        (output / name).write_text(value, encoding="utf-8")
-    arguments = recipe.get("arguments", [])
-    if not isinstance(arguments, list) or any(not isinstance(argument, str) for argument in arguments):
-        raise ValueError
-    (output / "installer-arguments").write_text("".join(f"{argument}\n" for argument in arguments), encoding="utf-8")
-except Exception:
-    print("Framework installer manifest selection failed.", file=sys.stderr)
-    raise SystemExit(1) from None
-PY
+ARG BASE_IMAGE
+ARG FRAMEWORK_SEED_IMAGE
+ARG FRAMEWORK_SEED_GENERATION
+ARG FRAMEWORK_SEED_VERSION
+ARG FRAMEWORK_SEED_PREFIX
+ARG FRAMEWORK_SEED_INPUT_SHA256
+ARG FRAMEWORK_TARGET_ID
+ARG FRAMEWORK_VERSION
+ARG CLR_GENERATION
+ARG INSTALLER_MANIFEST_SHA256
+ARG ACCEPT_MICROSOFT_DOTNET_FRAMEWORK_EULA
+ARG FRAMEWORK_INSTALLER_NETWORK
+ARG FRAMEWORK_INSTALLER_FILE
 
-read_config() {
-    local value
-    value="$(cat "${config_root}/$1")"
-    test -n "${value}"
-    printf '%s' "${value}"
-}
+FROM framework-installer-input AS framework-installer-default
 
-winetricks_version="$(read_config winetricks-version)"
-target_version="$(read_config target-version)"
-target_generation="$(read_config target-generation)"
-target_prefix="$(read_config target-prefix)"
-recipe_kind="$(read_config recipe-kind)"
-recipe_verb="$(cat "${config_root}/recipe-verb")"
-installer_file="$(cat "${config_root}/installer-file")"
-installer_sha256="$(cat "${config_root}/installer-sha256")"
-prerequisite_verb="$(cat "${config_root}/prerequisite-verb")"
-clr2_prefix="$(read_config clr2-prefix)"
-clr2_verb="$(read_config clr2-verb)"
-clr4_prefix="$(read_config clr4-prefix)"
-clr4_verb="$(read_config clr4-verb)"
-mapfile -t installer_arguments < "${config_root}/installer-arguments"
+RUN --mount=type=secret,id=framework-installer-url \
+    --mount=type=bind,from=framework-vendored-context,target=/run/operator-assets/framework-vendored,ro \
+    --mount=type=bind,from=framework-cached-context,target=/run/operator-assets/framework-cached,ro \
+    --mount=type=bind,from=framework-installer-context,target=/run/operator-assets/framework-installer,ro \
+    /usr/local/bin/sharplabnext-wine-netfx-bootstrap target
 
-test "${target_version}" = "${FRAMEWORK_VERSION}" \
-    || fail_bootstrap manifest-version
-test "${target_generation}" = "${CLR_GENERATION}" \
-    || fail_bootstrap manifest-generation
-test "${clr2_prefix}" = /opt/wine-netfx-clr2 \
-    || fail_bootstrap companion-clr2-prefix
-test "${clr4_prefix}" = /opt/wine-netfx-clr4 \
-    || fail_bootstrap companion-clr4-prefix
-case "${target_generation}:${target_prefix}" in
-    clr2:/opt/wine-netfx-clr2|clr4:/opt/wine-netfx-clr4) ;;
-    *) fail_bootstrap target-prefix ;;
-esac
-for verb in "${clr2_verb}" "${clr4_verb}"; do
-    [[ "${verb}" =~ ^dotnet[0-9]+(sp[0-9]+)?$ ]] \
-        || fail_bootstrap companion-verb
-done
-actual_winetricks_version="$(winetricks --version | awk 'NR == 1 { print $1; exit }')"
-test "${actual_winetricks_version}" = "${winetricks_version}" \
-    || fail_bootstrap winetricks-version
+FROM framework-installer-input AS framework-installer-none
 
-stage() {
-    printf '[framework-bootstrap] stage=%s\n' "$1"
-}
+RUN --network=none \
+    --mount=type=secret,id=framework-installer-url \
+    --mount=type=bind,from=framework-vendored-context,target=/run/operator-assets/framework-vendored,ro \
+    --mount=type=bind,from=framework-cached-context,target=/run/operator-assets/framework-cached,ro \
+    --mount=type=bind,from=framework-installer-context,target=/run/operator-assets/framework-installer,ro \
+    /usr/local/bin/sharplabnext-wine-netfx-bootstrap target
 
-bounded_log_tail() {
-    tail -c 16384 "$1" | tail -n 80 | python3 -c '
-import re
-import sys
+FROM framework-installer-${FRAMEWORK_INSTALLER_NETWORK} AS framework-installer
 
-for line in sys.stdin:
-    line = re.sub(r"https?://\S+", "<redacted-url>", line, flags=re.IGNORECASE)
-    line = line.replace("/run/operator-assets/framework/installer.bin", "<operator-asset>")
-    line = line.replace("/run/secrets/framework-installer-url", "<url-secret>")
-    sys.stdout.write(line)
-'
-}
+FROM ${ROOT_IMAGE} AS final
 
-run_logged() {
-    local operation="$1"
-    shift
-    local log="${installer_root}/${operation}.log"
-    if "$@" >"${log}" 2>&1; then
-        rm -f "${log}"
-        return 0
-    fi
-    printf '[framework-bootstrap] failed=%s log-tail-bytes<=16384 log-tail-lines<=80\n' "${operation}" >&2
-    bounded_log_tail "${log}" >&2 || true
-    return 1
-}
-
-install_clean_winetricks() {
-    local prefix="$1"
-    local verb="$2"
-    local operation="$3"
-    local cache="${installer_root}/winetricks-cache-${operation}"
-    rm -rf "${prefix}"
-    mkdir -p "${prefix}" "${cache}"
-    run_logged "${operation}" \
-        env WINEPREFIX="${prefix}" WINEARCH=win64 W_CACHE="${cache}" \
-        timeout --signal=KILL 1800 xvfb-run -a \
-        winetricks --optout --unattended "${verb}"
-    run_logged "${operation}-wineserver" \
-        env WINEPREFIX="${prefix}" WINEARCH=win64 "${WINESERVER}" -w
-    rm -rf "${cache}"
-}
-
-download_from_url_secret() {
-    local destination="$1"
-    python3 - /run/secrets/framework-installer-url "${destination}" <<'PY'
-import shutil
-import sys
-import urllib.parse
-import urllib.request
-
-secret_path, destination = sys.argv[1:]
-try:
-    with open(secret_path, encoding="utf-8") as secret:
-        url = secret.read().strip()
-    parsed = urllib.parse.urlsplit(url)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc or any(character.isspace() for character in url):
-        raise ValueError
-    request = urllib.request.Request(url, headers={"User-Agent": "SharpLabNext-operator-bootstrap"})
-    with urllib.request.urlopen(request, timeout=300) as response, open(destination, "xb") as output:
-        shutil.copyfileobj(response, output, length=1024 * 1024)
-except Exception:
-    print("Operator asset download failed.", file=sys.stderr)
-    raise SystemExit(1) from None
-PY
-}
-
-materialize_operator_installer() {
-    local destination="$1"
-    local url_present=0
-    local installer_present=0
-    test -s /run/secrets/framework-installer-url && url_present=1
-    test -s /run/operator-assets/framework/installer.bin && installer_present=1
-    test "$((url_present + installer_present))" -eq 1
-    if test "${installer_present}" -eq 1; then
-        cp /run/operator-assets/framework/installer.bin "${destination}"
-    else
-        download_from_url_secret "${destination}"
-    fi
-}
-
-install_manual_target() {
-    [[ "${installer_file}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.exe$ ]]
-    [[ "${installer_sha256}" =~ ^[0-9a-f]{64}$ ]]
-    [[ "${prerequisite_verb}" =~ ^dotnet[0-9]+(sp[0-9]+)?$ ]]
-    test "${#installer_arguments[@]}" -ge 1
-    test "${#installer_arguments[@]}" -le 8
-    for argument in "${installer_arguments[@]}"; do
-        [[ "${argument}" =~ ^/[A-Za-z0-9:._=-]+$ ]]
-    done
-
-    install_clean_winetricks "${target_prefix}" "${prerequisite_verb}" target-prerequisite
-    local installer="${installer_root}/${installer_file}"
-    stage materialize-private-installer
-    materialize_operator_installer "${installer}"
-    printf '%s  %s\n' "${installer_sha256}" "${installer}" | sha256sum --check --status -
-    run_logged install-target-manual \
-        env WINEPREFIX="${target_prefix}" WINEARCH=win64 WINEDLLOVERRIDES=fusion=b \
-        timeout --signal=KILL 1200 xvfb-run -a \
-        /usr/bin/wine-stable "${installer}" "${installer_arguments[@]}"
-    run_logged install-target-manual-wineserver \
-        env WINEPREFIX="${target_prefix}" WINEARCH=win64 "${WINESERVER}" -w
-    rm -f "${installer}"
-}
-
-url_present=0
-installer_present=0
-test -s /run/secrets/framework-installer-url && url_present=1
-test -s /run/operator-assets/framework/installer.bin && installer_present=1
-stage validate-recipe-source
-case "${recipe_kind}" in
-    winetricks)
-        test "$((url_present + installer_present))" -eq 0
-        [[ "${recipe_verb}" =~ ^dotnet[0-9]+(sp[0-9]+)?$ ]]
-        test -z "${installer_file}${installer_sha256}${prerequisite_verb}"
-        test "${#installer_arguments[@]}" -eq 0
-        ;;
-    operator-installer)
-        test "$((url_present + installer_present))" -eq 1
-        test -z "${recipe_verb}"
-        ;;
-    *) fail_bootstrap recipe-kind ;;
-esac
-
-if test "${target_generation}" = clr2; then
-    stage install-target-clr2
-    test "${recipe_kind}" = winetricks
-    install_clean_winetricks "${target_prefix}" "${recipe_verb}" target-clr2
-    stage install-companion-clr4
-    install_clean_winetricks "${clr4_prefix}" "${clr4_verb}" companion-clr4
-else
-    stage install-companion-clr2
-    install_clean_winetricks "${clr2_prefix}" "${clr2_verb}" companion-clr2
-    stage install-target-clr4
-    if test "${recipe_kind}" = winetricks; then
-        install_clean_winetricks "${target_prefix}" "${recipe_verb}" target-clr4
-    else
-        install_manual_target
-    fi
-fi
-
-stage preflight-installed-prefixes
-if test "${target_generation}" = clr2; then
-    /usr/local/bin/sharplabnext-wine-netfx-preflight "${clr2_prefix}" "${target_version}"
-    /usr/local/bin/sharplabnext-wine-netfx-preflight "${clr4_prefix}" 4.8
-else
-    /usr/local/bin/sharplabnext-wine-netfx-preflight "${clr2_prefix}" 3.5
-    /usr/local/bin/sharplabnext-wine-netfx-preflight "${clr4_prefix}" "${target_version}"
-fi
-
-stage cleanup-private-assets
-for prefix in "${clr2_prefix}" "${clr4_prefix}"; do
-    for temporary in \
-        "${prefix}/drive_c/windows/temp" \
-        "${prefix}/drive_c/users/root/Temp"; do
-        if test -d "${temporary}"; then
-            find "${temporary}" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-        fi
-    done
-    find "${prefix}/drive_c/windows/Microsoft.NET" -type d -name SetupCache -prune -exec rm -rf -- {} +
-    find "${prefix}" -type f \
-        \( -iname 'dotnetfx*.exe' -o -iname 'netfx*.exe' -o -iname 'ndp*.exe' \) \
-        -delete
-done
-stage deduplicate-immutable-prefix-files
-python3 /usr/local/bin/sharplabnext-dedupe-wine-prefixes \
-    --source /opt/wine-netfx-clr2 \
-    --target /opt/wine-netfx-clr4 \
-    --manifest /opt/sharplabnext/.wine-prefix-layout.json \
-    --freeze
-stage cleanup
-cleanup
-trap - EXIT
-SH
-
+ARG BASE_IMAGE
+ARG ROOT_IMAGE
+ARG FRAMEWORK_TARGET_ID
+ARG FRAMEWORK_VERSION
+ARG CLR_GENERATION
+ARG FRAMEWORK_SEED_IMAGE
+ARG FRAMEWORK_SEED_GENERATION
+ARG FRAMEWORK_SEED_VERSION
+ARG FRAMEWORK_SEED_PREFIX
+ARG FRAMEWORK_SEED_INPUT_SHA256
+ARG INSTALLER_MANIFEST_SHA256
 ARG SOURCE_REVISION
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Reassemble the operator on the clean amd64 userspace. The single /opt copy
+# preserves the audited cross-prefix hard links while excluding the classic
+# WoW64 package database, i386 Unix libraries, and installer caches.
+COPY --from=wine-source /usr/ /usr/
+COPY --from=wine-source /etc/fonts/ /etc/fonts/
+COPY --from=wine-source /etc/apt/sources.list.d/sharplabnext-snapshot.sources /etc/apt/sources.list.d/sharplabnext-snapshot.sources
+COPY --from=wine-source /var/lib/dpkg/ /var/lib/dpkg/
+COPY --from=wine-source /var/lib/apt/extended_states /var/lib/apt/extended_states
+COPY --from=framework-installer /opt/ /opt/
+
+ENV WINEARCH=win64 \
+    WINEDEBUG=-all \
+    WINE=/usr/lib/wine/wine64 \
+    WINELOADER=/usr/lib/wine/wine64 \
+    WINESERVER=/usr/lib/wine/wineserver64
+
+COPY profiles/runtime-framework-installers.json /usr/local/share/sharplabnext/runtime-framework-installers.json
+COPY deploy/docker/wine-netfx-framework-preflight.sh /usr/local/bin/sharplabnext-wine-netfx-preflight
+COPY deploy/docker/dedupe-wine-prefixes.py /usr/local/bin/sharplabnext-dedupe-wine-prefixes
+
 RUN <<'SH'
 set -euo pipefail
 
+find /etc/apt \( -name '*.list' -o -name '*.sources' \) \
+    ! -path /etc/apt/sources.list.d/sharplabnext-snapshot.sources -delete
+test "$(find /etc/apt \( -name '*.list' -o -name '*.sources' \) -print)" = \
+    '/etc/apt/sources.list.d/sharplabnext-snapshot.sources'
 rm -rf /usr/lib/x86_64-linux-gnu/wine/i386-windows
+chmod 0555 /usr/local/bin/sharplabnext-wine-netfx-preflight
+chmod 0555 /usr/local/bin/sharplabnext-dedupe-wine-prefixes
 
 fail_verify() {
     printf '[framework-verify] failed=%s\n' "$1" >&2
@@ -368,6 +405,10 @@ fail_verify() {
 
 [[ "${SOURCE_REVISION}" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]] \
     || fail_verify source-revision
+[[ "${FRAMEWORK_SEED_IMAGE}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]] \
+    || fail_verify seed-image
+[[ "${FRAMEWORK_SEED_INPUT_SHA256}" =~ ^[0-9a-f]{64}$ ]] \
+    || fail_verify seed-input-sha256
 
 manifest=/usr/local/share/sharplabnext/runtime-framework-installers.json
 printf '%s  %s\n' "${INSTALLER_MANIFEST_SHA256}" "${manifest}" | sha256sum --check --status - \
@@ -386,15 +427,31 @@ python3 /usr/local/bin/sharplabnext-dedupe-wine-prefixes \
     || fail_verify prefix-layout
 test ! -e /usr/lib/x86_64-linux-gnu/wine/i386-windows \
     || fail_verify i386-wine-payload
+test ! -e /usr/lib/i386-linux-gnu/wine \
+    || fail_verify i386-wine-userspace
+test ! -e /usr/lib/wine/wine \
+    || fail_verify wine32-loader
+test -z "$(dpkg --print-foreign-architectures)" \
+    || fail_verify foreign-dpkg-architecture
+test -z "$(dpkg-query -W -f='${binary:Package}\n' | grep ':i386$' || true)" \
+    || fail_verify i386-package
+test "$(od -An -t x1 -j 4 -N 1 /usr/lib/wine/wine64 | tr -d '[:space:]')" = 02 \
+    || fail_verify wine64-loader
 
 case "${CLR_GENERATION}:${FRAMEWORK_VERSION}" in
     clr2:2.0|clr2:3.0|clr2:3.5)
+        test "${FRAMEWORK_SEED_GENERATION}:${FRAMEWORK_SEED_VERSION}:${FRAMEWORK_SEED_PREFIX}" = \
+          'clr4:4.8:/opt/wine-netfx-clr4' \
+            || fail_verify companion-seed-selection
         /usr/local/bin/sharplabnext-wine-netfx-preflight /opt/wine-netfx-clr2 "${FRAMEWORK_VERSION}" \
             || fail_verify selected-clr2
         /usr/local/bin/sharplabnext-wine-netfx-preflight /opt/wine-netfx-clr4 4.8 \
             || fail_verify companion-clr4
         ;;
     clr4:4.0|clr4:4.5|clr4:4.5.1|clr4:4.5.2|clr4:4.6|clr4:4.6.1|clr4:4.6.2|clr4:4.7|clr4:4.7.1|clr4:4.7.2|clr4:4.8)
+        test "${FRAMEWORK_SEED_GENERATION}:${FRAMEWORK_SEED_VERSION}:${FRAMEWORK_SEED_PREFIX}" = \
+          'clr2:3.5:/opt/wine-netfx-clr2' \
+            || fail_verify companion-seed-selection
         /usr/local/bin/sharplabnext-wine-netfx-preflight /opt/wine-netfx-clr2 3.5 \
             || fail_verify companion-clr2
         /usr/local/bin/sharplabnext-wine-netfx-preflight /opt/wine-netfx-clr4 "${FRAMEWORK_VERSION}" \
@@ -402,6 +459,67 @@ case "${CLR_GENERATION}:${FRAMEWORK_VERSION}" in
         ;;
     *) fail_verify target-identity ;;
 esac
+
+python3 - \
+    /opt/sharplabnext/framework-companion-seed.json \
+    /opt/sharplabnext/framework-companion-binding.json \
+    "${FRAMEWORK_TARGET_ID}" \
+    "${FRAMEWORK_SEED_IMAGE}" \
+    "${FRAMEWORK_SEED_INPUT_SHA256}" \
+    "${INSTALLER_MANIFEST_SHA256}" \
+    "${FRAMEWORK_SEED_GENERATION}" \
+    "${FRAMEWORK_SEED_VERSION}" \
+    "${FRAMEWORK_SEED_PREFIX}" <<'PY'
+import json
+import os
+import pathlib
+import re
+import stat
+import sys
+
+(seed_path, binding_path, target_id, seed_image, input_sha256,
+ manifest_sha256, generation, version, prefix) = sys.argv[1:]
+
+def read_bounded(path):
+    info = os.lstat(path)
+    if not stat.S_ISREG(info.st_mode) or info.st_size < 1 or info.st_size > 4096:
+        raise ValueError
+    return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+
+try:
+    seed = read_bounded(seed_path)
+    expected_seed = {
+        "schemaVersion": 1,
+        "strategy": "framework-companion-seed-v1",
+        "seedInputSha256": input_sha256,
+        "installerManifestSha256": manifest_sha256,
+        "generation": generation,
+        "version": version,
+        "prefix": prefix,
+    }
+    if set(seed) != set(expected_seed) | {"wow64BaseImage"}:
+        raise ValueError
+    if any(seed[key] != expected_seed[key] for key in expected_seed):
+        raise ValueError
+    if re.fullmatch(r"[^\s@]+@sha256:[0-9a-f]{64}", seed["wow64BaseImage"]) is None:
+        raise ValueError
+
+    binding = read_bounded(binding_path)
+    expected_binding = {
+        "schemaVersion": 1,
+        "strategy": "framework-companion-binding-v1",
+        "targetId": target_id,
+        "seedImage": seed_image,
+        "seedInputSha256": input_sha256,
+        "generation": generation,
+        "version": version,
+    }
+    if binding != expected_binding:
+        raise ValueError
+except Exception:
+    print("Framework companion seed binding verification failed.", file=sys.stderr)
+    raise SystemExit(1) from None
+PY
 
 if find /opt/wine-netfx-clr2 /opt/wine-netfx-clr4 -type d -name SetupCache -print -quit | grep -q .; then
     fail_verify setupcache-cleanup
@@ -426,6 +544,10 @@ LABEL org.opencontainers.image.title="SharpLabNext Operator Wine .NET Framework 
       io.sharplabnext.framework.target-id="${FRAMEWORK_TARGET_ID}" \
       io.sharplabnext.framework.version="${FRAMEWORK_VERSION}" \
       io.sharplabnext.framework.clr-generation="${CLR_GENERATION}" \
+      io.sharplabnext.framework.companion-seed-image="${FRAMEWORK_SEED_IMAGE}" \
+      io.sharplabnext.framework.companion-seed-generation="${FRAMEWORK_SEED_GENERATION}" \
+      io.sharplabnext.framework.companion-seed-version="${FRAMEWORK_SEED_VERSION}" \
+      io.sharplabnext.framework.companion-seed-input-sha256="${FRAMEWORK_SEED_INPUT_SHA256}" \
       io.sharplabnext.framework.installer-manifest-sha256="${INSTALLER_MANIFEST_SHA256}" \
       io.sharplabnext.wine-prefix-layout="hardlink-immutable-v1" \
       io.sharplabnext.wine-prefix-layout-manifest="/opt/sharplabnext/.wine-prefix-layout.json" \

@@ -12,7 +12,7 @@ namespace SharpLabNext.BundleBuilder;
 internal static class RuntimePromotionMatrixBinding
 {
     private const long MaximumMatrixBytes = 16L * 1024 * 1024;
-    private const string MatrixRelativePath = "profiles/runtime-matrix.json";
+    internal const string MatrixRelativePath = "profiles/runtime-matrix.json";
 
     public static async Task ValidateAsync(
         string repositoryRoot,
@@ -171,7 +171,7 @@ internal static class RuntimePromotionMatrixBinding
         return matches.Count == 1 ? matches[0] : null;
     }
 
-    private static JsonDocument ParseMatrix(byte[] matrixBytes)
+    internal static JsonDocument ParseMatrix(byte[] matrixBytes)
     {
         try
         {
@@ -226,7 +226,7 @@ internal static class RuntimePromotionMatrixBinding
         return false;
     }
 
-    private static async Task<byte[]> ReadMatrixAsync(
+    internal static async Task<byte[]> ReadMatrixAsync(
         string repositoryRoot,
         CancellationToken cancellationToken)
     {

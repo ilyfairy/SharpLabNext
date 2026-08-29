@@ -125,8 +125,13 @@ if [[ "$skip_build" == true && "$skip_schemas" == false ]]; then
         eng/runtime-framework-deployment-bridge.test.mjs \
         eng/runtime-matrix-deployment-bridge.test.mjs \
         eng/runtime-framework-gateway-smoke.test.mjs \
+        eng/prerequisite-cache.test.mjs \
+        eng/image-build-inputs.test.mjs \
+        eng/cppcli-netfx-sdk-extraction.test.mjs \
+        eng/build-images.test.mjs \
         eng/build-wine-coreclr-operator.test.mjs \
         eng/runtime-candidate-input-validation.test.mjs \
+        eng/runtime-candidate-environment.test.mjs \
         eng/runtime-framework-installers.test.mjs \
         eng/build-framework-matrix-context.test.mjs \
         eng/build-framework-matrix-parent.test.mjs \

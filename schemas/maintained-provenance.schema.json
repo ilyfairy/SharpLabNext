@@ -184,7 +184,7 @@
       "required": [
         "configuration",
         "workerProject",
-        "operatorImageComponentId",
+        "sourceInputComponentIds",
         "referenceSetId",
         "runtimeComponentId",
         "compilerPath",
@@ -195,7 +195,7 @@
       "properties": {
         "configuration": { "const": "Release" },
         "workerProject": { "$ref": "#/$defs/nonEmpty" },
-        "operatorImageComponentId": { "$ref": "#/$defs/id" },
+        "sourceInputComponentIds": { "$ref": "#/$defs/idList" },
         "referenceSetId": { "$ref": "#/$defs/id" },
         "runtimeComponentId": { "$ref": "#/$defs/id" },
         "compilerPath": { "$ref": "#/$defs/nonEmpty" },

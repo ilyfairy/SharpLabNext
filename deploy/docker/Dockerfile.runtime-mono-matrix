@@ -26,13 +26,14 @@ RUN chmod 0555 /usr/local/bin/sharplabnext-validate-image \
 COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
 COPY profiles/versions.props ./profiles/versions.props
 COPY src/ ./src/
-RUN dotnet restore \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore \
       src/RuntimeJobs/SharpLabNext.TargetRuntimeRunner/SharpLabNext.TargetRuntimeRunner.csproj \
-      --locked-mode
-RUN dotnet restore \
+      --locked-mode \
+    && dotnet restore \
       src/RuntimeJobs/SharpLabNext.MonoJitInspector/SharpLabNext.MonoJitInspector.csproj \
-      --locked-mode
-RUN dotnet publish \
+      --locked-mode \
+    && dotnet publish \
       src/RuntimeJobs/SharpLabNext.TargetRuntimeRunner/SharpLabNext.TargetRuntimeRunner.csproj \
       --configuration Release \
       --framework net20 \
@@ -40,8 +41,8 @@ RUN dotnet publish \
       --output /target-runtime-runner \
       /p:UseAppHost=false \
       /p:ContinuousIntegrationBuild=true \
-      /p:SourceRevisionId=${SOURCE_REVISION}
-RUN dotnet publish \
+      /p:SourceRevisionId=${SOURCE_REVISION} \
+    && dotnet publish \
       src/RuntimeJobs/SharpLabNext.MonoJitInspector/SharpLabNext.MonoJitInspector.csproj \
       --configuration Release \
       --framework ${CONTROL_TFM} \

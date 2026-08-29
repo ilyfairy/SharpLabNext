@@ -5,7 +5,6 @@
 
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -20,24 +19,23 @@ internal static partial class FrameworkRuntimePreparation
     private const string ManifestRelativePath =
         "profiles/runtime-framework-installers.json";
     private const string MatrixRelativePath = "profiles/runtime-matrix.json";
+    private const string VendoredContextName = "framework-vendored-context";
+    private const string CachedContextName = "framework-cached-context";
+    private const string InstallerContextName = "framework-installer-context";
     private const long MaximumInstallerBytes = 2L * 1024 * 1024 * 1024;
-    private const int MaximumCommittedSourceFileBytes = 32 * 1024 * 1024;
-    private static readonly string[] CommittedSourceFiles =
-    [
-        DockerfileRelativePath,
-        ManifestRelativePath,
-        MatrixRelativePath,
-        "deploy/docker/wine-netfx-framework-preflight.sh",
-        "deploy/docker/dedupe-wine-prefixes.py",
-        "deploy/docker/certificates/microsoft-tls-rsa-root-g2-xsign.crt",
-        "deploy/docker/certificates/microsoft-tls-g2-rsa-ca-ocsp-04.crt"
-    ];
+    private const int MaximumGitLfsPointerBytes = 1024;
     private const string Usage =
         "Usage: dotnet run eng/prepare-framework-runtime.cs -- " +
-        "--target-id ID --base-image REFERENCE --root-image REFERENCE --output-image REFERENCE " +
+        "[--build-kind operator|wow64-base|companion-seed] " +
+        "[--target-id ID] [--seed-generation clr2|clr4] " +
+        "--base-image REFERENCE --root-image REFERENCE --output-image REFERENCE " +
+        "--seed-input-sha256 SHA256 " +
+        "[--framework-seed-image REFERENCE | --framework-wow64-base-image REFERENCE] " +
         "--source-revision COMMIT " +
         "[--installer-url-secret-file PATH | --installer-secret-file PATH] " +
+        "[--cached-winetricks-payload-file PATH] " +
         "--accept-microsoft-dotnet-framework-eula " +
+        "[--allow-uncommitted-source-for-development] " +
         "[--repository-root PATH] [--docker-command COMMAND] [--dry-run]";
 
     public static async Task<int> RunAsync(string[] args)
@@ -56,17 +54,13 @@ internal static partial class FrameworkRuntimePreparation
         try
         {
             var repositoryRoot = ResolveRepositoryRoot(options.RepositoryRoot);
-            ValidateSourceState(repositoryRoot, options.SourceRevision, options.DryRun);
-            using var sourceContext = CommittedSourceContext.Create(
+            ValidateSourceState(
                 repositoryRoot,
-                options.SourceRevision);
-            var inputs = Validate(options, repositoryRoot, sourceContext.Directory);
-            using var stagedContext = StagedBuildContext.Create(inputs.AssetSource);
-            var invocation = CreateDockerInvocation(
-                options,
-                inputs,
-                sourceContext,
-                stagedContext);
+                options.SourceRevision,
+                options.DryRun,
+                options.AllowUncommittedSourceForDevelopment);
+            var inputs = Validate(options, repositoryRoot);
+            var invocation = CreateDockerInvocation(options, inputs);
             if (options.DryRun)
             {
                 Console.WriteLine(invocation.RenderRedacted());
@@ -76,9 +70,8 @@ internal static partial class FrameworkRuntimePreparation
             return await ExecuteAsync(
                 invocation,
                 inputs,
-                sourceContext,
-                stagedContext,
-                options.SourceRevision);
+                options.SourceRevision,
+                options.AllowUncommittedSourceForDevelopment);
         }
         catch (UsageException exception)
         {
@@ -102,14 +95,21 @@ internal static partial class FrameworkRuntimePreparation
     {
         string? repositoryRoot = null;
         string? dockerCommand = null;
+        var buildKind = BuildKind.Operator;
         string? targetId = null;
+        string? seedGeneration = null;
+        string? frameworkSeedImage = null;
+        string? frameworkWow64BaseImage = null;
+        string? seedInputSha256 = null;
         string? baseImage = null;
         string? rootImage = null;
         string? outputImage = null;
         string? sourceRevision = null;
         string? installerUrlSecretFile = null;
         string? installerSecretFile = null;
+        string? cachedWinetricksPayloadFile = null;
         var acceptEula = false;
+        var allowUncommittedSourceForDevelopment = false;
         var dryRun = false;
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -127,8 +127,30 @@ internal static partial class FrameworkRuntimePreparation
                 case "--docker-command":
                     dockerCommand = RequiredValue(args, ref index, option);
                     break;
+                case "--build-kind":
+                    buildKind = RequiredValue(args, ref index, option) switch
+                    {
+                        "operator" => BuildKind.Operator,
+                        "wow64-base" => BuildKind.Wow64Base,
+                        "companion-seed" => BuildKind.CompanionSeed,
+                        _ => throw new UsageException(
+                            "--build-kind must be operator, wow64-base, or companion-seed.")
+                    };
+                    break;
                 case "--target-id":
                     targetId = RequiredValue(args, ref index, option);
+                    break;
+                case "--seed-generation":
+                    seedGeneration = RequiredValue(args, ref index, option);
+                    break;
+                case "--framework-seed-image":
+                    frameworkSeedImage = RequiredValue(args, ref index, option);
+                    break;
+                case "--framework-wow64-base-image":
+                    frameworkWow64BaseImage = RequiredValue(args, ref index, option);
+                    break;
+                case "--seed-input-sha256":
+                    seedInputSha256 = RequiredValue(args, ref index, option);
                     break;
                 case "--base-image":
                     baseImage = RequiredValue(args, ref index, option);
@@ -148,8 +170,14 @@ internal static partial class FrameworkRuntimePreparation
                 case "--installer-secret-file":
                     installerSecretFile = RequiredValue(args, ref index, option);
                     break;
+                case "--cached-winetricks-payload-file":
+                    cachedWinetricksPayloadFile = RequiredValue(args, ref index, option);
+                    break;
                 case "--accept-microsoft-dotnet-framework-eula":
                     acceptEula = true;
+                    break;
+                case "--allow-uncommitted-source-for-development":
+                    allowUncommittedSourceForDevelopment = true;
                     break;
                 case "--dry-run":
                     dryRun = true;
@@ -159,14 +187,14 @@ internal static partial class FrameworkRuntimePreparation
             }
         }
 
-        if (string.IsNullOrWhiteSpace(targetId) ||
-            string.IsNullOrWhiteSpace(baseImage) ||
+        if (string.IsNullOrWhiteSpace(baseImage) ||
             string.IsNullOrWhiteSpace(rootImage) ||
             string.IsNullOrWhiteSpace(outputImage) ||
-            string.IsNullOrWhiteSpace(sourceRevision))
+            string.IsNullOrWhiteSpace(sourceRevision) ||
+            string.IsNullOrWhiteSpace(seedInputSha256))
         {
             throw new UsageException(
-                "Target ID, base/root/output images, and source revision are required.");
+                "Base/root/output images, source revision, and seed input SHA-256 are required.");
         }
         if (!acceptEula)
             throw new UsageException("--accept-microsoft-dotnet-framework-eula is required.");
@@ -176,25 +204,69 @@ internal static partial class FrameworkRuntimePreparation
                 "An operator installer requires exactly one URL secret or local installer secret file.");
         }
 
+        switch (buildKind)
+        {
+            case BuildKind.Operator when
+                string.IsNullOrWhiteSpace(targetId) ||
+                string.IsNullOrWhiteSpace(frameworkSeedImage) ||
+                seedGeneration is not null ||
+                frameworkWow64BaseImage is not null:
+                throw new UsageException(
+                    "Operator builds require target ID and Framework seed image only.");
+            case BuildKind.Wow64Base when
+                targetId is not null ||
+                seedGeneration is not null ||
+                frameworkSeedImage is not null ||
+                frameworkWow64BaseImage is not null ||
+                installerUrlSecretFile is not null ||
+                installerSecretFile is not null ||
+                cachedWinetricksPayloadFile is not null:
+                throw new UsageException(
+                    "WoW64 base builds do not accept target, seed, or installer inputs.");
+            case BuildKind.CompanionSeed when
+                seedGeneration is not ("clr2" or "clr4") ||
+                string.IsNullOrWhiteSpace(frameworkWow64BaseImage) ||
+                targetId is not null ||
+                frameworkSeedImage is not null ||
+                installerUrlSecretFile is not null ||
+                installerSecretFile is not null:
+                throw new UsageException(
+                    "Companion seed builds require one generation and WoW64 base image only.");
+        }
+
         return new PreparationOptions(
             repositoryRoot,
             dockerCommand ?? "docker",
+            buildKind,
             targetId,
+            seedGeneration,
+            frameworkSeedImage is null
+                ? null
+                : ValidateDigestPinnedImageReference(
+                    frameworkSeedImage,
+                    "--framework-seed-image"),
+            frameworkWow64BaseImage is null
+                ? null
+                : ValidateDigestPinnedImageReference(
+                    frameworkWow64BaseImage,
+                    "--framework-wow64-base-image"),
+            ValidateSha256(seedInputSha256, "--seed-input-sha256"),
             ValidateDigestPinnedImageReference(baseImage, "--base-image"),
             ValidateDigestPinnedImageReference(rootImage, "--root-image"),
             ValidateOutputImageReference(outputImage),
             ValidateSourceRevision(sourceRevision),
             installerUrlSecretFile,
             installerSecretFile,
+            cachedWinetricksPayloadFile,
+            allowUncommittedSourceForDevelopment,
             dryRun);
     }
 
     private static ValidatedInputs Validate(
         PreparationOptions options,
-        string repositoryRoot,
-        string sourceRoot)
+        string repositoryRoot)
     {
-        var manifestPath = Path.Combine(sourceRoot, ManifestRelativePath);
+        var manifestPath = Path.Combine(repositoryRoot, ManifestRelativePath);
         byte[] manifestBytes;
         InstallerManifest manifest;
         try
@@ -211,35 +283,74 @@ internal static partial class FrameworkRuntimePreparation
             throw new InputValidationException("The Framework installer manifest is invalid or unreadable.");
         }
 
-        ValidateManifest(manifest, sourceRoot);
-        var target = manifest.Targets.SingleOrDefault(
-            candidate => StringComparer.Ordinal.Equals(candidate.Id, options.TargetId));
-        if (target is null)
+        ValidateManifest(manifest, repositoryRoot);
+        var target = options.BuildKind == BuildKind.Operator
+            ? manifest.Targets.SingleOrDefault(
+                candidate => StringComparer.Ordinal.Equals(candidate.Id, options.TargetId))
+            : null;
+        if (options.BuildKind == BuildKind.Operator && target is null)
         {
             throw new InputValidationException(
                 $"Target '{options.TargetId}' is not present in the Framework installer manifest.");
         }
 
+        var vendoredPayload = options.BuildKind == BuildKind.Wow64Base
+            ? null
+            : ValidateVendoredPayload(
+                repositoryRoot,
+                manifest.VendoredWinetricksPayloads.Single());
+        var cachedPayloadLock = manifest.CachedWinetricksPayloads.Single();
+        var cachedPayloadRequired = options.BuildKind switch
+        {
+            BuildKind.CompanionSeed => options.SeedGeneration == "clr2",
+            BuildKind.Operator =>
+                target!.Recipe.Verb == cachedPayloadLock.Verb ||
+                target.Recipe.PrerequisiteVerb == cachedPayloadLock.Verb,
+            _ => false
+        };
+        if (cachedPayloadRequired != (options.CachedWinetricksPayloadFile is not null))
+        {
+            throw new UsageException(cachedPayloadRequired
+                ? "This Framework build requires --cached-winetricks-payload-file."
+                : "This Framework build does not accept --cached-winetricks-payload-file.");
+        }
+        var cachedPayload = cachedPayloadRequired
+            ? ValidateCachedPayload(
+                options.CachedWinetricksPayloadFile!,
+                cachedPayloadLock,
+                options.DryRun)
+            : null;
+
         var hasSource = options.InstallerUrlSecretFile is not null || options.InstallerSecretFile is not null;
-        if (target.Recipe.Kind == "operator-installer" && !hasSource)
+        if (target?.Recipe.Kind == "operator-installer" && !hasSource)
         {
             throw new UsageException(
                 $"Target '{target.Id}' requires exactly one operator installer URL or local secret file.");
         }
-        if (target.Recipe.Kind == "winetricks" && hasSource)
+        if (target?.Recipe.Kind == "winetricks" && hasSource)
             throw new UsageException($"Target '{target.Id}' does not accept an operator installer source.");
 
-        var source = target.Recipe.Kind == "operator-installer"
+        var source = target?.Recipe.Kind == "operator-installer"
             ? ValidateAssetSource(options, target.Recipe)
             : ValidatedAssetSource.None();
         var manifestSha256 = Convert.ToHexStringLower(SHA256.HashData(manifestBytes));
-        return new ValidatedInputs(repositoryRoot, manifestSha256, target, source);
+        return new ValidatedInputs(
+            repositoryRoot,
+            manifestSha256,
+            target,
+            source,
+            vendoredPayload,
+            cachedPayload);
     }
 
     private static void ValidateManifest(InstallerManifest manifest, string repositoryRoot)
     {
         if (manifest.SchemaVersion != 1 || manifest.WinetricksVersion != "20240105")
             throw new InputValidationException("The Framework installer manifest version is unsupported.");
+        ValidateVendoredWinetricksPayloads(manifest.VendoredWinetricksPayloads);
+        ValidateCachedWinetricksPayloads(manifest.CachedWinetricksPayloads);
+        ValidateBootstrapTools(manifest.BootstrapTools);
+        ValidateClassicWow64Installer(manifest.ClassicWow64Installer);
         if (manifest.CompanionPrefixes.Clr2 != new CompanionPrefix("/opt/wine-netfx-clr2", "dotnet35sp1") ||
             manifest.CompanionPrefixes.Clr4 != new CompanionPrefix("/opt/wine-netfx-clr4", "dotnet48"))
         {
@@ -268,6 +379,114 @@ internal static partial class FrameworkRuntimePreparation
         }
 
         ValidateMatrixParity(manifest, Path.Combine(repositoryRoot, MatrixRelativePath));
+    }
+
+    private static void ValidateVendoredWinetricksPayloads(
+        IReadOnlyList<VendoredWinetricksPayload>? payloads)
+    {
+        var expected = new VendoredWinetricksPayload(
+            "dotnet20-x64",
+            "dotnet20",
+            "eng/prerequisites/dotnet-framework-2.0/NetFx64.exe",
+            "dotnet20/NetFx64.exe",
+            47_400_128,
+            "7ea86dca8eeaedcaa4a17370547ca2cea9e9b6774972b8e03d2cb1fb0e798669");
+        if (payloads is not { Count: 1 } || payloads[0] != expected)
+        {
+            throw new InputValidationException(
+                "The vendored Winetricks payload lock is invalid.");
+        }
+    }
+
+    private static void ValidateCachedWinetricksPayloads(
+        IReadOnlyList<CachedWinetricksPayload>? payloads)
+    {
+        var expected = new CachedWinetricksPayload(
+            "dotnet35sp1-full",
+            "dotnet35sp1",
+            "netfx35sp1-installer",
+            "dotnet35sp1/dotnetfx35.exe",
+            242_743_296,
+            "0582515bde321e072f8673e829e175ed2e7a53e803127c50253af76528e66bc1");
+        if (payloads is not { Count: 1 } || payloads[0] != expected)
+        {
+            throw new InputValidationException(
+                "The cached Winetricks payload lock is invalid.");
+        }
+    }
+
+    private static void ValidateBootstrapTools(FrameworkBootstrapTools? tools)
+    {
+        BootstrapDirectPackage[] expectedDirectPackages =
+        [
+            new("python3", "3.12.3-0ubuntu2.1"),
+            new("cabextract", "1.11-2"),
+            new("winetricks", "20240105-2")
+        ];
+        if (tools is null ||
+            tools.ArchiveSnapshotId != "20260810T000000Z" ||
+            !tools.DirectPackages.SequenceEqual(expectedDirectPackages) ||
+            !HasValidPackageLock(
+                tools.ResolvedPackages,
+                28,
+                tools.ResolvedPackageListSha256,
+                "f5fddc3a5d79452068b4633aa98e95156bca47bf8285bcab0e7b69c5a546830d"))
+        {
+            throw new InputValidationException("The Framework bootstrap tool package closure is invalid.");
+        }
+
+        foreach (var package in tools.DirectPackages)
+        {
+            if (!tools.ResolvedPackages.Contains($"{package.Name}={package.Version}", StringComparer.Ordinal))
+                throw new InputValidationException("The Framework bootstrap direct package is not locked.");
+        }
+
+    }
+
+    private static void ValidateClassicWow64Installer(ClassicWow64Installer? installer)
+    {
+        var expectedDirectPackage = new ClassicWow64DirectPackage(
+            "wine32",
+            "i386",
+            "9.0~repack-4build3");
+        if (installer is null ||
+            installer.ArchiveSnapshotId != "20260810T000000Z" ||
+            installer.ForeignArchitecture != "i386" ||
+            installer.DirectPackage != expectedDirectPackage ||
+            !HasValidPackageLock(
+                installer.ReplacedPackages,
+                4,
+                installer.ReplacedPackageListSha256,
+                "4a69f0e49c3ffd2cd0a5ef4001395cc5df87748ceb903a5595dea5872c3d1a45") ||
+            !HasValidPackageLock(
+                installer.ResolvedPackages,
+                109,
+                installer.ResolvedPackageListSha256,
+                "e96dce12a7d0347874522dce2a520588fe4f3860feafd55a5736f11241b0ec8e") ||
+            !installer.ResolvedPackages.Contains("wine32:i386=9.0~repack-4build3", StringComparer.Ordinal))
+        {
+            throw new InputValidationException("The Framework classic WoW64 installer package closure is invalid.");
+        }
+    }
+
+    private static bool HasValidPackageLock(
+        IReadOnlyList<string> packages,
+        int expectedCount,
+        string digest,
+        string expectedDigest)
+    {
+        if (packages.Count != expectedCount ||
+            !packages.SequenceEqual(packages.OrderBy(static package => package, StringComparer.Ordinal)) ||
+            packages.Distinct(StringComparer.Ordinal).Count() != packages.Count ||
+            packages.Any(static package => !IsPackageLockEntry(package)) ||
+            !StringComparer.Ordinal.Equals(digest, expectedDigest))
+        {
+            return false;
+        }
+
+        var canonical = string.Concat(packages.Select(static package => $"{package}\n"));
+        var actualDigest = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
+        return StringComparer.Ordinal.Equals(actualDigest, digest);
     }
 
     private static void ValidateRecipe(InstallerRecipe recipe)
@@ -330,6 +549,133 @@ internal static partial class FrameworkRuntimePreparation
         {
             throw new InputValidationException("The runtime matrix could not be checked against the installer manifest.");
         }
+    }
+
+    private static ValidatedVendoredPayload ValidateVendoredPayload(
+        string repositoryRoot,
+        VendoredWinetricksPayload payload)
+    {
+        var normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(repositoryRoot));
+        var path = Path.GetFullPath(Path.Combine(
+            normalizedRoot,
+            payload.RepositoryPath.Replace('/', Path.DirectorySeparatorChar)));
+        var pathComparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!path.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, pathComparison))
+        {
+            throw new InputValidationException(
+                "The vendored Winetricks payload path escapes the repository root.");
+        }
+
+        var attribute = RunGit(
+            normalizedRoot,
+            "check-attr",
+            "filter",
+            "--",
+            payload.RepositoryPath).Trim();
+        if (!attribute.EndsWith(": filter: lfs", StringComparison.Ordinal))
+        {
+            throw new InputValidationException(
+                "The vendored .NET Framework 2.0 payload is not tracked by Git LFS.");
+        }
+
+        try
+        {
+            if (!File.Exists(path))
+            {
+                throw new InputValidationException(
+                    "The vendored .NET Framework 2.0 Git LFS object is missing. " +
+                    $"Run 'git lfs pull --include={payload.RepositoryPath}'.");
+            }
+
+            var info = new FileInfo(path);
+            if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InputValidationException(
+                    "The vendored .NET Framework 2.0 payload must be a regular file.");
+            }
+            if (info.Length <= MaximumGitLfsPointerBytes &&
+                File.ReadAllText(path).StartsWith(
+                    "version https://git-lfs.github.com/spec/v1",
+                    StringComparison.Ordinal))
+            {
+                throw new InputValidationException(
+                    "The vendored .NET Framework 2.0 payload is an unexpanded Git LFS pointer. " +
+                    $"Run 'git lfs pull --include={payload.RepositoryPath}'.");
+            }
+            if (info.Length != payload.SizeBytes)
+            {
+                throw new InputValidationException(
+                    "The vendored .NET Framework 2.0 payload size does not match the manifest lock.");
+            }
+
+            using var stream = File.OpenRead(path);
+            var actualSha256 = Convert.ToHexStringLower(SHA256.HashData(stream));
+            if (!StringComparer.Ordinal.Equals(actualSha256, payload.Sha256))
+            {
+                throw new InputValidationException(
+                    "The vendored .NET Framework 2.0 payload SHA-256 does not match the manifest lock.");
+            }
+        }
+        catch (InputValidationException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            throw new InputValidationException(
+                "The vendored .NET Framework 2.0 payload could not be read.");
+        }
+
+        return new ValidatedVendoredPayload(payload, path);
+    }
+
+    private static ValidatedCachedPayload ValidateCachedPayload(
+        string configuredPath,
+        CachedWinetricksPayload payload,
+        bool dryRun)
+    {
+        string path;
+        try
+        {
+            path = Path.GetFullPath(configuredPath);
+            if (dryRun)
+                return new ValidatedCachedPayload(payload, path);
+            if (!File.Exists(path))
+            {
+                throw new InputValidationException(
+                    "The cached Winetricks payload file does not exist.");
+            }
+
+            var info = new FileInfo(path);
+            if ((info.Attributes & FileAttributes.ReparsePoint) != 0 ||
+                info.Length != payload.SizeBytes)
+            {
+                throw new InputValidationException(
+                    "The cached Winetricks payload is not the expected regular file size.");
+            }
+            using var stream = File.OpenRead(path);
+            var actualSha256 = Convert.ToHexStringLower(SHA256.HashData(stream));
+            if (!StringComparer.Ordinal.Equals(actualSha256, payload.Sha256))
+            {
+                throw new InputValidationException(
+                    "The cached Winetricks payload SHA-256 does not match the manifest lock.");
+            }
+        }
+        catch (InputValidationException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
+        {
+            throw new InputValidationException(
+                "The cached Winetricks payload could not be read.");
+        }
+
+        return new ValidatedCachedPayload(payload, path);
     }
 
     private static ValidatedAssetSource ValidateAssetSource(
@@ -408,19 +754,21 @@ internal static partial class FrameworkRuntimePreparation
 
     private static DockerInvocation CreateDockerInvocation(
         PreparationOptions options,
-        ValidatedInputs inputs,
-        CommittedSourceContext sourceContext,
-        StagedBuildContext stagedContext)
+        ValidatedInputs inputs)
     {
-        var dockerfile = Path.Combine(sourceContext.Directory, DockerfileRelativePath);
+        var dockerfile = Path.Combine(inputs.RepositoryRoot, DockerfileRelativePath);
+        var frameworkWow64BaseImage = options.BuildKind == BuildKind.CompanionSeed
+            ? options.FrameworkWow64BaseImage!
+            : options.RootImage;
+        var frameworkSeedImage = options.BuildKind == BuildKind.Operator
+            ? options.FrameworkSeedImage!
+            : options.RootImage;
         var arguments = new List<DockerArgument>
         {
             new("buildx"),
             new("build"),
             new("--file"),
-            new(
-                dockerfile,
-                $"<committed-source-context>/{DockerfileRelativePath}"),
+            new(dockerfile, $"<repository-context>/{DockerfileRelativePath}"),
             new("--tag"),
             new(options.OutputImage),
             new("--load"),
@@ -430,37 +778,137 @@ internal static partial class FrameworkRuntimePreparation
             new("--build-arg"),
             new($"ROOT_IMAGE={options.RootImage}"),
             new("--build-arg"),
-            new($"FRAMEWORK_TARGET_ID={inputs.Target.Id}"),
+            new($"FRAMEWORK_WOW64_BASE_IMAGE={frameworkWow64BaseImage}"),
             new("--build-arg"),
-            new($"FRAMEWORK_VERSION={inputs.Target.Version}"),
-            new("--build-arg"),
-            new($"CLR_GENERATION={inputs.Target.ClrGeneration}"),
+            new($"FRAMEWORK_SEED_IMAGE={frameworkSeedImage}"),
             new("--build-arg"),
             new($"INSTALLER_MANIFEST_SHA256={inputs.ManifestSha256}"),
             new("--build-arg"),
-            new($"SOURCE_REVISION={options.SourceRevision}"),
+            new($"FRAMEWORK_SEED_INPUT_SHA256={options.SeedInputSha256}"),
             new("--build-arg"),
             new("ACCEPT_MICROSOFT_DOTNET_FRAMEWORK_EULA=true")
         };
+        AddBuildArgument(
+            arguments,
+            "FRAMEWORK_INSTALLER_NETWORK",
+            inputs.CachedPayload is null ? "default" : "none");
+
+        if (options.BuildKind == BuildKind.Wow64Base)
+        {
+            arguments.Add(new("--target"));
+            arguments.Add(new("framework-wow64-base"));
+        }
+        else if (options.BuildKind == BuildKind.CompanionSeed)
+        {
+            var seed = CompanionSeedForGeneration(options.SeedGeneration!);
+            arguments.Add(new("--target"));
+            arguments.Add(new("framework-companion-seed"));
+            AddBuildArgument(arguments, "FRAMEWORK_SEED_GENERATION", seed.Generation);
+            AddBuildArgument(arguments, "FRAMEWORK_SEED_VERSION", seed.Version);
+            AddBuildArgument(arguments, "FRAMEWORK_SEED_PREFIX", seed.Prefix);
+        }
+        else
+        {
+            var target = inputs.Target!;
+            var seed = CompanionSeedForGeneration(
+                target.ClrGeneration == "clr2" ? "clr4" : "clr2");
+            AddBuildArgument(arguments, "FRAMEWORK_TARGET_ID", target.Id);
+            AddBuildArgument(arguments, "FRAMEWORK_VERSION", target.Version);
+            AddBuildArgument(arguments, "CLR_GENERATION", target.ClrGeneration);
+            AddBuildArgument(arguments, "FRAMEWORK_SEED_GENERATION", seed.Generation);
+            AddBuildArgument(arguments, "FRAMEWORK_SEED_VERSION", seed.Version);
+            AddBuildArgument(arguments, "FRAMEWORK_SEED_PREFIX", seed.Prefix);
+            AddBuildArgument(arguments, "SOURCE_REVISION", options.SourceRevision);
+        }
+
         if (inputs.AssetSource.Kind == AssetSourceKind.Url)
         {
             arguments.Add(new("--secret"));
             arguments.Add(new($"id=framework-installer-url,src={inputs.AssetSource.Path}"));
         }
-        arguments.Add(new("--build-context"));
-        arguments.Add(new(
-            $"framework-installer-context={stagedContext.Directory}",
-            "framework-installer-context=<staged-local-context>"));
-        arguments.Add(new(sourceContext.Directory, "<committed-source-context>"));
+        if (options.BuildKind != BuildKind.Wow64Base)
+        {
+            var vendoredContext = ContextDirectory(inputs.VendoredPayload!.Path);
+            var cachedContext = inputs.CachedPayload is null
+                ? vendoredContext
+                : ContextDirectory(inputs.CachedPayload.Path);
+            var installerContext = inputs.AssetSource.Kind == AssetSourceKind.Installer
+                ? ContextDirectory(inputs.AssetSource.Path!)
+                : vendoredContext;
+            AddBuildContext(arguments, VendoredContextName, vendoredContext);
+            AddBuildContext(arguments, CachedContextName, cachedContext);
+            AddBuildContext(arguments, InstallerContextName, installerContext);
+            AddBuildArgument(
+                arguments,
+                "FRAMEWORK_INSTALLER_FILE",
+                inputs.AssetSource.Kind == AssetSourceKind.Installer
+                    ? InputFileName(inputs.AssetSource.Path!)
+                    : inputs.Target?.Recipe.FileName ?? string.Empty);
+        }
+        arguments.Add(new(inputs.RepositoryRoot, "<repository-context>"));
         return new DockerInvocation(options.DockerCommand, arguments);
     }
+
+    private static void AddBuildContext(
+        ICollection<DockerArgument> arguments,
+        string name,
+        string directory)
+    {
+        arguments.Add(new("--build-context"));
+        arguments.Add(new(
+            $"{name}={directory}",
+            $"{name}=<direct-input-directory>"));
+    }
+
+    private static string ContextDirectory(string filePath)
+    {
+        var directory = Path.GetDirectoryName(filePath);
+        if (string.IsNullOrEmpty(directory))
+        {
+            throw new InputValidationException(
+                "A Framework Docker input does not have a parent directory.");
+        }
+        return directory;
+    }
+
+    private static string InputFileName(string filePath)
+    {
+        var fileName = Path.GetFileName(filePath);
+        if (string.IsNullOrEmpty(fileName) ||
+            !fileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Any(static character =>
+                character is not (>= 'a' and <= 'z' or >= 'A' and <= 'Z' or
+                    >= '0' and <= '9' or '.' or '_' or '-')))
+        {
+            throw new InputValidationException(
+                "The Framework installer file name is invalid for a direct Docker context.");
+        }
+        return fileName;
+    }
+
+    private static void AddBuildArgument(
+        ICollection<DockerArgument> arguments,
+        string name,
+        string value)
+    {
+        arguments.Add(new("--build-arg"));
+        arguments.Add(new($"{name}={value}"));
+    }
+
+    private static CompanionSeedDefinition CompanionSeedForGeneration(string generation) =>
+        generation switch
+        {
+            "clr2" => new("clr2", "3.5", "/opt/wine-netfx-clr2"),
+            "clr4" => new("clr4", "4.8", "/opt/wine-netfx-clr4"),
+            _ => throw new InputValidationException(
+                "The Framework companion seed generation is invalid.")
+        };
 
     private static async Task<int> ExecuteAsync(
         DockerInvocation invocation,
         ValidatedInputs inputs,
-        CommittedSourceContext sourceContext,
-        StagedBuildContext stagedContext,
-        string sourceRevision)
+        string sourceRevision,
+        bool allowUncommittedSourceForDevelopment)
     {
         var startInfo = new ProcessStartInfo(invocation.Command)
         {
@@ -494,8 +942,9 @@ internal static partial class FrameworkRuntimePreparation
             {
                 inputs.AssetSource.Path,
                 inputs.AssetSource.SensitiveContent,
-                sourceContext.Directory,
-                stagedContext.Directory
+                inputs.CachedPayload?.Path,
+                inputs.VendoredPayload?.Path,
+                inputs.Target?.Recipe.FileName
             }.Where(static value => !string.IsNullOrEmpty(value)).Select(static value => value!).ToArray();
             var output = ForwardRedactedAsync(process.StandardOutput, Console.Out, sensitiveValues);
             var error = ForwardRedactedAsync(process.StandardError, Console.Error, sensitiveValues);
@@ -503,12 +952,16 @@ internal static partial class FrameworkRuntimePreparation
             await Task.WhenAll(output, error);
             if (process.ExitCode != 0)
             {
-                Console.Error.WriteLine("Docker Buildx did not create the operator Framework runtime image.");
+                Console.Error.WriteLine("Docker Buildx did not create the requested Framework build image.");
                 return 1;
             }
         }
 
-        ValidateSourceState(inputs.RepositoryRoot, sourceRevision, dryRun: false);
+        ValidateSourceState(
+            inputs.RepositoryRoot,
+            sourceRevision,
+            dryRun: false,
+            allowUncommittedSourceForDevelopment);
         return 0;
     }
 
@@ -599,10 +1052,18 @@ internal static partial class FrameworkRuntimePreparation
         return value;
     }
 
+    private static string ValidateSha256(string value, string option)
+    {
+        if (!IsSha256(value))
+            throw new UsageException($"{option} must contain 64 lowercase hexadecimal characters.");
+        return value;
+    }
+
     private static void ValidateSourceState(
         string repositoryRoot,
         string sourceRevision,
-        bool dryRun)
+        bool dryRun,
+        bool allowUncommittedSourceForDevelopment)
     {
         var head = RunGit(repositoryRoot, "rev-parse", "--verify", "HEAD").Trim();
         if (!StringComparer.Ordinal.Equals(head, sourceRevision))
@@ -616,7 +1077,7 @@ internal static partial class FrameworkRuntimePreparation
             "status",
             "--porcelain=v1",
             "--untracked-files=normal");
-        if (!dryRun && status.Length != 0)
+        if (!dryRun && status.Length != 0 && !allowUncommittedSourceForDevelopment)
         {
             throw new InputValidationException(
                 "The Framework operator source worktree must be clean.");
@@ -661,65 +1122,6 @@ internal static partial class FrameworkRuntimePreparation
         }
     }
 
-    private static byte[] ReadCommittedSourceFile(
-        string repositoryRoot,
-        string sourceRevision,
-        string relativePath)
-    {
-        var startInfo = new ProcessStartInfo("git")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            WorkingDirectory = repositoryRoot
-        };
-        startInfo.ArgumentList.Add("show");
-        startInfo.ArgumentList.Add("--no-ext-diff");
-        startInfo.ArgumentList.Add("--no-textconv");
-        startInfo.ArgumentList.Add($"{sourceRevision}:{relativePath}");
-
-        try
-        {
-            using var process = Process.Start(startInfo)
-                ?? throw new InputValidationException(
-                    $"Could not read committed Framework operator source '{relativePath}'.");
-            var error = process.StandardError.ReadToEndAsync();
-            using var output = new MemoryStream();
-            var buffer = new byte[64 * 1024];
-            while (true)
-            {
-                var read = process.StandardOutput.BaseStream.Read(buffer, 0, buffer.Length);
-                if (read == 0)
-                    break;
-                output.Write(buffer, 0, read);
-                if (output.Length > MaximumCommittedSourceFileBytes)
-                {
-                    process.Kill(entireProcessTree: true);
-                    throw new InputValidationException(
-                        $"Committed Framework operator source '{relativePath}' is too large.");
-                }
-            }
-            process.WaitForExit();
-            _ = error.GetAwaiter().GetResult();
-            if (process.ExitCode != 0 || output.Length == 0)
-            {
-                throw new InputValidationException(
-                    $"Could not read committed Framework operator source '{relativePath}'.");
-            }
-            return output.ToArray();
-        }
-        catch (InputValidationException)
-        {
-            throw;
-        }
-        catch (Exception exception) when (
-            exception is InvalidOperationException or Win32Exception or IOException)
-        {
-            throw new InputValidationException(
-                $"Could not read committed Framework operator source '{relativePath}'.");
-        }
-    }
-
     private static string RequiredValue(string[] args, ref int index, string option)
     {
         index++;
@@ -758,23 +1160,69 @@ internal static partial class FrameworkRuntimePreparation
         value[1..].All(static character =>
             character is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or ':' or '.' or '_' or '=' or '-');
 
+    private static bool IsPackageLockEntry(string value)
+    {
+        if (value is not { Length: >= 3 and <= 192 })
+            return false;
+        var separator = value.IndexOf('=');
+        if (separator <= 0 || separator != value.LastIndexOf('=') || separator == value.Length - 1)
+            return false;
+        var name = value[..separator];
+        var version = value[(separator + 1)..];
+        return (name[0] is >= 'a' and <= 'z' or >= '0' and <= '9') &&
+            name.All(static character =>
+                character is >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '+' or '-' or ':') &&
+            (version[0] is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9') &&
+            version.All(static character =>
+                character is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '.' or '+' or ':' or '~' or '_' or '-');
+    }
+
     private sealed record PreparationOptions(
         string? RepositoryRoot,
         string DockerCommand,
-        string TargetId,
+        BuildKind BuildKind,
+        string? TargetId,
+        string? SeedGeneration,
+        string? FrameworkSeedImage,
+        string? FrameworkWow64BaseImage,
+        string SeedInputSha256,
         string BaseImage,
         string RootImage,
         string OutputImage,
         string SourceRevision,
         string? InstallerUrlSecretFile,
         string? InstallerSecretFile,
+        string? CachedWinetricksPayloadFile,
+        bool AllowUncommittedSourceForDevelopment,
         bool DryRun);
 
     private sealed record ValidatedInputs(
         string RepositoryRoot,
         string ManifestSha256,
-        InstallerTarget Target,
-        ValidatedAssetSource AssetSource);
+        InstallerTarget? Target,
+        ValidatedAssetSource AssetSource,
+        ValidatedVendoredPayload? VendoredPayload,
+        ValidatedCachedPayload? CachedPayload);
+
+    private sealed record CompanionSeedDefinition(
+        string Generation,
+        string Version,
+        string Prefix);
+
+    private enum BuildKind
+    {
+        Operator,
+        Wow64Base,
+        CompanionSeed
+    }
+
+    private sealed record ValidatedVendoredPayload(
+        VendoredWinetricksPayload Lock,
+        string Path);
+
+    private sealed record ValidatedCachedPayload(
+        CachedWinetricksPayload Lock,
+        string Path);
 
     private enum AssetSourceKind
     {
@@ -790,164 +1238,6 @@ internal static partial class FrameworkRuntimePreparation
     {
         public static ValidatedAssetSource None() =>
             new(AssetSourceKind.None, Path: null, SensitiveContent: null);
-    }
-
-    private sealed class CommittedSourceContext : IDisposable
-    {
-        private CommittedSourceContext(string directory) => Directory = directory;
-
-        public string Directory { get; }
-
-        public static CommittedSourceContext Create(
-            string repositoryRoot,
-            string sourceRevision)
-        {
-            var directory = Path.Combine(
-                Path.GetTempPath(),
-                $".sharplabnext-framework-source-{Guid.NewGuid():N}");
-            try
-            {
-                System.IO.Directory.CreateDirectory(directory);
-                if (!OperatingSystem.IsWindows())
-                {
-                    File.SetUnixFileMode(
-                        directory,
-                        UnixFileMode.UserRead |
-                        UnixFileMode.UserWrite |
-                        UnixFileMode.UserExecute);
-                }
-                foreach (var relativePath in CommittedSourceFiles)
-                {
-                    var destination = Path.Combine(
-                        directory,
-                        relativePath.Replace('/', Path.DirectorySeparatorChar));
-                    System.IO.Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                    File.WriteAllBytes(
-                        destination,
-                        ReadCommittedSourceFile(repositoryRoot, sourceRevision, relativePath));
-                }
-                return new CommittedSourceContext(directory);
-            }
-            catch (InputValidationException)
-            {
-                TryDelete(directory, failClosed: false);
-                throw;
-            }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException or NotSupportedException)
-            {
-                TryDelete(directory, failClosed: false);
-                throw new InputValidationException(
-                    "The committed Framework operator source context could not be created.");
-            }
-        }
-
-        public void Dispose() => TryDelete(Directory, failClosed: true);
-
-        private static void TryDelete(string directory, bool failClosed)
-        {
-            try
-            {
-                if (System.IO.Directory.Exists(directory))
-                    System.IO.Directory.Delete(directory, recursive: true);
-            }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException)
-            {
-                if (failClosed)
-                {
-                    throw new InputValidationException(
-                        "The committed Framework operator source context could not be removed.");
-                }
-            }
-        }
-    }
-
-    private sealed partial class StagedBuildContext : IDisposable
-    {
-        private StagedBuildContext(string directory) => Directory = directory;
-
-        public string Directory { get; }
-
-        public static StagedBuildContext Create(ValidatedAssetSource source)
-        {
-            var parent = source.Kind == AssetSourceKind.Installer
-                ? Path.GetDirectoryName(source.Path)
-                : Path.GetTempPath();
-            if (string.IsNullOrEmpty(parent))
-                throw new InputValidationException("The operator installer staging directory is invalid.");
-
-            var directory = Path.Combine(
-                parent,
-                $".sharplabnext-framework-context-{Guid.NewGuid():N}");
-            try
-            {
-                System.IO.Directory.CreateDirectory(directory);
-                var stagedInstaller = Path.Combine(directory, "installer.bin");
-                if (source.Kind == AssetSourceKind.Installer)
-                    CreateHardLink(stagedInstaller, source.Path!);
-                else
-                    File.Create(stagedInstaller).Dispose();
-                return new StagedBuildContext(directory);
-            }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException or NotSupportedException)
-            {
-                TryDelete(directory, failClosed: false);
-                throw new InputValidationException(
-                    "The operator installer could not be staged as a private local build context.");
-            }
-        }
-
-        public void Dispose() => TryDelete(Directory, failClosed: true);
-
-        private static void CreateHardLink(string newPath, string existingPath)
-        {
-            var succeeded = OperatingSystem.IsWindows()
-                ? CreateHardLinkWindows(newPath, existingPath, IntPtr.Zero)
-                : CreateHardLinkUnix(existingPath, newPath) == 0;
-            if (!succeeded)
-            {
-                throw new IOException(
-                    "Could not create the private operator installer hard link.",
-                    new Win32Exception(Marshal.GetLastPInvokeError()));
-            }
-        }
-
-        [LibraryImport(
-            "kernel32.dll",
-            EntryPoint = "CreateHardLinkW",
-            StringMarshalling = StringMarshalling.Utf16,
-            SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static partial bool CreateHardLinkWindows(
-            string fileName,
-            string existingFileName,
-            IntPtr securityAttributes);
-
-        [LibraryImport(
-            "libc",
-            EntryPoint = "link",
-            StringMarshalling = StringMarshalling.Utf8,
-            SetLastError = true)]
-        private static partial int CreateHardLinkUnix(string existingPath, string newPath);
-
-        private static void TryDelete(string directory, bool failClosed)
-        {
-            try
-            {
-                if (System.IO.Directory.Exists(directory))
-                    System.IO.Directory.Delete(directory, recursive: true);
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                if (failClosed)
-                {
-                    throw new InputValidationException(
-                        "The private operator installer staging context could not be removed.");
-                }
-            }
-        }
     }
 
     private sealed record DockerArgument(string Value, string? RedactedValue = null);
@@ -979,8 +1269,50 @@ internal static partial class FrameworkRuntimePreparation
     private sealed record InstallerManifest(
         int SchemaVersion,
         string WinetricksVersion,
+        IReadOnlyList<VendoredWinetricksPayload> VendoredWinetricksPayloads,
+        IReadOnlyList<CachedWinetricksPayload> CachedWinetricksPayloads,
+        FrameworkBootstrapTools BootstrapTools,
+        ClassicWow64Installer ClassicWow64Installer,
         CompanionPrefixes CompanionPrefixes,
         IReadOnlyList<InstallerTarget> Targets);
+
+    private sealed record VendoredWinetricksPayload(
+        string Id,
+        string Verb,
+        string RepositoryPath,
+        string CachePath,
+        long SizeBytes,
+        string Sha256);
+
+    private sealed record CachedWinetricksPayload(
+        string Id,
+        string Verb,
+        string PrerequisiteId,
+        string CachePath,
+        long SizeBytes,
+        string Sha256);
+
+    private sealed record FrameworkBootstrapTools(
+        string ArchiveSnapshotId,
+        IReadOnlyList<BootstrapDirectPackage> DirectPackages,
+        IReadOnlyList<string> ResolvedPackages,
+        string ResolvedPackageListSha256);
+
+    private sealed record BootstrapDirectPackage(string Name, string Version);
+
+    private sealed record ClassicWow64Installer(
+        string ArchiveSnapshotId,
+        string ForeignArchitecture,
+        ClassicWow64DirectPackage DirectPackage,
+        IReadOnlyList<string> ReplacedPackages,
+        string ReplacedPackageListSha256,
+        IReadOnlyList<string> ResolvedPackages,
+        string ResolvedPackageListSha256);
+
+    private sealed record ClassicWow64DirectPackage(
+        string Name,
+        string Architecture,
+        string Version);
 
     private sealed record CompanionPrefixes(CompanionPrefix Clr2, CompanionPrefix Clr4);
 
@@ -1011,5 +1343,11 @@ internal static partial class FrameworkRuntimePreparation
 
     private sealed class UsageException(string message) : Exception(message);
 
-    private sealed class InputValidationException(string message) : Exception(message);
+    private sealed class InputValidationException : Exception
+    {
+        public InputValidationException(string message) : base(message) { }
+
+        public InputValidationException(string message, Exception? innerException)
+            : base(message, innerException) { }
+    }
 }

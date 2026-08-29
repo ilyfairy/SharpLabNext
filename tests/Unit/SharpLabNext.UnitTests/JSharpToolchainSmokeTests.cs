@@ -39,6 +39,9 @@ public sealed class JSharpToolchainSmokeTests
         Assert.Contains("--entrypoint=/bin/bash", source, StringComparison.Ordinal);
         Assert.Contains("WINEPREFIX=/opt/wine-jsharp20", source, StringComparison.Ordinal);
         Assert.Contains("WINEARCH=win64", source, StringComparison.Ordinal);
+        Assert.Contains("test -x /usr/lib/wine/wineserver", source, StringComparison.Ordinal);
+        Assert.Contains("/usr/lib/wine/wineserver -k", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("command -v wineserver", source, StringComparison.Ordinal);
         Assert.Contains("Framework64/v2.0.50727", source, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "Microsoft.NET/Framework/v2.0.50727/vjc.exe",

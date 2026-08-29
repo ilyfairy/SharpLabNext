@@ -33,6 +33,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          lfs: true
           submodules: recursive
 
       - name: Install locked .NET SDK
@@ -130,6 +131,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          lfs: true
 
       - name: Install locked Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -146,14 +149,19 @@ jobs:
             eng/runtime-framework-supervisor-smoke.test.mjs \
             eng/runtime-framework-deployment-bridge.test.mjs \
             eng/runtime-matrix-deployment-bridge.test.mjs \
-            eng/runtime-framework-gateway-smoke.test.mjs
+            eng/runtime-framework-gateway-smoke.test.mjs \
+            eng/prerequisite-cache.test.mjs \
+            eng/image-build-inputs.test.mjs \
+            eng/cppcli-netfx-sdk-extraction.test.mjs \
+            eng/build-images.test.mjs \
+            eng/runtime-candidate-environment.test.mjs
           node eng/validate-schemas.mjs
 
       - name: Validate Compose security boundaries
         run: node eng/validate-compose.mjs
 
       - name: Validate Buildx Bake graph
-        run: docker buildx bake --file eng/bake.hcl --print > /dev/null
+        run: node eng/validate-bake-inputs.mjs
 
   compose-e2e:
     name: Production Compose and browser E2E
@@ -161,19 +169,26 @@ jobs:
       - backend
       - frontend
       - schema
-    runs-on: ubuntu-latest
-    timeout-minutes: 240
+    # The full stack contains licensed inputs. Enable this only on the trusted
+    # runner that retains artifacts/prerequisites and uses the Docker driver.
+    if: >-
+      vars.SHARPLABNEXT_PRIVATE_E2E_ENABLED == 'true' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, Linux, X64, sharplabnext-private]
+    timeout-minutes: 720
     env:
       COMPOSE_PROJECT_NAME: sharplabnext-ci-${{ github.run_id }}-${{ github.run_attempt }}
       SHARPLABNEXT_BIND_ADDRESS: 127.0.0.1
       SHARPLABNEXT_HTTP_PORT: 8080
       SHARPLABNEXT_E2E_BASE_URL: http://127.0.0.1:8080
-      SHARPLABNEXT_CI_BUNDLE: ${{ github.workspace }}/artifacts/ci-bundle
+      SHARPLABNEXT_CI_BUNDLE: ${{ runner.temp }}/sharplabnext-ci-bundle-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Check out source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          lfs: true
           submodules: recursive
+          clean: false
 
       - name: Install locked .NET SDK
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
@@ -191,77 +206,28 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Reclaim hosted runner disk space
+      - name: Verify retained licensed prerequisite cache
         shell: bash
         run: |
           set -euo pipefail
-          df -h /
-          sudo rm -rf \
-            /opt/ghc \
-            /opt/hostedtoolcache/CodeQL \
-            /usr/local/.ghcup \
-            /usr/local/lib/android \
-            /usr/share/swift
-          docker system prune --all --force --volumes
-          df -h /
+          node eng/prerequisite-cache.mjs verify \
+            --repository-root . \
+            --accept-microsoft-licenses
 
-      - name: Configure Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-
-      - name: Read approved release inputs
+      - name: Build every planned image and create deployment metadata
         shell: bash
+        timeout-minutes: 600
         run: |
           set -euo pipefail
-          release_id="$(jq -er '.releaseId' profiles/lock.json)"
-          {
-            echo "RELEASE_ID=$release_id"
-            echo "SHARPLABNEXT_RELEASE_ID=$release_id"
-            echo "IMAGE_PREFIX=sharplabnext"
-            echo "SOURCE_REVISION=$GITHUB_SHA"
-            echo "DOTNET10_RUNTIME_VERSION=$(jq -er '.components[\"dotnet-10-linux-x64\"].resolvedVersion' profiles/lock.json)"
-            echo "DOTNET10_RUNTIME_URL=$(jq -er '.components[\"dotnet-10-linux-x64\"].sourceUri' profiles/lock.json)"
-            echo "DOTNET10_RUNTIME_SHA512=$(jq -er '.components[\"dotnet-10-linux-x64\"].sha512' profiles/lock.json)"
-            echo "DOTNET11_RUNTIME_VERSION=$(jq -er '.components[\"dotnet-11-preview-linux-x64\"].resolvedVersion' profiles/lock.json)"
-            echo "DOTNET11_RUNTIME_URL=$(jq -er '.components[\"dotnet-11-preview-linux-x64\"].sourceUri' profiles/lock.json)"
-            echo "DOTNET11_RUNTIME_SHA512=$(jq -er '.components[\"dotnet-11-preview-linux-x64\"].sha512' profiles/lock.json)"
-          } >> "$GITHUB_ENV"
-
-      - name: Build and load locked Linux images
-        shell: bash
-        timeout-minutes: 150
-        run: |
-          set -euo pipefail
-          bake=(
-            dotnet run eng/run-with-bake-environment.cs --
-            --lock profiles/lock.json
-            --base-images profiles/base-images.json
-            --source-revision "$SOURCE_REVISION"
-            --repository-root "$GITHUB_WORKSPACE"
-            --image-prefix "$IMAGE_PREFIX"
-            --allow-uncommitted-source-for-development
-            --
-            docker buildx bake --file eng/bake.hcl
-          )
-          bake_plan="$("${bake[@]}" --print)"
-          mapfile -t targets < <(jq -r '.target | keys[]' <<< "$bake_plan")
-          cache_args=()
-          for target in "${targets[@]}"; do
-            cache_args+=(
-              --set "$target.cache-from=type=gha,scope=compose-e2e-$target,timeout=10m"
-              --set "$target.cache-to=type=gha,scope=compose-e2e-$target,mode=min,timeout=20m,ignore-error=true"
-            )
-          done
-          "${bake[@]}" "${cache_args[@]}"
-
-      - name: Generate immutable local deployment metadata
-        shell: bash
-        run: |
-          set -euo pipefail
-          ./eng/bundle.sh \
+          bash ./eng/release.sh \
             --output "$SHARPLABNEXT_CI_BUNDLE" \
             --metadata-only \
-            --skip-build \
-            --skip-restore
+            --accept-microsoft-licenses
+
+      - name: Validate immutable local deployment metadata
+        shell: bash
+        run: |
+          set -euo pipefail
           runtime_image="$(
             jq -er '.images[] | select(.id == "dotnet-10-linux-x64") | .imageId' \
               "$SHARPLABNEXT_CI_BUNDLE/bundle.json"
@@ -272,9 +238,6 @@ jobs:
             --file "$SHARPLABNEXT_CI_BUNDLE/compose.prod.yaml" \
             --file "$SHARPLABNEXT_CI_BUNDLE/compose.generated.yaml" \
             config --quiet
-
-      - name: Reclaim BuildKit cache space
-        run: docker buildx prune --all --force
 
       - name: Start production Compose without pulls
         shell: bash
@@ -392,7 +355,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
           path: |
-            artifacts/ci-bundle/
+            ${{ env.SHARPLABNEXT_CI_BUNDLE }}/
             artifacts/compose-e2e/
             artifacts/playwright/
             artifacts/playwright-report/

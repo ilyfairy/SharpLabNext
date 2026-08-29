@@ -238,13 +238,11 @@ function inspectImage(reference, spawn = spawnSync) {
 }
 
 export function inspectOrPullOperator(row, spawn = spawnSync, expectedImages = undefined) {
-  let info = inspectImage(row.operatorImage, spawn)
-  if (info === undefined && hasRegistryHost(row.operatorImage)) {
-    const pull = spawn('docker', ['pull', row.operatorImage], {
-      cwd: repositoryRoot, encoding: 'utf8', shell: false, stdio: 'inherit',
-    })
-    if (pull.error === undefined && pull.status === 0) info = inspectImage(row.operatorImage, spawn)
-  }
+  // Operators are produced by the current build and are already in the local
+  // Docker store.  A best-effort cache probe must never turn into an implicit
+  // registry login/pull (which is unreliable over SSH and defeats BuildKit's
+  // own layer cache).
+  const info = inspectImage(row.operatorImage, spawn)
   if (info === undefined) fail(`Docker operator image '${row.operatorImage}' is unavailable`)
   const failures = validateOperatorImageInspection(row, info, expectedImages)
   if (failures.length > 0) fail(failures.join('; '))

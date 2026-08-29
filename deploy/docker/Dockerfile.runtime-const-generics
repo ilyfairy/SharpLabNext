@@ -9,6 +9,7 @@ ARG CONST_GENERICS_RUNTIME_ARCHIVE_SHA256
 ARG CONST_GENERICS_VERSIONTOOLS_VERSION
 ARG CONST_GENERICS_VERSIONTOOLS_PACKAGE_SHA256
 ARG CONST_GENERICS_VERSIONTOOLS_SOURCE_URI
+ARG CONST_GENERICS_REFERENCE_VERSION
 
 FROM ${RUNTIME_BUILD_IMAGE} AS runtime-source-build-base
 ARG CONST_GENERICS_RUNTIME_COMMIT
@@ -17,6 +18,7 @@ ARG CONST_GENERICS_RUNTIME_ARCHIVE_SHA256
 ARG CONST_GENERICS_VERSIONTOOLS_VERSION
 ARG CONST_GENERICS_VERSIONTOOLS_PACKAGE_SHA256
 ARG CONST_GENERICS_VERSIONTOOLS_SOURCE_URI
+ARG CONST_GENERICS_REFERENCE_VERSION
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
     NUGET_XMLDOC_MODE=skip \
@@ -32,8 +34,18 @@ RUN curl --fail --location --retry 3 --retry-all-errors --output /tmp/runtime-so
     && grep --fixed-strings --quiet 'SupportsConstGenerics()' src/coreclr/md/inc/metamodel.h \
     && grep --fixed-strings --quiet 'IsConstGenericVariable()' src/coreclr/vm/typehandle.cpp \
     && grep --fixed-strings --quiet '<ProductVersion>9.0.0</ProductVersion>' eng/Versions.props
+COPY --from=const-generics-fork-packages / /const-generics-fork-packages/
+COPY eng/patches/const-generics-runtime/0001-use-local-fork-packages.patch /tmp/0001-use-local-fork-packages.patch
+RUN --network=none set -eux; \
+    test "$(find /const-generics-fork-packages -mindepth 1 -maxdepth 1 | wc -l)" -eq 2; \
+    test "$(find /const-generics-fork-packages -mindepth 1 -maxdepth 1 -type f -name '*.nupkg' | wc -l)" -eq 2; \
+    git apply --check /tmp/0001-use-local-fork-packages.patch; \
+    git apply /tmp/0001-use-local-fork-packages.patch; \
+    grep --fixed-strings --quiet 'value="/const-generics-fork-packages"' NuGet.config; \
+    ! grep --fixed-strings --quiet 'pkgs.dev.azure.com/hez2010' NuGet.config
 RUN --mount=type=cache,id=sharplabnext-const-runtime-nuget,target=/root/.nuget/packages,sharing=locked \
     --mount=type=cache,id=sharplabnext-const-runtime-packages,target=/runtime-source/.packages,sharing=locked \
+    --mount=type=cache,id=sharplabnext-const-runtime-artifacts-${CONST_GENERICS_RUNTIME_COMMIT}-${CONST_GENERICS_RUNTIME_ARCHIVE_SHA256},target=/runtime-source/artifacts,sharing=locked \
     ./build.sh \
       --subset clr+libs+host.native+host.tools+host.pkg+packs.product \
       --configuration Release \
@@ -46,10 +58,18 @@ RUN --mount=type=cache,id=sharplabnext-const-runtime-nuget,target=/root/.nuget/p
       /p:SourceRevisionId=${CONST_GENERICS_RUNTIME_COMMIT} \
       /p:MicrosoftDotNetVersionToolsTasksVersion=${CONST_GENERICS_VERSIONTOOLS_VERSION} \
       /p:RestoreDisableParallel=true \
+      /p:RestoreRetryCount=5 \
+      /p:RestoreRetryDelayMilliseconds=5000 \
       /p:EnableSourceLink=false \
-      /p:UseSharedCompilation=false
+      /p:UseSharedCompilation=false \
+    && mkdir -p /runtime-build-output/artifacts/packages/Release/Shipping \
+    && cp "artifacts/packages/Release/Shipping/dotnet-runtime-${CONST_GENERICS_REFERENCE_VERSION}-linux-x64.tar.gz" \
+      /runtime-build-output/artifacts/packages/Release/Shipping/ \
+    && cp "artifacts/packages/Release/Shipping/Microsoft.NETCore.App.Ref.${CONST_GENERICS_REFERENCE_VERSION}.nupkg" \
+      /runtime-build-output/artifacts/packages/Release/Shipping/
 RUN --mount=type=cache,id=sharplabnext-const-runtime-nuget,target=/root/.nuget/packages,sharing=locked \
     --mount=type=cache,id=sharplabnext-const-runtime-packages,target=/runtime-source/.packages,sharing=locked \
+    --mount=type=cache,id=sharplabnext-const-runtime-artifacts-${CONST_GENERICS_RUNTIME_COMMIT}-${CONST_GENERICS_RUNTIME_ARCHIVE_SHA256},target=/runtime-source/artifacts,sharing=locked \
     set -e; \
     restored=0; \
     for attempt in 1 2 3; do \
@@ -98,8 +118,8 @@ ARG CONST_GENERICS_VERSIONTOOLS_PACKAGE_SHA256
 ARG CONST_GENERICS_REFERENCE_VERSION
 ARG CONST_GENERICS_REFERENCE_DIGEST
 RUN set -eux; \
-    runtime_archive="artifacts/packages/Release/Shipping/dotnet-runtime-${CONST_GENERICS_REFERENCE_VERSION}-linux-x64.tar.gz"; \
-    reference_package="artifacts/packages/Release/Shipping/Microsoft.NETCore.App.Ref.${CONST_GENERICS_REFERENCE_VERSION}.nupkg"; \
+    runtime_archive="/runtime-build-output/artifacts/packages/Release/Shipping/dotnet-runtime-${CONST_GENERICS_REFERENCE_VERSION}-linux-x64.tar.gz"; \
+    reference_package="/runtime-build-output/artifacts/packages/Release/Shipping/Microsoft.NETCore.App.Ref.${CONST_GENERICS_REFERENCE_VERSION}.nupkg"; \
     test -f "${runtime_archive}"; \
     test -f "${reference_package}"; \
     test "${CONST_GENERICS_REFERENCE_DIGEST#sha256:}" != "${CONST_GENERICS_REFERENCE_DIGEST}"; \
@@ -166,10 +186,11 @@ WORKDIR /source
 COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
 COPY profiles/versions.props ./profiles/versions.props
 COPY src/ ./src/
-RUN dotnet restore src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj --locked-mode \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj --locked-mode \
     && dotnet restore src/RuntimeJobs/SharpLabNext.JitInspector/SharpLabNext.JitInspector.csproj --locked-mode \
-    && dotnet restore src/RuntimeJobs/SharpLabNext.JitProfiler.Native/Smoke/SharpLabNext.JitProfilerSmoke.csproj --locked-mode
-RUN dotnet publish src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj \
+    && dotnet restore src/RuntimeJobs/SharpLabNext.JitProfiler.Native/Smoke/SharpLabNext.JitProfilerSmoke.csproj --locked-mode \
+    && dotnet publish src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.csproj \
       --configuration ${CONFIGURATION} \
       --framework net8.0 \
       --no-restore \
@@ -188,8 +209,8 @@ RUN dotnet publish src/RuntimeJobs/SharpLabNext.Runner/SharpLabNext.Runner.cspro
       --output /helpers/mapping-smoke \
       /p:UseAppHost=false \
       /p:DebugSymbols=true \
-      /p:DebugType=portable
-RUN mkdir -p /smoke \
+      /p:DebugType=portable \
+    && mkdir -p /smoke \
     && printf '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><AssemblyName>SharpLabNext.ConstRuntimeSmoke</AssemblyName></PropertyGroup></Project>\n' > /smoke/Smoke.csproj \
     && printf 'using System; public static class Program { public static int Main() { Console.WriteLine("const-runtime-smoke"); return 0; } public static int Add(int left, int right) => left + right; }\n' > /smoke/Program.cs \
     && dotnet publish /smoke/Smoke.csproj --configuration Release --output /smoke/publish /p:UseAppHost=false

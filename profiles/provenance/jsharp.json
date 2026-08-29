@@ -4,7 +4,7 @@
   "sourceComponentId": "msvc-wine-source",
   "compatibilityGroup": "jsharp20-clr2-x64-wine",
   "status": "source-inputs-recorded",
-  "license": "BSD-2-Clause worker; Microsoft Visual J# and .NET Framework binaries are proprietary operator-supplied inputs",
+  "license": "BSD-2-Clause worker; Microsoft Visual J# and .NET Framework binaries are separately licensed build inputs",
   "builder": {
     "imageId": "dotnet-sdk",
     "platform": "linux/amd64",
@@ -13,7 +13,7 @@
   "build": {
     "configuration": "Release",
     "workerProject": "src/Workers/JSharp/SharpLabNext.Worker.JSharp/SharpLabNext.Worker.JSharp.csproj",
-    "operatorImageComponentId": "jsharp20",
+    "sourceInputComponentIds": ["jsharp20"],
     "referenceSetId": "jsharp20-ref",
     "runtimeComponentId": "wine-jsharp20-linux-x64",
     "compilerPath": "/opt/sharplabnext/jsharp20/vjc.exe",
@@ -39,7 +39,7 @@
     "Compiler output is validated as PE32+ AMD64, IL-only CLR 2.0 with no 32-bit-required or 32-bit-preferred flag",
     "The approved reference content set is limited to System.dll, mscorlib.dll, vjscor.dll and vjslib.dll",
     "Run is restricted to the dedicated x64 CLR 2.0/J# Wine runtime feature",
-    "The operator must supply the digest-pinned private image; Microsoft proprietary binaries are not redistributed as BSD project content"
+    "The build validates the exact repository Git LFS installer before source-building the private base; Microsoft proprietary binaries are not BSD project content"
   ],
   "artifactContract": {
     "toolchainId": "vjc-jsharp20",

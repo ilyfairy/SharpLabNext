@@ -4,7 +4,7 @@
   "sourceComponentId": "msvc-wine-source",
   "compatibilityGroup": "msvc-cppcli-netfx48-wine",
   "status": "source-inputs-recorded",
-  "license": "ISC wrapper; Microsoft compiler, SDK and .NET Framework binaries are proprietary operator-supplied inputs",
+  "license": "ISC wrapper; Microsoft compiler, SDK and .NET Framework binaries are separately licensed build inputs",
   "builder": {
     "imageId": "dotnet-sdk",
     "platform": "linux/amd64",
@@ -13,7 +13,7 @@
   "build": {
     "configuration": "Release",
     "workerProject": "src/Workers/CppCli/SharpLabNext.Worker.CppCli/SharpLabNext.Worker.CppCli.csproj",
-    "operatorImageComponentId": "msvc-cppcli-private-image",
+    "sourceInputComponentIds": ["msvc-cppcli-netfx48", "netfx48-ref"],
     "referenceSetId": "netfx48-ref",
     "runtimeComponentId": "wine-netfx48-linux-x64",
     "compilerPath": "/opt/msvc/bin/x64/cl",
@@ -28,7 +28,7 @@
     "Wine 9.0 invokes MSVC 19.51 with /clr and /EHa in the isolated compiler worker",
     "The compiler output is validated as PE32+ AMD64 with CLR metadata and without CorFlags.ILOnly",
     "The artifact entry point remains native and is never routed to CoreCLR Run or JIT",
-    "The operator must supply the digest-pinned prepared composition base whose labels retain the raw private operator lineage; the two image identities are not interchangeable and Microsoft proprietary binaries are not redistributed as BSD project content"
+    "The private composition base is source-built from the locked Visual Studio manifest, Developer Pack and msvc-wine revision; Microsoft proprietary binaries are not BSD project content"
   ],
   "artifactContract": {
     "toolchainId": "msvc-cppcli-netfx48",

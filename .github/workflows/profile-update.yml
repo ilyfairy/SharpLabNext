@@ -38,6 +38,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+          lfs: true
           submodules: recursive
 
       - name: Install locked .NET SDK
@@ -305,7 +306,7 @@ jobs:
             )
           fi
 
-          ./eng/bundle.sh "${bundle_args[@]}"
+          bash ./eng/bundle.sh "${bundle_args[@]}"
 
       - name: Collect public status and diagnostics
         if: always()

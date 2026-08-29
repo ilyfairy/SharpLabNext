@@ -136,7 +136,7 @@ if [ "$installed_copy" = true ]; then
     echo 'An installed copy requires a regular non-link deployment.sha256 file.' >&2
     exit 1
   }
-  deployment_files='bundle.json catalog.json lock.json profile-update-status.json compose.prod.yaml compose.generated.yaml github-oauth-client-secret.disabled images.expected checksums.sha256 THIRD-PARTY-NOTICES.md security/README.md security/THIRD-PARTY-NOTICES.md security/inventory.json security/sharplabnext-runtime-job-v1.apparmor security/licenses/moby-profiles-Apache-2.0.txt'
+  deployment_files='.env bundle.json catalog.json lock.json profile-update-status.json compose.prod.yaml compose.generated.yaml github-oauth-client-secret.disabled images.expected checksums.sha256 THIRD-PARTY-NOTICES.md security/README.md security/THIRD-PARTY-NOTICES.md security/inventory.json security/sharplabnext-runtime-job-v1.apparmor security/licenses/moby-profiles-Apache-2.0.txt'
   for relative in $deployment_files; do printf '%s\n' "$relative" >> "$deployment_expected_paths"; done
   while IFS= read -r line; do
     hash=${line%%  *}
@@ -439,5 +439,5 @@ while IFS=' ' read -r logical_id image_id; do
   actual=$(docker image inspect --format '{{.Id}}' "$image_id")
   [ "$actual" = "$image_id" ] || { echo "Image identity mismatch: $logical_id" >&2; exit 1; }
 done < images.expected
-docker compose -f compose.prod.yaml -f compose.generated.yaml config --quiet
+docker compose config --quiet
 echo "Verified SharpLabNext release $(json_string releaseId)."

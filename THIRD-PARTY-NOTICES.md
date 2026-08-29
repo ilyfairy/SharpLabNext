@@ -28,13 +28,23 @@ Initial implementation references:
   fixtures for the independently attested `netfx20-managed-ref` and
   `netfx48-managed-ref` identities; they are not the C++/CLI operator-image
   reference identity and are not used as runtime implementations.
-- Microsoft Visual J# 2.0 Second Edition and .NET Framework CLR 2.0 binaries
-  are proprietary, operator-supplied inputs for the optional x64-only J#
-  worker and Wine runtime. They are not BSD-licensed project content and are
-  not included in the source tree or public release images. A self-built
-  private bundle may contain them only when the operator has independently
-  obtained the software, accepted the applicable Microsoft terms, and is
-  authorized to use and transfer that bundle within the intended environment.
+- Microsoft .NET Framework 2.0 x64 Redistributable `NetFx64.exe` is retained
+  as one exact Git LFS object because its original Microsoft download no
+  longer resolves. It is proprietary Microsoft binary material, not
+  SharpLabNext source code and not covered by the BSD 2-Clause License. Its
+  use and redistribution remain governed by the applicable Microsoft terms;
+  this project grants no additional rights. The build accepts those terms
+  explicitly, verifies size and SHA-256, exposes the installer only to an
+  isolated Wine build stage, and excludes it from final images and bundles.
+- Microsoft Visual J# 2.0 Second Edition `vjredist64.exe` is retained as one
+  exact Git LFS object for the optional x64-only J# worker and Wine runtime.
+  It is proprietary Microsoft binary material, not SharpLabNext source code
+  and not covered by the BSD 2-Clause License. Its use and redistribution
+  remain governed by the applicable Microsoft terms; this project grants no
+  additional rights. The build requires explicit license acceptance, verifies
+  its size and SHA-256, installs it only inside an isolated Docker/Wine stage,
+  and excludes the installer from final images and bundles. The vendored
+  `NetFx64.exe` above neither contains nor licenses J#.
 - Wine 9.0 userspace is assembled from the exact Ubuntu package closure in the
   reviewed `wine-coreclr-userspace` component. Wine is LGPL-2.1-or-later; the
   corresponding exact source material, package inventory, and required notices

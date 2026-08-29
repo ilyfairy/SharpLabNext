@@ -20,7 +20,9 @@ public sealed record BundleBuilderCommand(
     string? SourceRevision = null,
     bool AllowUncommittedSourceForDevelopment = false,
     string? ProfileUpdateStatusPath = null,
-    string? RuntimeProfilesPath = null)
+    string? RuntimeProfilesPath = null,
+    string? ImagePlanPath = null,
+    bool AllowDevelopmentImageInputs = false)
 {
     public const string Usage =
         "Usage: SharpLabNext.BundleBuilder [--repository-root PATH] [--catalog PATH] [--lock PATH] " +
@@ -28,7 +30,8 @@ public sealed record BundleBuilderCommand(
         "[--docker COMMAND] [--openssl COMMAND] [--signing-key PATH --signing-public-key PATH] " +
         "[--signing-key-id ID] [--image-prefix PREFIX] [--image ID=REFERENCE] [--metadata-only] " +
         "[--source-revision REVISION] [--allow-uncommitted-source-for-development] " +
-        "[--profile-update-status PATH] [--runtime-profiles PATH]";
+        "[--profile-update-status PATH] [--runtime-profiles PATH] [--write-image-plan PATH] " +
+        "[--allow-development-image-inputs]";
 
     public static BundleBuilderCommand Parse(string[] args)
     {
@@ -50,7 +53,9 @@ public sealed record BundleBuilderCommand(
         string? sourceRevision = null;
         string? profileUpdateStatusPath = null;
         string? runtimeProfilesPath = null;
+        string? imagePlanPath = null;
         var allowUncommittedSourceForDevelopment = false;
+        var allowDevelopmentImageInputs = false;
         var imageOverrides = new Dictionary<string, string>(StringComparer.Ordinal);
 
         for (var index = 0; index < args.Length; index++)
@@ -117,6 +122,12 @@ public sealed record BundleBuilderCommand(
                 case "--runtime-profiles":
                     runtimeProfilesPath = Path.GetFullPath(RequiredValue(args, ref index));
                     break;
+                case "--write-image-plan":
+                    imagePlanPath = Path.GetFullPath(RequiredValue(args, ref index));
+                    break;
+                case "--allow-development-image-inputs":
+                    allowDevelopmentImageInputs = true;
+                    break;
                 case "--help" or "-h":
                     throw new BundleBuilderUsageException(Usage);
                 default:
@@ -154,7 +165,7 @@ public sealed record BundleBuilderCommand(
         licensePolicyPath ??= Path.Combine(repositoryRoot, "profiles", "license-policy.json");
         composePath ??= Path.Combine(repositoryRoot, "deploy", "compose.prod.yaml");
         noticesPath ??= Path.Combine(repositoryRoot, "THIRD-PARTY-NOTICES.md");
-        outputDirectory ??= Path.Combine(repositoryRoot, "artifacts", "bundles", "candidate");
+        outputDirectory ??= Path.Combine(repositoryRoot, "artifacts", "sharplabnext-candidate");
         runtimeProfilesPath ??= Path.Combine(repositoryRoot, "profiles", "runtimes");
 
         return new BundleBuilderCommand(
@@ -177,7 +188,9 @@ public sealed record BundleBuilderCommand(
             sourceRevision,
             allowUncommittedSourceForDevelopment,
             profileUpdateStatusPath,
-            Path.GetFullPath(runtimeProfilesPath));
+            Path.GetFullPath(runtimeProfilesPath),
+            imagePlanPath,
+            allowDevelopmentImageInputs);
     }
 
     private static void AddImageOverride(Dictionary<string, string> overrides, string value)

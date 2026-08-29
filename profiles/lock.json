@@ -288,22 +288,16 @@
       "sourceUri": "https://github.com/dotnet/runtime/tree/7ee91972e27c086d92b7d223f905cf391578b256"
     },
     "jsharp20": {
-      "kind": "operator-image",
-      "resolvedVersion": "2.0.50727.937-clr2-x64",
-      "digest": "sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6",
-      "sourceUri": "docker://sharplabnext/operator-jsharp20@sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6"
-    },
-    "jsharp20-prepared-base": {
-      "kind": "operator-image",
-      "resolvedVersion": "runtime-matrix-v2",
-      "digest": "sha256:ab6b92e21deb3d590b59c8da2367b89fafa6d8bc641b65430aa2f1eb2c045b21",
-      "sourceUri": "docker://localhost:5000/sharplabnext/jsharp20-prepared-base@sha256:ab6b92e21deb3d590b59c8da2367b89fafa6d8bc641b65430aa2f1eb2c045b21"
+      "kind": "toolchain-input",
+      "resolvedVersion": "2.0.50727.937-x64",
+      "digest": "sha256:3a7a6ff79eeb5d51f8bf4cab188f74de0a220722e3d9d97858092ea3ef41b2b0",
+      "sourceUri": "https://www.microsoft.com/en-us/download/details.aspx?id=4712"
     },
     "jsharp20-ref": {
       "kind": "reference-set",
       "resolvedVersion": "2.0.50727.937",
       "digest": "sha256:25288dc53b3190f14a65ebf96258601a262ebd4a8fa68e4881c897258b122013",
-      "sourceUri": "docker://sharplabnext/operator-jsharp20@sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6"
+      "sourceUri": "https://www.microsoft.com/en-us/download/details.aspx?id=4712"
     },
     "jsil-cecil-source": {
       "kind": "source",
@@ -361,20 +355,8 @@
     "msvc-cppcli-netfx48": {
       "kind": "toolchain",
       "resolvedVersion": "19.51.36248",
-      "digest": "sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743",
-      "sourceUri": "docker://codex/msvc-wine@sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743"
-    },
-    "msvc-cppcli-prepared-base": {
-      "kind": "operator-image",
-      "resolvedVersion": "runtime-matrix-v2",
-      "digest": "sha256:dfd2473d9faae804d8514e583cec77fe5622c3c955d2e97eeaa3a7952969e3e8",
-      "sourceUri": "docker://localhost:5000/sharplabnext/msvc-cppcli-prepared-base@sha256:dfd2473d9faae804d8514e583cec77fe5622c3c955d2e97eeaa3a7952969e3e8"
-    },
-    "msvc-cppcli-private-image": {
-      "kind": "operator-image",
-      "resolvedVersion": "19.51.36248-netfx48",
-      "digest": "sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743",
-      "sourceUri": "docker://codex/msvc-wine@sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743"
+      "digest": "sha256:b20492a4acb679cabdd4c7f7168a82d56b8c1079c9d8f5a3ef3550fea08ba4e8",
+      "sourceUri": "https://download.visualstudio.microsoft.com/download/pr/e05c0bc8-d058-4b2b-937c-1c80073d7633/6bc8ae0aa34a6dfb62a5d4b83673949165d7bbc4c6dd59979f45a68f62ff2358/VisualStudio.vsman"
     },
     "msvc-wine-source": {
       "kind": "source",
@@ -592,8 +574,8 @@
     "netfx48-ref": {
       "kind": "reference-set",
       "resolvedVersion": "4.8",
-      "digest": "sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743",
-      "sourceUri": "docker://codex/msvc-wine@sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743"
+      "digest": "sha256:b37882cda5610b291b2a984e4c2270f67a448f79d6b1f78337736c95b35c5a7f",
+      "sourceUri": "https://download.microsoft.com/download/6/4/2/642ec242-448b-49a1-8371-5d9c202eaa46/NDP48-DevPack-ENU.exe"
     },
     "peachpie-library": {
       "kind": "runtime-dependency",
@@ -723,8 +705,8 @@
     "wine-jsharp20-linux-x64": {
       "kind": "runtime",
       "resolvedVersion": "wine-9.0+clr2+jsharp-2.0.50727.937",
-      "digest": "sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6",
-      "sourceUri": "docker://sharplabnext/operator-jsharp20@sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6"
+      "digest": "sha256:3a7a6ff79eeb5d51f8bf4cab188f74de0a220722e3d9d97858092ea3ef41b2b0",
+      "sourceUri": "https://www.microsoft.com/en-us/download/details.aspx?id=4712"
     },
     "wine-netfx20-linux-x64": {
       "kind": "runtime",

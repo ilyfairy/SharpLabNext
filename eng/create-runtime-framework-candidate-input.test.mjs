@@ -289,3 +289,42 @@ test('CLI validates matrix and installer provenance from the requested committed
   }), 1)
   assert.match(mismatchMessages.errors.join('\n'), /installer-manifest-sha256/)
 })
+
+test('CLI development override uses the current worktree only after binding Git HEAD', t => {
+  const state = prepare(t)
+  const outputPath = path.join(state.root, 'development-candidate.json')
+  const messages = {
+    logs: [], errors: [],
+    log(value) { this.logs.push(value) },
+    error(value) { this.errors.push(value) },
+  }
+  const dockerSpawn = fakeSpawn(state)
+  const spawn = (command, arguments_, options) => command === 'git'
+    ? { status: 0, stdout: `${revision}\n`, stderr: '' }
+    : dockerSpawn(command, arguments_, options)
+
+  assert.equal(runCreateFrameworkCandidateInput([
+    '--parent-image', state.parentImage,
+    '--metadata-image', state.metadataImage,
+    '--matrix-input', state.matrixInputPath,
+    '--runtime-matrix', runtimeMatrixPath,
+    '--source-revision', revision,
+    '--output', outputPath,
+    '--allow-uncommitted-source-for-development',
+  ], { spawn, output: messages }), 0, messages.errors.join('\n'))
+  assert.equal(JSON.parse(fs.readFileSync(outputPath, 'utf8')).sourceRevision, revision)
+
+  messages.errors.length = 0
+  const wrongHead = (command, arguments_, options) => command === 'git'
+    ? { status: 0, stdout: `${'f'.repeat(40)}\n`, stderr: '' }
+    : dockerSpawn(command, arguments_, options)
+  assert.equal(runCreateFrameworkCandidateInput([
+    '--parent-image', state.parentImage,
+    '--metadata-image', state.metadataImage,
+    '--matrix-input', state.matrixInputPath,
+    '--source-revision', revision,
+    '--output', path.join(state.root, 'wrong-head.json'),
+    '--allow-uncommitted-source-for-development',
+  ], { spawn: wrongHead, output: messages }), 1)
+  assert.match(messages.errors.join('\n'), /must match Git HEAD/)
+})

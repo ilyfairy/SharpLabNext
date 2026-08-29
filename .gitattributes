@@ -15,3 +15,5 @@ profiles/runtime-promotion-receipts/*.json text eol=lf
 profiles/runtime-performance-policies/*.json text eol=lf
 profiles/runtimes/*.json text eol=lf
 profiles/runtimes/candidates/*.json text eol=lf
+eng/prerequisites/dotnet-framework-2.0/NetFx64.exe filter=lfs diff=lfs merge=lfs -text
+eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe filter=lfs diff=lfs merge=lfs -text

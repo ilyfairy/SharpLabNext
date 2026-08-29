@@ -6,6 +6,7 @@
 
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using SharpLabNext.Catalog;
 using SharpLabNext.ProfileUpdater;
 
@@ -15,9 +16,15 @@ string? sourceRevision = null;
 string? repositoryRoot = null;
 string? runtimeMatrixPath = null;
 var allowUncommittedSourceForDevelopment = false;
+var allowDevelopmentImageInputs = false;
+var emitEnvironmentJson = false;
 const string developmentGrantEnvironmentVariable =
     "SHARPLABNEXT_BAKE_ALLOW_UNCOMMITTED_SOURCE_FOR_DEVELOPMENT";
+const string developmentImageInputsGrantEnvironmentVariable =
+    "SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS";
+const string environmentJsonPrefix = "SHARPLABNEXT_BAKE_ENVIRONMENT_JSON=";
 var imagePrefix = "sharplabnext";
+var developmentImageInputs = new Dictionary<string, string>(StringComparer.Ordinal);
 var command = new List<string>();
 for (var index = 0; index < args.Length; index++)
 {
@@ -40,6 +47,17 @@ for (var index = 0; index < args.Length; index++)
             break;
         case "--allow-uncommitted-source-for-development":
             allowUncommittedSourceForDevelopment = true;
+            break;
+        case "--allow-development-image-inputs":
+            allowDevelopmentImageInputs = true;
+            break;
+        case "--emit-environment-json":
+            emitEnvironmentJson = true;
+            break;
+        case "--development-image-input":
+            AddDevelopmentImageInput(
+                developmentImageInputs,
+                RequiredValue(args, ref index));
             break;
         case "--image-prefix":
             imagePrefix = RequiredValue(args, ref index);
@@ -64,7 +82,24 @@ if (string.IsNullOrWhiteSpace(lockPath) ||
         "--lock PATH --base-images PATH --source-revision REVISION --repository-root PATH " +
         "[--runtime-matrix PATH] " +
         "[--allow-uncommitted-source-for-development] " +
+        "[--allow-development-image-inputs] " +
+        "[--development-image-input NAME=REFERENCE] " +
+        "[--emit-environment-json] " +
         "[--image-prefix PREFIX] [-- COMMAND [ARG...]]");
+    return 64;
+}
+
+if (developmentImageInputs.Count > 0 && !allowDevelopmentImageInputs)
+{
+    Console.Error.WriteLine(
+        "--development-image-input requires --allow-development-image-inputs.");
+    return 64;
+}
+
+if (emitEnvironmentJson && command.Count > 0)
+{
+    Console.Error.WriteLine(
+        "--emit-environment-json cannot be combined with a child command.");
     return 64;
 }
 
@@ -84,6 +119,18 @@ try
         sourceDateEpoch,
         imagePrefix,
         controlRuntimeTargetFramework: controlRuntimeTargetFramework);
+    environment["DEVELOPMENT_IMAGE_INPUTS"] =
+        allowDevelopmentImageInputs ? "true" : "false";
+    foreach (var pair in developmentImageInputs)
+        environment[pair.Key] = pair.Value;
+    if (emitEnvironmentJson)
+    {
+        Console.WriteLine(
+            $"{environmentJsonPrefix}{JsonSerializer.Serialize(
+                environment,
+                BakeEnvironmentJsonSerializerContext.Default.DictionaryStringString)}");
+        return 0;
+    }
     if (command.Count == 0)
     {
         foreach (var pair in environment.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
@@ -101,8 +148,11 @@ try
     foreach (var pair in environment)
         startInfo.Environment[pair.Key] = pair.Value;
     startInfo.Environment.Remove(developmentGrantEnvironmentVariable);
+    startInfo.Environment.Remove(developmentImageInputsGrantEnvironmentVariable);
     if (allowUncommittedSourceForDevelopment)
         startInfo.Environment[developmentGrantEnvironmentVariable] = "true";
+    if (allowDevelopmentImageInputs)
+        startInfo.Environment[developmentImageInputsGrantEnvironmentVariable] = "true";
 
     using var process = Process.Start(startInfo);
     if (process is null)
@@ -170,4 +220,40 @@ static string RequiredValue(string[] values, ref int index)
     if (index >= values.Length || string.IsNullOrWhiteSpace(values[index]))
         throw new BakeEnvironmentValidationException("An option value is missing.");
     return values[index];
+}
+
+static void AddDevelopmentImageInput(
+    IDictionary<string, string> inputs,
+    string configured)
+{
+    var separator = configured.IndexOf('=');
+    if (separator <= 0 || separator == configured.Length - 1)
+        throw new BakeEnvironmentValidationException(
+            "--development-image-input must use NAME=REFERENCE.");
+
+    var name = configured[..separator];
+    var reference = configured[(separator + 1)..];
+    var allowed = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "CPPCLI_PREPARED_BASE_IMAGE",
+        "JSHARP_TOOLCHAIN_IMAGE"
+    };
+    if (!allowed.Contains(name))
+        throw new BakeEnvironmentValidationException(
+            $"Development image input '{name}' is not supported.");
+    if (reference.Length > 512 ||
+        reference.Any(static character => char.IsWhiteSpace(character) || char.IsControl(character)) ||
+        !reference.Contains(':', StringComparison.Ordinal))
+    {
+        throw new BakeEnvironmentValidationException(
+            $"Development image input '{name}' has an invalid Docker reference.");
+    }
+    if (!inputs.TryAdd(name, reference))
+        throw new BakeEnvironmentValidationException(
+            $"Development image input '{name}' was supplied more than once.");
+}
+
+[JsonSerializable(typeof(Dictionary<string, string>))]
+internal sealed partial class BakeEnvironmentJsonSerializerContext : JsonSerializerContext
+{
 }

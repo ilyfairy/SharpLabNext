@@ -692,7 +692,7 @@
       "id": "netfx48-ref",
       "displayName": ".NET Framework 4.8",
       "targetFramework": "net48",
-      "digest": "sha256:463e30099e98f760e5f67cbe5aedeae5679f3fa4d3d1e9f9fee5232a5c06e743",
+      "digest": "sha256:b37882cda5610b291b2a984e4c2270f67a448f79d6b1f78337736c95b35c5a7f",
       "runtimeFamily": "netfx-clr-wine",
       "requiredRuntimeFeatureTags": [
         "runtime.netfx48-wine"

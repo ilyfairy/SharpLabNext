@@ -29,13 +29,16 @@ const safeDigestPinnedImagePattern = /^[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64
 const wineOperatorReceiptInput = 'WINE_CORECLR_OPERATOR_RECEIPT'
 const wineOperatorReceiptSignatureInput = 'WINE_CORECLR_OPERATOR_RECEIPT_SIG'
 const developmentSourceOverride = '--allow-uncommitted-source-for-development'
+const developmentImageInputsOverride = '--allow-development-image-inputs'
 const historicalFrameworkDevelopmentOverride = '--allow-historical-framework-input-for-development'
 const outerDevelopmentGrantInput = 'SHARPLABNEXT_BAKE_ALLOW_UNCOMMITTED_SOURCE_FOR_DEVELOPMENT'
+const outerDevelopmentImageInputsGrant = 'SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS'
 const historicalFrameworkDevelopmentInput = 'RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_DEVELOPMENT_OPT_IN'
 const developmentOperatorWrapperInput = 'WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN'
 const developmentOperatorTagInput = 'WINE_CORECLR_DEVELOPMENT_OPERATOR_TAG'
 const developmentOperatorImageIdInput = 'WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE_ID'
 const developmentOperatorBakeInput = 'WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE'
+const sharedWineOperatorContentTag = 'content'
 const localImageTagPattern = /^[a-z0-9][a-z0-9._/-]*(?::[a-z0-9][a-z0-9._-]{0,127})$/
 const imageIdPattern = /^sha256:[0-9a-f]{64}$/
 
@@ -48,6 +51,7 @@ export const runtimeCandidateEnvironmentUsage = `Usage:
     [--framework-input PATH]
     [--publish-to <registry-host>/<repository>:<RELEASE_ID>]
     [-- [--allow-uncommitted-source-for-development]
+         [--allow-development-image-inputs]
          [--allow-historical-framework-input-for-development]
          [build-runtime-candidate options]]`
 
@@ -569,6 +573,12 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
       fail(`${developmentSourceOverride} may be supplied once after --.`)
     }
     const developmentMode = developmentOverrideCount === 1
+    const developmentImageInputsOverrideCount = (parsed.buildArguments ?? [])
+      .filter(argument => argument === developmentImageInputsOverride).length
+    if (developmentImageInputsOverrideCount > 1) {
+      fail(`${developmentImageInputsOverride} may be supplied once after --.`)
+    }
+    const developmentImageInputsMode = developmentImageInputsOverrideCount === 1
     const historicalFrameworkOverrideCount = (parsed.buildArguments ?? [])
       .filter(argument => argument === historicalFrameworkDevelopmentOverride).length
     if (historicalFrameworkOverrideCount > 1) {
@@ -582,7 +592,7 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
     const derived = deriveRuntimeCandidateEnvironment(parsed.profileId, matrix, {
       wineImage: parsed.wineImage,
       frameworkInput,
-      allowLocalDevelopmentWineOperator: developmentMode,
+      allowLocalDevelopmentWineOperator: developmentMode || developmentImageInputsMode,
     })
     if (parsed.publishDestination !== undefined && parsed.buildArguments !== undefined) {
       fail('--publish-to cannot be combined with candidate build options after --.')
@@ -592,17 +602,22 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
     const wineCoreClrCandidate = derived.target === 'runtime-wine-dotnet-matrix-candidate'
     const sharedFrameworkCandidate =
       derived.target === 'runtime-wine-framework-matrix-shared-candidate'
+    const localWineOperatorMode = wineCoreClrCandidate &&
+      (developmentMode || developmentImageInputsMode)
+    const frameworkDevelopmentMode = sharedFrameworkCandidate &&
+      (historicalFrameworkMode || developmentImageInputsMode)
     const hasWineOperatorReceipt = parsed.wineOperatorReceiptPath !== undefined
     const hasWineOperatorReceiptSignature = parsed.wineOperatorReceiptSignaturePath !== undefined
     if (hasWineOperatorReceipt !== hasWineOperatorReceiptSignature) {
       fail('--wine-operator-receipt and --wine-operator-receipt-signature must be supplied together.')
     }
-    if (developmentMode && !historicalFrameworkMode) {
+    if (localWineOperatorMode) {
       const expectedTag = `${values.IMAGE_PREFIX}/operator-wine-coreclr:${values.RELEASE_ID}`
-      if (parsed.wineImage !== expectedTag) {
+      const contentTag = `${values.IMAGE_PREFIX}/operator-wine-coreclr:${sharedWineOperatorContentTag}`
+      if (parsed.wineImage !== expectedTag && parsed.wineImage !== contentTag) {
         fail(
-          `${developmentSourceOverride} requires the exact local development operator tag ` +
-          `'${expectedTag}'.`,
+          `Local development inputs require the exact Wine operator tag ` +
+          `'${expectedTag}' or shared content tag '${contentTag}'.`,
         )
       }
     }
@@ -631,21 +646,33 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
     if (historicalFrameworkMode && hasWineOperatorReceipt) {
       fail('Historical Framework development candidates must not receive formal operator receipts.')
     }
-    if (developmentMode && !historicalFrameworkMode &&
+    if (developmentMode &&
         (!commandMode || parsed.publishDestination !== undefined)) {
       fail(`${developmentSourceOverride} is accepted only for local candidate builds.`)
     }
-    if (developmentMode && !historicalFrameworkMode && values[outerDevelopmentGrantInput] !== 'true') {
+    if (developmentMode && values[outerDevelopmentGrantInput] !== 'true') {
       fail(
         `${developmentSourceOverride} requires the outer run-with-bake-environment ` +
         'development grant.',
       )
     }
-    if (developmentMode && !historicalFrameworkMode && !wineCoreClrCandidate) {
-      fail(`${developmentSourceOverride} with a local operator is supported only for Wine CoreCLR candidates.`)
+    if (developmentImageInputsMode &&
+        (!isRealLocalBuild(parsed.buildArguments) || parsed.publishDestination !== undefined)) {
+      fail(`${developmentImageInputsOverride} is accepted only for real local candidate builds.`)
     }
-    if (developmentMode && !historicalFrameworkMode && hasWineOperatorReceipt) {
-      fail('Development Wine candidate builds must not receive formal operator receipts.')
+    if (developmentImageInputsMode && values[outerDevelopmentImageInputsGrant] !== 'true') {
+      fail(
+        `${developmentImageInputsOverride} requires the outer run-with-bake-environment ` +
+        'development image-input grant.',
+      )
+    }
+    if (developmentImageInputsMode && wineCandidate && hasWineOperatorReceipt) {
+      fail('Development image-input candidate builds must not receive formal operator receipts.')
+    }
+    if (frameworkDevelopmentMode &&
+        (!isGitCommitIdentity(values.SOURCE_REVISION) ||
+         !isGitCommitIdentity(frameworkInput?.sourceRevision))) {
+      fail('Framework development inputs require valid Framework and candidate source revisions.')
     }
     if (hasWineOperatorReceipt && !commandMode) {
       fail('Wine operator receipt options are only accepted for build or publish commands.')
@@ -653,8 +680,8 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
     if ((hasWineOperatorReceipt || hasWineOperatorReceiptSignature) && !wineCandidate) {
       fail(`Wine operator receipt options are not applicable to '${parsed.profileId}'.`)
     }
-    if (commandMode && wineCandidate && !developmentMode &&
-        !historicalFrameworkMode && !hasWineOperatorReceipt) {
+    if (commandMode && wineCandidate && !localWineOperatorMode &&
+        !frameworkDevelopmentMode && !hasWineOperatorReceipt) {
       fail('Wine candidate build and publish commands require --wine-operator-receipt and --wine-operator-receipt-signature.')
     }
     if (hasWineOperatorReceipt &&
@@ -675,6 +702,7 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
       : [derived.target, '--destination', parsed.publishDestination]
     const childEnvironment = { ...values, ...derived.environment }
     delete childEnvironment[outerDevelopmentGrantInput]
+    delete childEnvironment[outerDevelopmentImageInputsGrant]
     delete childEnvironment[wineOperatorReceiptInput]
     delete childEnvironment[wineOperatorReceiptSignatureInput]
     delete childEnvironment.WINE_CORECLR_OPERATOR_RECEIPT_SHA256
@@ -692,7 +720,7 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
     if (historicalFrameworkMode) {
       childEnvironment[historicalFrameworkDevelopmentInput] = 'true'
     }
-    if (developmentMode && !historicalFrameworkMode) {
+    if (localWineOperatorMode) {
       const localTag = derived.environment.RUNTIME_MATRIX_WINE_IMAGE
       const inspect = options.inspectDockerImage ?? ((reference) => {
         const result = spawn('docker', ['image', 'inspect', reference], {

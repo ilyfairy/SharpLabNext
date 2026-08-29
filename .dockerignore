@@ -7,6 +7,10 @@
 **/node_modules
 artifacts
 deploy/secrets
+# This licensed LFS payload enters only the private Framework named context.
+eng/prerequisites/dotnet-framework-2.0/NetFx64.exe
+# This licensed LFS payload enters only the private J# named context.
+eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe
 test-results
 *.binlog
 *.user

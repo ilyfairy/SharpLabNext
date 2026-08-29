@@ -124,6 +124,33 @@ public sealed class BundleBuilderTests
             Assert.Equal(54, result.Images.Count);
             Assert.True(File.Exists(Path.Combine(output, "images.tar")));
             Assert.True(File.Exists(Path.Combine(output, "checksums.sha256")));
+            var composeEnvironmentPath = Path.Combine(
+                output,
+                ReleaseBundleBuilder.ComposeEnvironmentFileName);
+            Assert.True(File.Exists(composeEnvironmentPath));
+            var composeEnvironment = await File.ReadAllTextAsync(
+                composeEnvironmentPath,
+                TestContext.Current.CancellationToken);
+            Assert.Contains(
+                "COMPOSE_FILE=compose.prod.yaml:compose.generated.yaml\n",
+                composeEnvironment,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                $"SHARPLABNEXT_RELEASE_ID={activeReleaseId}\n",
+                composeEnvironment,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "SHARPLABNEXT_INTERNAL_SERVICE_TOKEN_FILE=./secrets/internal-service-token\n",
+                composeEnvironment,
+                StringComparison.Ordinal);
+            Assert.False(File.Exists(Path.Combine(output, "deploy.env")));
+            Assert.False(File.Exists(Path.Combine(output, "deploy.env.example")));
+            Assert.Contains(
+                "  .env\n",
+                await File.ReadAllTextAsync(
+                    Path.Combine(output, "checksums.sha256"),
+                    TestContext.Current.CancellationToken),
+                StringComparison.Ordinal);
             Assert.True(File.Exists(Path.Combine(output, "sbom", "release.spdx.json")));
             Assert.True(File.Exists(Path.Combine(output, "sbom", "release.cdx.json")));
             Assert.True(File.Exists(Path.Combine(output, "sbom", "dependencies.json")));
@@ -219,6 +246,11 @@ public sealed class BundleBuilderTests
                         .StartsWith("pkg:deb/ubuntu/", StringComparison.Ordinal)));
                 Assert.Contains(resolvedMaterials, static dependency => dependency.GetProperty("uri").GetString() ==
                     $"https://github.com/sharplabnext/SharpLabNext/blob/{TestSourceRevision}/profiles/runtime-wine-packages.json");
+                Assert.Contains(resolvedMaterials, static dependency =>
+                    dependency.GetProperty("uri").GetString() ==
+                        "pkg:docker/mcr.microsoft.com%2Fdotnet%2Fruntime-deps%3A5.0.17-bullseye-slim-amd64" &&
+                    dependency.GetProperty("digest").GetProperty("sha256").GetString() ==
+                        "4ad701bcf8b58aa254fb81915597e7d3a89764fc029e9bff3046ca7abfbd3e0a");
             }
             Assert.True(File.Exists(Path.Combine(output, "provenance", "release.slsa.json")));
             Assert.True(File.Exists(Path.Combine(
@@ -360,11 +392,15 @@ public sealed class BundleBuilderTests
                 Path.Combine(output, "THIRD-PARTY-NOTICES.md"),
                 TestContext.Current.CancellationToken);
             Assert.Contains(
-                "Microsoft Visual J# 2.0 Second Edition and .NET Framework CLR 2.0 binaries",
+                "Microsoft .NET Framework 2.0 x64 Redistributable `NetFx64.exe`",
+                bundledNotices,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Microsoft Visual J# 2.0 Second Edition `vjredist64.exe`",
                 bundledNotices,
                 StringComparison.Ordinal);
             Assert.Contains("x64-only J#", bundledNotices, StringComparison.Ordinal);
-            Assert.Contains("not BSD-licensed project content", bundledNotices, StringComparison.Ordinal);
+            Assert.Contains("not covered by the BSD 2-Clause License", bundledNotices, StringComparison.Ordinal);
             var appArmorPath = Path.Combine(output, "security", "sharplabnext-runtime-job-v1.apparmor");
             Assert.True(File.Exists(appArmorPath));
             var appArmor = await File.ReadAllTextAsync(
@@ -1661,6 +1697,24 @@ public sealed class BundleBuilderTests
     }
 
     [Fact]
+    public void CommandDefaultsOutputToRepositoryArtifactsAndAllowsAnOverride()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var defaultCommand = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot]);
+
+        Assert.Equal(
+            Path.Combine(repositoryRoot, "artifacts", "sharplabnext-candidate"),
+            defaultCommand.OutputDirectory);
+
+        var customOutput = Path.Combine(Path.GetTempPath(), $"sharplabnext-custom-{Guid.NewGuid():N}");
+        var customCommand = BundleBuilderCommand.Parse([
+            "--repository-root", repositoryRoot,
+            "--output", customOutput
+        ]);
+        Assert.Equal(Path.GetFullPath(customOutput), customCommand.OutputDirectory);
+    }
+
+    [Fact]
     public async Task BuilderRejectsSigningWhenDevelopmentSourceOverrideIsUsed()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -1680,6 +1734,226 @@ public sealed class BundleBuilderTests
             builder.BuildAsync(command, TestContext.Current.CancellationToken));
 
         Assert.Contains("cannot be used to create a signed", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BuilderRejectsSigningWhenDevelopmentImageInputsAreAllowed()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var command = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot]) with
+        {
+            SigningKeyPath = Path.Combine(repositoryRoot, "local-private.pem"),
+            SigningPublicKeyPath = Path.Combine(repositoryRoot, "local-public.pem"),
+            AllowDevelopmentImageInputs = true
+        };
+        var builder = CreateBuilder(new FakeDockerCli(), new FakeBundleSigner());
+
+        var exception = await Assert.ThrowsAsync<BundleValidationException>(() =>
+            builder.BuildAsync(command, TestContext.Current.CancellationToken));
+
+        Assert.Contains("cannot be used to create a signed", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BuilderRejectsRuntimeCandidateBaseImageThatDoesNotMatchMatrix()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var output = Path.Combine(
+            Path.GetTempPath(),
+            $"sharplabnext-runtime-base-rejected-{Guid.NewGuid():N}");
+        var command = BundleBuilderCommand.Parse([
+            "--repository-root", repositoryRoot,
+            "--output", output,
+            "--metadata-only"
+        ]);
+        const string wrongBaseImage =
+            "mcr.microsoft.com/dotnet/runtime-deps:10.0.9-noble-amd64@" +
+            "sha256:2785f3f766217c9af963efa7cc299b01cd5c6c55ca97d41d5e914303e43b7878";
+
+        var exception = await Assert.ThrowsAsync<BundleValidationException>(() =>
+            CreateBuilder(new FakeDockerCli(dotnet5BaseImageOverride: wrongBaseImage)).BuildAsync(
+                command,
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains("dotnet-5-linux-x64", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("runtime matrix", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(output));
+    }
+
+    [Fact]
+    public async Task BuilderRequiresExplicitOptInForDevelopmentImageInputs()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var output = Path.Combine(
+            Path.GetTempPath(),
+            $"sharplabnext-development-image-rejected-{Guid.NewGuid():N}");
+        var command = BundleBuilderCommand.Parse([
+            "--repository-root", repositoryRoot,
+            "--output", output,
+            "--metadata-only"
+        ]);
+
+        var exception = await Assert.ThrowsAsync<BundleValidationException>(() =>
+            CreateBuilder(new FakeDockerCli(developmentImageInputsLabel: "true")).BuildAsync(
+                command,
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains("--allow-development-image-inputs", exception.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(output));
+    }
+
+    [Fact]
+    public async Task UnsignedBundleRecordsAcceptedDevelopmentImageInputs()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var output = Path.Combine(
+            Path.GetTempPath(),
+            $"sharplabnext-development-image-accepted-{Guid.NewGuid():N}");
+        try
+        {
+            var command = BundleBuilderCommand.Parse([
+                "--repository-root", repositoryRoot,
+                "--output", output,
+                "--metadata-only",
+                "--allow-development-image-inputs"
+            ]);
+
+            await CreateBuilder(new FakeDockerCli(developmentImageInputsLabel: "true")).BuildAsync(
+                command,
+                TestContext.Current.CancellationToken);
+
+            using var bundle = JsonDocument.Parse(await File.ReadAllTextAsync(
+                Path.Combine(output, "bundle.json"),
+                TestContext.Current.CancellationToken));
+            Assert.True(bundle.RootElement
+                .GetProperty("source")
+                .GetProperty("developmentImageInputsUsed")
+                .GetBoolean());
+            using var provenance = JsonDocument.Parse(await File.ReadAllTextAsync(
+                Path.Combine(output, "provenance", "release.slsa.json"),
+                TestContext.Current.CancellationToken));
+            Assert.True(provenance.RootElement
+                .GetProperty("predicate")
+                .GetProperty("buildDefinition")
+                .GetProperty("externalParameters")
+                .GetProperty("developmentImageInputs")
+                .GetBoolean());
+        }
+        finally
+        {
+            if (Directory.Exists(output)) Directory.Delete(output, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task UnsignedBundleRecordsVerifiedFrameworkDevelopmentOperatorIdentity()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var output = Path.Combine(
+            Path.GetTempPath(),
+            $"sharplabnext-framework-development-identity-{Guid.NewGuid():N}");
+        const string operatorImage =
+            "localhost:5000/sharplabnext-development/operator-netfx20@" +
+            "sha256:2121212121212121212121212121212121212121212121212121212121212121";
+        try
+        {
+            var command = BundleBuilderCommand.Parse([
+                "--repository-root", repositoryRoot,
+                "--output", output,
+                "--metadata-only",
+                "--allow-development-image-inputs"
+            ]);
+
+            await CreateBuilder(new FakeDockerCli(
+                developmentImageInputsLabel: "true",
+                frameworkDevelopmentOperatorImage: operatorImage)).BuildAsync(
+                    command,
+                    TestContext.Current.CancellationToken);
+
+            using var bundleLock = JsonDocument.Parse(await File.ReadAllTextAsync(
+                Path.Combine(output, "lock.json"),
+                TestContext.Current.CancellationToken));
+            var component = bundleLock.RootElement
+                .GetProperty("components")
+                .GetProperty("wine-netfx20-linux-x64");
+            Assert.Equal($"docker://{operatorImage}", component.GetProperty("sourceUri").GetString());
+
+            using var provenance = JsonDocument.Parse(await File.ReadAllTextAsync(
+                Path.Combine(output, "provenance", "release.slsa.json"),
+                TestContext.Current.CancellationToken));
+            var resolvedDependencies = provenance.RootElement
+                .GetProperty("predicate")
+                .GetProperty("buildDefinition")
+                .GetProperty("resolvedDependencies")
+                .EnumerateArray();
+            Assert.Contains(resolvedDependencies, dependency =>
+                dependency.GetProperty("uri").GetString() ==
+                    "pkg:docker/localhost%3A5000%2Fsharplabnext-development%2Foperator-netfx20" &&
+                dependency.GetProperty("digest").GetProperty("sha256").GetString() ==
+                    "2121212121212121212121212121212121212121212121212121212121212121");
+        }
+        finally
+        {
+            if (Directory.Exists(output)) Directory.Delete(output, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task UnsignedBundleRejectsFrameworkDevelopmentDigestNotBoundToOperator()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var output = Path.Combine(
+            Path.GetTempPath(),
+            $"sharplabnext-framework-development-tamper-{Guid.NewGuid():N}");
+        const string operatorImage =
+            "localhost:5000/sharplabnext-development/operator-netfx20@" +
+            "sha256:2121212121212121212121212121212121212121212121212121212121212121";
+        var command = BundleBuilderCommand.Parse([
+            "--repository-root", repositoryRoot,
+            "--output", output,
+            "--metadata-only",
+            "--allow-development-image-inputs"
+        ]);
+
+        var exception = await Assert.ThrowsAsync<BundleValidationException>(() =>
+            CreateBuilder(new FakeDockerCli(
+                developmentImageInputsLabel: "true",
+                frameworkDevelopmentOperatorImage: operatorImage,
+                tamperFrameworkDevelopmentComponentDigest: true)).BuildAsync(
+                    command,
+                    TestContext.Current.CancellationToken));
+
+        Assert.Contains("wine-netfx20-linux-x64.digest", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("verified Framework row", exception.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(output));
+    }
+
+    [Fact]
+    public async Task DevelopmentOptInDoesNotOverrideFrameworkIdentityWithoutImageMarker()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var output = Path.Combine(
+            Path.GetTempPath(),
+            $"sharplabnext-framework-development-unmarked-{Guid.NewGuid():N}");
+        const string operatorImage =
+            "localhost:5000/sharplabnext-development/operator-netfx20@" +
+            "sha256:2121212121212121212121212121212121212121212121212121212121212121";
+        var command = BundleBuilderCommand.Parse([
+            "--repository-root", repositoryRoot,
+            "--output", output,
+            "--metadata-only",
+            "--allow-development-image-inputs"
+        ]);
+
+        var exception = await Assert.ThrowsAsync<BundleValidationException>(() =>
+            CreateBuilder(new FakeDockerCli(
+                frameworkDevelopmentOperatorImage: operatorImage)).BuildAsync(
+                    command,
+                    TestContext.Current.CancellationToken));
+
+        Assert.Contains("wine-netfx20-linux-x64.digest", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("lock requires", exception.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(output));
     }
 
     [Fact]
@@ -3090,7 +3364,10 @@ public sealed class BundleBuilderTests
                 ["-NoProfile", "-File", Path.Combine(bundleB, "install.ps1"), "-AllowUnsigned", "-SkipArtifactBackup", "-ReadyTimeoutSeconds", "1", "-SmokeBaseAddress", smokeAddress],
                 environment);
             Assert.NotEqual(0, failedUpgrade.ExitCode);
-            Assert.Contains("was restored", failedUpgrade.StandardError, StringComparison.OrdinalIgnoreCase);
+            Assert.True(
+                failedUpgrade.StandardError.Contains("was restored", StringComparison.OrdinalIgnoreCase),
+                $"Failed upgrade did not restore its predecessor. stdout: {failedUpgrade.StandardOutput}" +
+                $"{Environment.NewLine}stderr: {failedUpgrade.StandardError}");
             Assert.Equal("development", ReadPointer(installRoot, "current-release"));
 
             File.Delete(failPath);
@@ -3379,6 +3656,98 @@ public sealed class BundleBuilderTests
         var selected = ReleaseBundleBuilder.SelectImages(catalog, deployment);
 
         Assert.Equal(["shared"], selected.Select(static item => item.Id));
+    }
+
+    [Fact]
+    public async Task ReleaseImagePlanCoversEverySelectedImageWithOneProducer()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var command = BundleBuilderCommand.Parse(
+        [
+            "--repository-root", repositoryRoot,
+            "--image-prefix", "example/sharplabnext"
+        ]);
+
+        var plan = await ReleaseBundleBuilder.CreateImagePlanAsync(
+            command,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, plan.SchemaVersion);
+        Assert.Equal("development", plan.ReleaseId);
+        Assert.Equal(54, plan.Images.Count);
+        Assert.Equal(plan.Images.Count, plan.Images.Select(static image => image.Id).Distinct().Count());
+        Assert.Equal(plan.Images.Count, plan.Images.Select(static image => image.Reference).Distinct().Count());
+        Assert.Equal(20, plan.Images.Count(static image => image.Producer.Kind == "bake"));
+        Assert.Equal(33, plan.Images.Count(static image => image.Producer.Kind == "runtime-candidate"));
+        Assert.Single(plan.Images, static image => image.Producer.Kind == "pull");
+        Assert.All(
+            plan.Images.Where(static image => image.Producer.Kind != "pull"),
+            static image => Assert.StartsWith(
+                "example/sharplabnext/",
+                image.Reference,
+                StringComparison.Ordinal));
+        Assert.Contains(
+            plan.Images,
+            static image => image.Id == "dotnet-10-linux-x64" &&
+                image.Producer == new ReleaseImageProducer
+                {
+                    Kind = "pull",
+                    Id = image.Reference
+                });
+        Assert.Contains(
+            plan.Images,
+            static image => image.Id == "const-generics-linux-x64" &&
+                image.Producer == new ReleaseImageProducer
+                {
+                    Kind = "bake",
+                    Id = "runtime-const-generics"
+                });
+        Assert.Contains(
+            plan.Images,
+            static image => image.Id == "wine-jsharp20-linux-x64" &&
+                image.Producer == new ReleaseImageProducer
+                {
+                    Kind = "bake",
+                    Id = "runtime-wine-jsharp20"
+                });
+    }
+
+    [Fact]
+    public async Task ReleaseImagePlanPreflightsCatalogAndReleaseLockAgreement()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var testRoot = Path.Combine(
+            Path.GetTempPath(),
+            $"sharplabnext-image-plan-preflight-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(testRoot);
+        try
+        {
+            var lockPath = Path.Combine(testRoot, "lock.json");
+            var releaseLock = JsonNode.Parse(await File.ReadAllTextAsync(
+                Path.Combine(repositoryRoot, "profiles", "lock.json"),
+                TestContext.Current.CancellationToken))
+                ?? throw new InvalidOperationException("Release lock fixture is empty.");
+            releaseLock["releaseId"] = "mismatched-image-plan-release";
+            await File.WriteAllTextAsync(
+                lockPath,
+                releaseLock.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
+                TestContext.Current.CancellationToken);
+            var command = BundleBuilderCommand.Parse([
+                "--repository-root", repositoryRoot,
+                "--lock", lockPath
+            ]);
+
+            var exception = await Assert.ThrowsAsync<BundleValidationException>(() =>
+                ReleaseBundleBuilder.CreateImagePlanAsync(
+                    command,
+                    TestContext.Current.CancellationToken));
+
+            Assert.Contains("Catalog and release lock IDs do not match", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(testRoot, recursive: true);
+        }
     }
 
     [Fact]
@@ -5059,7 +5428,7 @@ public sealed class BundleBuilderTests
         public static PromotionFixtureData Load()
         {
             var sourceRoot = FindSourceRepositoryRoot();
-            var root = Path.Combine(Path.GetTempPath(), $"sharplabnext-bundle-promotion-{Guid.NewGuid():N}");
+            var root = CreateFixtureRoot();
             CopyRepositorySource(sourceRoot, root);
             CopyRequiredNpmSourceMaterial(sourceRoot, root);
             InstallCompletedPromotion(root);
@@ -5165,6 +5534,32 @@ public sealed class BundleBuilderTests
                 closurePaths.OrderBy(static path => path, StringComparer.Ordinal).ToArray());
         }
 
+        private static string CreateFixtureRoot()
+        {
+            var root = Path.Combine(
+                Path.GetTempPath(),
+                $"sharplabnext-bundle-promotion-{Guid.NewGuid():N}");
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => DeleteFixtureRoot(root);
+            return root;
+        }
+
+        private static void DeleteFixtureRoot(string root)
+        {
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch (DirectoryNotFoundException)
+            {
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
         private static void InstallCompletedPromotion(string root)
         {
             var profilePath = Path.Combine(root, "profiles", "runtimes", "dotnet-10-linux-x64.json");
@@ -5254,7 +5649,7 @@ public sealed class BundleBuilderTests
                 foreach (var directory in Directory.EnumerateDirectories(currentSource))
                 {
                     var name = Path.GetFileName(directory);
-                    if (name is ".git" or ".tmp" or "bin" or "obj" or "node_modules" or ".vs")
+                    if (name is ".git" or ".tmp" or "artifacts" or "bin" or "obj" or "node_modules" or ".vs")
                         continue;
                     var child = Path.Combine(currentDestination, name);
                     Directory.CreateDirectory(child);
@@ -5378,7 +5773,11 @@ public sealed class BundleBuilderTests
         string? componentIdOverride = null,
         string? componentVersionOverride = null,
         bool omitComponentLabels = false,
-        string? releaseLabelOverride = null) : IDockerCli
+        string? releaseLabelOverride = null,
+        string? developmentImageInputsLabel = null,
+        string? dotnet5BaseImageOverride = null,
+        string? frameworkDevelopmentOperatorImage = null,
+        bool tamperFrameworkDevelopmentComponentDigest = false) : IDockerCli
     {
         private static readonly JsonSerializerOptions FixtureJsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -5458,6 +5857,11 @@ public sealed class BundleBuilderTests
                 [ReleaseBundleBuilder.RuntimeCommitLabel] = runtimeCommit,
                 [ReleaseBundleBuilder.JitCommitLabel] = jitCommit
             };
+            if (developmentImageInputsLabel is not null)
+            {
+                labels[ReleaseBundleBuilder.DevelopmentImageInputsLabel] =
+                    developmentImageInputsLabel;
+            }
             if (promotion is not null)
             {
                 labels["io.sharplabnext.source.context"] = "committed";
@@ -5483,10 +5887,16 @@ public sealed class BundleBuilderTests
                     labels[ReleaseBundleBuilder.ReferenceSetLabelPrefix + referenceSetId] = digest;
                 }
             }
-            AddBaseImageLabels(labels);
+            AddBaseImageLabels(labels, definition, dotnet5BaseImageOverride);
             if (!omitComponentLabels)
             {
-                AddComponentLabels(reference, labels, componentIdOverride, componentVersionOverride);
+                AddComponentLabels(
+                    reference,
+                    labels,
+                    componentIdOverride,
+                    componentVersionOverride,
+                    frameworkDevelopmentOperatorImage,
+                    tamperFrameworkDevelopmentComponentDigest);
                 if (reference.Contains("runtime-wine-", StringComparison.Ordinal))
                 {
                     var prefix = ReleaseBundleBuilder.ComponentLabelPrefix + "wine-coreclr-userspace.";
@@ -5630,7 +6040,9 @@ public sealed class BundleBuilderTests
             string reference,
             Dictionary<string, string> labels,
             string? componentIdOverride,
-            string? componentVersionOverride)
+            string? componentVersionOverride,
+            string? frameworkDevelopmentOperatorImage,
+            bool tamperFrameworkDevelopmentComponentDigest)
         {
             var root = FindRepositoryRoot();
             var releaseLock = LoadReleaseLock();
@@ -5652,9 +6064,42 @@ public sealed class BundleBuilderTests
                 AddOptional(labels, prefix + "source-uri", component.SourceUri);
                 AddOptional(labels, prefix + "patch-digest", component.PatchDigest);
             }
+
+            if (frameworkDevelopmentOperatorImage is null ||
+                !StringComparer.Ordinal.Equals(definition.RuntimeId, "wine-netfx20-linux-x64"))
+            {
+                return;
+            }
+
+            var operatorDigest = frameworkDevelopmentOperatorImage[
+                (frameworkDevelopmentOperatorImage.LastIndexOf('@') + 1)..];
+            var componentPrefix =
+                $"{ReleaseBundleBuilder.ComponentLabelPrefix}wine-netfx20-linux-x64.";
+            labels[componentPrefix + "digest"] = tamperFrameworkDevelopmentComponentDigest
+                ? "sha256:6161616161616161616161616161616161616161616161616161616161616161"
+                : operatorDigest;
+            labels[componentPrefix + "source-uri"] = $"docker://{frameworkDevelopmentOperatorImage}";
+            var matrixPrefix = $"{ReleaseBundleBuilder.ComponentLabelPrefix}runtime-matrix.";
+            labels[matrixPrefix + "profile-id"] = "wine-netfx20-linux-x64";
+            labels[matrixPrefix + "version"] = "2.0";
+            labels[matrixPrefix + "digest"] = operatorDigest;
+            labels[matrixPrefix + "source-uri"] = $"docker://{frameworkDevelopmentOperatorImage}";
+            labels["io.sharplabnext.framework.matrix-selector"] = "true";
+            labels["io.sharplabnext.framework.matrix-parent"] =
+                "localhost:5000/sharplabnext-development/operator-framework-parent@" +
+                "sha256:3131313131313131313131313131313131313131313131313131313131313131";
+            labels["io.sharplabnext.framework.matrix-source-uri"] =
+                "docker://localhost:5000/sharplabnext-development/operator-framework-metadata@" +
+                "sha256:4141414141414141414141414141414141414141414141414141414141414141";
+            labels["io.sharplabnext.framework.row-operator-image"] = frameworkDevelopmentOperatorImage;
+            labels["io.sharplabnext.framework.row-digest"] =
+                "sha256:5151515151515151515151515151515151515151515151515151515151515151";
         }
 
-        private static void AddBaseImageLabels(Dictionary<string, string> labels)
+        private static void AddBaseImageLabels(
+            Dictionary<string, string> labels,
+            DeploymentImageDefinition definition,
+            string? dotnet5BaseImageOverride)
         {
             var root = FindRepositoryRoot();
             var manifest = JsonSerializer.Deserialize<BaseImageManifest>(
@@ -5662,6 +6107,25 @@ public sealed class BundleBuilderTests
                 FixtureJsonOptions) ?? throw new InvalidOperationException("Base image fixture is invalid.");
             foreach (var image in manifest.Images)
                 labels[ReleaseBundleBuilder.BaseImageLabelPrefix + image.Id] = image.Reference;
+
+            if (definition.RuntimeId is null)
+                return;
+
+            using var matrix = JsonDocument.Parse(File.ReadAllText(
+                Path.Combine(root, "profiles", "runtime-matrix.json")));
+            var row = matrix.RootElement.GetProperty("coreClr").EnumerateArray().SingleOrDefault(candidate =>
+                StringComparer.Ordinal.Equals(
+                    candidate.GetProperty("id").GetString() + "-linux-x64",
+                    definition.RuntimeId));
+            if (row.ValueKind == JsonValueKind.Undefined)
+                return;
+
+            var reference = StringComparer.Ordinal.Equals(definition.RuntimeId, "dotnet-5-linux-x64") &&
+                dotnet5BaseImageOverride is not null
+                    ? dotnet5BaseImageOverride
+                    : row.GetProperty("linuxBaseImage").GetString()
+                        ?? throw new InvalidOperationException("Runtime matrix base image fixture is invalid.");
+            labels[ReleaseBundleBuilder.BaseImageLabelPrefix + "dotnet-runtime-deps"] = reference;
         }
 
         private static string LockedComponentDigest(string componentId)

@@ -75,16 +75,15 @@ compiles against the independently checksummed
 `Microsoft.NETFramework.ReferenceAssemblies.net48` package, publishes an
 IL-only framework PE, and routes Run to the separate Wine runtime container.
 
-The J# route is x64-only and uses a separately prepared, digest-pinned operator
-image containing licensed Visual J# 2.0 Second Edition and CLR 2.0 assets. The
-worker always invokes Framework64 `vjc.exe` with `/platform:x64`; emitted user
-assemblies must be AMD64 PE32+, IL-only, and free of 32-bit-required/preferred
-flags. Compilation and Run use separate minimized images with a dedicated
-win64 prefix. Microsoft binaries, installer paths, and credentials are not
-checked into the BSD source tree or published as public images. Operators must
-acquire the installers, accept their licenses, build the private prerequisite
-with `eng/prepare-jsharp-toolchain.cs`, and keep the resulting release within
-their licensed deployment boundary.
+The J# route is x64-only and uses a private base source-built from the reusable
+CLR 2/3.5 seed plus the exact Visual J# 2.0 Second Edition `vjredist64.exe`
+stored through Git LFS. The worker always invokes Framework64 `vjc.exe` with
+`/platform:x64`; emitted user assemblies must be AMD64 PE32+, IL-only, and free
+of 32-bit-required/preferred flags. Compilation and Run use separate minimized
+images with a dedicated win64 prefix. The Microsoft binary is separately
+licensed, is not covered by the repository's BSD license, and is excluded from
+public images and bundles. Operators must accept the applicable licenses and
+keep the resulting release within their licensed deployment boundary.
 
 ## Workbench And Transport
 
@@ -151,43 +150,150 @@ submodule and ignores sibling or floating checkouts.
 
 ## Quick Start
 
-The complete stack includes source-built Roslyn Main, ConstGenerics, G#,
-PeachPie, and operator-built x64 J# images. Prepare the private J# prerequisite
-first, then build an unsigned development bundle into a new directory and
-install it locally:
+Build and packaging entry points have separate responsibilities:
+
+| Entry point | Responsibility |
+| --- | --- |
+| `eng/build.ps1` / `eng/build.sh` | Restore and build the host backend/frontend and run static contract checks. It does not build Docker images. |
+| `eng/build-images.ps1` / `eng/build-images.sh` | Generate and validate the Catalog image plan, then build every planned image. BuildKit reuses unchanged layers and download caches. |
+| `eng/bundle.ps1` / `eng/bundle.sh` | Validate and package an already-complete image set. It performs no restore or image build and fails on missing or mismatched images. |
+| `eng/release.ps1` / `eng/release.sh` | Complete entry point: preflight output and static contracts, build and validate every planned image, then create the offline bundle only after all images pass. |
+
+The complete stack also requires licensed Microsoft prerequisites. Two exact
+binaries whose original download path is not a reliable clean-build input are
+versioned through Git LFS:
+
+- `.NET Framework 2.0 x64`:
+  `eng/prerequisites/dotnet-framework-2.0/NetFx64.exe`
+- `Visual J# 2.0 Second Edition x64`:
+  `eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe`
+
+A normal LFS-aware clone hydrates them automatically; repair a pointer-only
+checkout with:
 
 ```powershell
-$repositoryRoot = (Resolve-Path .).Path
-$bundleRoot = Join-Path $repositoryRoot "artifacts/bundles/local-$(Get-Date -Format yyyyMMdd-HHmmss)"
+git lfs install
+git lfs pull --include="eng/prerequisites/dotnet-framework-2.0/NetFx64.exe,eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe"
+```
 
-./eng/bundle.ps1 `
-  -OutputDirectory $bundleRoot `
+The manifest and preparation tools require each exact size and SHA-256 before
+Docker starts. Each file enters only its private BuildKit context; neither is
+executed on the host or copied as an installer into a final image or offline
+bundle. `NetFx64.exe` seeds Winetricks' `dotnet20` cache, while
+`vjredist64.exe` is installed only inside the J# Docker stage. Other .NET
+Framework payloads continue through the locked Winetricks/Microsoft download
+paths.
+
+The locked .NET Framework 3.5 SP1, 4.5.1, and 4.7 installers are downloaded
+from Microsoft HTTPS origins into the Git-ignored
+`artifacts/prerequisites/downloads` cache and checked by size and SHA-256. They
+are never started on the Windows host and do not modify its registry or system
+directories. They enter BuildKit as private inputs and run silently only
+inside isolated Linux/Wine build stages; the temporary installers are removed
+after the dedicated Wine prefixes are built. The 3.5 SP1 file pre-populates
+Winetricks' exact cache path so container builds do not depend on its legacy
+downloader or TLS stack.
+
+The complete image build creates the classic WoW64 build layer once, then
+builds exactly two private companion seeds: CLR 2 with .NET Framework 3.5 and
+CLR 4 with .NET Framework 4.8. Each exact Framework operator starts from the
+opposite-generation seed and installs only its selected target. It still
+verifies both prefixes, disables the matching NGen services, removes installer
+residue, and records the seed image digest before the existing immutable-file
+deduplication runs. Framework operators remain limited to two concurrent
+builds.
+
+The build does not export these seeds through an additional `docker image save`
+archive. Every invocation submits the same locked build graph to BuildKit;
+Docker reuses unchanged layers and naturally invalidates them when the build
+input identity changes. Reinstalling Docker or clearing every image rebuilds
+the seeds from Git LFS and the verified download inputs without requiring a
+pre-generated image TAR.
+
+J# is rebuilt from its repository LFS object and the CLR2 seed. C++/CLI is
+rebuilt from the locked `msvc-wine` revision, Visual Studio 18.8 manifest and
+.NET Framework 4.8 Developer Pack. The source archives and Microsoft inputs are
+downloaded as size/SHA-256-verified bytes under the ignored prerequisite cache;
+all extraction, setup and `/clr` preflight work occurs inside Docker.
+
+The J# and C++/CLI bases are likewise submitted to BuildKit on every image
+build; no separate `private-images.tar` is written. Docker's layer cache speeds
+up ordinary incremental builds, while a cleared Docker store rebuilds them from
+the locked inputs above. `artifacts/prerequisites/downloads` caches only
+verified source/download bytes, not Docker images.
+
+Build every image and package the result from the repository root:
+
+```powershell
+.\eng\release.ps1 -AcceptMicrosoftLicenses
+```
+
+This complete local entry point source-builds the private bases,
+then injects their inspected digest-pinned references into the remaining image
+graph. Even from a clean Git checkout, its images and bundle are explicitly
+marked as using development image inputs and form a deployable unsigned
+development artifact. Formal signing and promotion still require immutable
+images produced through the independent operator-receipt and promotion flows,
+followed by packaging with `bundle.ps1`; the development grant does not relax
+that boundary.
+
+For intentional uncommitted changes, use the development override. Such a
+bundle records its development inputs and cannot be signed or promoted:
+
+```powershell
+.\eng\release.ps1 `
+  -AcceptMicrosoftLicenses `
   -AllowUncommittedSourceForDevelopment
+```
 
+The default output is `artifacts/sharplabnext-<release-id>`. Bundle outputs are
+immutable and never overwritten, so use a new explicit path for another run:
+
+```powershell
+.\eng\release.ps1 `
+  -AcceptMicrosoftLicenses `
+  -OutputDirectory D:\Bundles\SharpLabNext-20260824
+```
+
+Use `build-images.ps1` to rebuild only images or `bundle.ps1` to package an
+existing image set. A normal `release.ps1`/`release.sh` run first reuses every
+matching local image and lets BuildKit rebuild only changed inputs; a bundle
+failure therefore does not normally trigger a full rebuild. `-BundleOnly` (or
+`--bundle-only`) is an optional direct packaging shortcut. `-Offline` only
+prevents prerequisite-cache downloads; a cold BuildKit cache can still require
+the locked Docker, NuGet, npm, or source origins.
+
+The generated `.env` selects `compose.prod.yaml` and `compose.generated.yaml`
+in the correct order and fixes the Compose project name. It contains only
+non-secret defaults; the deployment entry points supply the real host token
+path and Docker socket group on every invocation. Do not edit files inside an
+immutable or signed bundle.
+
+To test the unsigned development bundle on Windows, provide the ignored local
+development token and run its installer:
+
+```powershell
+$bundleRoot = (Resolve-Path .\artifacts\sharplabnext-development).Path
 $env:SHARPLABNEXT_INTERNAL_SERVICE_TOKEN_FILE = `
-  (Resolve-Path ./deploy/secrets/internal-service-token.dev).Path
-$env:SHARPLABNEXT_BIND_ADDRESS = "127.0.0.1"
-$env:SHARPLABNEXT_HTTP_PORT = "8080"
-
+  (Resolve-Path .\deploy\secrets\internal-service-token.dev).Path
 & (Join-Path $bundleRoot "install.ps1") `
   -AllowUnsigned `
-  -InstallRoot (Join-Path $repositoryRoot "artifacts/local-install") `
+  -InstallRoot (Join-Path (Resolve-Path .\artifacts) "local-install") `
   -SmokeBaseAddress "http://127.0.0.1:8080"
 ```
 
-Open <http://127.0.0.1:8080>. The first full build is intentionally substantial
-because locked upstream source trees and reference packs are verified and
-built. Rebuild into another empty bundle directory; bundle output directories
-are immutable.
-
-Linux uses the equivalent `eng/bundle.sh` and generated `install.sh`. Pass the
-Docker socket group and the same host settings before installation:
+On Linux, each new transferred bundle is deployed or upgraded with one entry
+point. It loads the archive, starts the immutable Compose set, checks readiness,
+and rolls back on failure:
 
 ```bash
-export DOCKER_GID="$(stat -c '%g' /var/run/docker.sock)"
-export SHARPLABNEXT_BIND_ADDRESS=127.0.0.1
-export SHARPLABNEXT_HTTP_PORT=8080
+sudo env SHARPLABNEXT_HOME=/opt/sharplabnext \
+  sh ./deploy.sh --allow-unsigned
 ```
+
+Use the trust flags documented by `install.sh` instead of `--allow-unsigned`
+for a formally signed bundle. The first full build is intentionally substantial
+because locked upstream source trees and reference packs are verified and built.
 
 Generated bundles contain the signing metadata and installation and rollback
 scripts needed for offline deployment. The `deploy/compose.dev.yaml` file is
@@ -200,13 +306,11 @@ Run an external smoke test against the ready stack:
 dotnet run eng/smoke/gateway-compose.cs -- http://127.0.0.1:8080 --full
 ```
 
-Stop the stack without deleting the Artifact Store volume:
+From the active deployment directory, stop the stack without deleting the
+Artifact Store volume:
 
 ```powershell
-docker compose --project-name sharplabnext `
-  -f (Join-Path $bundleRoot "compose.prod.yaml") `
-  -f (Join-Path $bundleRoot "compose.generated.yaml") `
-  down --remove-orphans
+docker compose down --remove-orphans
 ```
 
 Do not add `--volumes` when the local Artifact Store data must be preserved.
@@ -257,8 +361,9 @@ dotnet run --project src/Tools/SharpLabNext.CompatibilityCli -- validate
 
 ## Release And Deployment
 
-`eng/bundle.ps1` and `eng/bundle.sh` build the complete Linux image set and
-produce an offline bundle. A production bundle must come from a clean Git
+`eng/release.ps1` and `eng/release.sh` build the complete Linux image set and
+produce an offline bundle. `eng/bundle.ps1` and `eng/bundle.sh` package only an
+already-built and validated image set. A production bundle must come from a clean Git
 worktree, use an out-of-band trusted signing key, and pass identity, security,
 smoke, performance, and browser gates. Do not deploy `deploy/compose.prod.yaml`
 by itself; the generated bundle overlay supplies the immutable image and worker

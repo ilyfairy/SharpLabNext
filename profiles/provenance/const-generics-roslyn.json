@@ -9,6 +9,10 @@
     {
       "path": "eng/patches/roslyn-const-generics/0001-use-source-built-metadata.patch",
       "purpose": "Replace the mutable 8.0.0-dev metadata and immutable packages with compiler-compatible assemblies built from the locked runtime source, and correct the fork's Windows-only SymbolKey path casing."
+    },
+    {
+      "path": "eng/patches/roslyn-const-generics/0002-use-local-fork-packages.patch",
+      "purpose": "Replace the fork's remote NuGet feed with the checksum-verified local package source prepared for the release build."
     }
   ],
   "builder": {

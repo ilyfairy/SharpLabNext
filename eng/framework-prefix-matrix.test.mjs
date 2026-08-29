@@ -221,9 +221,10 @@ test('shared Framework matrix assembler accepts metadata plus read-only mounted 
         path.join(metadata, 'rows', row, 'row.json'),
       )
       fs.mkdirSync(path.join(mounted, row), { recursive: true })
-      fs.renameSync(
+      fs.cpSync(
         path.join(raw, 'rows', row, 'clr4'),
         path.join(mounted, row, 'clr4'),
+        { recursive: true, errorOnExist: true },
       )
     }
     const result = run(python, [

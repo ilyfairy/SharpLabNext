@@ -1048,41 +1048,16 @@ public sealed class ProfileUpdaterTests
             "sha512-Q1XzhqGM3cR1FW5hWh7JIfjCCNtmNM1u0HW1nM0UCyl4X5MM7cM9dxeBjmWETIumKpP/8yj19WXF0wRmfQgaew==",
             bake.Environment["PEACHPIE_CODEANALYSIS_PACKAGE_CONTENT_HASH"]);
         Assert.Equal(new string('e', 128), bake.Environment["PEACHPIE_RUNTIME_SHA512"]);
-        var cppCliOperator = resolvedLock.Components["msvc-cppcli-private-image"];
-        var cppCliPreparedBase = resolvedLock.Components["msvc-cppcli-prepared-base"];
-        Assert.Equal(cppCliOperator.ResolvedVersion, bake.Environment["CPPCLI_PRIVATE_IMAGE_VERSION"]);
-        Assert.Equal(cppCliOperator.Digest, bake.Environment["CPPCLI_PRIVATE_IMAGE_DIGEST"]);
-        Assert.Equal(cppCliOperator.SourceUri, bake.Environment["CPPCLI_PRIVATE_IMAGE_SOURCE_URI"]);
-        Assert.Equal(
-            cppCliPreparedBase.SourceUri!["docker://".Length..],
-            bake.Environment["CPPCLI_PREPARED_BASE_IMAGE"]);
-        Assert.Equal(
-            cppCliPreparedBase.ResolvedVersion,
-            bake.Environment["CPPCLI_PREPARED_BASE_VERSION"]);
-        Assert.Equal(cppCliPreparedBase.Digest, bake.Environment["CPPCLI_PREPARED_BASE_DIGEST"]);
-        Assert.Equal(
-            cppCliPreparedBase.SourceUri,
-            bake.Environment["CPPCLI_PREPARED_BASE_SOURCE_URI"]);
-        var jsharpOperator = resolvedLock.Components["jsharp20"];
-        var jsharpPreparedBase = resolvedLock.Components["jsharp20-prepared-base"];
+        Assert.DoesNotContain("CPPCLI_PREPARED_BASE_IMAGE", bake.Environment.Keys);
+        var jsharpSource = resolvedLock.Components["jsharp20"];
         var jsharpCompiler = resolvedLock.Components["vjc-jsharp20"];
         var jsharpReference = resolvedLock.Components["jsharp20-ref"];
         var jsharpRuntime = resolvedLock.Components["wine-jsharp20-linux-x64"];
-        Assert.Equal(
-            jsharpOperator.SourceUri!["docker://".Length..],
-            bake.Environment["JSHARP_TOOLCHAIN_IMAGE"]);
-        Assert.Equal(jsharpOperator.ResolvedVersion, bake.Environment["JSHARP_TOOLCHAIN_VERSION"]);
+        Assert.DoesNotContain("JSHARP_TOOLCHAIN_IMAGE", bake.Environment.Keys);
+        Assert.Equal(jsharpSource.ResolvedVersion, bake.Environment["JSHARP_TOOLCHAIN_VERSION"]);
         Assert.Equal(jsharpCompiler.ResolvedVersion, bake.Environment["JSHARP_COMPILER_VERSION"]);
-        Assert.Equal(jsharpOperator.Digest, bake.Environment["JSHARP_TOOLCHAIN_DIGEST"]);
-        Assert.Equal(jsharpOperator.SourceUri, bake.Environment["JSHARP_TOOLCHAIN_SOURCE_URI"]);
-        Assert.Equal(
-            jsharpPreparedBase.SourceUri!["docker://".Length..],
-            bake.Environment["JSHARP_WINE_BASE_IMAGE"]);
-        Assert.Equal(
-            jsharpPreparedBase.ResolvedVersion,
-            bake.Environment["JSHARP_WINE_BASE_VERSION"]);
-        Assert.Equal(jsharpPreparedBase.Digest, bake.Environment["JSHARP_WINE_BASE_DIGEST"]);
-        Assert.Equal(jsharpPreparedBase.SourceUri, bake.Environment["JSHARP_WINE_BASE_SOURCE_URI"]);
+        Assert.Equal(jsharpSource.Digest, bake.Environment["JSHARP_TOOLCHAIN_DIGEST"]);
+        Assert.Equal(jsharpSource.SourceUri, bake.Environment["JSHARP_TOOLCHAIN_SOURCE_URI"]);
         Assert.Equal(jsharpReference.ResolvedVersion, bake.Environment["JSHARP_REFERENCE_VERSION"]);
         Assert.Equal(jsharpReference.Digest, bake.Environment["JSHARP_REFERENCE_DIGEST"]);
         Assert.Equal(jsharpReference.SourceUri, bake.Environment["JSHARP_REFERENCE_SOURCE_URI"]);
@@ -1255,7 +1230,15 @@ public sealed class ProfileUpdaterTests
         Assert.DoesNotContain(declaredVariables, static name =>
             name.StartsWith("RUNTIME_MATRIX_", StringComparison.Ordinal));
         Assert.Empty(candidateOnlyVariables.Intersect(environment.Keys, StringComparer.Ordinal));
-        Assert.Empty(declaredVariables.Except(environment.Keys, StringComparer.Ordinal));
+        string[] generatedImageInputs =
+        [
+            "CPPCLI_PREPARED_BASE_IMAGE",
+            "JSHARP_TOOLCHAIN_IMAGE"
+        ];
+        Assert.Empty(generatedImageInputs.Intersect(environment.Keys, StringComparer.Ordinal));
+        Assert.Empty(declaredVariables.Except(
+            environment.Keys.Concat(generatedImageInputs),
+            StringComparer.Ordinal));
         Assert.All(environment.Values, static value => Assert.False(string.IsNullOrWhiteSpace(value)));
     }
 
@@ -1344,6 +1327,120 @@ public sealed class ProfileUpdaterTests
         finally
         {
             File.Delete(temporaryLock);
+        }
+    }
+
+    [Fact]
+    public async Task RoslynMainSourceBuildHonorsSolutionFilterAndRestoresInParallel()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var dockerfile = await File.ReadAllTextAsync(
+            Path.Combine(repositoryRoot, "deploy", "docker", "Dockerfile.worker-roslyn-main"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Contains("--solution SharpLabNext.Roslyn.Main.slnf", dockerfile, StringComparison.Ordinal);
+        Assert.Contains("/p:RestoreUseStaticGraphEvaluation=false", dockerfile, StringComparison.Ordinal);
+        Assert.Contains("/p:RestoreDisableParallel=false", dockerfile, StringComparison.Ordinal);
+        Assert.DoesNotContain("/p:RestoreDisableParallel=true", dockerfile, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Dockerfile.worker-roslyn-main", "verify-roslyn-main.cs")]
+    [InlineData("Dockerfile.worker-roslyn-const-generics", "verify-roslyn-const-generics.cs")]
+    public async Task RoslynSourceVerifierRestoresAndRunsWithoutNetwork(
+        string dockerfileName,
+        string verifierFileName)
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var dockerfile = await File.ReadAllTextAsync(
+            Path.Combine(repositoryRoot, "deploy", "docker", dockerfileName),
+            TestContext.Current.CancellationToken);
+        var verifier = await File.ReadAllTextAsync(
+            Path.Combine(repositoryRoot, "eng", verifierFileName),
+            TestContext.Current.CancellationToken);
+        var nugetConfig = await File.ReadAllTextAsync(
+            Path.Combine(repositoryRoot, "eng", "NuGet.verifier.config"),
+            TestContext.Current.CancellationToken);
+        var verifierPath = $"/tools/{verifierFileName}";
+        var copyMarker = $"COPY eng/{verifierFileName} {verifierPath}";
+        var verifierStageStart = dockerfile.IndexOf(copyMarker, StringComparison.Ordinal);
+        var verifierStageEnd = dockerfile.IndexOf("\nFROM ", verifierStageStart, StringComparison.Ordinal);
+
+        Assert.True(verifierStageStart >= 0, $"Missing verifier copy in {dockerfileName}.");
+        Assert.True(verifierStageEnd > verifierStageStart, $"Missing verifier stage boundary in {dockerfileName}.");
+        var verifierStage = dockerfile[verifierStageStart..verifierStageEnd];
+        Assert.Contains(
+            "COPY eng/NuGet.verifier.config /tools/NuGet.verifier.config",
+            verifierStage,
+            StringComparison.Ordinal);
+        var verifierWorkdir = verifierStage.IndexOf("WORKDIR /tools", StringComparison.Ordinal);
+        var offlineRun = verifierStage.IndexOf("RUN --network=none", StringComparison.Ordinal);
+        Assert.True(
+            verifierWorkdir >= 0 && verifierWorkdir < offlineRun,
+            $"{dockerfileName} must select the pinned SDK outside the upstream Roslyn global.json scope.");
+        Assert.Contains("RUN --network=none", verifierStage, StringComparison.Ordinal);
+        Assert.Contains($"dotnet restore {verifierPath}", verifierStage, StringComparison.Ordinal);
+        Assert.Contains("--configfile /tools/NuGet.verifier.config", verifierStage, StringComparison.Ordinal);
+        Assert.Contains("-p:NuGetAudit=false", verifierStage, StringComparison.Ordinal);
+        Assert.Contains($"dotnet run --no-restore {verifierPath}", verifierStage, StringComparison.Ordinal);
+        Assert.DoesNotContain("NUGET_PACKAGES=/tmp/verify-nuget", verifierStage, StringComparison.Ordinal);
+        Assert.Contains("#:property PublishAot=false", verifier, StringComparison.Ordinal);
+        Assert.Contains("<packageSources>", nugetConfig, StringComparison.Ordinal);
+        Assert.Contains("<auditSources>", nugetConfig, StringComparison.Ordinal);
+        Assert.Equal(2, Regex.Count(nugetConfig, @"<clear\s*/>"));
+    }
+
+    [Fact]
+    public async Task ConstGenericsBuildsReplaceTheForkFeedWithPreparedLocalPackages()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var bake = await File.ReadAllTextAsync(
+            Path.Combine(repositoryRoot, "eng", "bake.hcl"),
+            TestContext.Current.CancellationToken);
+        const string context =
+            "\"const-generics-fork-packages\" = \"./artifacts/prerequisites/downloads/const-generics-fork-packages\"";
+
+        foreach (var (target, dockerfileName, patchPath) in new[]
+                 {
+                     (
+                         "runtime-const-generics",
+                         "Dockerfile.runtime-const-generics",
+                         "eng/patches/const-generics-runtime/0001-use-local-fork-packages.patch"),
+                     (
+                         "worker-roslyn-const-generics",
+                         "Dockerfile.worker-roslyn-const-generics",
+                         "eng/patches/roslyn-const-generics/0002-use-local-fork-packages.patch"),
+                     (
+                         "worker-artifacts-const-generics",
+                         "Dockerfile.worker-artifacts-const-generics",
+                         "eng/patches/const-generics-runtime/0001-use-local-fork-packages.patch")
+                 })
+        {
+            var targetBlock = ExtractNamedBlock(bake, "target", target);
+            Assert.Contains(context, targetBlock, StringComparison.Ordinal);
+
+            var dockerfile = await File.ReadAllTextAsync(
+                Path.Combine(repositoryRoot, "deploy", "docker", dockerfileName),
+                TestContext.Current.CancellationToken);
+            Assert.Contains(
+                "COPY --from=const-generics-fork-packages / /const-generics-fork-packages/",
+                dockerfile,
+                StringComparison.Ordinal);
+            Assert.Contains($"COPY {patchPath} /tmp/", dockerfile, StringComparison.Ordinal);
+            Assert.Contains("git apply --check /tmp/", dockerfile, StringComparison.Ordinal);
+            Assert.Contains(
+                "value=\"/const-generics-fork-packages\"",
+                await File.ReadAllTextAsync(
+                    Path.Combine(repositoryRoot, patchPath.Replace('/', Path.DirectorySeparatorChar)),
+                    TestContext.Current.CancellationToken),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "! grep --fixed-strings --quiet 'pkgs.dev.azure.com/hez2010' NuGet.config",
+                dockerfile,
+                StringComparison.Ordinal);
+            Assert.Equal(
+                1,
+                Regex.Count(dockerfile, Regex.Escape("pkgs.dev.azure.com/hez2010")));
         }
     }
 
@@ -1477,7 +1574,7 @@ public sealed class ProfileUpdaterTests
     }
 
     [Fact]
-    public async Task CppCliProductTargetsConsumePreparedBaseWithoutAliasingRawOperator()
+    public async Task CppCliProductTargetsConsumeSourceBuiltBaseWithDirectInputProvenance()
     {
         var repositoryRoot = FindRepositoryRoot();
         var bake = await File.ReadAllTextAsync(
@@ -1487,11 +1584,11 @@ public sealed class ProfileUpdaterTests
         var workerTarget = ExtractNamedBlock(bake, "target", "worker-cppcli");
 
         Assert.Contains(
-            "\"cppcli-prepared-base-context\" = \"docker-image://${required(CPPCLI_PREPARED_BASE_IMAGE)}\"",
+            "\"cppcli-prepared-base-context\" = \"docker-image://${deferred_image(CPPCLI_PREPARED_BASE_IMAGE)}\"",
             runtimeTarget,
             StringComparison.Ordinal);
         Assert.Contains(
-            "\"cppcli-prepared-base\" = \"docker-image://${required(CPPCLI_PREPARED_BASE_IMAGE)}\"",
+            "\"cppcli-prepared-base\" = \"docker-image://${deferred_image(CPPCLI_PREPARED_BASE_IMAGE)}\"",
             workerTarget,
             StringComparison.Ordinal);
         Assert.DoesNotContain("CPPCLI_TOOLCHAIN_IMAGE", runtimeTarget, StringComparison.Ordinal);
@@ -1520,8 +1617,10 @@ public sealed class ProfileUpdaterTests
                 string.Equals(node!["id"]!.GetValue<string>(), imageId, StringComparison.Ordinal))!;
             var componentIds = image["lockComponentIds"]!.AsArray()
                 .Select(static node => node!.GetValue<string>());
-            Assert.Contains("msvc-cppcli-private-image", componentIds, StringComparer.Ordinal);
-            Assert.Contains("msvc-cppcli-prepared-base", componentIds, StringComparer.Ordinal);
+            Assert.Contains("msvc-wine-source", componentIds, StringComparer.Ordinal);
+            Assert.Contains("netfx48-ref", componentIds, StringComparer.Ordinal);
+            Assert.DoesNotContain("msvc-cppcli-private-image", componentIds, StringComparer.Ordinal);
+            Assert.DoesNotContain("msvc-cppcli-prepared-base", componentIds, StringComparer.Ordinal);
         }
     }
 
@@ -1663,24 +1762,35 @@ public sealed class ProfileUpdaterTests
     }
 
     [Fact]
-    public async Task BundleEntrypointsUseSharedBakeEnvironmentTool()
+    public async Task ImageBuildOwnsTheSharedBakeEnvironmentAndBundleIsPackagingOnly()
     {
         var repositoryRoot = FindRepositoryRoot();
+        var imageBuilder = await File.ReadAllTextAsync(
+            Path.Combine(repositoryRoot, "eng", "build-images.mjs"),
+            TestContext.Current.CancellationToken);
+        Assert.Contains("run-with-bake-environment.cs", imageBuilder, StringComparison.Ordinal);
+        Assert.Contains("--repository-root", imageBuilder, StringComparison.Ordinal);
+        Assert.Contains(
+            "--allow-uncommitted-source-for-development",
+            imageBuilder,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("--load", imageBuilder, StringComparison.Ordinal);
+
         foreach (var script in new[] { "bundle.ps1", "bundle.sh" })
         {
             var content = await File.ReadAllTextAsync(
                 Path.Combine(repositoryRoot, "eng", script),
                 TestContext.Current.CancellationToken);
-            Assert.Contains("run-with-bake-environment.cs", content, StringComparison.Ordinal);
-            Assert.Contains("--repository-root", content, StringComparison.Ordinal);
-            Assert.Contains("--allow-uncommitted-source-for-development", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("run-with-bake-environment.cs", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("build-images", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("buildx", content, StringComparison.Ordinal);
             Assert.DoesNotContain("--load", content, StringComparison.Ordinal);
             Assert.DoesNotContain("read-lock-field.cs", content, StringComparison.Ordinal);
         }
     }
 
     [Fact]
-    public async Task ComposeE2eWorkflowUsesSharedBakeEnvironmentTool()
+    public async Task ComposeE2eWorkflowUsesTheCompleteReleaseEntrypoint()
     {
         var repositoryRoot = FindRepositoryRoot();
         var content = await File.ReadAllTextAsync(
@@ -1691,22 +1801,20 @@ public sealed class ProfileUpdaterTests
         Assert.Single(yaml.Documents);
 
         var buildStepStart = content.IndexOf(
-            "- name: Build and load locked Linux images",
+            "- name: Build every planned image and create deployment metadata",
             StringComparison.Ordinal);
         var buildStepEnd = content.IndexOf(
-            "- name: Generate immutable local deployment metadata",
+            "- name: Validate immutable local deployment metadata",
             StringComparison.Ordinal);
         Assert.True(buildStepStart >= 0);
         Assert.True(buildStepEnd > buildStepStart);
         var buildStep = content[buildStepStart..buildStepEnd];
 
-        Assert.Contains("run-with-bake-environment.cs", buildStep, StringComparison.Ordinal);
-        Assert.Contains("--lock profiles/lock.json", buildStep, StringComparison.Ordinal);
-        Assert.Contains("--base-images profiles/base-images.json", buildStep, StringComparison.Ordinal);
-        Assert.Contains("--source-revision \"$SOURCE_REVISION\"", buildStep, StringComparison.Ordinal);
-        Assert.Contains("--repository-root \"$GITHUB_WORKSPACE\"", buildStep, StringComparison.Ordinal);
-        Assert.Contains("--image-prefix \"$IMAGE_PREFIX\"", buildStep, StringComparison.Ordinal);
-        Assert.Contains("--allow-uncommitted-source-for-development", buildStep, StringComparison.Ordinal);
+        Assert.Contains("bash ./eng/release.sh", buildStep, StringComparison.Ordinal);
+        Assert.Contains("--metadata-only", buildStep, StringComparison.Ordinal);
+        Assert.Contains("--accept-microsoft-licenses", buildStep, StringComparison.Ordinal);
+        Assert.DoesNotContain("run-with-bake-environment.cs", buildStep, StringComparison.Ordinal);
+        Assert.DoesNotContain("docker buildx", buildStep, StringComparison.Ordinal);
         Assert.DoesNotContain("--load", buildStep, StringComparison.Ordinal);
     }
 
@@ -1941,13 +2049,12 @@ public sealed class ProfileUpdaterTests
     }
 
     [Theory]
-    [InlineData("sharplabnext/operator-jsharp20:latest", null)]
-    [InlineData(
-        "docker://sharplabnext/operator-jsharp20@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")]
-    public async Task BakeEnvironmentRejectsMutableOrMismatchedJSharpOperatorImage(
-        string sourceUri,
-        string? digest)
+    [InlineData("jsharp20", "jsharp20.digest")]
+    [InlineData("msvc-cppcli-netfx48", "msvc-cppcli-netfx48.digest")]
+    [InlineData("netfx48-ref", "netfx48-ref.digest")]
+    public async Task BakeEnvironmentRejectsSourceInputsWithoutDigests(
+        string componentId,
+        string expectedError)
     {
         var repositoryRoot = FindRepositoryRoot();
         var lockDocument = JsonSerializer.Deserialize<ReleaseLockDocument>(
@@ -1957,10 +2064,9 @@ public sealed class ProfileUpdaterTests
             WebJsonOptions)
             ?? throw new InvalidOperationException("Repository release lock is invalid.");
         var components = lockDocument.Components.ToDictionary(static pair => pair.Key, static pair => pair.Value);
-        components["jsharp20"] = components["jsharp20"] with
+        components[componentId] = components[componentId] with
         {
-            SourceUri = sourceUri,
-            Digest = digest ?? components["jsharp20"].Digest
+            Digest = null
         };
         var temporaryLock = Path.GetTempFileName();
         try
@@ -1980,103 +2086,7 @@ public sealed class ProfileUpdaterTests
                     "1700000000",
                     cancellationToken: TestContext.Current.CancellationToken));
 
-            Assert.Contains("jsharp20.sourceUri", exception.Message, StringComparison.Ordinal);
-        }
-        finally
-        {
-            File.Delete(temporaryLock);
-        }
-    }
-
-    [Theory]
-    [InlineData("sharplabnext/worker-cppcli:latest", null)]
-    [InlineData(
-        "docker://localhost:5000/sharplabnext/msvc-cppcli-prepared-base@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")]
-    public async Task BakeEnvironmentRejectsMutableOrMismatchedCppCliPreparedBaseImage(
-        string sourceUri,
-        string? digest)
-    {
-        var repositoryRoot = FindRepositoryRoot();
-        var lockDocument = JsonSerializer.Deserialize<ReleaseLockDocument>(
-            await File.ReadAllTextAsync(
-                Path.Combine(repositoryRoot, "profiles", "lock.json"),
-                TestContext.Current.CancellationToken),
-            WebJsonOptions)
-            ?? throw new InvalidOperationException("Repository release lock is invalid.");
-        var components = lockDocument.Components.ToDictionary(static pair => pair.Key, static pair => pair.Value);
-        components["msvc-cppcli-prepared-base"] = components["msvc-cppcli-prepared-base"] with
-        {
-            SourceUri = sourceUri,
-            Digest = digest ?? components["msvc-cppcli-prepared-base"].Digest
-        };
-        var temporaryLock = Path.GetTempFileName();
-        try
-        {
-            await File.WriteAllTextAsync(
-                temporaryLock,
-                JsonSerializer.Serialize(
-                    lockDocument with { Components = components },
-                    WebJsonOptions),
-                TestContext.Current.CancellationToken);
-
-            var exception = await Assert.ThrowsAsync<BakeEnvironmentValidationException>(() =>
-                BakeEnvironmentResolver.CreateAsync(
-                    temporaryLock,
-                    Path.Combine(repositoryRoot, "profiles", "base-images.json"),
-                    "test-source-revision",
-                    "1700000000",
-                    cancellationToken: TestContext.Current.CancellationToken));
-
-            Assert.Contains("msvc-cppcli-prepared-base.sourceUri", exception.Message, StringComparison.Ordinal);
-        }
-        finally
-        {
-            File.Delete(temporaryLock);
-        }
-    }
-
-    [Theory]
-    [InlineData("sharplabnext/runtime-wine-jsharp20:latest", null)]
-    [InlineData(
-        "docker://sharplabnext/runtime-wine-jsharp20@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")]
-    public async Task BakeEnvironmentRejectsMutableOrMismatchedJSharpPreparedBaseImage(
-        string sourceUri,
-        string? digest)
-    {
-        var repositoryRoot = FindRepositoryRoot();
-        var lockDocument = JsonSerializer.Deserialize<ReleaseLockDocument>(
-            await File.ReadAllTextAsync(
-                Path.Combine(repositoryRoot, "profiles", "lock.json"),
-                TestContext.Current.CancellationToken),
-            WebJsonOptions)
-            ?? throw new InvalidOperationException("Repository release lock is invalid.");
-        var components = lockDocument.Components.ToDictionary(static pair => pair.Key, static pair => pair.Value);
-        components["jsharp20-prepared-base"] = components["jsharp20-prepared-base"] with
-        {
-            SourceUri = sourceUri,
-            Digest = digest ?? components["jsharp20-prepared-base"].Digest
-        };
-        var temporaryLock = Path.GetTempFileName();
-        try
-        {
-            await File.WriteAllTextAsync(
-                temporaryLock,
-                JsonSerializer.Serialize(
-                    lockDocument with { Components = components },
-                    WebJsonOptions),
-                TestContext.Current.CancellationToken);
-
-            var exception = await Assert.ThrowsAsync<BakeEnvironmentValidationException>(() =>
-                BakeEnvironmentResolver.CreateAsync(
-                    temporaryLock,
-                    Path.Combine(repositoryRoot, "profiles", "base-images.json"),
-                    "test-source-revision",
-                    "1700000000",
-                    cancellationToken: TestContext.Current.CancellationToken));
-
-            Assert.Contains("jsharp20-prepared-base.sourceUri", exception.Message, StringComparison.Ordinal);
+            Assert.Contains(expectedError, exception.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -2864,14 +2874,11 @@ public sealed class ProfileUpdaterTests
                     ["jit-profiler-clr-samples"] = sourceLock.Components["jit-profiler-clr-samples"],
                     ["jit-profiler-runtime-headers"] = sourceLock.Components["jit-profiler-runtime-headers"],
                     ["msvc-wine-source"] = sourceLock.Components["msvc-wine-source"],
-                    ["msvc-cppcli-private-image"] = sourceLock.Components["msvc-cppcli-private-image"],
-                    ["msvc-cppcli-prepared-base"] = sourceLock.Components["msvc-cppcli-prepared-base"],
                     ["msvc-cppcli-netfx48"] = sourceLock.Components["msvc-cppcli-netfx48"],
                     ["netfx48-ref"] = sourceLock.Components["netfx48-ref"],
                     ["netfx48-managed-ref"] = sourceLock.Components["netfx48-managed-ref"],
                     ["wine-netfx48-linux-x64"] = sourceLock.Components["wine-netfx48-linux-x64"],
                     ["jsharp20"] = sourceLock.Components["jsharp20"],
-                    ["jsharp20-prepared-base"] = sourceLock.Components["jsharp20-prepared-base"],
                     ["vjc-jsharp20"] = sourceLock.Components["vjc-jsharp20"],
                     ["jsharp20-ref"] = sourceLock.Components["jsharp20-ref"],
                     ["wine-jsharp20-linux-x64"] = sourceLock.Components["wine-jsharp20-linux-x64"],

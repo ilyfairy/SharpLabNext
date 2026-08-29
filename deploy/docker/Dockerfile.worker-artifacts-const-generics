@@ -54,12 +54,6 @@ RUN --mount=type=cache,id=sharplabnext-const-ilspy-nuget,target=/root/.nuget/pac
       --locked-mode \
       --runtime linux-x64 \
       /p:ConstGenericsMetadataAssemblyPath=/const-generics-dependencies/System.Reflection.Metadata.dll \
-      /p:ConstGenericsImmutableAssemblyPath=/const-generics-dependencies/System.Collections.Immutable.dll
-RUN --mount=type=cache,id=sharplabnext-const-ilspy-nuget,target=/root/.nuget/packages,sharing=locked \
-    dotnet restore ICSharpCode.Decompiler/ICSharpCode.Decompiler.csproj \
-      --locked-mode \
-      --runtime linux-x64 \
-      /p:ConstGenericsMetadataAssemblyPath=/const-generics-dependencies/System.Reflection.Metadata.dll \
       /p:ConstGenericsImmutableAssemblyPath=/const-generics-dependencies/System.Collections.Immutable.dll \
     && dotnet build ICSharpCode.Decompiler/ICSharpCode.Decompiler.csproj \
       --configuration Release \
@@ -101,17 +95,20 @@ RUN curl --fail --location --retry 3 --retry-all-errors --output /tmp/runtime-so
     && tar --extract --gzip --file /tmp/runtime-source.tar.gz --strip-components=1 \
     && rm /tmp/runtime-source.tar.gz \
     && grep --fixed-strings --quiet 'ConstTypeArgument' src/libraries/System.Reflection.Metadata/src/System/Reflection/Metadata/Signatures/SignatureTypeCode.cs
+COPY --from=const-generics-fork-packages / /const-generics-fork-packages/
+COPY eng/patches/const-generics-runtime/0001-use-local-fork-packages.patch /tmp/0001-use-local-fork-packages.patch
+RUN --network=none set -eux; \
+    test "$(find /const-generics-fork-packages -mindepth 1 -maxdepth 1 | wc -l)" -eq 2; \
+    test "$(find /const-generics-fork-packages -mindepth 1 -maxdepth 1 -type f -name '*.nupkg' | wc -l)" -eq 2; \
+    git apply --check /tmp/0001-use-local-fork-packages.patch; \
+    git apply /tmp/0001-use-local-fork-packages.patch; \
+    grep --fixed-strings --quiet 'value="/const-generics-fork-packages"' NuGet.config; \
+    ! grep --fixed-strings --quiet 'pkgs.dev.azure.com/hez2010' NuGet.config
 COPY --from=fork-dependencies /const-generics-dependencies/ /const-generics-dependencies/
 COPY eng/patches/ilspy-const-generics/0002-ilverification-const-type-arguments.patch /tmp/0002-ilverification-const-type-arguments.patch
 RUN git apply --check /tmp/0002-ilverification-const-type-arguments.patch \
     && git apply /tmp/0002-ilverification-const-type-arguments.patch \
     && grep --fixed-strings --quiet 'SignatureTypeCode.ConstTypeArgument' src/coreclr/tools/Common/TypeSystem/Ecma/EcmaSignatureParser.cs
-RUN --mount=type=cache,id=sharplabnext-const-runtime-nuget,target=/root/.nuget/packages,sharing=locked \
-    dotnet restore src/coreclr/tools/ILVerification/ILVerification.csproj \
-      --locked-mode \
-      /p:MicrosoftDotNetVersionToolsTasksVersion=${CONST_GENERICS_VERSIONTOOLS_VERSION} \
-      /p:ConstGenericsMetadataAssemblyPath=/const-generics-dependencies/System.Reflection.Metadata.dll \
-      /p:ConstGenericsImmutableAssemblyPath=/const-generics-dependencies/System.Collections.Immutable.dll
 RUN --mount=type=cache,id=sharplabnext-const-runtime-nuget,target=/root/.nuget/packages,sharing=locked \
     dotnet restore src/coreclr/tools/ILVerification/ILVerification.csproj \
       --locked-mode \
@@ -151,7 +148,8 @@ COPY src/ ./src/
 COPY --from=fork-dependencies /const-generics-dependencies/ /const-generics-dependencies/
 COPY --from=ilspy-source-build /ilspy-output/ICSharpCode.Decompiler.dll /const-generics-dependencies/ICSharpCode.Decompiler.dll
 COPY --from=ilverification-source-build /ilverification-output/ILVerification.dll /const-generics-dependencies/ILVerification.dll
-RUN dotnet restore \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore \
       src/Workers/Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics.Processor/SharpLabNext.Worker.Artifacts.ConstGenerics.Processor.csproj \
       --locked-mode \
       /p:ConstGenericsDependenciesDirectory=/const-generics-dependencies \
@@ -161,15 +159,15 @@ RUN dotnet restore \
     && dotnet restore \
       src/Workers/Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics.Tests/SharpLabNext.Worker.Artifacts.ConstGenerics.Tests.csproj \
       --locked-mode \
-      /p:ConstGenericsDependenciesDirectory=/const-generics-dependencies
-RUN dotnet test \
+      /p:ConstGenericsDependenciesDirectory=/const-generics-dependencies \
+    && dotnet test \
       src/Workers/Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics.Tests/SharpLabNext.Worker.Artifacts.ConstGenerics.Tests.csproj \
       --configuration ${CONFIGURATION} \
       --no-restore \
       /p:ConstGenericsDependenciesDirectory=/const-generics-dependencies \
       /p:ConstGenericsIlSpyCommit=${CONST_GENERICS_ILSPY_COMMIT} \
-      /p:ConstGenericsRuntimeCommit=${CONST_GENERICS_RUNTIME_COMMIT}
-RUN dotnet publish \
+      /p:ConstGenericsRuntimeCommit=${CONST_GENERICS_RUNTIME_COMMIT} \
+    && dotnet publish \
       src/Workers/Artifacts.ConstGenerics/SharpLabNext.Worker.Artifacts.ConstGenerics.Processor/SharpLabNext.Worker.Artifacts.ConstGenerics.Processor.csproj \
       --configuration ${CONFIGURATION} \
       --no-restore \

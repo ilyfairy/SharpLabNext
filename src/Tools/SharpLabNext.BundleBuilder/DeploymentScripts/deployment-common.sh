@@ -474,7 +474,7 @@ install_release_assets() {
   rm -rf "$staging"
   mkdir -p "$staging"
   if ! cp -a "$bundle_root/." "$staging/"; then rm -rf "$staging"; return 1; fi
-  deployment_files='bundle.json catalog.json lock.json profile-update-status.json compose.prod.yaml compose.generated.yaml github-oauth-client-secret.disabled images.expected checksums.sha256 THIRD-PARTY-NOTICES.md security/README.md security/THIRD-PARTY-NOTICES.md security/inventory.json security/sharplabnext-runtime-job-v1.apparmor security/licenses/moby-profiles-Apache-2.0.txt'
+  deployment_files='.env bundle.json catalog.json lock.json profile-update-status.json compose.prod.yaml compose.generated.yaml github-oauth-client-secret.disabled images.expected checksums.sha256 THIRD-PARTY-NOTICES.md security/README.md security/THIRD-PARTY-NOTICES.md security/inventory.json security/sharplabnext-runtime-job-v1.apparmor security/licenses/moby-profiles-Apache-2.0.txt'
   (cd "$staging" && sha256sum $deployment_files > deployment.sha256)
   mv "$staging" "$release_root"
   printf '%s' "$release_root"

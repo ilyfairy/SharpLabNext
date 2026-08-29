@@ -5,6 +5,12 @@
   "compatibilityGroup": "const-generics-bcaed316",
   "status": "source-inputs-recorded",
   "license": "MIT",
+  "patchSeries": [
+    {
+      "path": "eng/patches/const-generics-runtime/0001-use-local-fork-packages.patch",
+      "purpose": "Replace the fork's remote NuGet feed with the two checksum-verified fork packages prepared in the release artifact cache."
+    }
+  ],
   "builder": {
     "imageId": "dotnet-runtime-build",
     "platform": "linux/amd64",

@@ -71,6 +71,20 @@ require_install() {
         || fail "${section} is not marked Install=1"
 }
 
+require_disabled_ngen_service() {
+    service=$1
+    expected_image=$2
+    section="System\\\\CurrentControlSet\\\\Services\\\\${service}"
+    start=$(read_value "$section" Start)
+    image=$(strip_quotes "$(read_value "$section" ImagePath)")
+    image=$(printf '%s' "$image" | tr '[:upper:]' '[:lower:]')
+    expected_image=$(printf '%s' "$expected_image" | tr '[:upper:]' '[:lower:]')
+    test "$start" = 'dword:00000004' \
+        || fail "${section} is not disabled with Start=4"
+    test "$image" = "$expected_image" \
+        || fail "${section} does not identify the expected NGen service executable"
+}
+
 base='Software\\Microsoft\\NET Framework Setup\\NDP'
 
 case "$requested" in
@@ -164,6 +178,12 @@ case "$prefix_case" in
         framework="${prefix}/drive_c/windows/Microsoft.NET/Framework64/v2.0.50727"
         test -f "${framework}/mscorlib.dll" \
             || fail 'Framework64 CLR 2.0 mscorlib.dll is missing'
+        require_disabled_ngen_service \
+            clr_optimization_v2.0.50727_32 \
+            'C:\\windows\\Microsoft.NET\\Framework\\v2.0.50727\\mscorsvw.exe'
+        require_disabled_ngen_service \
+            clr_optimization_v2.0.50727_64 \
+            'C:\\windows\\Microsoft.NET\\Framework64\\v2.0.50727\\mscorsvw.exe'
         ;;
     clr4)
         if test "${SHARPLABNEXT_FRAMEWORK_MATRIX_PREFLIGHT:-0}" = 1; then
@@ -180,6 +200,12 @@ case "$prefix_case" in
         framework="${prefix}/drive_c/windows/Microsoft.NET/Framework64/v4.0.30319"
         test -f "${framework}/mscorlib.dll" \
             || fail 'Framework64 CLR 4.0 mscorlib.dll is missing'
+        require_disabled_ngen_service \
+            clr_optimization_v4.0.30319_32 \
+            'C:\\windows\\Microsoft.NET\\Framework\\v4.0.30319\\mscorsvw.exe'
+        require_disabled_ngen_service \
+            clr_optimization_v4.0.30319_64 \
+            'C:\\windows\\Microsoft.NET\\Framework64\\v4.0.30319\\mscorsvw.exe'
         ;;
 esac
 

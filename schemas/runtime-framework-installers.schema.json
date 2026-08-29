@@ -7,12 +7,30 @@
   "required": [
     "schemaVersion",
     "winetricksVersion",
+    "vendoredWinetricksPayloads",
+    "cachedWinetricksPayloads",
+    "bootstrapTools",
+    "classicWow64Installer",
     "companionPrefixes",
     "targets"
   ],
   "properties": {
     "schemaVersion": { "const": 1 },
     "winetricksVersion": { "type": "string", "pattern": "^[0-9]{8}$" },
+    "vendoredWinetricksPayloads": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": { "$ref": "#/$defs/vendoredWinetricksPayload" }
+    },
+    "cachedWinetricksPayloads": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": { "$ref": "#/$defs/cachedWinetricksPayload" }
+    },
+    "bootstrapTools": { "$ref": "#/$defs/bootstrapTools" },
+    "classicWow64Installer": { "$ref": "#/$defs/classicWow64Installer" },
     "companionPrefixes": { "$ref": "#/$defs/companionPrefixes" },
     "targets": {
       "type": "array",
@@ -47,6 +65,139 @@
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "vendoredWinetricksPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "verb",
+        "repositoryPath",
+        "cachePath",
+        "sizeBytes",
+        "sha256"
+      ],
+      "properties": {
+        "id": { "const": "dotnet20-x64" },
+        "verb": { "const": "dotnet20" },
+        "repositoryPath": {
+          "const": "eng/prerequisites/dotnet-framework-2.0/NetFx64.exe"
+        },
+        "cachePath": { "const": "dotnet20/NetFx64.exe" },
+        "sizeBytes": { "const": 47400128 },
+        "sha256": {
+          "const": "7ea86dca8eeaedcaa4a17370547ca2cea9e9b6774972b8e03d2cb1fb0e798669"
+        }
+      }
+    },
+    "cachedWinetricksPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "verb",
+        "prerequisiteId",
+        "cachePath",
+        "sizeBytes",
+        "sha256"
+      ],
+      "properties": {
+        "id": { "const": "dotnet35sp1-full" },
+        "verb": { "const": "dotnet35sp1" },
+        "prerequisiteId": { "const": "netfx35sp1-installer" },
+        "cachePath": { "const": "dotnet35sp1/dotnetfx35.exe" },
+        "sizeBytes": { "const": 242743296 },
+        "sha256": {
+          "const": "0582515bde321e072f8673e829e175ed2e7a53e803127c50253af76528e66bc1"
+        }
+      }
+    },
+    "bootstrapDirectPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "enum": ["python3", "cabextract", "winetricks"] },
+        "version": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.+:~_-]*$"
+        }
+      }
+    },
+    "packageLockEntry": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.+-]*(?::(?:amd64|i386))?=[A-Za-z0-9][A-Za-z0-9.+:~_-]*$"
+    },
+    "bootstrapTools": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "archiveSnapshotId",
+        "directPackages",
+        "resolvedPackages",
+        "resolvedPackageListSha256"
+      ],
+      "properties": {
+        "archiveSnapshotId": { "const": "20260810T000000Z" },
+        "directPackages": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/bootstrapDirectPackage" }
+        },
+        "resolvedPackages": {
+          "type": "array",
+          "minItems": 28,
+          "maxItems": 28,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/packageLockEntry" }
+        },
+        "resolvedPackageListSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "classicWow64DirectPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "architecture", "version"],
+      "properties": {
+        "name": { "const": "wine32" },
+        "architecture": { "const": "i386" },
+        "version": { "const": "9.0~repack-4build3" }
+      }
+    },
+    "classicWow64Installer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "archiveSnapshotId",
+        "foreignArchitecture",
+        "directPackage",
+        "replacedPackages",
+        "replacedPackageListSha256",
+        "resolvedPackages",
+        "resolvedPackageListSha256"
+      ],
+      "properties": {
+        "archiveSnapshotId": { "const": "20260810T000000Z" },
+        "foreignArchitecture": { "const": "i386" },
+        "directPackage": { "$ref": "#/$defs/classicWow64DirectPackage" },
+        "replacedPackages": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/packageLockEntry" }
+        },
+        "replacedPackageListSha256": { "$ref": "#/$defs/sha256" },
+        "resolvedPackages": {
+          "type": "array",
+          "minItems": 109,
+          "maxItems": 109,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/packageLockEntry" }
+        },
+        "resolvedPackageListSha256": { "$ref": "#/$defs/sha256" }
+      }
     },
     "winetricksVerb": {
       "type": "string",

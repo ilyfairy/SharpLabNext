@@ -5,6 +5,7 @@ configuration="Release"
 skip_restore=false
 skip_frontend=false
 skip_schemas=false
+skip_validation=false
 
 while (($# > 0)); do
     case "$1" in
@@ -22,6 +23,10 @@ while (($# > 0)); do
             ;;
         --skip-schemas)
             skip_schemas=true
+            shift
+            ;;
+        --skip-validation)
+            skip_validation=true
             shift
             ;;
         *)
@@ -66,12 +71,17 @@ dotnet build SharpLabNext.slnx \
     --configuration "$configuration" \
     --no-restore
 
-if [[ "$skip_schemas" == false ]]; then
+if [[ "$skip_validation" == false && "$skip_schemas" == false ]]; then
     node --test \
         eng/runtime-profile-channel-validation.test.mjs \
         eng/runtime-wine-packages.test.mjs \
+        eng/prerequisite-cache.test.mjs \
+        eng/image-build-inputs.test.mjs \
+        eng/cppcli-netfx-sdk-extraction.test.mjs \
+        eng/build-images.test.mjs \
         eng/build-wine-coreclr-operator.test.mjs \
         eng/runtime-candidate-input-validation.test.mjs \
+        eng/runtime-candidate-environment.test.mjs \
         eng/runtime-framework-installers.test.mjs \
         eng/build-framework-matrix-context.test.mjs \
         eng/build-framework-matrix-parent.test.mjs \

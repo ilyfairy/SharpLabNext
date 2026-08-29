@@ -1,24 +1,28 @@
 #:sdk Microsoft.NET.Sdk
 #:property TargetFramework=net10.0
 #:property NuGetLockFilePath=obj/prepare-jsharp-toolchain.packages.lock.json
-#:property AllowUnsafeBlocks=true
 
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 
 return await JSharpToolchainPreparation.RunAsync(args);
 
-internal static partial class JSharpToolchainPreparation
+internal static class JSharpToolchainPreparation
 {
-    private const string DockerfileRelativePath = "deploy/docker/Dockerfile.operator-jsharp20";
+    private const string DockerfileRelativePath =
+        "deploy/docker/Dockerfile.operator-jsharp20";
+    private const string InstallerRelativePath =
+        "eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe";
+    private const long InstallerSize = 6_110_048;
+    private const string InstallerSha256 =
+        "3a7a6ff79eeb5d51f8bf4cab188f74de0a220722e3d9d97858092ea3ef41b2b0";
+    private const string InstallerContextName = "visual-jsharp-installer-context";
     private const string Usage =
         "Usage: dotnet run eng/prepare-jsharp-toolchain.cs -- " +
-        "--base-image REFERENCE --output-image REFERENCE " +
-        "(--clr2-url-secret-file PATH | --clr2-installer-secret-file PATH) --clr2-sha256 HEX " +
-        "(--jsharp-url-secret-file PATH | --jsharp-installer-secret-file PATH) --jsharp-sha256 HEX " +
+        "--framework-seed-image REFERENCE --output-image REFERENCE " +
+        "--operator-build-input-sha256 HEX " +
         "--accept-microsoft-dotnet-eula --accept-microsoft-jsharp-eula " +
         "[--repository-root PATH] [--docker-command COMMAND] [--dry-run]";
 
@@ -47,37 +51,22 @@ internal static partial class JSharpToolchainPreparation
             return 1;
         }
 
-        try
+        var invocation = CreateDockerInvocation(options, inputs);
+        if (options.DryRun)
         {
-            using var stagedContexts = StagedBuildContexts.Create(inputs);
-            var invocation = CreateDockerInvocation(options, inputs, stagedContexts);
-            if (options.DryRun)
-            {
-                Console.WriteLine(invocation.RenderRedacted());
-                return 0;
-            }
-
-            return await ExecuteAsync(invocation, inputs, stagedContexts);
+            Console.WriteLine(invocation.RenderRedacted());
+            return 0;
         }
-        catch (InputValidationException exception)
-        {
-            Console.Error.WriteLine(exception.Message);
-            return 1;
-        }
+        return await ExecuteAsync(invocation, inputs);
     }
 
     private static PreparationOptions Parse(string[] args)
     {
         string? repositoryRoot = null;
         string? dockerCommand = null;
-        string? baseImage = null;
+        string? frameworkSeedImage = null;
         string? outputImage = null;
-        string? clr2UrlSecretFile = null;
-        string? clr2InstallerSecretFile = null;
-        string? clr2Sha256 = null;
-        string? jsharpUrlSecretFile = null;
-        string? jsharpInstallerSecretFile = null;
-        string? jsharpSha256 = null;
+        string? operatorBuildInputSha256 = null;
         var acceptDotNetEula = false;
         var acceptJSharpEula = false;
         var dryRun = false;
@@ -88,7 +77,6 @@ internal static partial class JSharpToolchainPreparation
             var option = args[index];
             if (!seen.Add(option))
                 throw new UsageException($"Option '{option}' was supplied more than once.");
-
             switch (option)
             {
                 case "--repository-root":
@@ -97,29 +85,14 @@ internal static partial class JSharpToolchainPreparation
                 case "--docker-command":
                     dockerCommand = RequiredValue(args, ref index, option);
                     break;
-                case "--base-image":
-                    baseImage = RequiredValue(args, ref index, option);
+                case "--framework-seed-image":
+                    frameworkSeedImage = RequiredValue(args, ref index, option);
                     break;
                 case "--output-image":
                     outputImage = RequiredValue(args, ref index, option);
                     break;
-                case "--clr2-url-secret-file":
-                    clr2UrlSecretFile = RequiredValue(args, ref index, option);
-                    break;
-                case "--clr2-installer-secret-file":
-                    clr2InstallerSecretFile = RequiredValue(args, ref index, option);
-                    break;
-                case "--clr2-sha256":
-                    clr2Sha256 = RequiredValue(args, ref index, option);
-                    break;
-                case "--jsharp-url-secret-file":
-                    jsharpUrlSecretFile = RequiredValue(args, ref index, option);
-                    break;
-                case "--jsharp-installer-secret-file":
-                    jsharpInstallerSecretFile = RequiredValue(args, ref index, option);
-                    break;
-                case "--jsharp-sha256":
-                    jsharpSha256 = RequiredValue(args, ref index, option);
+                case "--operator-build-input-sha256":
+                    operatorBuildInputSha256 = RequiredValue(args, ref index, option);
                     break;
                 case "--accept-microsoft-dotnet-eula":
                     acceptDotNetEula = true;
@@ -135,111 +108,183 @@ internal static partial class JSharpToolchainPreparation
             }
         }
 
-        if (string.IsNullOrWhiteSpace(baseImage) ||
+        if (string.IsNullOrWhiteSpace(frameworkSeedImage) ||
             string.IsNullOrWhiteSpace(outputImage) ||
-            string.IsNullOrWhiteSpace(clr2Sha256) ||
-            string.IsNullOrWhiteSpace(jsharpSha256))
+            string.IsNullOrWhiteSpace(operatorBuildInputSha256))
         {
             throw new UsageException(
-                "Base/output images and both operator asset SHA-256 digests are required.");
+                "Framework seed, output image, and operator build input digest are required.");
         }
         if (!acceptDotNetEula || !acceptJSharpEula)
         {
             throw new UsageException(
-                "Both --accept-microsoft-dotnet-eula and --accept-microsoft-jsharp-eula are required.");
+                "Both --accept-microsoft-dotnet-eula and " +
+                "--accept-microsoft-jsharp-eula are required.");
         }
 
         return new PreparationOptions(
             repositoryRoot,
             dockerCommand ?? "docker",
-            ValidateBaseImageReference(baseImage),
+            ValidateDigestReference(frameworkSeedImage, "--framework-seed-image"),
             ValidateOutputImageReference(outputImage),
-            AssetSourceOptions.Create(
-                "CLR2",
-                clr2UrlSecretFile,
-                clr2InstallerSecretFile,
-                "--clr2-url-secret-file",
-                "--clr2-installer-secret-file"),
-            NormalizeSha256(clr2Sha256, "--clr2-sha256"),
-            AssetSourceOptions.Create(
-                "Visual J# x64",
-                jsharpUrlSecretFile,
-                jsharpInstallerSecretFile,
-                "--jsharp-url-secret-file",
-                "--jsharp-installer-secret-file"),
-            NormalizeSha256(jsharpSha256, "--jsharp-sha256"),
+            NormalizeSha256(
+                operatorBuildInputSha256,
+                "--operator-build-input-sha256"),
             dryRun);
     }
 
     private static ValidatedInputs Validate(PreparationOptions options)
     {
         var repositoryRoot = ResolveRepositoryRoot(options.RepositoryRoot);
-        var clr2Source = ValidateAssetSource(
-            options.Clr2Source,
-            options.Clr2Sha256,
-            "dotnet-clr2-url",
-            "dotnet-clr2-installer-context");
-        var jsharpSource = ValidateAssetSource(
-            options.JSharpSource,
-            options.JSharpSha256,
-            "visual-jsharp-url",
-            "visual-jsharp-installer-context");
-        return new ValidatedInputs(repositoryRoot, clr2Source, jsharpSource);
+        var dockerfile = Path.Combine(repositoryRoot, DockerfileRelativePath);
+        RequireRegularFile(dockerfile, "The J# operator Dockerfile is missing or invalid.");
+
+        var installer = Path.Combine(
+            repositoryRoot,
+            InstallerRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        FileInfo info;
+        try
+        {
+            info = new FileInfo(installer);
+            if (!info.Exists)
+            {
+                throw new InputValidationException(
+                    "The Visual J# Git LFS object is missing. Run git lfs pull before building.");
+            }
+            if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InputValidationException(
+                    "The Visual J# Git LFS input must be one regular non-link file.");
+            }
+            if (IsLfsPointer(installer, info.Length))
+            {
+                throw new InputValidationException(
+                    "The Visual J# input is an unexpanded Git LFS pointer. " +
+                    "Run git lfs pull before building.");
+            }
+            ValidateLfsAttribute(repositoryRoot);
+            if (info.Length != InstallerSize)
+            {
+                throw new InputValidationException(
+                    "The Visual J# Git LFS input size or SHA-256 is invalid.");
+            }
+            using var stream = File.OpenRead(installer);
+            var digest = Convert.ToHexStringLower(SHA256.HashData(stream));
+            if (!StringComparer.Ordinal.Equals(digest, InstallerSha256))
+            {
+                throw new InputValidationException(
+                    "The Visual J# Git LFS input size or SHA-256 is invalid.");
+            }
+        }
+        catch (InputValidationException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or IOException or
+                NotSupportedException or UnauthorizedAccessException)
+        {
+            throw new InputValidationException(
+                "The Visual J# Git LFS input could not be validated.");
+        }
+
+        var context = Path.GetDirectoryName(installer);
+        if (string.IsNullOrEmpty(context))
+            throw new InputValidationException("The Visual J# LFS context is invalid.");
+        return new ValidatedInputs(repositoryRoot, dockerfile, installer, context);
+    }
+
+    private static bool IsLfsPointer(string path, long size)
+    {
+        if (size is < 1 or > 1024)
+            return false;
+        var text = File.ReadAllText(path);
+        return text.StartsWith(
+            "version https://git-lfs.github.com/spec/v1\n",
+            StringComparison.Ordinal);
+    }
+
+    private static void ValidateLfsAttribute(string repositoryRoot)
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = repositoryRoot,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        foreach (var argument in new[]
+        {
+            "check-attr",
+            "filter",
+            "--",
+            InstallerRelativePath
+        })
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+        try
+        {
+            using var process = Process.Start(startInfo)
+                ?? throw new InputValidationException(
+                    "Git could not validate the Visual J# LFS attribute.");
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0 ||
+                !output.TrimEnd().EndsWith(": filter: lfs", StringComparison.Ordinal))
+            {
+                throw new InputValidationException(
+                    "The Visual J# installer path is not covered by a Git LFS filter rule.");
+            }
+        }
+        catch (InputValidationException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (
+            exception is InvalidOperationException or Win32Exception)
+        {
+            throw new InputValidationException(
+                "Git could not validate the Visual J# LFS attribute.");
+        }
     }
 
     private static DockerInvocation CreateDockerInvocation(
         PreparationOptions options,
-        ValidatedInputs inputs,
-        StagedBuildContexts stagedContexts)
+        ValidatedInputs inputs)
     {
-        var dockerfile = Path.Combine(inputs.RepositoryRoot, DockerfileRelativePath);
         var arguments = new List<DockerArgument>
         {
             new("buildx"),
             new("build"),
             new("--file"),
-            new(dockerfile),
+            new(inputs.Dockerfile),
             new("--tag"),
             new(options.OutputImage),
             new("--load"),
             new("--provenance=false"),
             new("--build-arg"),
-            new($"BASE_IMAGE={options.BaseImage}"),
+            new($"FRAMEWORK_SEED_IMAGE={options.FrameworkSeedImage}"),
             new("--build-arg"),
-            new($"CLR2_INSTALLER_SHA256={options.Clr2Sha256}"),
+            new($"JSHARP_INSTALLER_SHA256={InstallerSha256}"),
             new("--build-arg"),
-            new($"JSHARP_INSTALLER_SHA256={options.JSharpSha256}"),
+            new($"OPERATOR_BUILD_INPUT_SHA256={options.OperatorBuildInputSha256}"),
             new("--build-arg"),
             new("ACCEPT_MICROSOFT_DOTNET_EULA=true"),
             new("--build-arg"),
             new("ACCEPT_MICROSOFT_JSHARP_EULA=true"),
+            new("--build-context"),
+            new(
+                $"{InstallerContextName}={inputs.InstallerContext}",
+                $"{InstallerContextName}=<repository-lfs-context>"),
+            new(inputs.RepositoryRoot)
         };
-        AddSourceArguments(arguments, inputs.Clr2Source, stagedContexts.Clr2Context);
-        AddSourceArguments(arguments, inputs.JSharpSource, stagedContexts.JSharpContext);
-        arguments.Add(new(inputs.RepositoryRoot));
         return new DockerInvocation(options.DockerCommand, arguments);
-    }
-
-    private static void AddSourceArguments(
-        List<DockerArgument> arguments,
-        ValidatedAssetSource source,
-        StagedBuildContext context)
-    {
-        if (source.Kind == AssetSourceKind.Url)
-        {
-            arguments.Add(new("--secret"));
-            arguments.Add(new($"id={source.DockerSourceId},src={source.Path}"));
-        }
-        arguments.Add(new("--build-context"));
-        arguments.Add(new(
-            $"{context.Name}={context.Directory}",
-            $"{context.Name}=<staged-local-context>"));
     }
 
     private static async Task<int> ExecuteAsync(
         DockerInvocation invocation,
-        ValidatedInputs inputs,
-        StagedBuildContexts stagedContexts)
+        ValidatedInputs inputs)
     {
         var startInfo = new ProcessStartInfo(invocation.Command)
         {
@@ -256,7 +301,8 @@ internal static partial class JSharpToolchainPreparation
         {
             process = Process.Start(startInfo);
         }
-        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
+        catch (Exception exception) when (
+            exception is InvalidOperationException or Win32Exception)
         {
             Console.Error.WriteLine("Could not start Docker Buildx.");
             return 1;
@@ -269,26 +315,24 @@ internal static partial class JSharpToolchainPreparation
 
         using (process)
         {
-            var sensitiveValues = new[]
-            {
-                inputs.Clr2Source.Path,
-                inputs.Clr2Source.SensitiveContent,
-                inputs.JSharpSource.Path,
-                inputs.JSharpSource.SensitiveContent,
-                stagedContexts.Clr2Context.Directory,
-                stagedContexts.JSharpContext.Directory
-            }.Where(static value => !string.IsNullOrEmpty(value)).Select(static value => value!).ToArray();
-            var standardOutput = ForwardRedactedAsync(process.StandardOutput, Console.Out, sensitiveValues);
-            var standardError = ForwardRedactedAsync(process.StandardError, Console.Error, sensitiveValues);
+            var sensitive = new[] { inputs.Installer, inputs.InstallerContext };
+            var standardOutput = ForwardRedactedAsync(
+                process.StandardOutput,
+                Console.Out,
+                sensitive);
+            var standardError = ForwardRedactedAsync(
+                process.StandardError,
+                Console.Error,
+                sensitive);
             await process.WaitForExitAsync();
             await Task.WhenAll(standardOutput, standardError);
             if (process.ExitCode != 0)
             {
-                Console.Error.WriteLine("Docker Buildx did not create the operator J# toolchain image.");
+                Console.Error.WriteLine(
+                    "Docker Buildx did not create the source-built J# operator image.");
                 return 1;
             }
         }
-
         return 0;
     }
 
@@ -299,8 +343,8 @@ internal static partial class JSharpToolchainPreparation
     {
         while (await source.ReadLineAsync() is { } line)
         {
-            foreach (var sensitiveValue in sensitiveValues)
-                line = line.Replace(sensitiveValue, "<redacted>", StringComparison.Ordinal);
+            foreach (var value in sensitiveValues)
+                line = line.Replace(value, "<redacted>", StringComparison.OrdinalIgnoreCase);
             await destination.WriteLineAsync(line);
         }
     }
@@ -316,7 +360,6 @@ internal static partial class JSharpToolchainPreparation
                     return root;
                 throw new InputValidationException("The repository root is invalid.");
             }
-
             var directory = new DirectoryInfo(Environment.CurrentDirectory);
             while (directory is not null)
             {
@@ -325,152 +368,79 @@ internal static partial class JSharpToolchainPreparation
                 directory = directory.Parent;
             }
         }
+        catch (InputValidationException)
+        {
+            throw;
+        }
         catch (Exception exception) when (
-            exception is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
+            exception is ArgumentException or IOException or
+                NotSupportedException or UnauthorizedAccessException)
         {
             throw new InputValidationException("The repository root is invalid.");
         }
-
-        throw new InputValidationException("SharpLabNext.slnx was not found above the current directory.");
+        throw new InputValidationException(
+            "SharpLabNext.slnx was not found above the current directory.");
     }
 
-    private static ValidatedAssetSource ValidateAssetSource(
-        AssetSourceOptions source,
-        string expectedSha256,
-        string urlSecretId,
-        string installerContextName)
+    private static void RequireRegularFile(string path, string message)
     {
-        return source.Kind switch
-        {
-            AssetSourceKind.Url => ReadUrlSecret(
-                source.Path,
-                source.AssetName,
-                urlSecretId,
-                installerContextName),
-            AssetSourceKind.Installer => ReadInstaller(
-                source.Path,
-                source.AssetName,
-                installerContextName,
-                expectedSha256),
-            _ => throw new InvalidOperationException("Unsupported operator asset source kind.")
-        };
-    }
-
-    private static ValidatedAssetSource ReadUrlSecret(
-        string configuredPath,
-        string assetName,
-        string secretId,
-        string installerContextName)
-    {
-        string path;
-        string content;
         try
         {
-            path = Path.GetFullPath(configuredPath);
-            if (!File.Exists(path))
-                throw new InputValidationException($"The {assetName} URL secret file does not exist.");
-            content = File.ReadAllText(path).Trim();
-        }
-        catch (InputValidationException)
-        {
-            throw;
-        }
-        catch (Exception exception) when (
-            exception is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
-        {
-            throw new InputValidationException($"The {assetName} URL secret file could not be read.");
-        }
-
-        if (string.IsNullOrWhiteSpace(content) ||
-            content.Any(char.IsWhiteSpace) ||
-            !Uri.TryCreate(content, UriKind.Absolute, out var uri) ||
-            uri.Scheme is not ("http" or "https"))
-        {
-            throw new InputValidationException(
-                $"The {assetName} URL secret file must contain one absolute HTTP(S) URL.");
-        }
-
-        return new ValidatedAssetSource(
-            AssetSourceKind.Url,
-            path,
-            secretId,
-            installerContextName,
-            content);
-    }
-
-    private static ValidatedAssetSource ReadInstaller(
-        string configuredPath,
-        string assetName,
-        string installerContextName,
-        string expectedSha256)
-    {
-        string path;
-        try
-        {
-            path = Path.GetFullPath(configuredPath);
-            if (!File.Exists(path))
-                throw new InputValidationException($"The {assetName} installer secret file does not exist.");
             var info = new FileInfo(path);
-            if (info.Length <= 0)
-                throw new InputValidationException($"The {assetName} installer secret file is empty.");
-            using var stream = File.OpenRead(path);
-            var actualSha256 = Convert.ToHexStringLower(SHA256.HashData(stream));
-            if (!StringComparer.Ordinal.Equals(actualSha256, expectedSha256))
-            {
-                throw new InputValidationException(
-                    $"The {assetName} installer secret file does not match its required SHA-256 digest.");
-            }
+            if (!info.Exists || (info.Attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InputValidationException(message);
         }
         catch (InputValidationException)
         {
             throw;
         }
         catch (Exception exception) when (
-            exception is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
+            exception is ArgumentException or IOException or
+                NotSupportedException or UnauthorizedAccessException)
         {
-            throw new InputValidationException($"The {assetName} installer secret file could not be read.");
+            throw new InputValidationException(message);
         }
-
-        return new ValidatedAssetSource(
-            AssetSourceKind.Installer,
-            path,
-            installerContextName,
-            installerContextName,
-            SensitiveContent: null);
     }
 
     private static string NormalizeSha256(string value, string option)
     {
-        if (value.Length != 64 || value.Any(static character => !char.IsAsciiHexDigit(character)))
-            throw new UsageException($"{option} must contain exactly 64 hexadecimal characters.");
+        if (value.Length != 64 ||
+            value.Any(static character => !char.IsAsciiHexDigit(character)))
+        {
+            throw new UsageException(
+                $"{option} must contain exactly 64 hexadecimal characters.");
+        }
         return value.ToLowerInvariant();
     }
 
-    private static string ValidateBaseImageReference(string value)
+    private static string ValidateDigestReference(string value, string option)
     {
-        const string digestMarker = "@sha256:";
-        var separator = value.LastIndexOf(digestMarker, StringComparison.Ordinal);
-        if (value.Length > 512 ||
-            separator <= 0 ||
-            separator + digestMarker.Length + 64 != value.Length ||
+        const string marker = "@sha256:";
+        var separator = value.LastIndexOf(marker, StringComparison.Ordinal);
+        if (value.Length > 512 || separator <= 0 ||
+            separator + marker.Length + 64 != value.Length ||
             value[..separator].Any(static character =>
-                char.IsWhiteSpace(character) || char.IsControl(character) || character == '@') ||
-            value[(separator + digestMarker.Length)..].Any(static character =>
+                char.IsWhiteSpace(character) ||
+                char.IsControl(character) ||
+                character == '@') ||
+            value[(separator + marker.Length)..].Any(static character =>
                 character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
         {
             throw new UsageException(
-                "--base-image must use repository[:tag]@sha256:<64 lowercase hex>.");
+                $"{option} must use repository[:tag]@sha256:<64 lowercase hex>.");
         }
         return value;
     }
 
     private static string ValidateOutputImageReference(string value)
     {
-        if (value.Length > 512 ||
-            value.Contains('@') ||
-            value.Any(static character => char.IsWhiteSpace(character) || char.IsControl(character)))
+        if (value.Length > 512 || value.Contains('@') ||
+            !value.Contains(':', StringComparison.Ordinal) ||
+            value.Any(static character =>
+                char.IsWhiteSpace(character) || char.IsControl(character)))
         {
-            throw new UsageException("--output-image must contain one bounded taggable Docker image reference.");
+            throw new UsageException(
+                "--output-image must contain one bounded taggable Docker image reference.");
         }
         return value;
     }
@@ -486,201 +456,22 @@ internal static partial class JSharpToolchainPreparation
     private sealed record PreparationOptions(
         string? RepositoryRoot,
         string DockerCommand,
-        string BaseImage,
+        string FrameworkSeedImage,
         string OutputImage,
-        AssetSourceOptions Clr2Source,
-        string Clr2Sha256,
-        AssetSourceOptions JSharpSource,
-        string JSharpSha256,
+        string OperatorBuildInputSha256,
         bool DryRun);
 
     private sealed record ValidatedInputs(
         string RepositoryRoot,
-        ValidatedAssetSource Clr2Source,
-        ValidatedAssetSource JSharpSource);
-
-    private enum AssetSourceKind
-    {
-        Url,
-        Installer
-    }
-
-    private sealed record AssetSourceOptions(string AssetName, AssetSourceKind Kind, string Path)
-    {
-        public static AssetSourceOptions Create(
-            string assetName,
-            string? urlSecretFile,
-            string? installerSecretFile,
-            string urlOption,
-            string installerOption)
-        {
-            var hasUrl = !string.IsNullOrWhiteSpace(urlSecretFile);
-            var hasInstaller = !string.IsNullOrWhiteSpace(installerSecretFile);
-            if (hasUrl == hasInstaller)
-            {
-                throw new UsageException(
-                    $"{assetName} requires exactly one of {urlOption} or {installerOption}.");
-            }
-            return hasUrl
-                ? new AssetSourceOptions(assetName, AssetSourceKind.Url, urlSecretFile!)
-                : new AssetSourceOptions(assetName, AssetSourceKind.Installer, installerSecretFile!);
-        }
-    }
-
-    private sealed record ValidatedAssetSource(
-        AssetSourceKind Kind,
-        string Path,
-        string DockerSourceId,
-        string InstallerContextName,
-        string? SensitiveContent);
-
-    private sealed class StagedBuildContexts : IDisposable
-    {
-        private StagedBuildContexts(StagedBuildContext clr2Context, StagedBuildContext jsharpContext)
-        {
-            Clr2Context = clr2Context;
-            JSharpContext = jsharpContext;
-        }
-
-        public StagedBuildContext Clr2Context { get; }
-        public StagedBuildContext JSharpContext { get; }
-
-        public static StagedBuildContexts Create(ValidatedInputs inputs)
-        {
-            StagedBuildContext? clr2Context = null;
-            try
-            {
-                clr2Context = StagedBuildContext.Create(inputs.Clr2Source);
-                var jsharpContext = StagedBuildContext.Create(inputs.JSharpSource);
-                return new StagedBuildContexts(clr2Context, jsharpContext);
-            }
-            catch
-            {
-                clr2Context?.Dispose();
-                throw;
-            }
-        }
-
-        public void Dispose()
-        {
-            InputValidationException? cleanupFailure = null;
-            try
-            {
-                JSharpContext.Dispose();
-            }
-            catch (InputValidationException exception)
-            {
-                cleanupFailure = exception;
-            }
-            try
-            {
-                Clr2Context.Dispose();
-            }
-            catch (InputValidationException exception)
-            {
-                cleanupFailure ??= exception;
-            }
-            if (cleanupFailure is not null)
-                throw cleanupFailure;
-        }
-    }
-
-    private sealed partial class StagedBuildContext : IDisposable
-    {
-        private StagedBuildContext(string name, string directory)
-        {
-            Name = name;
-            Directory = directory;
-        }
-
-        public string Name { get; }
-        public string Directory { get; }
-
-        public static StagedBuildContext Create(ValidatedAssetSource source)
-        {
-            var parent = source.Kind == AssetSourceKind.Installer
-                ? Path.GetDirectoryName(source.Path)
-                : Path.GetTempPath();
-            if (string.IsNullOrEmpty(parent))
-                throw new InputValidationException("The operator asset staging directory is invalid.");
-
-            var directory = Path.Combine(
-                parent,
-                $".sharplabnext-jsharp-context-{Guid.NewGuid():N}");
-            try
-            {
-                System.IO.Directory.CreateDirectory(directory);
-                var stagedInstaller = Path.Combine(directory, "installer.bin");
-                if (source.Kind == AssetSourceKind.Installer)
-                    CreateHardLink(stagedInstaller, source.Path);
-                else
-                    File.Create(stagedInstaller).Dispose();
-                return new StagedBuildContext(source.InstallerContextName, directory);
-            }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException or NotSupportedException)
-            {
-                TryDelete(directory, failClosed: false);
-                throw new InputValidationException(
-                    "The operator asset could not be staged as a private local build context.");
-            }
-        }
-
-        public void Dispose() => TryDelete(Directory, failClosed: true);
-
-        private static void CreateHardLink(string newPath, string existingPath)
-        {
-            var succeeded = OperatingSystem.IsWindows()
-                ? CreateHardLinkWindows(newPath, existingPath, IntPtr.Zero)
-                : CreateHardLinkUnix(existingPath, newPath) == 0;
-            if (!succeeded)
-            {
-                throw new IOException(
-                    "Could not create the private operator asset hard link.",
-                    new Win32Exception(Marshal.GetLastPInvokeError()));
-            }
-        }
-
-        [LibraryImport(
-            "kernel32.dll",
-            EntryPoint = "CreateHardLinkW",
-            StringMarshalling = StringMarshalling.Utf16,
-            SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static partial bool CreateHardLinkWindows(
-            string fileName,
-            string existingFileName,
-            IntPtr securityAttributes);
-
-        [LibraryImport(
-            "libc",
-            EntryPoint = "link",
-            StringMarshalling = StringMarshalling.Utf8,
-            SetLastError = true)]
-        private static partial int CreateHardLinkUnix(string existingPath, string newPath);
-
-        private static void TryDelete(string directory, bool failClosed)
-        {
-            try
-            {
-                if (System.IO.Directory.Exists(directory))
-                    System.IO.Directory.Delete(directory, recursive: true);
-            }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException)
-            {
-                if (failClosed)
-                {
-                    throw new InputValidationException(
-                        "The private operator asset staging context could not be removed.");
-                }
-            }
-        }
-    }
+        string Dockerfile,
+        string Installer,
+        string InstallerContext);
 
     private sealed record DockerArgument(string Value, string? RedactedValue = null);
 
-    private sealed record DockerInvocation(string Command, IReadOnlyList<DockerArgument> Arguments)
+    private sealed record DockerInvocation(
+        string Command,
+        IReadOnlyList<DockerArgument> Arguments)
     {
         public string RenderRedacted()
         {
@@ -696,7 +487,8 @@ internal static partial class JSharpToolchainPreparation
         private static string Quote(string value)
         {
             if (value.Length > 0 && value.All(static character =>
-                    !char.IsWhiteSpace(character) && character is not ('\"' or '\\')))
+                    !char.IsWhiteSpace(character) &&
+                    character is not ('"' or '\\')))
             {
                 return value;
             }
@@ -705,6 +497,5 @@ internal static partial class JSharpToolchainPreparation
     }
 
     private sealed class UsageException(string message) : Exception(message);
-
     private sealed class InputValidationException(string message) : Exception(message);
 }

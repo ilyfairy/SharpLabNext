@@ -21,7 +21,8 @@ COPY profiles/versions.props ./profiles/versions.props
 COPY src/ ./src/
 COPY samples/ ./samples/
 COPY third_party/ILSense/ ./third_party/ILSense/
-RUN if [ "${PROJECT_PATH}" = "src/Workers/IL/SharpLabNext.Worker.IL/SharpLabNext.Worker.IL.csproj" ]; then \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    if [ "${PROJECT_PATH}" = "src/Workers/IL/SharpLabNext.Worker.IL/SharpLabNext.Worker.IL.csproj" ]; then \
       dotnet restore "third_party/ILSense/src/EleCho.ILSense/EleCho.ILSense.csproj" \
         --force-evaluate \
         --use-lock-file \
@@ -29,18 +30,19 @@ RUN if [ "${PROJECT_PATH}" = "src/Workers/IL/SharpLabNext.Worker.IL/SharpLabNext
         --locked-mode \
         /p:RestorePackagesWithLockFile=true; \
     fi
-RUN dotnet restore "${PROJECT_PATH}" --locked-mode \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore "${PROJECT_PATH}" --locked-mode \
     /p:RoslynStableVersion="${ROSLYN_STABLE_VERSION}" \
     /p:FSharpCompilerServiceVersion="${FSHARP_COMPILER_SERVICE_VERSION}" \
     /p:FSharpCoreVersion="${FSHARP_CORE_VERSION}" \
     /p:ILSpyVersion="${ILSPY_VERSION}" \
     /p:ILVerificationVersion="${ILVERIFICATION_VERSION}" \
-    /p:MobiusILAsmVersion="${MOBIUS_ILASM_VERSION}"
-RUN dotnet publish "${PROJECT_PATH}" \
-    --configuration ${CONFIGURATION} \
-    --no-restore \
-    --output /app/publish \
-    /p:UseAppHost=false
+    /p:MobiusILAsmVersion="${MOBIUS_ILASM_VERSION}" \
+    && dotnet publish "${PROJECT_PATH}" \
+      --configuration ${CONFIGURATION} \
+      --no-restore \
+      --output /app/publish \
+      /p:UseAppHost=false
 
 FROM publish AS reference-sets
 ARG NET10_REFERENCE_PACK_VERSION
@@ -155,8 +157,12 @@ ARG NET11_REFERENCE_PACKAGE_CONTENT_HASH
 COPY profiles/runtime-matrix.json /inputs/runtime-matrix.json
 COPY profiles/lock.json /inputs/lock.json
 COPY eng/materialize-coreclr-reference-sets.cs /tools/materialize-coreclr-reference-sets.cs
-RUN --mount=type=cache,id=sharplabnext-reference-archives,target=/reference-archives,sharing=locked \
-    dotnet build --no-restore \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    --mount=type=cache,id=sharplabnext-reference-archives,target=/reference-archives,sharing=locked \
+    dotnet restore \
+      /source/src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj \
+      --locked-mode \
+    && dotnet build --no-restore \
       /source/src/RuntimeApi/SharpLabNext.Runtime/SharpLabNext.Runtime.csproj \
       --configuration "${CONFIGURATION}" \
       --framework netstandard2.1 \

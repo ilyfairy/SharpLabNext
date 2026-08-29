@@ -15,6 +15,10 @@ const dockerfile = fs.readFileSync(
   path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.runtime-wine-framework-matrix'),
   'utf8',
 )
+const sharedDockerfile = fs.readFileSync(
+  path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.runtime-wine-framework-matrix-shared'),
+  'utf8',
+)
 const shell = findShell()
 
 function findShell() {
@@ -48,14 +52,29 @@ function wineSection(logicalPath) {
   return logicalPath.replaceAll('\\', '\\\\')
 }
 
-function runFixture({ requested, architecture = 'win64', sections, createSyswow64 = false }) {
+function runFixture({
+  requested,
+  architecture = 'win64',
+  sections,
+  createSyswow64 = false,
+  ngenServiceStarts = { 32: 'dword:00000004', 64: 'dword:00000004' },
+}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-netfx-preflight-'))
   const clr2 = path.join(root, 'wine-netfx-clr2')
   const clr4 = path.join(root, 'wine-netfx-clr4')
-  const prefix = requested === '2.0' || requested === '3.0' || requested === '3.5' ? clr2 : clr4
-  const framework = requested === '2.0' || requested === '3.0' || requested === '3.5'
+  const isClr2 = requested === '2.0' || requested === '3.0' || requested === '3.5'
+  const prefix = isClr2 ? clr2 : clr4
+  const framework = isClr2
     ? path.join(prefix, 'drive_c', 'windows', 'Microsoft.NET', 'Framework64', 'v2.0.50727')
     : path.join(prefix, 'drive_c', 'windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319')
+  const serviceVersion = isClr2 ? 'v2.0.50727' : 'v4.0.30319'
+  const serviceSections = [32, 64].map(serviceArchitecture => ({
+    path: String.raw`System\CurrentControlSet\Services\clr_optimization_${serviceVersion}_${serviceArchitecture}`,
+    values: {
+      ImagePath: `"C:\\\\windows\\\\Microsoft.NET\\\\Framework${serviceArchitecture === 64 ? '64' : ''}\\\\${serviceVersion}\\\\mscorsvw.exe"`,
+      Start: ngenServiceStarts[serviceArchitecture],
+    },
+  }))
 
   try {
     fs.mkdirSync(framework, { recursive: true })
@@ -70,7 +89,7 @@ function runFixture({ requested, architecture = 'win64', sections, createSyswow6
       '',
       `#arch=${architecture}`,
       '',
-      ...sections.flatMap(section => [
+      ...[...serviceSections, ...sections].flatMap(section => [
         `[${wineSection(section.path)}] 1`,
         ...Object.entries(section.values).map(([name, value]) => `"${name}"=${value}`),
         '',
@@ -105,6 +124,9 @@ test('Wine Framework preflight reads installer registry identity rather than dir
   assert.match(script, /Release/)
   assert.doesNotMatch(script, /test ! -e .*syswow64/)
   assert.match(script, /Framework64/)
+  assert.match(script, /clr_optimization_v2\.0\.50727_(?:32|64)/)
+  assert.match(script, /clr_optimization_v4\.0\.30319_(?:32|64)/)
+  assert.match(script, /dword:00000004/)
   assert.doesNotMatch(script, /wine-stable\s+.*\.exe/)
 })
 
@@ -238,6 +260,34 @@ test('Wine Framework preflight rejects a registry that declares a 32-bit prefix'
   assert.match(result.stderr, /registry architecture 'win32' is not win64/)
 })
 
+test('Wine Framework preflight rejects enabled NGen background services', {
+  skip: shell === undefined,
+}, () => {
+  for (const serviceArchitecture of [32, 64]) {
+    const starts = { 32: 'dword:00000004', 64: 'dword:00000004' }
+    starts[serviceArchitecture] = 'dword:00000002'
+    const result = runFixture({
+      requested: '2.0',
+      ngenServiceStarts: starts,
+      sections: [{
+        path: String.raw`Software\Microsoft\NET Framework Setup\NDP\v2.0.50727`,
+        values: {
+          Increment: '"42"',
+          Install: 'dword:00000001',
+          MSI: 'dword:00000001',
+          SP: 'dword:00000000',
+        },
+      }],
+    })
+
+    assert.equal(result.status, 1)
+    assert.match(
+      result.stderr,
+      new RegExp(`clr_optimization_v2\\.0\\.50727_${serviceArchitecture}.*Start=4`),
+    )
+  }
+})
+
 test('Wine Framework preflight has an explicit exact-version branch for every candidate row', () => {
   for (const version of [
     '2.0',
@@ -280,6 +330,12 @@ test('candidate Dockerfile validates the prefix before and after adding the targ
   assert.doesNotMatch(dockerfile, /cmp --silent/)
   assert.doesNotMatch(dockerfile, /test ! -e .*syswow64/)
   assert.match(dockerfile, /test ! -e \/usr\/lib\/x86_64-linux-gnu\/wine\/i386-windows/)
+  for (const source of [dockerfile, sharedDockerfile]) {
+    assert.match(source, /run_clean\(\)/)
+    assert.match(source, /target-runtime-runner\.stderr/)
+    assert.match(source, /desktop-clr-jit\.stderr/)
+    assert.match(source, /if test -s "\$\{stderr\}"/)
+  }
 })
 
 test('other Wine matrix candidates use registry architecture instead of syswow64 presence', () => {

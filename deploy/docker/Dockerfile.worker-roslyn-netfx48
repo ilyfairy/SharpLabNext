@@ -10,11 +10,12 @@ WORKDIR /source
 COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
 COPY profiles/versions.props ./profiles/versions.props
 COPY src/ ./src/
-RUN dotnet restore \
+RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore \
       src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable.csproj \
       --locked-mode \
-      /p:RoslynStableVersion="${ROSLYN_STABLE_VERSION}"
-RUN dotnet publish \
+      /p:RoslynStableVersion="${ROSLYN_STABLE_VERSION}" \
+    && dotnet publish \
       src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable.csproj \
       --configuration Release \
       --no-restore \
