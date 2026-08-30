@@ -44,9 +44,7 @@ public static class RuntimeProfileValidation
         ],
         StringComparer.OrdinalIgnoreCase);
 
-    public static IReadOnlyList<string> ValidatePackage(
-        RuntimeProfileDefinition profile,
-        bool requireDigestPinnedImage)
+    public static IReadOnlyList<string> ValidatePackage(RuntimeProfileDefinition profile, bool requireDigestPinnedImage)
     {
         var failures = Validate(profile, requireDigestPinnedImage).ToList();
         var policyIds = new HashSet<string>(StringComparer.Ordinal);
@@ -58,16 +56,12 @@ public static class RuntimeProfileValidation
         }
         if (profile.SecurityPolicies.Count > 0)
         {
-            failures.AddRange(profile.AllowedSecurityPolicyIds
-                .Where(id => !policyIds.Contains(id))
-                .Select(id => $"Runtime profile '{profile.Id}' allows missing security policy '{id}'."));
+            failures.AddRange(profile.AllowedSecurityPolicyIds.Where(id => !policyIds.Contains(id)).Select(id => $"Runtime profile '{profile.Id}' allows missing security policy '{id}'."));
         }
         return failures;
     }
 
-    public static IReadOnlyList<string> Validate(
-        RuntimeProfileDefinition profile,
-        bool requireDigestPinnedImage)
+    public static IReadOnlyList<string> Validate(RuntimeProfileDefinition profile, bool requireDigestPinnedImage)
     {
         ArgumentNullException.ThrowIfNull(profile);
         var failures = new List<string>();
@@ -80,18 +74,15 @@ public static class RuntimeProfileValidation
             var expectedPath = $"profiles/runtime-promotion-receipts/{profile.Id}.json";
             if (!string.Equals(promotionReceipt.Path, expectedPath, StringComparison.Ordinal))
             {
-                failures.Add(
-                    $"Runtime profile '{profile.Id}' promotion receipt path must be '{expectedPath}'.");
+                failures.Add($"Runtime profile '{profile.Id}' promotion receipt path must be '{expectedPath}'.");
             }
             if (!IsSha256(promotionReceipt.Sha256))
             {
-                failures.Add(
-                    $"Runtime profile '{profile.Id}' promotion receipt must have a canonical SHA-256 digest.");
+                failures.Add($"Runtime profile '{profile.Id}' promotion receipt must have a canonical SHA-256 digest.");
             }
             if (profile.Image.LastIndexOf("@sha256:", StringComparison.Ordinal) <= 0)
             {
-                failures.Add(
-                    $"Runtime profile '{profile.Id}' with a promotion receipt must use a registry digest reference.");
+                failures.Add($"Runtime profile '{profile.Id}' with a promotion receipt must use a registry digest reference.");
             }
         }
         RequireStableId(profile.Family, $"family for runtime profile '{profile.Id}'", failures);
@@ -102,11 +93,9 @@ public static class RuntimeProfileValidation
         else
         {
             RequireDistinct(profile.AcceptedRuntimeFamilies, "accepted runtime family", failures);
-            if (profile.AcceptedRuntimeFamilies.Count > 0 &&
-                !profile.AcceptedRuntimeFamilies.Contains(profile.Family, StringComparer.Ordinal))
+            if (profile.AcceptedRuntimeFamilies.Count > 0 && !profile.AcceptedRuntimeFamilies.Contains(profile.Family, StringComparer.Ordinal))
             {
-                failures.Add(
-                    $"Runtime profile '{profile.Id}' must include its own family '{profile.Family}' when accepted runtime families are explicit.");
+                failures.Add($"Runtime profile '{profile.Id}' must include its own family '{profile.Family}' when accepted runtime families are explicit.");
             }
         }
         ValidateAcceptedFrameworks(profile, failures);
@@ -153,8 +142,7 @@ public static class RuntimeProfileValidation
         {
             if (minimumVersionIsDeclared || maximumVersionIsDeclared)
             {
-                failures.Add(
-                    $"Accepted framework '{framework.Name}' must declare either ExactVersion or a minimum/maximum range, not both.");
+                failures.Add($"Accepted framework '{framework.Name}' must declare either ExactVersion or a minimum/maximum range, not both.");
             }
             ValidateFrameworkVersion(framework.ExactVersion, framework.Name, "exact", failures, out _);
             return failures;
@@ -162,50 +150,32 @@ public static class RuntimeProfileValidation
 
         if (!minimumVersionIsDeclared || !maximumVersionIsDeclared)
         {
-            failures.Add(
-                $"Accepted framework '{framework.Name}' must declare both MinimumVersion and MaximumVersion, or ExactVersion.");
+            failures.Add($"Accepted framework '{framework.Name}' must declare both MinimumVersion and MaximumVersion, or ExactVersion.");
             return failures;
         }
 
-        var minimumIsValid = ValidateFrameworkVersion(
-            framework.MinimumVersion,
-            framework.Name,
-            "minimum",
-            failures,
-            out var minimum);
-        var maximumIsValid = ValidateFrameworkVersion(
-            framework.MaximumVersion,
-            framework.Name,
-            "maximum",
-            failures,
-            out var maximum);
+        var minimumIsValid = ValidateFrameworkVersion(framework.MinimumVersion, framework.Name, "minimum", failures, out var minimum);
+        var maximumIsValid = ValidateFrameworkVersion(framework.MaximumVersion, framework.Name, "maximum", failures, out var maximum);
         if (minimumIsValid && maximumIsValid && CompareFrameworkVersions(minimum!, maximum!) > 0)
         {
-            failures.Add(
-                $"Accepted framework '{framework.Name}' has MinimumVersion greater than MaximumVersion.");
+            failures.Add($"Accepted framework '{framework.Name}' has MinimumVersion greater than MaximumVersion.");
         }
         return failures;
     }
 
-    public static bool AcceptsFramework(
-        RuntimeFrameworkCompatibilityDefinition accepted,
-        string frameworkName,
-        string minimumVersion)
+    public static bool AcceptsFramework(RuntimeFrameworkCompatibilityDefinition accepted, string frameworkName, string minimumVersion)
     {
         ArgumentNullException.ThrowIfNull(accepted);
         ArgumentException.ThrowIfNullOrWhiteSpace(frameworkName);
         ArgumentException.ThrowIfNullOrWhiteSpace(minimumVersion);
-        if (!StringComparer.Ordinal.Equals(accepted.Name, frameworkName) ||
-            Validate(accepted).Count > 0)
+        if (!StringComparer.Ordinal.Equals(accepted.Name, frameworkName) || Validate(accepted).Count > 0)
         {
             return false;
         }
 
         if (accepted.ExactVersion is { } exactVersion)
             return StringComparer.Ordinal.Equals(exactVersion, minimumVersion);
-        if (!TryParseFrameworkVersion(minimumVersion, out var requested) ||
-            !TryParseFrameworkVersion(accepted.MinimumVersion, out var minimum) ||
-            !TryParseFrameworkVersion(accepted.MaximumVersion, out var maximum))
+        if (!TryParseFrameworkVersion(minimumVersion, out var requested) || !TryParseFrameworkVersion(accepted.MinimumVersion, out var minimum) || !TryParseFrameworkVersion(accepted.MaximumVersion, out var maximum))
         {
             return false;
         }
@@ -223,61 +193,41 @@ public static class RuntimeProfileValidation
             RuntimeContainerEnvironmentKinds.Wine;
         if (!environmentKindIsKnown)
         {
-            failures.Add(
-                $"Runtime container environment kind '{container.EnvironmentKind}' is not supported.");
+            failures.Add($"Runtime container environment kind '{container.EnvironmentKind}' is not supported.");
         }
 
         switch (container.IsolationKind)
         {
             case RuntimeContainerIsolationKinds.Standard:
-                if (!StringComparer.Ordinal.Equals(
-                        container.ExecutionUser,
-                        RuntimeContainerExecutionUsers.NonRoot))
+                if (!StringComparer.Ordinal.Equals(container.ExecutionUser, RuntimeContainerExecutionUsers.NonRoot))
                 {
-                    failures.Add(
-                        $"Standard container isolation requires execution user '{RuntimeContainerExecutionUsers.NonRoot}'.");
+                    failures.Add($"Standard container isolation requires execution user '{RuntimeContainerExecutionUsers.NonRoot}'.");
                 }
-                if (environmentKindIsKnown &&
-                    container.EnvironmentKind is not (
-                        RuntimeContainerEnvironmentKinds.CoreClr or
-                        RuntimeContainerEnvironmentKinds.Mono))
+                if (environmentKindIsKnown && container.EnvironmentKind is not (RuntimeContainerEnvironmentKinds.CoreClr or RuntimeContainerEnvironmentKinds.Mono))
                 {
-                    failures.Add(
-                        "Standard container isolation supports only 'coreclr' or 'mono' environments.");
+                    failures.Add("Standard container isolation supports only 'coreclr' or 'mono' environments.");
                 }
                 if (container.WinePrefixPath is not null)
                     failures.Add("A standard container cannot declare a Wine prefix path.");
                 break;
             case RuntimeContainerIsolationKinds.Wine:
-                if (container.ExecutionUser is not (
-                        RuntimeContainerExecutionUsers.Root or
-                        RuntimeContainerExecutionUsers.NonRoot))
+                if (container.ExecutionUser is not (RuntimeContainerExecutionUsers.Root or RuntimeContainerExecutionUsers.NonRoot))
                 {
-                    failures.Add(
-                        $"Wine container isolation requires execution user '{RuntimeContainerExecutionUsers.Root}' or '{RuntimeContainerExecutionUsers.NonRoot}'.");
+                    failures.Add($"Wine container isolation requires execution user '{RuntimeContainerExecutionUsers.Root}' or '{RuntimeContainerExecutionUsers.NonRoot}'.");
                 }
-                if (environmentKindIsKnown &&
-                    !StringComparer.Ordinal.Equals(
-                        container.EnvironmentKind,
-                        RuntimeContainerEnvironmentKinds.Wine))
+                if (environmentKindIsKnown && !StringComparer.Ordinal.Equals(container.EnvironmentKind, RuntimeContainerEnvironmentKinds.Wine))
                 {
                     failures.Add("Wine container isolation requires the 'wine' environment.");
                 }
-                ValidateCommand(
-                    container.WinePrefixPath ?? string.Empty,
-                    "Wine container prefix",
-                    allowCommandName: false,
-                    failures);
+                ValidateCommand(container.WinePrefixPath ?? string.Empty, "Wine container prefix", allowCommandName: false, failures);
                 if (container.WinePrefixPath is { } winePrefixPath &&
-                    (!winePrefixPath.StartsWith("/opt/", StringComparison.Ordinal) ||
-                     winePrefixPath.EndsWith('/')))
+                    (!winePrefixPath.StartsWith("/opt/", StringComparison.Ordinal) || winePrefixPath.EndsWith('/')))
                 {
                     failures.Add("The Wine container prefix must be a directory below /opt.");
                 }
                 break;
             default:
-                failures.Add(
-                    $"Runtime container isolation kind '{container.IsolationKind}' is not supported.");
+                failures.Add($"Runtime container isolation kind '{container.IsolationKind}' is not supported.");
                 break;
         }
         return failures;
@@ -287,26 +237,10 @@ public static class RuntimeProfileValidation
     {
         ArgumentNullException.ThrowIfNull(operation);
         var failures = new List<string>();
-        ValidateOperation(
-            operation,
-            "Run",
-            [RuntimeOperationPlaceholders.EntryAssembly, RuntimeOperationPlaceholders.Arguments],
-            failures);
-        RequirePlaceholderExactlyOnce(
-            operation.Command,
-            RuntimeOperationPlaceholders.EntryAssembly,
-            "Run",
-            failures);
-        RequirePlaceholderAtMostOnce(
-            operation.Command,
-            RuntimeOperationPlaceholders.Arguments,
-            "Run",
-            failures);
-        RequireDynamicPlaceholderLastAndAfterEntry(
-            operation.Command,
-            RuntimeOperationPlaceholders.Arguments,
-            "Run",
-            failures);
+        ValidateOperation(operation, "Run", [RuntimeOperationPlaceholders.EntryAssembly, RuntimeOperationPlaceholders.Arguments], failures);
+        RequirePlaceholderExactlyOnce(operation.Command, RuntimeOperationPlaceholders.EntryAssembly, "Run", failures);
+        RequirePlaceholderAtMostOnce(operation.Command, RuntimeOperationPlaceholders.Arguments, "Run", failures);
+        RequireDynamicPlaceholderLastAndAfterEntry(operation.Command, RuntimeOperationPlaceholders.Arguments, "Run", failures);
         ValidateRunImplementation(operation, failures);
         return failures;
     }
@@ -315,26 +249,10 @@ public static class RuntimeProfileValidation
     {
         ArgumentNullException.ThrowIfNull(operation);
         var failures = new List<string>();
-        ValidateOperation(
-            operation,
-            "JIT",
-            [RuntimeOperationPlaceholders.EntryAssembly, RuntimeOperationPlaceholders.MethodFilter],
-            failures);
-        RequirePlaceholderExactlyOnce(
-            operation.Command,
-            RuntimeOperationPlaceholders.EntryAssembly,
-            "JIT",
-            failures);
-        RequirePlaceholderAtMostOnce(
-            operation.Command,
-            RuntimeOperationPlaceholders.MethodFilter,
-            "JIT",
-            failures);
-        RequireDynamicPlaceholderLastAndAfterEntry(
-            operation.Command,
-            RuntimeOperationPlaceholders.MethodFilter,
-            "JIT",
-            failures);
+        ValidateOperation(operation, "JIT", [RuntimeOperationPlaceholders.EntryAssembly, RuntimeOperationPlaceholders.MethodFilter], failures);
+        RequirePlaceholderExactlyOnce(operation.Command, RuntimeOperationPlaceholders.EntryAssembly, "JIT", failures);
+        RequirePlaceholderAtMostOnce(operation.Command, RuntimeOperationPlaceholders.MethodFilter, "JIT", failures);
+        RequireDynamicPlaceholderLastAndAfterEntry(operation.Command, RuntimeOperationPlaceholders.MethodFilter, "JIT", failures);
 
         switch (operation.SourceMappingKind)
         {
@@ -345,39 +263,29 @@ public static class RuntimeProfileValidation
             case RuntimeJitSourceMappingKinds.LinuxProfiler:
                 if (!StringComparer.Ordinal.Equals(operation.PathStyle, RuntimeOperationPathStyles.Unix))
                 {
-                    failures.Add(
-                        "A JIT operation with source mapping kind 'linux-profiler' must use Unix paths.");
+                    failures.Add("A JIT operation with source mapping kind 'linux-profiler' must use Unix paths.");
                 }
-                ValidateCommand(
-                    operation.ProfilerPath ?? string.Empty,
-                    "JIT Linux profiler",
-                    allowCommandName: false,
-                    failures);
+                ValidateCommand(operation.ProfilerPath ?? string.Empty, "JIT Linux profiler", allowCommandName: false, failures);
                 break;
             case RuntimeJitSourceMappingKinds.CheckedJitDebugInfo:
                 if (!StringComparer.Ordinal.Equals(operation.PathStyle, RuntimeOperationPathStyles.Unix))
                 {
-                    failures.Add(
-                        "A JIT operation with source mapping kind 'checked-jit-debug-info' must use Unix paths.");
+                    failures.Add("A JIT operation with source mapping kind 'checked-jit-debug-info' must use Unix paths.");
                 }
                 if (operation.ProfilerPath is not null)
                 {
-                    failures.Add(
-                        "A JIT operation with source mapping kind 'checked-jit-debug-info' cannot declare a profiler path.");
+                    failures.Add("A JIT operation with source mapping kind 'checked-jit-debug-info' cannot declare a profiler path.");
                 }
                 break;
             default:
-                failures.Add(
-                    $"JIT source mapping kind '{operation.SourceMappingKind}' is not supported.");
+                failures.Add($"JIT source mapping kind '{operation.SourceMappingKind}' is not supported.");
                 break;
         }
         ValidateJitImplementation(operation, failures);
         return failures;
     }
 
-    private static void ValidateAcceptedFrameworks(
-        RuntimeProfileDefinition profile,
-        List<string> failures)
+    private static void ValidateAcceptedFrameworks(RuntimeProfileDefinition profile, List<string> failures)
     {
         if (profile.AcceptedFrameworks is null)
         {
@@ -386,8 +294,7 @@ public static class RuntimeProfileValidation
         }
         if (profile.AcceptedFrameworks.Count > MaximumAcceptedFrameworks)
         {
-            failures.Add(
-                $"Runtime profile '{profile.Id}' cannot declare more than {MaximumAcceptedFrameworks} accepted frameworks.");
+            failures.Add($"Runtime profile '{profile.Id}' cannot declare more than {MaximumAcceptedFrameworks} accepted frameworks.");
         }
 
         var names = new HashSet<string>(StringComparer.Ordinal);
@@ -401,42 +308,28 @@ public static class RuntimeProfileValidation
             failures.AddRange(Validate(framework));
             if (!string.IsNullOrWhiteSpace(framework.Name) && !names.Add(framework.Name))
             {
-                failures.Add(
-                    $"Runtime profile '{profile.Id}' declares duplicate accepted framework '{framework.Name}'.");
+                failures.Add($"Runtime profile '{profile.Id}' declares duplicate accepted framework '{framework.Name}'.");
             }
         }
     }
 
     private static void ValidateFrameworkName(string? name, List<string> failures)
     {
-        if (string.IsNullOrWhiteSpace(name) ||
-            name.Length > MaximumFrameworkNameLength ||
-            !name.Any(static character => char.IsAsciiLetterOrDigit(character)) ||
-            name.Any(static character =>
-                !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '_' or '-')))
+        if (string.IsNullOrWhiteSpace(name) || name.Length > MaximumFrameworkNameLength || !name.Any(static character => char.IsAsciiLetterOrDigit(character)) || name.Any(static character => !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '_' or '-')))
         {
-            failures.Add(
-                "Accepted framework names must use 1-160 ASCII letters, digits, periods, underscores, or hyphens.");
+            failures.Add("Accepted framework names must use 1-160 ASCII letters, digits, periods, underscores, or hyphens.");
         }
     }
 
-    private static bool ValidateFrameworkVersion(
-        string? version,
-        string frameworkName,
-        string boundName,
-        List<string> failures,
-        out ParsedFrameworkVersion? parsed)
+    private static bool ValidateFrameworkVersion(string? version, string frameworkName, string boundName, List<string> failures, out ParsedFrameworkVersion? parsed)
     {
         if (TryParseFrameworkVersion(version, out parsed))
             return true;
-        failures.Add(
-            $"Accepted framework '{frameworkName}' has an invalid {boundName} version '{version}'.");
+        failures.Add($"Accepted framework '{frameworkName}' has an invalid {boundName} version '{version}'.");
         return false;
     }
 
-    private static bool TryParseFrameworkVersion(
-        string? value,
-        out ParsedFrameworkVersion? parsed)
+    private static bool TryParseFrameworkVersion(string? value, out ParsedFrameworkVersion? parsed)
     {
         parsed = null;
         if (string.IsNullOrWhiteSpace(value) || value.Length > MaximumFrameworkVersionLength)
@@ -445,9 +338,7 @@ public static class RuntimeProfileValidation
         var buildSeparator = value.IndexOf('+');
         if (buildSeparator >= 0)
         {
-            if (buildSeparator == value.Length - 1 ||
-                value.LastIndexOf('+') != buildSeparator ||
-                !IsVersionIdentifierSequence(value[(buildSeparator + 1)..]))
+            if (buildSeparator == value.Length - 1 || value.LastIndexOf('+') != buildSeparator || !IsVersionIdentifierSequence(value[(buildSeparator + 1)..]))
             {
                 return false;
             }
@@ -455,14 +346,11 @@ public static class RuntimeProfileValidation
         var withoutBuild = buildSeparator >= 0 ? value[..buildSeparator] : value;
         var prereleaseSeparator = withoutBuild.IndexOf('-');
         var releaseText = prereleaseSeparator >= 0
-            ? withoutBuild[..prereleaseSeparator]
-            : withoutBuild;
+            ? withoutBuild[..prereleaseSeparator] : withoutBuild;
         var prereleaseText = prereleaseSeparator >= 0
-            ? withoutBuild[(prereleaseSeparator + 1)..]
-            : null;
+            ? withoutBuild[(prereleaseSeparator + 1)..] : null;
         var release = releaseText.Split('.');
-        if (release.Length is 0 or > 4 || release.Any(static identifier =>
-                identifier.Length == 0 || identifier.Any(static character => !char.IsAsciiDigit(character))))
+        if (release.Length is 0 or > 4 || release.Any(static identifier => identifier.Length == 0 || identifier.Any(static character => !char.IsAsciiDigit(character))))
         {
             return false;
         }
@@ -484,20 +372,14 @@ public static class RuntimeProfileValidation
     }
 
     private static bool IsVersionIdentifierSequence(string value) =>
-        value.Split('.').All(static identifier =>
-            identifier.Length > 0 && identifier.All(static character =>
-                char.IsAsciiLetterOrDigit(character) || character == '-'));
+        value.Split('.').All(static identifier => identifier.Length > 0 && identifier.All(static character => char.IsAsciiLetterOrDigit(character) || character == '-'));
 
-    private static int CompareFrameworkVersions(
-        ParsedFrameworkVersion left,
-        ParsedFrameworkVersion right)
+    private static int CompareFrameworkVersions(ParsedFrameworkVersion left, ParsedFrameworkVersion right)
     {
         var releaseCount = Math.Max(left.Release.Length, right.Release.Length);
         for (var index = 0; index < releaseCount; index++)
         {
-            var comparison = CompareNumericIdentifier(
-                index < left.Release.Length ? left.Release[index] : "0",
-                index < right.Release.Length ? right.Release[index] : "0");
+            var comparison = CompareNumericIdentifier(index < left.Release.Length ? left.Release[index] : "0", index < right.Release.Length ? right.Release[index] : "0");
             if (comparison != 0)
                 return comparison;
         }
@@ -538,14 +420,10 @@ public static class RuntimeProfileValidation
             normalizedRight = "0";
         var lengthComparison = normalizedLeft.Length.CompareTo(normalizedRight.Length);
         return lengthComparison != 0
-            ? lengthComparison
-            : StringComparer.Ordinal.Compare(normalizedLeft, normalizedRight);
+            ? lengthComparison : StringComparer.Ordinal.Compare(normalizedLeft, normalizedRight);
     }
 
-    private static void ValidateOperations(
-        RuntimeProfileDefinition profile,
-        RuntimeProfileOperations operations,
-        List<string> failures)
+    private static void ValidateOperations(RuntimeProfileDefinition profile, RuntimeProfileOperations operations, List<string> failures)
     {
         var hasRunCapability = profile.Capabilities.Contains("run", StringComparer.Ordinal);
         var hasJitCapability = profile.Capabilities.Contains("jit-asm", StringComparer.Ordinal);
@@ -574,25 +452,18 @@ public static class RuntimeProfileValidation
         }
     }
 
-    private static void ValidateCapabilities(
-        RuntimeProfileDefinition profile,
-        List<string> failures)
+    private static void ValidateCapabilities(RuntimeProfileDefinition profile, List<string> failures)
     {
-        var known = new HashSet<string>(
-            ["run", "jit-asm", "inspection", "execution-flow"],
-            StringComparer.Ordinal);
+        var known = new HashSet<string>(["run", "jit-asm", "inspection", "execution-flow"], StringComparer.Ordinal);
         foreach (var capability in profile.Capabilities)
         {
             if (!known.Contains(capability))
             {
-                failures.Add(
-                    $"Runtime profile '{profile.Id}' declares unsupported capability '{capability}'.");
+                failures.Add($"Runtime profile '{profile.Id}' declares unsupported capability '{capability}'.");
             }
         }
 
-        var instrumentation = profile.Capabilities
-            .Where(static capability => capability is "inspection" or "execution-flow")
-            .ToArray();
+        var instrumentation = profile.Capabilities.Where(static capability => capability is "inspection" or "execution-flow").ToArray();
         if (instrumentation.Length == 0)
             return;
 
@@ -601,66 +472,43 @@ public static class RuntimeProfileValidation
         // runner until another runtime family supplies equivalent evidence.
         if (profile.Operations is null)
         {
-            failures.Add(
-                $"Runtime profile '{profile.Id}' cannot declare instrumentation capabilities without operation-based Run support.");
+            failures.Add($"Runtime profile '{profile.Id}' cannot declare instrumentation capabilities without operation-based Run support.");
         }
         var isSupportedCoreClrFamily = profile.Family is "coreclr" or "coreclr-const-generics";
-        if (!isSupportedCoreClrFamily ||
-            profile.Container is null ||
-            !StringComparer.Ordinal.Equals(profile.Container.IsolationKind, RuntimeContainerIsolationKinds.Standard) ||
-            !StringComparer.Ordinal.Equals(profile.Container.EnvironmentKind, RuntimeContainerEnvironmentKinds.CoreClr) ||
-            !StringComparer.Ordinal.Equals(profile.Layout.RunnerKind, RuntimeRunnerKinds.DotNet))
+        if (!isSupportedCoreClrFamily || profile.Container is null || !StringComparer.Ordinal.Equals(profile.Container.IsolationKind, RuntimeContainerIsolationKinds.Standard) || !StringComparer.Ordinal.Equals(profile.Container.EnvironmentKind, RuntimeContainerEnvironmentKinds.CoreClr) || !StringComparer.Ordinal.Equals(profile.Layout.RunnerKind, RuntimeRunnerKinds.DotNet))
         {
-            failures.Add(
-                $"Runtime profile '{profile.Id}' instrumentation capabilities are supported only by the standard CoreCLR runner.");
+            failures.Add($"Runtime profile '{profile.Id}' instrumentation capabilities are supported only by the standard CoreCLR runner.");
         }
         if (profile.Operations?.Run?.ImplementationId is not RuntimeOperationImplementationIds.Runner)
         {
-            failures.Add(
-                $"Runtime profile '{profile.Id}' instrumentation capabilities require Run implementation '{RuntimeOperationImplementationIds.Runner}'.");
+            failures.Add($"Runtime profile '{profile.Id}' instrumentation capabilities require Run implementation '{RuntimeOperationImplementationIds.Runner}'.");
         }
     }
 
-    private static void ValidateLegacyLayout(
-        RuntimeProfileDefinition profile,
-        List<string> failures)
+    private static void ValidateLegacyLayout(RuntimeProfileDefinition profile, List<string> failures)
     {
         if (profile.Layout is null)
         {
             failures.Add($"Runtime profile '{profile.Id}' must declare operations or a legacy image layout.");
             return;
         }
-        if (profile.Layout.RunnerKind is not (
-                RuntimeRunnerKinds.DotNet or
-                RuntimeRunnerKinds.WineCoreClr or
-                RuntimeRunnerKinds.WineNetFx or
-                RuntimeRunnerKinds.WineJSharp20))
+        if (profile.Layout.RunnerKind is not (RuntimeRunnerKinds.DotNet or RuntimeRunnerKinds.WineCoreClr or RuntimeRunnerKinds.WineNetFx or RuntimeRunnerKinds.WineJSharp20))
             failures.Add($"Runtime runner kind '{profile.Layout.RunnerKind}' is not supported.");
         ValidateCommand(profile.Layout.DotNetHostPath, "dotnet host", allowCommandName: true, failures);
         ValidateCommand(profile.Layout.RunnerAssemblyPath, "Runner assembly", allowCommandName: false, failures);
         var requiresJitInspector = profile.Capabilities.Contains("jit-asm", StringComparer.Ordinal);
         if (requiresJitInspector)
         {
-            ValidateCommand(
-                profile.Layout.JitInspectorAssemblyPath ?? string.Empty,
-                "JIT inspector assembly",
-                allowCommandName: false,
-                failures);
+            ValidateCommand(profile.Layout.JitInspectorAssemblyPath ?? string.Empty, "JIT inspector assembly", allowCommandName: false, failures);
         }
         else if (!string.IsNullOrWhiteSpace(profile.Layout.JitInspectorAssemblyPath))
         {
             failures.Add("A run-only legacy profile cannot declare a JIT inspector assembly.");
         }
-        if (profile.Layout.RunnerKind is RuntimeRunnerKinds.WineCoreClr or
-            RuntimeRunnerKinds.WineNetFx or
-            RuntimeRunnerKinds.WineJSharp20)
+        if (profile.Layout.RunnerKind is RuntimeRunnerKinds.WineCoreClr or RuntimeRunnerKinds.WineNetFx or RuntimeRunnerKinds.WineJSharp20)
         {
             ValidateCommand(profile.Layout.WineHostPath, "Wine host", allowCommandName: true, failures);
-            ValidateCommand(
-                profile.Layout.WinePrefixPath ?? string.Empty,
-                "Wine prefix",
-                allowCommandName: false,
-                failures);
+            ValidateCommand(profile.Layout.WinePrefixPath ?? string.Empty, "Wine prefix", allowCommandName: false, failures);
             if (StringComparer.Ordinal.Equals(profile.Layout.RunnerKind, RuntimeRunnerKinds.WineCoreClr))
                 ValidateWineCoreClrProfile(profile, failures);
             else if (StringComparer.Ordinal.Equals(profile.Layout.RunnerKind, RuntimeRunnerKinds.WineNetFx))
@@ -670,9 +518,7 @@ public static class RuntimeProfileValidation
         }
     }
 
-    private static void ValidateRunnerSemantics(
-        RuntimeProfileDefinition profile,
-        List<string> failures)
+    private static void ValidateRunnerSemantics(RuntimeProfileDefinition profile, List<string> failures)
     {
         // Mono is a managed compatibility runner, not a CoreCLR host.  Keep
         // this invariant in the profile SDK so a hand-authored profile cannot
@@ -720,84 +566,58 @@ public static class RuntimeProfileValidation
                     else if (StringComparer.Ordinal.Equals(profile.Family, "netfx-clr-wine"))
                         ValidateWineNetFxProfile(profile, failures);
                     else
-                        failures.Add(
-                            $"Wine runtime profile '{profile.Id}' must use a supported Wine runner kind.");
+                        failures.Add($"Wine runtime profile '{profile.Id}' must use a supported Wine runner kind.");
                     break;
             }
         }
     }
 
-    private static void ValidateMonoProfile(
-        RuntimeProfileDefinition profile,
-        List<string> failures)
+    private static void ValidateMonoProfile(RuntimeProfileDefinition profile, List<string> failures)
     {
         if (!StringComparer.Ordinal.Equals(profile.Family, "mono"))
             failures.Add("The Mono environment requires runtime family 'mono'.");
-        if (profile.Container is null ||
-            !StringComparer.Ordinal.Equals(profile.Container.IsolationKind, RuntimeContainerIsolationKinds.Standard) ||
-            !StringComparer.Ordinal.Equals(profile.Container.EnvironmentKind, RuntimeContainerEnvironmentKinds.Mono) ||
-            profile.Container.WinePrefixPath is not null)
+        if (profile.Container is null || !StringComparer.Ordinal.Equals(profile.Container.IsolationKind, RuntimeContainerIsolationKinds.Standard) || !StringComparer.Ordinal.Equals(profile.Container.EnvironmentKind, RuntimeContainerEnvironmentKinds.Mono) || profile.Container.WinePrefixPath is not null)
         {
             failures.Add("The Mono runner requires standard container isolation with no Wine prefix.");
         }
-        if (!StringComparer.Ordinal.Equals(profile.Rid, "linux-x64") ||
-            !StringComparer.Ordinal.Equals(profile.Architecture, "x64"))
+        if (!StringComparer.Ordinal.Equals(profile.Rid, "linux-x64") || !StringComparer.Ordinal.Equals(profile.Architecture, "x64"))
         {
             failures.Add("The Mono runner currently supports only linux-x64/x64.");
         }
 
         var acceptedFormats = new HashSet<string>(profile.AcceptedArtifactFormats, StringComparer.Ordinal);
-        if (acceptedFormats.Count != 1 ||
-            !acceptedFormats.Contains("dotnet-framework-managed-pe-v1"))
+        if (acceptedFormats.Count != 1 || !acceptedFormats.Contains("dotnet-framework-managed-pe-v1"))
         {
             failures.Add("The Mono runner accepts only managed .NET Framework PE artifacts.");
         }
 
         var capabilities = new HashSet<string>(profile.Capabilities, StringComparer.Ordinal);
-        if (!capabilities.Contains("run") ||
-            capabilities.Any(static capability => capability is not ("run" or "jit-asm")))
+        if (!capabilities.Contains("run") || capabilities.Any(static capability => capability is not ("run" or "jit-asm")))
         {
             failures.Add("The Mono runner exposes Run and optional bounded Mono JIT ASM only.");
         }
         if (profile.Operations?.Jit is { } monoJit &&
-            (!StringComparer.Ordinal.Equals(
-                monoJit.ImplementationId,
-                RuntimeOperationImplementationIds.MonoJitInspector) ||
-             !StringComparer.Ordinal.Equals(
-                monoJit.SourceMappingKind,
-                RuntimeJitSourceMappingKinds.None)))
+            (!StringComparer.Ordinal.Equals(monoJit.ImplementationId, RuntimeOperationImplementationIds.MonoJitInspector) || !StringComparer.Ordinal.Equals(monoJit.SourceMappingKind, RuntimeJitSourceMappingKinds.None)))
         {
-            failures.Add(
-                $"The Mono runner requires JIT implementation '{RuntimeOperationImplementationIds.MonoJitInspector}' with source mapping kind '{RuntimeJitSourceMappingKinds.None}'.");
+            failures.Add($"The Mono runner requires JIT implementation '{RuntimeOperationImplementationIds.MonoJitInspector}' with source mapping kind '{RuntimeJitSourceMappingKinds.None}'.");
         }
         if (profile.Operations?.Run is { ImplementationId: not RuntimeOperationImplementationIds.TargetRuntimeRunner })
         {
-            failures.Add(
-                $"The Mono runner requires Run implementation '{RuntimeOperationImplementationIds.TargetRuntimeRunner}'.");
+            failures.Add($"The Mono runner requires Run implementation '{RuntimeOperationImplementationIds.TargetRuntimeRunner}'.");
         }
         if (!StringComparer.Ordinal.Equals(profile.Layout.RunnerKind, RuntimeRunnerKinds.DotNet))
             failures.Add("The Mono runner must use the operation-based managed-runner layout.");
-        if (!StringComparer.Ordinal.Equals(profile.Layout.DotNetHostPath, "/usr/bin/mono") ||
-            !StringComparer.Ordinal.Equals(
-                profile.Layout.RunnerAssemblyPath,
-                TargetRuntimeRunnerAssemblyPath))
+        if (!StringComparer.Ordinal.Equals(profile.Layout.DotNetHostPath, "/usr/bin/mono") || !StringComparer.Ordinal.Equals(profile.Layout.RunnerAssemblyPath, TargetRuntimeRunnerAssemblyPath))
         {
-            failures.Add(
-                $"The Mono runner layout must invoke '{TargetRuntimeRunnerAssemblyPath}' through '/usr/bin/mono'.");
+            failures.Add($"The Mono runner layout must invoke '{TargetRuntimeRunnerAssemblyPath}' through '/usr/bin/mono'.");
         }
-        if (capabilities.Contains("jit-asm") &&
-            !StringComparer.Ordinal.Equals(
-                profile.Layout.JitInspectorAssemblyPath,
-                MonoJitInspectorAssemblyPath))
+        if (capabilities.Contains("jit-asm") && !StringComparer.Ordinal.Equals(profile.Layout.JitInspectorAssemblyPath, MonoJitInspectorAssemblyPath))
         {
-            failures.Add(
-                $"The Mono runner JIT layout requires helper '{MonoJitInspectorAssemblyPath}'.");
+            failures.Add($"The Mono runner JIT layout requires helper '{MonoJitInspectorAssemblyPath}'.");
         }
     }
 
-    private static void ValidateRunImplementation(
-        RuntimeRunOperationDefinition operation,
-        List<string> failures)
+    private static void ValidateRunImplementation(RuntimeRunOperationDefinition operation, List<string> failures)
     {
         if (operation.Command is null)
             return;
@@ -831,8 +651,7 @@ public static class RuntimeProfileValidation
                     !TokenEquals(operation.Command, 4, "--") ||
                     !TokenEquals(operation.Command, 5, RuntimeOperationPlaceholders.Arguments))
                 {
-                    failures.Add(
-                        $"Run implementation '{RuntimeOperationImplementationIds.WineRunner}' must invoke '{WineRunnerAssemblyPath}' exactly as '<runner> bridge <fixed-host> {{entryAssembly}} -- {{arguments}}'.");
+                    failures.Add($"Run implementation '{RuntimeOperationImplementationIds.WineRunner}' must invoke '{WineRunnerAssemblyPath}' exactly as '<runner> bridge <fixed-host> {{entryAssembly}} -- {{arguments}}'.");
                 }
                 break;
             case RuntimeOperationImplementationIds.TargetRuntimeRunner:
@@ -848,8 +667,7 @@ public static class RuntimeProfileValidation
                         ],
                         StringComparer.Ordinal))
                 {
-                    failures.Add(
-                        $"Run implementation '{RuntimeOperationImplementationIds.DirectRuntime}' must invoke exactly as '{{entryAssembly}} -- {{arguments}}'.");
+                    failures.Add($"Run implementation '{RuntimeOperationImplementationIds.DirectRuntime}' must invoke exactly as '{{entryAssembly}} -- {{arguments}}'.");
                 }
                 break;
             default:
@@ -858,9 +676,7 @@ public static class RuntimeProfileValidation
         }
     }
 
-    private static void ValidateTargetRuntimeRunnerImplementation(
-        RuntimeRunOperationDefinition operation,
-        List<string> failures)
+    private static void ValidateTargetRuntimeRunnerImplementation(RuntimeRunOperationDefinition operation, List<string> failures)
     {
         var helperPath = operation.PathStyle switch
         {
@@ -886,14 +702,11 @@ public static class RuntimeProfileValidation
                 ],
                 StringComparer.Ordinal))
         {
-            failures.Add(
-                $"Run implementation '{RuntimeOperationImplementationIds.TargetRuntimeRunner}' must invoke the fixed target CLR host and '{TargetRuntimeRunnerAssemblyPath}' exactly as '<helper> run {{entryAssembly}} -- {{arguments}}'.");
+            failures.Add($"Run implementation '{RuntimeOperationImplementationIds.TargetRuntimeRunner}' must invoke the fixed target CLR host and '{TargetRuntimeRunnerAssemblyPath}' exactly as '<helper> run {{entryAssembly}} -- {{arguments}}'.");
         }
     }
 
-    private static void ValidateJitImplementation(
-        RuntimeJitOperationDefinition operation,
-        List<string> failures)
+    private static void ValidateJitImplementation(RuntimeJitOperationDefinition operation, List<string> failures)
     {
         if (operation.Command is null)
             return;
@@ -911,23 +724,16 @@ public static class RuntimeProfileValidation
                     "JIT",
                     JitInspectorAssemblyPath,
                     failures);
-                if (StringComparer.Ordinal.Equals(
-                        operation.SourceMappingKind,
-                        RuntimeJitSourceMappingKinds.LinuxProfiler) &&
-                    !StringComparer.Ordinal.Equals(operation.ProfilerPath, JitProfilerPath))
+                if (StringComparer.Ordinal.Equals(operation.SourceMappingKind, RuntimeJitSourceMappingKinds.LinuxProfiler) && !StringComparer.Ordinal.Equals(operation.ProfilerPath, JitProfilerPath))
                 {
-                    failures.Add(
-                        $"JIT implementation '{RuntimeOperationImplementationIds.JitInspector}' with Linux profiler mapping requires profiler '{JitProfilerPath}'.");
+                    failures.Add($"JIT implementation '{RuntimeOperationImplementationIds.JitInspector}' with Linux profiler mapping requires profiler '{JitProfilerPath}'.");
                 }
                 break;
             case RuntimeOperationImplementationIds.LegacyJitInspector:
                 ValidateLegacyJitInspectorImplementation(operation, "jit", "JIT", failures);
-                if (!StringComparer.Ordinal.Equals(
-                        operation.SourceMappingKind,
-                        RuntimeJitSourceMappingKinds.None))
+                if (!StringComparer.Ordinal.Equals(operation.SourceMappingKind, RuntimeJitSourceMappingKinds.None))
                 {
-                    failures.Add(
-                        $"JIT implementation '{RuntimeOperationImplementationIds.LegacyJitInspector}' supports only source mapping kind '{RuntimeJitSourceMappingKinds.None}'.");
+                    failures.Add($"JIT implementation '{RuntimeOperationImplementationIds.LegacyJitInspector}' supports only source mapping kind '{RuntimeJitSourceMappingKinds.None}'.");
                 }
                 break;
             case RuntimeOperationImplementationIds.CheckedJitBridge:
@@ -943,12 +749,9 @@ public static class RuntimeProfileValidation
                     "JIT",
                     CheckedJitBridgeAssemblyPath,
                     failures);
-                if (operation.SourceMappingKind is not (
-                    RuntimeJitSourceMappingKinds.None or
-                    RuntimeJitSourceMappingKinds.CheckedJitDebugInfo))
+                if (operation.SourceMappingKind is not (RuntimeJitSourceMappingKinds.None or RuntimeJitSourceMappingKinds.CheckedJitDebugInfo))
                 {
-                    failures.Add(
-                        $"JIT implementation '{RuntimeOperationImplementationIds.CheckedJitBridge}' supports only source mapping kinds '{RuntimeJitSourceMappingKinds.None}' and '{RuntimeJitSourceMappingKinds.CheckedJitDebugInfo}'.");
+                    failures.Add($"JIT implementation '{RuntimeOperationImplementationIds.CheckedJitBridge}' supports only source mapping kinds '{RuntimeJitSourceMappingKinds.None}' and '{RuntimeJitSourceMappingKinds.CheckedJitDebugInfo}'.");
                 }
                 break;
             case RuntimeOperationImplementationIds.MonoJitInspector:
@@ -963,21 +766,15 @@ public static class RuntimeProfileValidation
                     "JIT",
                     MonoJitInspectorAssemblyPath,
                     failures);
-                if (!StringComparer.Ordinal.Equals(
-                        operation.SourceMappingKind,
-                        RuntimeJitSourceMappingKinds.None) ||
-                    operation.ProfilerPath is not null)
+                if (!StringComparer.Ordinal.Equals(operation.SourceMappingKind, RuntimeJitSourceMappingKinds.None) || operation.ProfilerPath is not null)
                 {
-                    failures.Add(
-                        $"JIT implementation '{RuntimeOperationImplementationIds.MonoJitInspector}' supports only source mapping kind '{RuntimeJitSourceMappingKinds.None}' and cannot declare a profiler.");
+                    failures.Add($"JIT implementation '{RuntimeOperationImplementationIds.MonoJitInspector}' supports only source mapping kind '{RuntimeJitSourceMappingKinds.None}' and cannot declare a profiler.");
                 }
                 break;
             case RuntimeOperationImplementationIds.DesktopClrJitInspector:
-                if (!StringComparer.Ordinal.Equals(operation.PathStyle, RuntimeOperationPathStyles.Unix) ||
-                    !StringComparer.Ordinal.Equals(operation.Command.Executable, "/usr/share/dotnet/dotnet"))
+                if (!StringComparer.Ordinal.Equals(operation.PathStyle, RuntimeOperationPathStyles.Unix) || !StringComparer.Ordinal.Equals(operation.Command.Executable, "/usr/share/dotnet/dotnet"))
                 {
-                    failures.Add(
-                        $"JIT implementation '{RuntimeOperationImplementationIds.DesktopClrJitInspector}' requires Unix paths and executable '/usr/share/dotnet/dotnet'.");
+                    failures.Add($"JIT implementation '{RuntimeOperationImplementationIds.DesktopClrJitInspector}' requires Unix paths and executable '/usr/share/dotnet/dotnet'.");
                 }
                 RequireExactInvocation(
                     operation.Command,
@@ -990,13 +787,9 @@ public static class RuntimeProfileValidation
                     "JIT",
                     WineRunnerAssemblyPath,
                     failures);
-                if (!StringComparer.Ordinal.Equals(
-                        operation.SourceMappingKind,
-                        RuntimeJitSourceMappingKinds.None) ||
-                    operation.ProfilerPath is not null)
+                if (!StringComparer.Ordinal.Equals(operation.SourceMappingKind, RuntimeJitSourceMappingKinds.None) || operation.ProfilerPath is not null)
                 {
-                    failures.Add(
-                        $"JIT implementation '{RuntimeOperationImplementationIds.DesktopClrJitInspector}' supports only source mapping kind '{RuntimeJitSourceMappingKinds.None}' and cannot declare a profiler.");
+                    failures.Add($"JIT implementation '{RuntimeOperationImplementationIds.DesktopClrJitInspector}' supports only source mapping kind '{RuntimeJitSourceMappingKinds.None}' and cannot declare a profiler.");
                 }
                 break;
             default:
@@ -1005,11 +798,7 @@ public static class RuntimeProfileValidation
         }
     }
 
-    private static void ValidateLegacyJitInspectorImplementation(
-        RuntimeOperationDefinition operation,
-        string verb,
-        string operationName,
-        List<string> failures)
+    private static void ValidateLegacyJitInspectorImplementation(RuntimeOperationDefinition operation, string verb, string operationName, List<string> failures)
     {
         var helperPath = operation.PathStyle switch
         {
@@ -1023,14 +812,7 @@ public static class RuntimeProfileValidation
             failures.Add($"{operationName} legacy Wine implementation requires executable '/usr/lib/wine/wine64'.");
 
         var invocation = verb == "run"
-            ? new List<string>
-            {
-                helperPath,
-                verb,
-                RuntimeOperationPlaceholders.EntryAssembly,
-                "--",
-                RuntimeOperationPlaceholders.Arguments
-            }
+            ? new List<string> { helperPath, verb, RuntimeOperationPlaceholders.EntryAssembly, "--", RuntimeOperationPlaceholders.Arguments }
             :
             [
                 helperPath,
@@ -1039,51 +821,24 @@ public static class RuntimeProfileValidation
                 RuntimeOperationPlaceholders.MethodFilter
             ];
         var fixedRuntimeVersion = operation.Command.Argv is { } commandArgv
-            ? ReadFixedFxVersion(commandArgv)
-            : null;
-        var guardedInvocation = fixedRuntimeVersion is null
-            ? null
-            : invocation
-                .Take(1)
-                .Concat([
-                    LegacyRuntimeVersionSwitch,
-                    fixedRuntimeVersion
-                ])
-                .Concat(invocation.Skip(1))
-                .ToList();
+            ? ReadFixedFxVersion(commandArgv) : null;
+        var guardedInvocation = fixedRuntimeVersion is null ? null : invocation.Take(1).Concat([LegacyRuntimeVersionSwitch, fixedRuntimeVersion]).Concat(invocation.Skip(1)).ToList();
         var hasValidShape = operation.Command.Argv is { } argv &&
             operation.PathStyle switch
             {
                 RuntimeOperationPathStyles.Unix =>
                     HasExactSuffix(argv, 0, invocation) ||
                     guardedInvocation is not null && HasExactSuffix(argv, 0, guardedInvocation) ||
-                    (guardedInvocation is not null &&
-                     argv.Count == guardedInvocation.Count + 3 &&
-                     StringComparer.Ordinal.Equals(argv[0], "exec") &&
-                     StringComparer.Ordinal.Equals(argv[1], "--fx-version") &&
-                     IsFixedToken(argv[2]) &&
-                     HasExactSuffix(argv, 3, guardedInvocation)),
+                    (guardedInvocation is not null && argv.Count == guardedInvocation.Count + 3 && StringComparer.Ordinal.Equals(argv[0], "exec") && StringComparer.Ordinal.Equals(argv[1], "--fx-version") && IsFixedToken(argv[2]) && HasExactSuffix(argv, 3, guardedInvocation)),
                 RuntimeOperationPathStyles.WineZ =>
-                    (argv.Count == invocation.Count + 1 &&
-                     IsFixedWindowsDotNetHost(argv[0]) &&
-                     HasExactSuffix(argv, 1, invocation)) ||
-                    (guardedInvocation is not null &&
-                     argv.Count == guardedInvocation.Count + 1 &&
-                     IsFixedWindowsDotNetHost(argv[0]) &&
-                     HasExactSuffix(argv, 1, guardedInvocation)) ||
-                    (guardedInvocation is not null &&
-                     argv.Count == guardedInvocation.Count + 4 &&
-                     IsFixedWindowsDotNetHost(argv[0]) &&
-                     StringComparer.Ordinal.Equals(argv[1], "exec") &&
-                     StringComparer.Ordinal.Equals(argv[2], "--fx-version") &&
-                     IsFixedToken(argv[3]) &&
-                     HasExactSuffix(argv, 4, guardedInvocation)),
+                    (argv.Count == invocation.Count + 1 && IsFixedWindowsDotNetHost(argv[0]) && HasExactSuffix(argv, 1, invocation)) ||
+                    (guardedInvocation is not null && argv.Count == guardedInvocation.Count + 1 && IsFixedWindowsDotNetHost(argv[0]) && HasExactSuffix(argv, 1, guardedInvocation)) ||
+                    (guardedInvocation is not null && argv.Count == guardedInvocation.Count + 4 && IsFixedWindowsDotNetHost(argv[0]) && StringComparer.Ordinal.Equals(argv[1], "exec") && StringComparer.Ordinal.Equals(argv[2], "--fx-version") && IsFixedToken(argv[3]) && HasExactSuffix(argv, 4, guardedInvocation)),
                 _ => false
             };
         if (!hasValidShape)
         {
-            failures.Add(
-                $"{operationName} implementation must invoke '{helperPath}' using its exact fixed operation contract.");
+            failures.Add($"{operationName} implementation must invoke '{helperPath}' using its exact fixed operation contract.");
         }
     }
 
@@ -1102,20 +857,14 @@ public static class RuntimeProfileValidation
         return index < 0 ? null : argv[index + 1];
     }
 
-    private static void RequireUnixDotNetImplementation(
-        RuntimeOperationDefinition operation,
-        string operationName,
-        List<string> failures)
+    private static void RequireUnixDotNetImplementation(RuntimeOperationDefinition operation, string operationName, List<string> failures)
     {
         if (!StringComparer.Ordinal.Equals(operation.PathStyle, RuntimeOperationPathStyles.Unix))
             failures.Add($"{operationName} modern helper implementation requires Unix paths.");
         RequireDotNetExecutable(operation.Command, operationName, failures);
     }
 
-    private static void RequireDotNetExecutable(
-        RuntimeOperationCommandDefinition command,
-        string operationName,
-        List<string> failures)
+    private static void RequireDotNetExecutable(RuntimeOperationCommandDefinition command, string operationName, List<string> failures)
     {
         var executable = command.Executable.Replace('\\', '/');
         var fileName = executable[(executable.LastIndexOf('/') + 1)..];
@@ -1123,24 +872,15 @@ public static class RuntimeProfileValidation
             failures.Add($"{operationName} helper implementation requires a fixed dotnet executable.");
     }
 
-    private static void RequireExactInvocation(
-        RuntimeOperationCommandDefinition command,
-        List<string> sequence,
-        string operationName,
-        string helperPath,
-        List<string> failures)
+    private static void RequireExactInvocation(RuntimeOperationCommandDefinition command, List<string> sequence, string operationName, string helperPath, List<string> failures)
     {
         if (command.Argv is null || !command.Argv.SequenceEqual(sequence, StringComparer.Ordinal))
         {
-            failures.Add(
-                $"{operationName} implementation must invoke '{helperPath}' using its fixed operation contract.");
+            failures.Add($"{operationName} implementation must invoke '{helperPath}' using its fixed operation contract.");
         }
     }
 
-    private static bool HasExactSuffix(
-        List<string> values,
-        int start,
-        List<string> sequence)
+    private static bool HasExactSuffix(List<string> values, int start, List<string> sequence)
     {
         if (values.Count != start + sequence.Count)
             return false;
@@ -1177,39 +917,24 @@ public static class RuntimeProfileValidation
         return token.Split('\\').All(static segment => segment is not ("" or "." or ".."));
     }
 
-    private static void ValidateFixedRuntimeVersion(
-        RuntimeProfileDefinition profile,
-        RuntimeOperationDefinition operation,
-        string operationName,
-        List<string> failures)
+    private static void ValidateFixedRuntimeVersion(RuntimeProfileDefinition profile, RuntimeOperationDefinition operation, string operationName, List<string> failures)
     {
         if (operation.Command?.Argv is not { } argv)
             return;
-        var versionSwitchIndex = argv.FindIndex(static token =>
-            StringComparer.Ordinal.Equals(token, "--fx-version"));
+        var versionSwitchIndex = argv.FindIndex(static token => StringComparer.Ordinal.Equals(token, "--fx-version"));
         if (versionSwitchIndex < 0)
             return;
-        if (argv.Count(token => StringComparer.Ordinal.Equals(token, "--fx-version")) != 1 ||
-            versionSwitchIndex + 1 >= argv.Count ||
-            !StringComparer.Ordinal.Equals(argv[versionSwitchIndex + 1], profile.RuntimeVersion))
+        if (argv.Count(token => StringComparer.Ordinal.Equals(token, "--fx-version")) != 1 || versionSwitchIndex + 1 >= argv.Count || !StringComparer.Ordinal.Equals(argv[versionSwitchIndex + 1], profile.RuntimeVersion))
         {
-            failures.Add(
-                $"The {operationName} operation '--fx-version' must match runtime profile version '{profile.RuntimeVersion}'.");
+            failures.Add($"The {operationName} operation '--fx-version' must match runtime profile version '{profile.RuntimeVersion}'.");
         }
     }
 
-    private static void ValidateOperation(
-        RuntimeOperationDefinition operation,
-        string operationName,
-        IReadOnlyCollection<string> allowedPlaceholders,
-        List<string> failures)
+    private static void ValidateOperation(RuntimeOperationDefinition operation, string operationName, IReadOnlyCollection<string> allowedPlaceholders, List<string> failures)
     {
-        if (operation.PathStyle is not (
-                RuntimeOperationPathStyles.Unix or
-                RuntimeOperationPathStyles.WineZ))
+        if (operation.PathStyle is not (RuntimeOperationPathStyles.Unix or RuntimeOperationPathStyles.WineZ))
         {
-            failures.Add(
-                $"{operationName} operation path style '{operation.PathStyle}' is not supported.");
+            failures.Add($"{operationName} operation path style '{operation.PathStyle}' is not supported.");
         }
 
         if (operation.Command is null)
@@ -1226,18 +951,14 @@ public static class RuntimeProfileValidation
         }
         if (operation.Command.Argv.Count is 0 or > MaximumOperationArgumentTokens)
         {
-            failures.Add(
-                $"The {operationName} operation command must declare between 1 and {MaximumOperationArgumentTokens} argv tokens.");
+            failures.Add($"The {operationName} operation command must declare between 1 and {MaximumOperationArgumentTokens} argv tokens.");
         }
 
         foreach (var token in operation.Command.Argv)
         {
-            if (string.IsNullOrEmpty(token) ||
-                token.Length > MaximumOperationTokenLength ||
-                token.Any(static character => char.IsControl(character)))
+            if (string.IsNullOrEmpty(token) || token.Length > MaximumOperationTokenLength || token.Any(static character => char.IsControl(character)))
             {
-                failures.Add(
-                    $"The {operationName} operation contains an empty, oversized, or control-character argv token.");
+                failures.Add($"The {operationName} operation contains an empty, oversized, or control-character argv token.");
                 continue;
             }
 
@@ -1245,113 +966,80 @@ public static class RuntimeProfileValidation
             {
                 if (!allowedPlaceholders.Contains(token, StringComparer.Ordinal))
                 {
-                    failures.Add(
-                        $"Placeholder '{token}' is not allowed in the {operationName} operation.");
+                    failures.Add($"Placeholder '{token}' is not allowed in the {operationName} operation.");
                 }
                 continue;
             }
 
             if (token.Contains('{') || token.Contains('}'))
             {
-                failures.Add(
-                    $"The {operationName} operation argv token '{token}' contains an unknown or embedded placeholder.");
+                failures.Add($"The {operationName} operation argv token '{token}' contains an unknown or embedded placeholder.");
                 continue;
             }
 
             if (IsShellExecutable(token))
             {
-                failures.Add(
-                    $"The {operationName} operation cannot invoke shell token '{token}'.");
+                failures.Add($"The {operationName} operation cannot invoke shell token '{token}'.");
             }
         }
     }
 
-    private static void ValidateOperationExecutable(
-        string? executable,
-        string operationName,
-        List<string> failures)
+    private static void ValidateOperationExecutable(string? executable, string operationName, List<string> failures)
     {
-        if (string.IsNullOrWhiteSpace(executable) ||
-            executable.Length > 512 ||
-            executable.Any(static character => char.IsWhiteSpace(character) || char.IsControl(character)) ||
-            executable.Contains('{') ||
-            executable.Contains('}') ||
-            executable.Contains('\\'))
+        if (string.IsNullOrWhiteSpace(executable) || executable.Length > 512 || executable.Any(static character => char.IsWhiteSpace(character) || char.IsControl(character)) || executable.Contains('{') || executable.Contains('}') || executable.Contains('\\'))
         {
-            failures.Add(
-                $"The {operationName} operation executable must be a fixed Linux command name or absolute path.");
+            failures.Add($"The {operationName} operation executable must be a fixed Linux command name or absolute path.");
             return;
         }
 
         if (executable.Contains('/'))
         {
-            if (!executable.StartsWith('/') ||
-                executable.Split('/').Skip(1).Any(static segment => segment is "" or "." or ".."))
+            if (!executable.StartsWith('/') || executable.Split('/').Skip(1).Any(static segment => segment is "" or "." or ".."))
             {
-                failures.Add(
-                    $"The {operationName} operation executable must be a normalized absolute Linux path.");
+                failures.Add($"The {operationName} operation executable must be a normalized absolute Linux path.");
             }
         }
-        else if (executable.Any(static character =>
-                     !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '_' or '-')))
+        else if (executable.Any(static character => !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '_' or '-')))
         {
-            failures.Add(
-                $"The {operationName} operation executable command name is invalid.");
+            failures.Add($"The {operationName} operation executable command name is invalid.");
         }
 
         if (IsShellExecutable(executable))
             failures.Add($"The {operationName} operation cannot invoke shell executable '{executable}'.");
     }
 
-    private static void RequirePlaceholderExactlyOnce(
-        RuntimeOperationCommandDefinition? command,
-        string placeholder,
-        string operationName,
-        List<string> failures)
+    private static void RequirePlaceholderExactlyOnce(RuntimeOperationCommandDefinition? command, string placeholder, string operationName, List<string> failures)
     {
         if (command?.Argv is null)
             return;
         var count = command.Argv.Count(token => StringComparer.Ordinal.Equals(token, placeholder));
         if (count != 1)
         {
-            failures.Add(
-                $"The {operationName} operation must contain '{placeholder}' exactly once.");
+            failures.Add($"The {operationName} operation must contain '{placeholder}' exactly once.");
         }
     }
 
-    private static void RequirePlaceholderAtMostOnce(
-        RuntimeOperationCommandDefinition? command,
-        string placeholder,
-        string operationName,
-        List<string> failures)
+    private static void RequirePlaceholderAtMostOnce(RuntimeOperationCommandDefinition? command, string placeholder, string operationName, List<string> failures)
     {
         if (command?.Argv is null)
             return;
         if (command.Argv.Count(token => StringComparer.Ordinal.Equals(token, placeholder)) > 1)
         {
-            failures.Add(
-                $"The {operationName} operation can contain '{placeholder}' at most once.");
+            failures.Add($"The {operationName} operation can contain '{placeholder}' at most once.");
         }
     }
 
-    private static void RequireDynamicPlaceholderLastAndAfterEntry(
-        RuntimeOperationCommandDefinition? command,
-        string placeholder,
-        string operationName,
-        List<string> failures)
+    private static void RequireDynamicPlaceholderLastAndAfterEntry(RuntimeOperationCommandDefinition? command, string placeholder, string operationName, List<string> failures)
     {
         if (command?.Argv is null)
             return;
-        var placeholderIndex = command.Argv.FindIndex(token =>
-            StringComparer.Ordinal.Equals(token, placeholder));
+        var placeholderIndex = command.Argv.FindIndex(token => StringComparer.Ordinal.Equals(token, placeholder));
         if (placeholderIndex < 0)
             return;
-        var entryAssemblyIndex = command.Argv.FindIndex(token =>
-            StringComparer.Ordinal.Equals(token, RuntimeOperationPlaceholders.EntryAssembly));
+        var entryAssemblyIndex = command.Argv.FindIndex(token => StringComparer.Ordinal.Equals(token, RuntimeOperationPlaceholders.EntryAssembly));
         if (placeholderIndex <= entryAssemblyIndex || placeholderIndex != command.Argv.Count - 1)
         {
-            failures.Add(
-                $"The {operationName} operation placeholder '{placeholder}' must follow '{RuntimeOperationPlaceholders.EntryAssembly}' and be the final argv token.");
+            failures.Add($"The {operationName} operation placeholder '{placeholder}' must follow '{RuntimeOperationPlaceholders.EntryAssembly}' and be the final argv token.");
         }
     }
 
@@ -1368,52 +1056,37 @@ public static class RuntimeProfileValidation
         return ShellExecutableNames.Contains(fileName);
     }
 
-    private static void ValidateWineNetFxProfile(
-        RuntimeProfileDefinition profile,
-        List<string> failures)
+    private static void ValidateWineNetFxProfile(RuntimeProfileDefinition profile, List<string> failures)
     {
         if (!StringComparer.Ordinal.Equals(profile.Family, "netfx-clr-wine"))
             failures.Add("The wine-netfx runner requires runtime family 'netfx-clr-wine'.");
-        if (!StringComparer.Ordinal.Equals(profile.Rid, "linux-x64") ||
-            !StringComparer.Ordinal.Equals(profile.Architecture, "x64"))
+        if (!StringComparer.Ordinal.Equals(profile.Rid, "linux-x64") || !StringComparer.Ordinal.Equals(profile.Architecture, "x64"))
         {
             failures.Add("The wine-netfx runner currently supports only linux-x64/x64.");
         }
         var acceptedFormats = new HashSet<string>(profile.AcceptedArtifactFormats, StringComparer.Ordinal);
         var allowsManaged = acceptedFormats.Contains("dotnet-framework-managed-pe-v1");
         var allowsMixed = acceptedFormats.Contains("dotnet-framework-mixed-pe-v1");
-        if (!allowsManaged ||
-            acceptedFormats.Any(static format => format is not (
-                "dotnet-framework-managed-pe-v1" or
-                "dotnet-framework-mixed-pe-v1")) ||
-            (allowsMixed && !StringComparer.Ordinal.Equals(profile.Id, "wine-netfx48-linux-x64")))
+        if (!allowsManaged || acceptedFormats.Any(static format => format is not ("dotnet-framework-managed-pe-v1" or "dotnet-framework-mixed-pe-v1")) || (allowsMixed && !StringComparer.Ordinal.Equals(profile.Id, "wine-netfx48-linux-x64")))
         {
-            failures.Add(
-                "The wine-netfx runner requires managed .NET Framework PE; mixed PE is restricted to the audited wine-netfx48 profile.");
+            failures.Add("The wine-netfx runner requires managed .NET Framework PE; mixed PE is restricted to the audited wine-netfx48 profile.");
         }
         var capabilities = new HashSet<string>(profile.Capabilities, StringComparer.Ordinal);
         var desktopClrJit = profile.Operations?.Jit;
         var allowsDesktopClrJit = desktopClrJit is { } &&
-            StringComparer.Ordinal.Equals(
-                desktopClrJit.ImplementationId,
-                RuntimeOperationImplementationIds.DesktopClrJitInspector);
+            StringComparer.Ordinal.Equals(desktopClrJit.ImplementationId, RuntimeOperationImplementationIds.DesktopClrJitInspector);
         if (allowsDesktopClrJit)
         {
             if (!capabilities.SetEquals(["run", "jit-asm"]))
             {
-                failures.Add(
-                    "The wine-netfx Desktop CLR JIT provider requires exactly the run and jit-asm capabilities.");
+                failures.Add("The wine-netfx Desktop CLR JIT provider requires exactly the run and jit-asm capabilities.");
             }
-            if (!StringComparer.Ordinal.Equals(
-                    profile.Layout.JitInspectorAssemblyPath,
-                    WineRunnerAssemblyPath))
+            if (!StringComparer.Ordinal.Equals(profile.Layout.JitInspectorAssemblyPath, WineRunnerAssemblyPath))
             {
-                failures.Add(
-                    $"The wine-netfx Desktop CLR JIT provider requires helper '{WineRunnerAssemblyPath}'.");
+                failures.Add($"The wine-netfx Desktop CLR JIT provider requires helper '{WineRunnerAssemblyPath}'.");
             }
         }
-        else if (profile.Capabilities.Count != 1 ||
-                 !StringComparer.Ordinal.Equals(profile.Capabilities[0], "run"))
+        else if (profile.Capabilities.Count != 1 || !StringComparer.Ordinal.Equals(profile.Capabilities[0], "run"))
         {
             failures.Add("The wine-netfx runner exposes only the run capability unless it uses the Desktop CLR JIT provider.");
         }
@@ -1421,29 +1094,18 @@ public static class RuntimeProfileValidation
                 RuntimeOperationImplementationIds.TargetRuntimeRunner or
                 RuntimeOperationImplementationIds.WineRunner) })
         {
-            failures.Add(
-                $"The wine-netfx runner requires Run implementation '{RuntimeOperationImplementationIds.TargetRuntimeRunner}' or the active legacy implementation '{RuntimeOperationImplementationIds.WineRunner}'.");
+            failures.Add($"The wine-netfx runner requires Run implementation '{RuntimeOperationImplementationIds.TargetRuntimeRunner}' or the active legacy implementation '{RuntimeOperationImplementationIds.WineRunner}'.");
         }
         var prefix = profile.Layout.WinePrefixPath;
-        if (prefix is not (
-                "/opt/wine-dotnet" or
-                "/opt/wine-netfx-clr2" or
-                "/opt/wine-netfx-clr4"))
+        if (prefix is not ("/opt/wine-dotnet" or "/opt/wine-netfx-clr2" or "/opt/wine-netfx-clr4"))
         {
-            failures.Add(
-                "The wine-netfx runner requires one of the dedicated '/opt/wine-dotnet', '/opt/wine-netfx-clr2', or '/opt/wine-netfx-clr4' prefixes.");
+            failures.Add("The wine-netfx runner requires one of the dedicated '/opt/wine-dotnet', '/opt/wine-netfx-clr2', or '/opt/wine-netfx-clr4' prefixes.");
         }
         if (!StringComparer.Ordinal.Equals(profile.Layout.WineHostPath, "/usr/lib/wine/wine64"))
             failures.Add("The wine-netfx runner requires the explicit x64 Wine host '/usr/lib/wine/wine64'.");
-        if (StringComparer.Ordinal.Equals(
-                profile.Operations?.Run?.ImplementationId,
-                RuntimeOperationImplementationIds.TargetRuntimeRunner) &&
-            !StringComparer.Ordinal.Equals(
-                profile.Layout.RunnerAssemblyPath,
-                TargetRuntimeRunnerAssemblyPath))
+        if (StringComparer.Ordinal.Equals(profile.Operations?.Run?.ImplementationId, RuntimeOperationImplementationIds.TargetRuntimeRunner) && !StringComparer.Ordinal.Equals(profile.Layout.RunnerAssemblyPath, TargetRuntimeRunnerAssemblyPath))
         {
-            failures.Add(
-                $"The wine-netfx target-runtime layout requires helper '{TargetRuntimeRunnerAssemblyPath}'.");
+            failures.Add($"The wine-netfx target-runtime layout requires helper '{TargetRuntimeRunnerAssemblyPath}'.");
         }
 
         // TargetRuntimeRunner profiles are the data-driven Framework matrix
@@ -1453,84 +1115,59 @@ public static class RuntimeProfileValidation
         // inspector.  Keep this contract fail-closed so a hand-authored
         // profile cannot route a different Framework artifact into the same
         // Wine prefix or advertise unverifiable JIT metadata.
-        if (StringComparer.Ordinal.Equals(
-                profile.Operations?.Run?.ImplementationId,
-                RuntimeOperationImplementationIds.TargetRuntimeRunner))
+        if (StringComparer.Ordinal.Equals(profile.Operations?.Run?.ImplementationId, RuntimeOperationImplementationIds.TargetRuntimeRunner))
         {
             ValidateTargetRuntimeFrameworkIdentity(profile, failures);
         }
 
-        if (profile.Container is null ||
-            !StringComparer.Ordinal.Equals(profile.Container.IsolationKind, RuntimeContainerIsolationKinds.Wine) ||
-            !StringComparer.Ordinal.Equals(profile.Container.EnvironmentKind, RuntimeContainerEnvironmentKinds.Wine) ||
-            !StringComparer.Ordinal.Equals(profile.Container.WinePrefixPath, prefix))
+        if (profile.Container is null || !StringComparer.Ordinal.Equals(profile.Container.IsolationKind, RuntimeContainerIsolationKinds.Wine) || !StringComparer.Ordinal.Equals(profile.Container.EnvironmentKind, RuntimeContainerEnvironmentKinds.Wine) || !StringComparer.Ordinal.Equals(profile.Container.WinePrefixPath, prefix))
         {
             failures.Add("The wine-netfx runner layout and container must use the same dedicated Wine prefix.");
         }
     }
 
-    private static void ValidateTargetRuntimeFrameworkIdentity(
-        RuntimeProfileDefinition profile,
-        List<string> failures)
+    private static void ValidateTargetRuntimeFrameworkIdentity(RuntimeProfileDefinition profile, List<string> failures)
     {
         if (!StringComparer.Ordinal.Equals(profile.RuntimeCommit, NotApplicableRuntimeIdentity))
         {
-            failures.Add(
-                $"The wine-netfx target-runtime profile must set RuntimeCommit to '{NotApplicableRuntimeIdentity}'.");
+            failures.Add($"The wine-netfx target-runtime profile must set RuntimeCommit to '{NotApplicableRuntimeIdentity}'.");
         }
         if (!StringComparer.Ordinal.Equals(profile.JitVersion, NotApplicableRuntimeIdentity))
         {
-            failures.Add(
-                $"The wine-netfx target-runtime profile must set JitVersion to '{NotApplicableRuntimeIdentity}'.");
+            failures.Add($"The wine-netfx target-runtime profile must set JitVersion to '{NotApplicableRuntimeIdentity}'.");
         }
         if (!StringComparer.Ordinal.Equals(profile.JitCommit, NotApplicableRuntimeIdentity))
         {
-            failures.Add(
-                $"The wine-netfx target-runtime profile must set JitCommit to '{NotApplicableRuntimeIdentity}'.");
+            failures.Add($"The wine-netfx target-runtime profile must set JitCommit to '{NotApplicableRuntimeIdentity}'.");
         }
         if (!StringComparer.Ordinal.Equals(profile.Layout.DotNetHostPath, "/usr/lib/wine/wine64"))
         {
-            failures.Add(
-                "The wine-netfx target-runtime layout requires the fixed x64 Wine host '/usr/lib/wine/wine64' as DotNetHostPath.");
+            failures.Add("The wine-netfx target-runtime layout requires the fixed x64 Wine host '/usr/lib/wine/wine64' as DotNetHostPath.");
         }
 
         var acceptedFrameworks = profile.AcceptedFrameworks is null
-            ? []
-            : profile.AcceptedFrameworks
-                .Where(static framework =>
-                    framework is not null &&
-                    StringComparer.Ordinal.Equals(framework.Name, FrameworkRuntimeName))
-                .ToArray();
-        if (acceptedFrameworks.Length != 1 ||
-            !StringComparer.Ordinal.Equals(acceptedFrameworks[0]?.ExactVersion, profile.RuntimeVersion) ||
-            acceptedFrameworks[0]?.MinimumVersion is not null ||
-            acceptedFrameworks[0]?.MaximumVersion is not null)
+            ? [] : profile.AcceptedFrameworks.Where(static framework => framework is not null && StringComparer.Ordinal.Equals(framework.Name, FrameworkRuntimeName)).ToArray();
+        if (acceptedFrameworks.Length != 1 || !StringComparer.Ordinal.Equals(acceptedFrameworks[0]?.ExactVersion, profile.RuntimeVersion) || acceptedFrameworks[0]?.MinimumVersion is not null || acceptedFrameworks[0]?.MaximumVersion is not null)
         {
-            failures.Add(
-                $"The wine-netfx target-runtime profile must accept exactly '{FrameworkRuntimeName}' version '{profile.RuntimeVersion}'.");
+            failures.Add($"The wine-netfx target-runtime profile must accept exactly '{FrameworkRuntimeName}' version '{profile.RuntimeVersion}'.");
         }
     }
 
-    private static void ValidateWineCoreClrProfile(
-        RuntimeProfileDefinition profile,
-        List<string> failures)
+    private static void ValidateWineCoreClrProfile(RuntimeProfileDefinition profile, List<string> failures)
     {
         if (!StringComparer.Ordinal.Equals(profile.Family, "coreclr-wine"))
             failures.Add("The wine-coreclr runner requires runtime family 'coreclr-wine'.");
-        if (!StringComparer.Ordinal.Equals(profile.Rid, "linux-x64") ||
-            !StringComparer.Ordinal.Equals(profile.Architecture, "x64"))
+        if (!StringComparer.Ordinal.Equals(profile.Rid, "linux-x64") || !StringComparer.Ordinal.Equals(profile.Architecture, "x64"))
         {
             failures.Add("The wine-coreclr runner currently supports only linux-x64/x64.");
         }
         var acceptedFormats = new HashSet<string>(profile.AcceptedArtifactFormats, StringComparer.Ordinal);
-        if (acceptedFormats.Count != 1 ||
-            !acceptedFormats.Contains("dotnet-managed-pe-v1"))
+        if (acceptedFormats.Count != 1 || !acceptedFormats.Contains("dotnet-managed-pe-v1"))
         {
             failures.Add("The wine-coreclr runner accepts only dotnet-managed-pe-v1 artifacts.");
         }
         var capabilities = new HashSet<string>(profile.Capabilities, StringComparer.Ordinal);
-        if (capabilities.Count == 0 ||
-            capabilities.Any(capability => capability is not ("run" or "jit-asm")))
+        if (capabilities.Count == 0 || capabilities.Any(capability => capability is not ("run" or "jit-asm")))
         {
             failures.Add("The wine-coreclr runner exposes only 'run' and optional 'jit-asm' capabilities.");
         }
@@ -1538,10 +1175,7 @@ public static class RuntimeProfileValidation
             failures.Add("The wine-coreclr runner requires the dedicated '/opt/wine-dotnet' prefix.");
         if (!StringComparer.Ordinal.Equals(profile.Layout.WineHostPath, "/usr/lib/wine/wine64"))
             failures.Add("The wine-coreclr runner requires the explicit x64 Wine host '/usr/lib/wine/wine64'.");
-        if (profile.Container is null ||
-            !StringComparer.Ordinal.Equals(profile.Container.IsolationKind, RuntimeContainerIsolationKinds.Wine) ||
-            !StringComparer.Ordinal.Equals(profile.Container.EnvironmentKind, RuntimeContainerEnvironmentKinds.Wine) ||
-            !StringComparer.Ordinal.Equals(profile.Container.WinePrefixPath, "/opt/wine-dotnet"))
+        if (profile.Container is null || !StringComparer.Ordinal.Equals(profile.Container.IsolationKind, RuntimeContainerIsolationKinds.Wine) || !StringComparer.Ordinal.Equals(profile.Container.EnvironmentKind, RuntimeContainerEnvironmentKinds.Wine) || !StringComparer.Ordinal.Equals(profile.Container.WinePrefixPath, "/opt/wine-dotnet"))
         {
             failures.Add("The wine-coreclr runner requires a Wine container using '/opt/wine-dotnet'.");
         }
@@ -1549,45 +1183,33 @@ public static class RuntimeProfileValidation
             failures.Add("The wine-coreclr runner does not support source-mapped JIT operations.");
         if (profile.Operations?.Run is { ImplementationId: not RuntimeOperationImplementationIds.LegacyJitInspector })
         {
-            failures.Add(
-                $"The wine-coreclr runner requires Run implementation '{RuntimeOperationImplementationIds.LegacyJitInspector}'.");
+            failures.Add($"The wine-coreclr runner requires Run implementation '{RuntimeOperationImplementationIds.LegacyJitInspector}'.");
         }
         if (profile.Operations?.Jit is { ImplementationId: not RuntimeOperationImplementationIds.LegacyJitInspector })
         {
-            failures.Add(
-                $"The wine-coreclr runner requires JIT implementation '{RuntimeOperationImplementationIds.LegacyJitInspector}'.");
+            failures.Add($"The wine-coreclr runner requires JIT implementation '{RuntimeOperationImplementationIds.LegacyJitInspector}'.");
         }
     }
 
-    private static void ValidateWineJSharp20Profile(
-        RuntimeProfileDefinition profile,
-        List<string> failures)
+    private static void ValidateWineJSharp20Profile(RuntimeProfileDefinition profile, List<string> failures)
     {
         if (!StringComparer.Ordinal.Equals(profile.Id, "wine-jsharp20-linux-x64"))
             failures.Add("The wine-jsharp20 runner requires profile ID 'wine-jsharp20-linux-x64'.");
         if (!StringComparer.Ordinal.Equals(profile.Family, "netfx-clr-wine"))
             failures.Add("The wine-jsharp20 runner requires runtime family 'netfx-clr-wine'.");
-        if (!StringComparer.Ordinal.Equals(profile.Rid, "linux-x64") ||
-            !StringComparer.Ordinal.Equals(profile.Architecture, "x64"))
+        if (!StringComparer.Ordinal.Equals(profile.Rid, "linux-x64") || !StringComparer.Ordinal.Equals(profile.Architecture, "x64"))
         {
             failures.Add("The wine-jsharp20 runner supports only linux-x64/x64.");
         }
-        if (profile.AcceptedArtifactFormats.Count != 1 ||
-            !StringComparer.Ordinal.Equals(
-                profile.AcceptedArtifactFormats[0],
-                "dotnet-framework-managed-pe-v1"))
+        if (profile.AcceptedArtifactFormats.Count != 1 || !StringComparer.Ordinal.Equals(profile.AcceptedArtifactFormats[0], "dotnet-framework-managed-pe-v1"))
         {
             failures.Add("The wine-jsharp20 runner accepts only managed .NET Framework PE artifacts.");
         }
-        if (profile.Capabilities.Count != 1 ||
-            !StringComparer.Ordinal.Equals(profile.Capabilities[0], "run"))
+        if (profile.Capabilities.Count != 1 || !StringComparer.Ordinal.Equals(profile.Capabilities[0], "run"))
         {
             failures.Add("The wine-jsharp20 runner exposes only the run capability.");
         }
-        if (profile.ProvidedRuntimeFeatureTags.Count != 1 ||
-            !StringComparer.Ordinal.Equals(
-                profile.ProvidedRuntimeFeatureTags[0],
-                "runtime.jsharp20-wine"))
+        if (profile.ProvidedRuntimeFeatureTags.Count != 1 || !StringComparer.Ordinal.Equals(profile.ProvidedRuntimeFeatureTags[0], "runtime.jsharp20-wine"))
         {
             failures.Add("The wine-jsharp20 runner must provide only 'runtime.jsharp20-wine'.");
         }
@@ -1597,10 +1219,7 @@ public static class RuntimeProfileValidation
             failures.Add("The wine-jsharp20 runner requires the dedicated '/opt/wine-jsharp20' prefix.");
         if (!StringComparer.Ordinal.Equals(profile.Layout.WineHostPath, "/usr/lib/wine/wine64"))
             failures.Add("The wine-jsharp20 runner requires the explicit x64 Wine host '/usr/lib/wine/wine64'.");
-        if (profile.AllowedSecurityPolicyIds.Count != 1 ||
-            !StringComparer.Ordinal.Equals(
-                profile.AllowedSecurityPolicyIds[0],
-                "runtime-job-wine-jsharp20"))
+        if (profile.AllowedSecurityPolicyIds.Count != 1 || !StringComparer.Ordinal.Equals(profile.AllowedSecurityPolicyIds[0], "runtime-job-wine-jsharp20"))
         {
             failures.Add("The wine-jsharp20 runner requires only security policy 'runtime-job-wine-jsharp20'.");
         }
@@ -1625,10 +1244,7 @@ public static class RuntimeProfileValidation
 
     public static bool IsImmutableImageReference(string? value) =>
         value is not null &&
-        (IsSha256(value) ||
-        value.LastIndexOf("@sha256:", StringComparison.Ordinal) is var separator &&
-        separator > 0 &&
-        IsSha256(value[(separator + 1)..]));
+        (IsSha256(value) || value.LastIndexOf("@sha256:", StringComparison.Ordinal) is var separator && separator > 0 && IsSha256(value[(separator + 1)..]));
 
     public static bool IsSha256(string? value)
     {
@@ -1642,20 +1258,14 @@ public static class RuntimeProfileValidation
         return true;
     }
 
-    private static void RequireNonEmptyDistinct(
-        List<string> values,
-        string description,
-        List<string> failures)
+    private static void RequireNonEmptyDistinct(List<string> values, string description, List<string> failures)
     {
         if (values.Count == 0)
             failures.Add($"At least one {description} must be declared.");
         RequireDistinct(values, description, failures);
     }
 
-    private static void RequireDistinct(
-        IEnumerable<string> values,
-        string description,
-        List<string> failures)
+    private static void RequireDistinct(IEnumerable<string> values, string description, List<string> failures)
     {
         var observed = new HashSet<string>(StringComparer.Ordinal);
         foreach (var value in values)
@@ -1671,8 +1281,7 @@ public static class RuntimeProfileValidation
         Require(value, description, failures);
         if (string.IsNullOrWhiteSpace(value))
             return;
-        if (value.Length > 128 || value.Any(static character =>
-                !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.')))
+        if (value.Length > 128 || value.Any(static character => !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.')))
         {
             failures.Add($"The {description} '{value}' is not a stable ID.");
         }
@@ -1684,18 +1293,12 @@ public static class RuntimeProfileValidation
             failures.Add($"The {description} must be non-empty and cannot contain NUL characters.");
     }
 
-    private static void ValidateCommand(
-        string value,
-        string description,
-        bool allowCommandName,
-        List<string> failures)
+    private static void ValidateCommand(string value, string description, bool allowCommandName, List<string> failures)
     {
         Require(value, description, failures);
         if (string.IsNullOrWhiteSpace(value))
             return;
-        if (value.Contains('\\') || value.Contains("..", StringComparison.Ordinal) ||
-            (!allowCommandName && !value.StartsWith('/')) ||
-            (allowCommandName && value.Contains('/') && !value.StartsWith('/')))
+        if (value.Contains('\\') || value.Contains("..", StringComparison.Ordinal) || (!allowCommandName && !value.StartsWith('/')) || (allowCommandName && value.Contains('/') && !value.StartsWith('/')))
         {
             failures.Add($"The {description} path is invalid for a Linux runtime image.");
         }

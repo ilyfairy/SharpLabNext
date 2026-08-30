@@ -22,27 +22,17 @@ public sealed class JSharpWorkerEndpointTests
         {
             await using var factory = new JSharpWebApplicationFactory(root);
             using var client = factory.CreateClient();
-            var manifest = await client.GetFromJsonAsync<LanguageWorkerCapabilityManifest>(
-                "/api/v1/worker/capabilities",
-                JsonOptions,
-                TestContext.Current.CancellationToken);
+            var manifest = await client.GetFromJsonAsync<LanguageWorkerCapabilityManifest>("/api/v1/worker/capabilities", JsonOptions, TestContext.Current.CancellationToken);
 
             Assert.NotNull(manifest);
             Assert.Equal(["artifact", "compile-check"], manifest.Capabilities);
-            var descriptor = await client.GetFromJsonAsync<WorkerDescriptor>(
-                "/api/v1/worker/describe",
-                JsonOptions,
-                TestContext.Current.CancellationToken);
+            var descriptor = await client.GetFromJsonAsync<WorkerDescriptor>("/api/v1/worker/describe", JsonOptions, TestContext.Current.CancellationToken);
             var referenceSet = Assert.Single(descriptor!.ReferenceSets!);
             Assert.Equal(JSharpToolchain.ReferenceSetId, referenceSet.Id);
             Assert.Equal(JSharpToolchain.TargetFramework, referenceSet.TargetFramework);
             Assert.Equal("operator-image", referenceSet.Provenance.Kind);
 
-            using var response = await client.PostAsJsonAsync(
-                "/api/v1/build",
-                JSharpTestSettings.CreateRequest(BuildTarget.Artifact),
-                JsonOptions,
-                TestContext.Current.CancellationToken);
+            using var response = await client.PostAsJsonAsync("/api/v1/build", JSharpTestSettings.CreateRequest(BuildTarget.Artifact), JsonOptions, TestContext.Current.CancellationToken);
             var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
             Assert.True(response.IsSuccessStatusCode, body);
             var build = JsonSerializer.Deserialize<LanguageWorkerBuildHttpResponse>(body, JsonOptions);
@@ -50,9 +40,7 @@ public sealed class JSharpWorkerEndpointTests
             var artifact = build.DevelopmentArtifact!;
             Assert.Equal(JSharpToolchain.ArtifactFormat, artifact.ArtifactFormat);
             Assert.Equal("x64", artifact.Manifest.RuntimeRequirement.Architecture);
-            Assert.Equal(
-                [JSharpToolchain.RuntimeFeatureTag],
-                artifact.Manifest.RuntimeRequirement.RequiredRuntimeFeatureTags);
+            Assert.Equal([JSharpToolchain.RuntimeFeatureTag], artifact.Manifest.RuntimeRequirement.RequiredRuntimeFeatureTags);
 
             using var noLsp = await client.PostAsJsonAsync(
                 "/api/v1/language-sessions",
@@ -102,14 +90,7 @@ internal sealed class JSharpWebApplicationFactory : WebApplicationFactory<Progra
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<ILanguageWorkerBuildService>();
-            services.AddSingleton<ILanguageWorkerBuildService>(provider =>
-                new JSharpBuildService(
-                    new FakeJSharpCompilerProcess(new JSharpCompilerInvocation(
-                        true,
-                        JSharpTestSettings.CreateClr2ManagedPe(),
-                        [])),
-                    provider.GetRequiredService<JSharpWorkerSettings>(),
-                    provider.GetRequiredService<LanguageWorkerCapabilityManifest>()));
+            services.AddSingleton<ILanguageWorkerBuildService>(provider => new JSharpBuildService(new FakeJSharpCompilerProcess(new JSharpCompilerInvocation(true, JSharpTestSettings.CreateClr2ManagedPe(), [])), provider.GetRequiredService<JSharpWorkerSettings>(), provider.GetRequiredService<LanguageWorkerCapabilityManifest>()));
         });
     }
 

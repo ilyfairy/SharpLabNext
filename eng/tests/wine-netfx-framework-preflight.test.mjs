@@ -6,19 +6,10 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const script = fs.readFileSync(
-  path.join(repositoryRoot, 'deploy', 'docker', 'wine-netfx-framework-preflight.sh'),
-  'utf8',
-)
-const dockerfile = fs.readFileSync(
-  path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.runtime-wine-framework-matrix'),
-  'utf8',
-)
-const sharedDockerfile = fs.readFileSync(
-  path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.runtime-wine-framework-matrix-shared'),
-  'utf8',
-)
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const script = fs.readFileSync(path.join(repositoryRoot, 'deploy', 'docker', 'wine-netfx-framework-preflight.sh'), 'utf8')
+const dockerfile = fs.readFileSync(path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.runtime-wine-framework-matrix'), 'utf8')
+const sharedDockerfile = fs.readFileSync(path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.runtime-wine-framework-matrix-shared'), 'utf8')
 const shell = findShell()
 
 function findShell() {
@@ -31,9 +22,7 @@ function findShell() {
   return candidates.find(candidate => fs.existsSync(candidate))
 }
 
-function shellPath(value) {
-  return process.platform === 'win32' ? value.replaceAll('\\', '/') : value
-}
+function shellPath(value) { return process.platform === 'win32' ? value.replaceAll('\\', '/') : value; }
 
 function shellEnvironment() {
   if (process.platform !== 'win32' || shell === undefined) return process.env
@@ -48,9 +37,7 @@ function shellEnvironment() {
   }
 }
 
-function wineSection(logicalPath) {
-  return logicalPath.replaceAll('\\', '\\\\')
-}
+function wineSection(logicalPath) { return logicalPath.replaceAll('\\', '\\\\'); }
 
 function runFixture({
   requested,

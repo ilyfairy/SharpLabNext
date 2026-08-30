@@ -14,7 +14,9 @@ class InProcessWorker {
   postMessage(request: UrlCodecWorkerRequest): void {
     void handleUrlCodecWorkerRequest(request).then((response) => {
       if (!this.terminated)
-        this.onmessage?.({ data: response } as MessageEvent<UrlCodecWorkerResponse>)
+        this.onmessage?.({
+          data: response,
+        } as MessageEvent<UrlCodecWorkerResponse>)
     })
   }
 
@@ -59,7 +61,9 @@ describe('URL codec worker client', () => {
       workerFactory: () => worker as unknown as Worker,
     })
 
-    await expect(client.decode('#v2:AAAA')).rejects.toMatchObject({ code: 'worker-timeout' })
+    await expect(client.decode('#v2:AAAA')).rejects.toMatchObject({
+      code: 'worker-timeout',
+    })
     expect(worker.terminated).toBe(true)
     client.dispose()
   })
@@ -85,7 +89,9 @@ describe('URL codec worker client', () => {
         throw new Error('worker unavailable')
       },
     })
-    await expect(client.decode('#v2:AAAA')).rejects.toMatchObject({ code: 'worker-failed' })
+    await expect(client.decode('#v2:AAAA')).rejects.toMatchObject({
+      code: 'worker-failed',
+    })
     client.dispose()
   })
 })

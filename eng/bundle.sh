@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-release_id="$(dotnet run "$repository_root/eng/read-release-id.cs" -- "$repository_root/profiles/lock.json")"
+release_id="$(dotnet run "$repository_root/eng/tools/read-release-id.cs" -- "$repository_root/profiles/lock.json")"
 output_directory="$repository_root/artifacts/sharplabnext-$release_id"
 image_prefix="sharplabnext"
 metadata_only=false
@@ -60,7 +60,7 @@ else
 fi
 
 cd "$repository_root"
-source_arguments=(run "$repository_root/eng/resolve-source-provenance.cs" -- --repository-root "$repository_root")
+source_arguments=(run "$repository_root/eng/tools/resolve-source-provenance.cs" -- --repository-root "$repository_root")
 if [[ -n "$source_revision" ]]; then source_arguments+=(--source-revision "$source_revision"); fi
 if [[ "$allow_uncommitted_source_for_development" == true ]]; then
   source_arguments+=(--allow-uncommitted-source-for-development)

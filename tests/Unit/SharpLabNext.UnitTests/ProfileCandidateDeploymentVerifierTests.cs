@@ -17,9 +17,7 @@ public sealed class ProfileCandidateDeploymentVerifierTests
         using var http = new HttpClient(fixture.CreateHandler()) { Timeout = Timeout.InfiniteTimeSpan };
         var verifier = new ProfileCandidateDeploymentVerifier(http);
 
-        var result = await verifier.VerifyAsync(
-            fixture.Options,
-            TestContext.Current.CancellationToken);
+        var result = await verifier.VerifyAsync(fixture.Options, TestContext.Current.CancellationToken);
 
         Assert.Equal("candidate-test", result.ReleaseId);
         Assert.Equal(14, result.WorkersVerified);
@@ -31,15 +29,11 @@ public sealed class ProfileCandidateDeploymentVerifierTests
     {
         using var fixture = await CandidateFixture.CreateAsync(TestContext.Current.CancellationToken);
         var responses = fixture.CreateResponses();
-        responses[fixture.SystemUri] = responses[fixture.SystemUri]
-            .Replace("\"Id\"", "\"id\"", StringComparison.Ordinal)
-            .Replace("\"ReleaseId\"", "\"releaseId\"", StringComparison.Ordinal);
+        responses[fixture.SystemUri] = responses[fixture.SystemUri].Replace("\"Id\"", "\"id\"", StringComparison.Ordinal).Replace("\"ReleaseId\"", "\"releaseId\"", StringComparison.Ordinal);
         using var http = new HttpClient(fixture.CreateHandler(responses)) { Timeout = Timeout.InfiniteTimeSpan };
         var verifier = new ProfileCandidateDeploymentVerifier(http);
 
-        var exception = await Assert.ThrowsAsync<ProfileUpdateValidationException>(() => verifier.VerifyAsync(
-            fixture.Options,
-            TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<ProfileUpdateValidationException>(() => verifier.VerifyAsync(fixture.Options, TestContext.Current.CancellationToken));
 
         Assert.Contains("missing", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -64,80 +58,47 @@ public sealed class ProfileCandidateDeploymentVerifierTests
         switch (mismatch)
         {
             case "compiler":
-                responses[fixture.WorkerUri("roslyn-stable")] = responses[fixture.WorkerUri("roslyn-stable")]
-                    .Replace("\"compilerVersion\":\"5.6.0\"", "\"compilerVersion\":\"5.5.0\"", StringComparison.Ordinal);
+                responses[fixture.WorkerUri("roslyn-stable")] = responses[fixture.WorkerUri("roslyn-stable")].Replace("\"compilerVersion\":\"5.6.0\"", "\"compilerVersion\":\"5.5.0\"", StringComparison.Ordinal);
                 break;
             case "netfx-compiler":
                 responses[fixture.WorkerUri("roslyn-stable-netfx48")] =
-                    responses[fixture.WorkerUri("roslyn-stable-netfx48")]
-                        .Replace("\"compilerVersion\":\"5.6.0\"", "\"compilerVersion\":\"5.5.0\"", StringComparison.Ordinal);
+                    responses[fixture.WorkerUri("roslyn-stable-netfx48")].Replace("\"compilerVersion\":\"5.6.0\"", "\"compilerVersion\":\"5.5.0\"", StringComparison.Ordinal);
                 break;
             case "worker-image":
-                responses[fixture.WorkerUri("fsharp-stable")] = responses[fixture.WorkerUri("fsharp-stable")]
-                    .Replace(fixture.ImageId("worker-fsharp"), ImmutableImageId("wrong-worker"), StringComparison.Ordinal);
+                responses[fixture.WorkerUri("fsharp-stable")] = responses[fixture.WorkerUri("fsharp-stable")].Replace(fixture.ImageId("worker-fsharp"), ImmutableImageId("wrong-worker"), StringComparison.Ordinal);
                 break;
             case "artifact-worker-image":
                 responses[fixture.WorkerUri("artifacts-const-generics")] =
-                    responses[fixture.WorkerUri("artifacts-const-generics")]
-                        .Replace(
-                            fixture.ImageId("worker-artifacts-const-generics"),
-                            ImmutableImageId("wrong-artifact-worker"),
-                            StringComparison.Ordinal);
+                    responses[fixture.WorkerUri("artifacts-const-generics")].Replace(fixture.ImageId("worker-artifacts-const-generics"), ImmutableImageId("wrong-artifact-worker"), StringComparison.Ordinal);
                 break;
             case "reference-set":
-                responses[fixture.WorkerUri("roslyn-stable")] = responses[fixture.WorkerUri("roslyn-stable")]
-                    .Replace(
-                        fixture.ReferenceSetDigest("net10-ref"),
-                        "sha512-wrong-reference-set",
-                        StringComparison.Ordinal);
+                responses[fixture.WorkerUri("roslyn-stable")] = responses[fixture.WorkerUri("roslyn-stable")].Replace(fixture.ReferenceSetDigest("net10-ref"), "sha512-wrong-reference-set", StringComparison.Ordinal);
                 break;
             case "netfx-reference-set":
                 responses[fixture.WorkerUri("roslyn-stable-netfx48")] =
-                    responses[fixture.WorkerUri("roslyn-stable-netfx48")]
-                        .Replace(
-                            fixture.ReferenceSetDigest("netfx48-managed-ref"),
-                            "sha512-wrong-netfx-reference-set",
-                            StringComparison.Ordinal);
+                    responses[fixture.WorkerUri("roslyn-stable-netfx48")].Replace(fixture.ReferenceSetDigest("netfx48-managed-ref"), "sha512-wrong-netfx-reference-set", StringComparison.Ordinal);
                 break;
             case "reference-set-content":
-                responses[fixture.WorkerUri("fsharp-stable")] = responses[fixture.WorkerUri("fsharp-stable")]
-                    .Replace(
-                        $"sha256:{new string('f', 64)}",
-                        $"sha256:{new string('e', 64)}",
-                        StringComparison.Ordinal);
+                responses[fixture.WorkerUri("fsharp-stable")] = responses[fixture.WorkerUri("fsharp-stable")].Replace($"sha256:{new string('f', 64)}", $"sha256:{new string('e', 64)}", StringComparison.Ordinal);
                 break;
             case "reference-source-uri":
-                responses[fixture.WorkerUri("roslyn-const-generics")] = responses[fixture.WorkerUri("roslyn-const-generics")]
-                    .Replace(
+                responses[fixture.WorkerUri("roslyn-const-generics")] = responses[fixture.WorkerUri("roslyn-const-generics")].Replace(
                         $"\"SourceUri\":\"{fixture.ReferenceSetSourceUri("const-generics-ref")}\"",
                         "\"SourceUri\":\"https://example.test/wrong-source.tar.gz\"",
                         StringComparison.Ordinal);
                 break;
             case "reference-source-digest":
-                responses[fixture.WorkerUri("roslyn-const-generics")] = responses[fixture.WorkerUri("roslyn-const-generics")]
-                    .Replace(
-                        $"\"SourceArchiveDigest\":\"{fixture.ReferenceSetDigest("const-generics-ref")}\"",
-                        $"\"SourceArchiveDigest\":\"sha256:{new string('0', 64)}\"",
-                        StringComparison.Ordinal);
+                responses[fixture.WorkerUri("roslyn-const-generics")] = responses[fixture.WorkerUri("roslyn-const-generics")].Replace($"\"SourceArchiveDigest\":\"{fixture.ReferenceSetDigest("const-generics-ref")}\"", $"\"SourceArchiveDigest\":\"sha256:{new string('0', 64)}\"", StringComparison.Ordinal);
                 break;
             case "netfx30-reference-source-digest":
                 responses[fixture.WorkerUri("roslyn-stable-netfx48")] =
-                    responses[fixture.WorkerUri("roslyn-stable-netfx48")]
-                        .Replace(
-                            "sha512:335bc1db148c258d05757352507e248e3d38693a9620e3d429e5147da0a8540e49570df45c63bd203ee652e068fa29d25cb8262efa0c9126f777df18110c1fc8",
-                            $"sha512:{new string('0', 128)}",
-                            StringComparison.Ordinal);
+                    responses[fixture.WorkerUri("roslyn-stable-netfx48")].Replace("sha512:335bc1db148c258d05757352507e248e3d38693a9620e3d429e5147da0a8540e49570df45c63bd203ee652e068fa29d25cb8262efa0c9126f777df18110c1fc8", $"sha512:{new string('0', 128)}", StringComparison.Ordinal);
                 break;
             case "jsharp-reference-source-digest":
-                responses[fixture.WorkerUri("vjc-jsharp20")] = responses[fixture.WorkerUri("vjc-jsharp20")]
-                    .Replace(
-                        $"\"SourceArchiveDigest\":\"{fixture.ReferenceSetDigest("jsharp20-ref")}\"",
-                        $"\"SourceArchiveDigest\":\"sha256:{new string('0', 64)}\"",
-                        StringComparison.Ordinal);
+                responses[fixture.WorkerUri("vjc-jsharp20")] = responses[fixture.WorkerUri("vjc-jsharp20")].Replace($"\"SourceArchiveDigest\":\"{fixture.ReferenceSetDigest("jsharp20-ref")}\"", $"\"SourceArchiveDigest\":\"sha256:{new string('0', 64)}\"", StringComparison.Ordinal);
                 break;
             case "runtime":
-                responses[fixture.RuntimeStatusUri] = responses[fixture.RuntimeStatusUri]
-                    .Replace("\"RuntimeVersion\":\"10.0.9\"", "\"RuntimeVersion\":\"10.0.8\"", StringComparison.Ordinal);
+                responses[fixture.RuntimeStatusUri] = responses[fixture.RuntimeStatusUri].Replace("\"RuntimeVersion\":\"10.0.9\"", "\"RuntimeVersion\":\"10.0.8\"", StringComparison.Ordinal);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(mismatch));
@@ -145,9 +106,7 @@ public sealed class ProfileCandidateDeploymentVerifierTests
         using var http = new HttpClient(fixture.CreateHandler(responses)) { Timeout = Timeout.InfiniteTimeSpan };
         var verifier = new ProfileCandidateDeploymentVerifier(http);
 
-        var exception = await Assert.ThrowsAsync<ProfileUpdateValidationException>(() => verifier.VerifyAsync(
-            fixture.Options,
-            TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<ProfileUpdateValidationException>(() => verifier.VerifyAsync(fixture.Options, TestContext.Current.CancellationToken));
 
         Assert.Contains("identity mismatch", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -188,13 +147,7 @@ public sealed class ProfileCandidateDeploymentVerifierTests
         private readonly CandidateValidationEndpoints endpoints;
         private readonly Dictionary<string, string> images;
 
-        private CandidateFixture(
-            string root,
-            ReleaseLockDocument releaseLock,
-            CatalogDocument catalog,
-            CandidateValidationEndpoints endpoints,
-            Dictionary<string, string> images,
-            ProfileCandidateVerificationOptions options)
+        private CandidateFixture(string root, ReleaseLockDocument releaseLock, CatalogDocument catalog, CandidateValidationEndpoints endpoints, Dictionary<string, string> images, ProfileCandidateVerificationOptions options)
         {
             Root = root;
             this.releaseLock = releaseLock;
@@ -216,21 +169,12 @@ public sealed class ProfileCandidateDeploymentVerifierTests
             var repositoryRoot = FindRepositoryRoot();
             var runtimeDirectory = Path.Combine(root, "profiles", "runtimes");
             Directory.CreateDirectory(runtimeDirectory);
-            File.Copy(
-                Path.Combine(repositoryRoot, "profiles", "runtimes", "const-generics-linux-x64.json"),
-                Path.Combine(runtimeDirectory, "const-generics-linux-x64.json"));
-            var template = await CatalogLoader.LoadCatalogAsync(
-                Path.Combine(repositoryRoot, "profiles", "catalog", "catalog.json"),
-                cancellationToken);
+            File.Copy(Path.Combine(repositoryRoot, "profiles", "runtimes", "const-generics-linux-x64.json"), Path.Combine(runtimeDirectory, "const-generics-linux-x64.json"));
+            var template = await CatalogLoader.LoadCatalogAsync(Path.Combine(repositoryRoot, "profiles", "catalog", "catalog.json"), cancellationToken);
             var releaseLock = CreateLock();
             template = RestrictSelectableRuntimesToLock(template, releaseLock);
             const string candidateDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-            var material = await CandidateReleaseMaterializer.WriteAsync(
-                root,
-                template,
-                releaseLock,
-                candidateDigest,
-                cancellationToken);
+            var material = await CandidateReleaseMaterializer.WriteAsync(root, template, releaseLock, candidateDigest, cancellationToken);
             var catalog = await CatalogLoader.LoadCatalogAsync(material.CatalogPath, cancellationToken);
             var endpoints = CandidateReleaseMaterializer.CreateValidationEndpoints(candidateDigest);
             var imageIds = BundleImageIds.ToDictionary(static id => id, ImmutableImageId, StringComparer.Ordinal);
@@ -246,11 +190,9 @@ public sealed class ProfileCandidateDeploymentVerifierTests
                         id = pair.Key,
                         imageId = pair.Value,
                         runtimeCommit = releaseLock.Components.TryGetValue(pair.Key, out var component) && component.Kind == "runtime"
-                            ? component.Commit
-                            : null,
+                            ? component.Commit : null,
                         jitCommit = releaseLock.Components.TryGetValue(pair.Key, out component) && component.Kind == "runtime"
-                            ? component.JitCommit
-                            : null
+                            ? component.JitCommit : null
                     })
                 }, JsonOptions),
                 cancellationToken);
@@ -274,13 +216,7 @@ public sealed class ProfileCandidateDeploymentVerifierTests
         {
             var responses = new Dictionary<Uri, string>
             {
-                [Endpoint(endpoints.Gateway, "/api/v1/system")] = Serialize(new ServiceIdentity(
-                    "gateway",
-                    ServiceKind.Gateway,
-                    releaseLock.ReleaseId,
-                    ProtocolVersion.WorkerV1,
-                    [],
-                    "ready")),
+                [Endpoint(endpoints.Gateway, "/api/v1/system")] = Serialize(new ServiceIdentity("gateway", ServiceKind.Gateway, releaseLock.ReleaseId, ProtocolVersion.WorkerV1, [], "ready")),
                 [Endpoint(endpoints.Gateway, "/api/v1/catalog")] = Serialize(catalog),
                 [WorkerUri("roslyn-stable")] = Serialize(Worker(
                     "roslyn-stable",
@@ -320,10 +256,7 @@ public sealed class ProfileCandidateDeploymentVerifierTests
                         ["compilerVersion"] = "43.12.204",
                         ["fsharpCoreVersion"] = "10.1.204"
                     })),
-                [WorkerUri("gsharp-stable")] = Serialize(Worker(
-                    "gsharp-stable",
-                    "worker-gsharp",
-                    new Dictionary<string, string>())),
+                [WorkerUri("gsharp-stable")] = Serialize(Worker("gsharp-stable", "worker-gsharp", new Dictionary<string, string>())),
                 [WorkerUri("peachpie-stable")] = Serialize(Worker(
                     "peachpie-stable",
                     "worker-peachpie",
@@ -332,10 +265,7 @@ public sealed class ProfileCandidateDeploymentVerifierTests
                         ["compilerVersion"] = "1.1.13",
                         ["compilerCommit"] = "608bf30cf3f43f97e32825076a2cfdaa25043e50"
                     })),
-                [WorkerUri("msvc-cppcli-netfx48")] = Serialize(Worker(
-                    "msvc-cppcli-netfx48",
-                    "worker-cppcli",
-                    new Dictionary<string, string>())),
+                [WorkerUri("msvc-cppcli-netfx48")] = Serialize(Worker("msvc-cppcli-netfx48", "worker-cppcli", new Dictionary<string, string>())),
                 [WorkerUri("vjc-jsharp20")] = Serialize(Worker(
                     "vjc-jsharp20",
                     "worker-jsharp",
@@ -350,10 +280,7 @@ public sealed class ProfileCandidateDeploymentVerifierTests
                     {
                         ["compilerVersion"] = "0.1.0"
                     })),
-                [WorkerUri("minilang-stable")] = Serialize(Worker(
-                    "minilang-stable",
-                    "worker-minilang",
-                    new Dictionary<string, string>())),
+                [WorkerUri("minilang-stable")] = Serialize(Worker("minilang-stable", "worker-minilang", new Dictionary<string, string>())),
                 [WorkerUri("artifacts-default")] = Serialize(Worker(
                     "artifacts-default",
                     "worker-artifacts-default",
@@ -364,22 +291,10 @@ public sealed class ProfileCandidateDeploymentVerifierTests
                     },
                     ServiceKind.ArtifactWorker,
                     WorkerKind.ArtifactProcessor)),
-                [WorkerUri("artifacts-const-generics")] = Serialize(Worker(
-                    "artifacts-const-generics",
-                    "worker-artifacts-const-generics",
-                    new Dictionary<string, string>(),
-                    ServiceKind.ArtifactWorker,
-                    WorkerKind.ArtifactProcessor)),
-                [WorkerUri("il-assembler")] = Serialize(Worker(
-                    "il-assembler",
-                    "worker-artifacts-il-assembler",
-                    new Dictionary<string, string>(),
-                    ServiceKind.ArtifactWorker,
-                    WorkerKind.ArtifactProcessor))
+                [WorkerUri("artifacts-const-generics")] = Serialize(Worker("artifacts-const-generics", "worker-artifacts-const-generics", new Dictionary<string, string>(), ServiceKind.ArtifactWorker, WorkerKind.ArtifactProcessor)),
+                [WorkerUri("il-assembler")] = Serialize(Worker("il-assembler", "worker-artifacts-il-assembler", new Dictionary<string, string>(), ServiceKind.ArtifactWorker, WorkerKind.ArtifactProcessor))
             };
-            var runtimeProfiles = catalog.Runtimes
-                .Where(static runtime => runtime.Availability.IsSelectable)
-                .Select(runtime =>
+            var runtimeProfiles = catalog.Runtimes.Where(static runtime => runtime.Availability.IsSelectable).Select(runtime =>
                 {
                     var component = releaseLock.Components[runtime.Id];
                     var isOperatorRuntime = runtime.Family is "netfx-clr-wine" or "mono";
@@ -399,17 +314,10 @@ public sealed class ProfileCandidateDeploymentVerifierTests
                         runtime.Architecture,
                         capabilities = runtime.Capabilities
                     };
-                })
-                .ToArray();
+                }).ToArray();
             responses[RuntimeStatusUri] = Serialize(new
             {
-                service = new ServiceIdentity(
-                    "runtime-supervisor",
-                    ServiceKind.RuntimeSupervisor,
-                    releaseLock.ReleaseId,
-                    ProtocolVersion.WorkerV1,
-                    [],
-                    "ready"),
+                service = new ServiceIdentity("runtime-supervisor", ServiceKind.RuntimeSupervisor, releaseLock.ReleaseId, ProtocolVersion.WorkerV1, [], "ready"),
                 profiles = runtimeProfiles
             });
             return responses;
@@ -425,20 +333,9 @@ public sealed class ProfileCandidateDeploymentVerifierTests
 
         public void Dispose() => Directory.Delete(Root, recursive: true);
 
-        private WorkerDescriptor Worker(
-            string profileId,
-            string imageId,
-            IReadOnlyDictionary<string, string> identity,
-            ServiceKind serviceKind = ServiceKind.ToolchainWorker,
-            WorkerKind workerKind = WorkerKind.Toolchain) =>
+        private WorkerDescriptor Worker(string profileId, string imageId, IReadOnlyDictionary<string, string> identity, ServiceKind serviceKind = ServiceKind.ToolchainWorker, WorkerKind workerKind = WorkerKind.Toolchain) =>
             new(
-                new ServiceIdentity(
-                    profileId,
-                    serviceKind,
-                    releaseLock.ReleaseId,
-                    ProtocolVersion.WorkerV1,
-                    [],
-                    "ready"),
+                new ServiceIdentity(profileId, serviceKind, releaseLock.ReleaseId, ProtocolVersion.WorkerV1, [], "ready"),
                 $"{profileId}-instance",
                 workerKind,
                 images[imageId],
@@ -449,8 +346,7 @@ public sealed class ProfileCandidateDeploymentVerifierTests
                 DateTimeOffset.UnixEpoch,
                 identity,
                 serviceKind == ServiceKind.ToolchainWorker
-                    ? CreateReferenceSetAttestations(profileId)
-                    : null);
+                    ? CreateReferenceSetAttestations(profileId) : null);
 
         private ReferenceSetAttestation[] CreateReferenceSetAttestations(string profileId)
         {
@@ -463,27 +359,9 @@ public sealed class ProfileCandidateDeploymentVerifierTests
                 var isOperatorImage = component.SourceUri?.StartsWith("docker://", StringComparison.Ordinal) == true;
                 if (string.Equals(referenceSetId, "netfx30-managed-ref", StringComparison.Ordinal))
                 {
-                    return new ReferenceSetAttestation(
-                        referenceSetId,
-                        manifest.TargetFramework,
-                        manifest.Digest,
-                        $"sha256:{new string('f', 64)}",
-                        NetFx30CompositeProvenance());
+                    return new ReferenceSetAttestation(referenceSetId, manifest.TargetFramework, manifest.Digest, $"sha256:{new string('f', 64)}", NetFx30CompositeProvenance());
                 }
-                return new ReferenceSetAttestation(
-                    referenceSetId,
-                    manifest.TargetFramework,
-                    manifest.Digest,
-                    $"sha256:{new string('f', 64)}",
-                    new ReferenceSetProvenance(
-                        isOperatorImage ? "operator-image" : package is null ? "source-build" : "nuget-package",
-                        component.ResolvedVersion,
-                        package,
-                        component.SourceUri,
-                        isOperatorImage ? null : component.Commit,
-                        isOperatorImage
-                            ? component.Digest
-                            : package is null ? component.Digest : $"sha512:{component.Sha512}"));
+                return new ReferenceSetAttestation(referenceSetId, manifest.TargetFramework, manifest.Digest, $"sha256:{new string('f', 64)}", new ReferenceSetProvenance(isOperatorImage ? "operator-image" : package is null ? "source-build" : "nuget-package", component.ResolvedVersion, package, component.SourceUri, isOperatorImage ? null : component.Commit, isOperatorImage ? component.Digest : package is null ? component.Digest : $"sha512:{component.Sha512}"));
             }).ToArray();
         }
 
@@ -518,10 +396,7 @@ public sealed class ProfileCandidateDeploymentVerifierTests
             Components = new Dictionary<string, LockedComponent>(StringComparer.Ordinal)
             {
                 ["roslyn-stable"] = Package("toolchain", "5.6.0", "Microsoft.CodeAnalysis.CSharp"),
-                ["roslyn-stable-netfx48"] = Package(
-                    "toolchain",
-                    "5.6.0",
-                    "Microsoft.CodeAnalysis.CSharp"),
+                ["roslyn-stable-netfx48"] = Package("toolchain", "5.6.0", "Microsoft.CodeAnalysis.CSharp"),
                 ["roslyn-main"] = new()
                 {
                     Kind = "toolchain",
@@ -583,9 +458,7 @@ public sealed class ProfileCandidateDeploymentVerifierTests
                     Commit = "608bf30cf3f43f97e32825076a2cfdaa25043e50"
                 },
                 ["msvc-cppcli-netfx48"] = OperatorImageComponent("toolchain", "19.51.36248"),
-                ["jsharp20"] = JSharpOperatorComponent(
-                    "operator-image",
-                    "2.0.50727.937-clr2-x64"),
+                ["jsharp20"] = JSharpOperatorComponent("operator-image", "2.0.50727.937-clr2-x64"),
                 ["vjc-jsharp20"] = new()
                 {
                     Kind = "toolchain",
@@ -643,9 +516,7 @@ public sealed class ProfileCandidateDeploymentVerifierTests
                     JitCommit = new string('c', 40)
                 },
                 ["wine-netfx48-linux-x64"] = OperatorImageComponent("runtime", "wine-9.0+netfx48"),
-                ["wine-jsharp20-linux-x64"] = JSharpOperatorComponent(
-                    "runtime",
-                    "wine-9.0+clr2+jsharp-2.0.50727.937"),
+                ["wine-jsharp20-linux-x64"] = JSharpOperatorComponent("runtime", "wine-9.0+clr2+jsharp-2.0.50727.937"),
                 ["net10-ref"] = Package("reference-set", "10.0.9", "Microsoft.NETCore.App.Ref"),
                 ["net11-preview-ref"] = Package("reference-set", "11.0.0-preview.5", "Microsoft.NETCore.App.Ref"),
                 ["netfx20-managed-ref"] = FrameworkPackage("net20"),
@@ -666,10 +537,7 @@ public sealed class ProfileCandidateDeploymentVerifierTests
                 ["netfx47-managed-ref"] = FrameworkPackage("net47"),
                 ["netfx471-managed-ref"] = FrameworkPackage("net471"),
                 ["netfx472-managed-ref"] = FrameworkPackage("net472"),
-                ["netfx48-managed-ref"] = Package(
-                    "reference-set",
-                    "1.0.3",
-                    "Microsoft.NETFramework.ReferenceAssemblies.net48"),
+                ["netfx48-managed-ref"] = Package("reference-set", "1.0.3", "Microsoft.NETFramework.ReferenceAssemblies.net48"),
                 ["const-generics-ref"] = new()
                 {
                     Kind = "reference-set",
@@ -694,10 +562,8 @@ public sealed class ProfileCandidateDeploymentVerifierTests
             };
         }
 
-        private const string JSharpOperatorDigest =
-            "sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6";
-        private const string JSharpOperatorSourceUri =
-            "docker://sharplabnext/operator-jsharp20@sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6";
+        private const string JSharpOperatorDigest = "sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6";
+        private const string JSharpOperatorSourceUri = "docker://sharplabnext/operator-jsharp20@sha256:61ac7f65c64101a912fca1fee14128241daa0e2d1869ce641f2192fa0a2555f6";
 
         private static LockedComponent JSharpOperatorComponent(string kind, string version) => new()
         {
@@ -717,51 +583,33 @@ public sealed class ProfileCandidateDeploymentVerifierTests
             Sha512 = new string('d', 128)
         };
 
-        private static LockedComponent FrameworkPackage(string targetFramework) => Package(
-            "reference-set",
-            "1.0.3",
-            $"Microsoft.NETFramework.ReferenceAssemblies.{targetFramework}");
+        private static LockedComponent FrameworkPackage(string targetFramework) => Package("reference-set", "1.0.3", $"Microsoft.NETFramework.ReferenceAssemblies.{targetFramework}");
 
         private static LockedComponent Runtime(string version) => new()
         {
             Kind = "runtime",
             ResolvedVersion = version,
             Commit = version.StartsWith("10.", StringComparison.Ordinal)
-                ? "901ca941248413c79832d2fdbd709da0c4386353"
-                : "f7b4c5716faaee8fb8a289aed29118cad955c45f",
+                ? "901ca941248413c79832d2fdbd709da0c4386353" : "f7b4c5716faaee8fb8a289aed29118cad955c45f",
             JitCommit = version.StartsWith("10.", StringComparison.Ordinal)
-                ? "901ca941248413c79832d2fdbd709da0c4386353"
-                : "f7b4c5716faaee8fb8a289aed29118cad955c45f",
+                ? "901ca941248413c79832d2fdbd709da0c4386353" : "f7b4c5716faaee8fb8a289aed29118cad955c45f",
             SourceUri = $"https://example.test/runtime/{version}.tar.gz",
             Sha512 = new string('e', 128)
         };
 
-        private static CatalogDocument RestrictSelectableRuntimesToLock(
-            CatalogDocument catalog,
-            ReleaseLockDocument releaseLock)
+        private static CatalogDocument RestrictSelectableRuntimesToLock(CatalogDocument catalog, ReleaseLockDocument releaseLock)
         {
-            var referenceSetIds = catalog.ReferenceSets
-                .Where(referenceSet => HasComponent(releaseLock, referenceSet.Id, "reference-set") ||
-                                       IsResolvedBySyntheticChannel(referenceSet.Id))
-                .Select(static referenceSet => referenceSet.Id)
-                .ToHashSet(StringComparer.Ordinal);
+            var referenceSetIds = catalog.ReferenceSets.Where(referenceSet => HasComponent(releaseLock, referenceSet.Id, "reference-set") || IsResolvedBySyntheticChannel(referenceSet.Id)).Select(static referenceSet => referenceSet.Id).ToHashSet(StringComparer.Ordinal);
             return catalog with
             {
-                Toolchains = catalog.Toolchains
-                    .Select(toolchain => toolchain with
+                Toolchains = catalog.Toolchains.Select(toolchain => toolchain with
                     {
-                        AllowedReferenceSetIds = toolchain.AllowedReferenceSetIds
-                            .Where(referenceSetIds.Contains)
-                            .ToArray()
+                        AllowedReferenceSetIds = toolchain.AllowedReferenceSetIds.Where(referenceSetIds.Contains).ToArray()
                     })
                     .ToArray(),
-                ReferenceSets = catalog.ReferenceSets
-                    .Where(referenceSet => referenceSetIds.Contains(referenceSet.Id))
-                    .ToArray(),
-                Runtimes = catalog.Runtimes
-                    .Select(runtime => HasComponent(releaseLock, runtime.Id, "runtime")
-                        ? runtime
-                        : runtime with
+                ReferenceSets = catalog.ReferenceSets.Where(referenceSet => referenceSetIds.Contains(referenceSet.Id)).ToArray(),
+                Runtimes = catalog.Runtimes.Select(runtime => HasComponent(releaseLock, runtime.Id, "runtime")
+                        ? runtime : runtime with
                         {
                             Availability = new ComponentAvailability
                             {
@@ -771,20 +619,12 @@ public sealed class ProfileCandidateDeploymentVerifierTests
                             }
                         })
                     .ToArray(),
-                Compatibility = catalog.Compatibility
-                    .Where(rule => rule.Kind != CompatibilityRuleKind.ToolchainReferenceSet ||
-                                   referenceSetIds.Contains(rule.ToId))
-                    .ToArray(),
-                Presets = catalog.Presets
-                    .Where(preset => referenceSetIds.Contains(preset.ReferenceSetId))
-                    .ToArray()
+                Compatibility = catalog.Compatibility.Where(rule => rule.Kind != CompatibilityRuleKind.ToolchainReferenceSet || referenceSetIds.Contains(rule.ToId)).ToArray(),
+                Presets = catalog.Presets.Where(preset => referenceSetIds.Contains(preset.ReferenceSetId)).ToArray()
             };
         }
 
-        private static bool HasComponent(
-            ReleaseLockDocument releaseLock,
-            string id,
-            string kind) =>
+        private static bool HasComponent(ReleaseLockDocument releaseLock, string id, string kind) =>
             releaseLock.Components.TryGetValue(id, out var component) &&
             string.Equals(component.Kind, kind, StringComparison.Ordinal);
 
@@ -810,9 +650,7 @@ public sealed class ProfileCandidateDeploymentVerifierTests
 
     private sealed class StubHttpHandler(IReadOnlyDictionary<Uri, string> responses) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (request.RequestUri is not null && responses.TryGetValue(request.RequestUri, out var response))

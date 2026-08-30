@@ -24,11 +24,7 @@ namespace SharpLabNext.LegacyJitInspector
             if (information.Length > MaximumOutputBytes)
                 throw new InvalidDataException("CoreCLR JIT output exceeds the helper limit.");
 
-            using (var stream = new FileStream(
-                path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete))
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
             using (var reader = new StreamReader(stream, Encoding.UTF8, true))
             {
                 string text = reader.ReadToEnd();
@@ -38,10 +34,7 @@ namespace SharpLabNext.LegacyJitInspector
             }
         }
 
-        public static string SelectPreparedMethods(
-            string assemblyText,
-            IList<JitMethodResult> methods,
-            IReadOnlyDictionary<int, MethodSourceSpan> sourceSpans)
+        public static string SelectPreparedMethods(string assemblyText, IList<JitMethodResult> methods, IReadOnlyDictionary<int, MethodSourceSpan> sourceSpans)
         {
             if (string.IsNullOrEmpty(assemblyText) || methods.Count == 0)
                 return string.Empty;
@@ -61,13 +54,11 @@ namespace SharpLabNext.LegacyJitInspector
             {
                 int start = sectionStarts[sectionIndex];
                 int end = sectionIndex + 1 < sectionStarts.Count
-                    ? sectionStarts[sectionIndex + 1]
-                    : lines.Length;
+                    ? sectionStarts[sectionIndex + 1] : lines.Length;
                 if (!TryGetHeaderName(lines[start], out string jitName))
                     continue;
 
-                int unmatchedIndex = unmatched.FindIndex(
-                    resultIndex => MethodNamesMatch(jitName, methods[resultIndex].DisplayName));
+                int unmatchedIndex = unmatched.FindIndex(resultIndex => MethodNamesMatch(jitName, methods[resultIndex].DisplayName));
                 if (unmatchedIndex < 0)
                     continue;
 
@@ -104,18 +95,9 @@ namespace SharpLabNext.LegacyJitInspector
                 JitMethodResult result = methods[resultIndex];
                 result.NativeCodeSize = ParseNativeCodeSize(lines, start, end);
                 result.InstructionCount = CountInstructions(lines, start, end);
-                if (firstInstruction >= 0 &&
-                    sourceSpans.TryGetValue(result.MetadataToken, out MethodSourceSpan sourceSpan))
+                if (firstInstruction >= 0 && sourceSpans.TryGetValue(result.MetadataToken, out MethodSourceSpan sourceSpan))
                 {
-                    result.LinkedRanges.Add(new JitLinkedRange(
-                        sourceSpan.SourceFilePath,
-                        sourceSpan.Range,
-                        new JitTextRange(
-                            sectionOutputStart + firstInstruction,
-                            0,
-                            sectionOutputStart + lastInstruction,
-                            lines[start + lastInstruction].Length),
-                        "method"));
+                    result.LinkedRanges.Add(new JitLinkedRange(sourceSpan.SourceFilePath, sourceSpan.Range, new JitTextRange(sectionOutputStart + firstInstruction, 0, sectionOutputStart + lastInstruction, lines[start + lastInstruction].Length), "method"));
                     result.MappingSource = "method";
                 }
 
@@ -128,8 +110,7 @@ namespace SharpLabNext.LegacyJitInspector
         private static bool TryGetHeaderName(string line, out string name)
         {
             string prefix = line.StartsWith(HeaderPrefix, StringComparison.Ordinal)
-                ? HeaderPrefix
-                : line.StartsWith(BareHeaderPrefix, StringComparison.Ordinal) ? BareHeaderPrefix : null;
+                ? HeaderPrefix : line.StartsWith(BareHeaderPrefix, StringComparison.Ordinal) ? BareHeaderPrefix : null;
             if (prefix == null)
             {
                 name = null;
@@ -193,11 +174,7 @@ namespace SharpLabNext.LegacyJitInspector
                 int digitEnd = digitStart;
                 while (digitEnd < trimmed.Length && char.IsDigit(trimmed[digitEnd]))
                     digitEnd++;
-                if (digitEnd > digitStart && int.TryParse(
-                    trimmed.Substring(digitStart, digitEnd - digitStart),
-                    NumberStyles.None,
-                    CultureInfo.InvariantCulture,
-                    out int size))
+                if (digitEnd > digitStart && int.TryParse(trimmed.Substring(digitStart, digitEnd - digitStart), NumberStyles.None, CultureInfo.InvariantCulture, out int size))
                 {
                     return size;
                 }

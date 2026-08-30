@@ -3,28 +3,21 @@ import { createWorkbenchBuildOptions } from './buildOptions'
 import type { WorkbenchSnapshot } from './storeSnapshot'
 
 export function buildTargetForOutput(outputId: string): BuildTarget {
-  if (outputId === 'compile-check') return 'compile-check'
-  if (outputId === 'ast') return 'ast'
-  if (outputId === 'generated-source') return 'generated-source'
-  return 'artifact'
+  if (outputId === 'compile-check') return 'compile-check';
+  if (outputId === 'ast') return 'ast';
+  if (outputId === 'generated-source') return 'generated-source';
+  return 'artifact';
 }
 
 function createRequestId(): string {
   const randomUuid = globalThis.crypto?.randomUUID
-  if (randomUuid) return `req_${randomUuid.call(globalThis.crypto)}`
-  return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`
+  if (randomUuid) return `req_${randomUuid.call(globalThis.crypto)}`;
+  return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
 }
 
-export function createBuildRequest(
-  resolution: ResolveSelectionResponse,
-  workspace: WorkbenchSnapshot,
-): BuildRequest {
+export function createBuildRequest(resolution: ResolveSelectionResponse, workspace: WorkbenchSnapshot): BuildRequest {
   const requestId = createRequestId()
-  const buildOptions = createWorkbenchBuildOptions(
-    resolution.effectiveSelection.languageId,
-    workspace.buildMode,
-    resolution.pipelinePlan.stages,
-  )
+  const buildOptions = createWorkbenchBuildOptions(resolution.effectiveSelection.languageId, workspace.buildMode, resolution.pipelinePlan.stages)
 
   return {
     requestId,

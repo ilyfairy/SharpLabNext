@@ -12,8 +12,7 @@ namespace SharpLabNext.LegacyJitInspector
         {
             if (assembly == null)
                 throw new ArgumentNullException(nameof(assembly));
-            MethodInfo entryPoint = assembly.EntryPoint
-                ?? throw new InvalidOperationException("The user assembly does not define an entry point.");
+            MethodInfo entryPoint = assembly.EntryPoint ?? throw new InvalidOperationException("The user assembly does not define an entry point.");
 
             ParameterInfo[] parameters = entryPoint.GetParameters();
             object[] invocationArguments;
@@ -27,8 +26,7 @@ namespace SharpLabNext.LegacyJitInspector
             }
             else
             {
-                throw new InvalidOperationException(
-                    "The user entry point must take no parameters or a string[] parameter.");
+                throw new InvalidOperationException("The user entry point must take no parameters or a string[] parameter.");
             }
 
             object result;
@@ -59,8 +57,7 @@ namespace SharpLabNext.LegacyJitInspector
                 task.GetAwaiter().GetResult();
                 return 0;
             }
-            throw new InvalidOperationException(
-                "Unsupported entry point return type '" + result.GetType().FullName + "'.");
+            throw new InvalidOperationException("Unsupported entry point return type '" + result.GetType().FullName + "'.");
         }
     }
 

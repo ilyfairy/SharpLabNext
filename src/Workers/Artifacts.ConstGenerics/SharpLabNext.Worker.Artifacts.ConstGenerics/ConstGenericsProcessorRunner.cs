@@ -7,30 +7,18 @@ using SharpLabNext.Worker.Artifacts.ConstGenerics.Protocol;
 
 namespace SharpLabNext.Worker.Artifacts.ConstGenerics;
 
-internal sealed record ConstGenericsProcessorRunResult(
-    ConstGenericsProcessorResponse Response,
-    string OutputPath);
+internal sealed record ConstGenericsProcessorRunResult(ConstGenericsProcessorResponse Response, string OutputPath);
 
 internal sealed record ConstGenericsProcessorHealth(bool IsHealthy, string Message);
 
-internal sealed class ConstGenericsProcessorRunner(
-    ConstGenericsArtifactWorkerSettings settings,
-    ArtifactWorkerCapabilityManifest capabilityManifest)
+internal sealed class ConstGenericsProcessorRunner(ConstGenericsArtifactWorkerSettings settings, ArtifactWorkerCapabilityManifest capabilityManifest)
 {
     private static readonly string[] ExpectedOperations = ["decompiled-csharp", "il", "verify"];
     private int _startedProcessCount;
 
     internal int StartedProcessCount => Volatile.Read(ref _startedProcessCount);
 
-    public async Task<ConstGenericsProcessorRunResult> RunAsync(
-        MaterializedConstGenericsArtifact artifact,
-        ConstGenericsProcessorOperation operation,
-        bool includeSequencePoints,
-        bool includeCompilerGeneratedMembers,
-        bool includeMetadataTokens,
-        int maxCharacters,
-        int maxFindings,
-        CancellationToken cancellationToken)
+    public async Task<ConstGenericsProcessorRunResult> RunAsync(MaterializedConstGenericsArtifact artifact, ConstGenericsProcessorOperation operation, bool includeSequencePoints, bool includeCompilerGeneratedMembers, bool includeMetadataTokens, int maxCharacters, int maxFindings, CancellationToken cancellationToken)
     {
         var requestPath = ConstGenericsTemporaryDirectory.ResolvePath(artifact.RootPath, "processor-request.json");
         var responsePath = ConstGenericsTemporaryDirectory.ResolvePath(artifact.RootPath, "processor-response.json");
@@ -42,17 +30,14 @@ internal sealed class ConstGenericsProcessorRunner(
             artifact.PortablePdbPath,
             outputPath,
             new[] { settings.ReferenceRoot, settings.RuntimeReferenceRoot }
-                .Distinct(StringComparer.Ordinal)
-                .ToArray(),
+                .Distinct(StringComparer.Ordinal).ToArray(),
             settings.SystemModuleName,
             includeSequencePoints,
             includeCompilerGeneratedMembers,
             includeMetadataTokens,
             Math.Min(maxCharacters, capabilityManifest.Limits.MaximumOutputArtifactBytes),
             Math.Min(maxFindings, ConstGenericsProcessorProtocol.MaximumFindings));
-        var requestBytes = JsonSerializer.SerializeToUtf8Bytes(
-            request,
-            ConstGenericsProcessorProtocol.JsonOptions);
+        var requestBytes = JsonSerializer.SerializeToUtf8Bytes(request, ConstGenericsProcessorProtocol.JsonOptions);
         if (requestBytes.Length > ConstGenericsProcessorProtocol.MaximumRequestBytes)
             throw new ArtifactWorkerLimitExceededException("The isolated processor request exceeded its limit.");
         await File.WriteAllBytesAsync(requestPath, requestBytes, cancellationToken).ConfigureAwait(false);
@@ -77,18 +62,8 @@ internal sealed class ConstGenericsProcessorRunner(
         ConstGenericsProcessorResponse response;
         try
         {
-            await using var responseStream = new FileStream(
-                responsePath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                16 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            response = await JsonSerializer.DeserializeAsync<ConstGenericsProcessorResponse>(
-                responseStream,
-                ConstGenericsProcessorProtocol.JsonOptions,
-                cancellationToken).ConfigureAwait(false)
-                ?? throw new ArtifactWorkerProcessorException("The isolated processor response was empty.");
+            await using var responseStream = new FileStream(responsePath, FileMode.Open, FileAccess.Read, FileShare.Read, 16 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            response = await JsonSerializer.DeserializeAsync<ConstGenericsProcessorResponse>(responseStream, ConstGenericsProcessorProtocol.JsonOptions, cancellationToken).ConfigureAwait(false) ?? throw new ArtifactWorkerProcessorException("The isolated processor response was empty.");
         }
         catch (JsonException exception)
         {
@@ -96,13 +71,11 @@ internal sealed class ConstGenericsProcessorRunner(
         }
 
         ValidateResponse(response, operation);
-        if (response.LinkedRanges.Count > ConstGenericsProcessorProtocol.MaximumLinkedRanges ||
-            response.Findings.Count > ConstGenericsProcessorProtocol.MaximumFindings)
+        if (response.LinkedRanges.Count > ConstGenericsProcessorProtocol.MaximumLinkedRanges || response.Findings.Count > ConstGenericsProcessorProtocol.MaximumFindings)
         {
             throw new ArtifactWorkerLimitExceededException("The isolated processor returned too many items.");
         }
-        if (File.Exists(outputPath) &&
-            new FileInfo(outputPath).Length > capabilityManifest.Limits.MaximumOutputArtifactBytes)
+        if (File.Exists(outputPath) && new FileInfo(outputPath).Length > capabilityManifest.Limits.MaximumOutputArtifactBytes)
         {
             throw new ArtifactWorkerLimitExceededException("The isolated processor output exceeded its byte limit.");
         }
@@ -124,26 +97,18 @@ internal sealed class ConstGenericsProcessorRunner(
             var execution = await ExecuteAsync(startInfo, timeout.Token).ConfigureAwait(false);
             if (execution.ExitCode != 0 || execution.OutputLimitExceeded)
                 return new ConstGenericsProcessorHealth(false, "The isolated ConstGenerics processor preflight failed.");
-            var descriptor = JsonSerializer.Deserialize<ConstGenericsProcessorDescriptor>(
-                execution.StandardOutput,
-                ConstGenericsProcessorProtocol.JsonOptions);
+            var descriptor = JsonSerializer.Deserialize<ConstGenericsProcessorDescriptor>(execution.StandardOutput, ConstGenericsProcessorProtocol.JsonOptions);
             var healthy = descriptor is not null &&
                 descriptor.ProtocolVersion == ConstGenericsProcessorProtocol.Version &&
                 string.Equals(descriptor.IlSpyCommit, ConstGenericsProcessorProtocol.IlSpyCommit, StringComparison.Ordinal) &&
                 string.Equals(descriptor.RuntimeCommit, ConstGenericsProcessorProtocol.RuntimeCommit, StringComparison.Ordinal) &&
                 string.Equals(descriptor.MetadataFeatureTag, ConstGenericsProcessorProtocol.MetadataFeatureTag, StringComparison.Ordinal) &&
                 string.Equals(descriptor.CompatibilityGroup, ConstGenericsProcessorProtocol.CompatibilityGroup, StringComparison.Ordinal) &&
-                descriptor.Operations.Order(StringComparer.Ordinal).SequenceEqual(
-                    ExpectedOperations,
-                    StringComparer.Ordinal);
+                descriptor.Operations.Order(StringComparer.Ordinal).SequenceEqual(ExpectedOperations, StringComparer.Ordinal);
             return healthy
-                ? new ConstGenericsProcessorHealth(
-                    true,
-                    $"ILSpy {descriptor!.IlSpyCommit[..12]} and matching metadata verifier are isolated and ready.")
-                : new ConstGenericsProcessorHealth(false, "The isolated ConstGenerics processor identity is not approved.");
+                ? new ConstGenericsProcessorHealth(true, $"ILSpy {descriptor!.IlSpyCommit[..12]} and matching metadata verifier are isolated and ready.") : new ConstGenericsProcessorHealth(false, "The isolated ConstGenerics processor identity is not approved.");
         }
-        catch (Exception exception) when (
-            exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             return new ConstGenericsProcessorHealth(false, "The isolated ConstGenerics processor is unavailable.");
         }
@@ -151,20 +116,8 @@ internal sealed class ConstGenericsProcessorRunner(
 
     private ProcessStartInfo CreateStartInfo(string workingDirectory)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = ResolveExecutable(settings.ProcessorDotNetHostPath),
-            WorkingDirectory = workingDirectory,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = false,
-            CreateNoWindow = true
-        };
-        var inherited = startInfo.Environment.ToDictionary(
-            static pair => pair.Key,
-            static pair => pair.Value,
-            StringComparer.OrdinalIgnoreCase);
+        var startInfo = new ProcessStartInfo { FileName = ResolveExecutable(settings.ProcessorDotNetHostPath), WorkingDirectory = workingDirectory, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = false, CreateNoWindow = true };
+        var inherited = startInfo.Environment.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.OrdinalIgnoreCase);
         startInfo.Environment.Clear();
         Copy("PATH");
         Copy("SystemRoot");
@@ -194,9 +147,7 @@ internal sealed class ConstGenericsProcessorRunner(
         }
     }
 
-    private async Task<ProcessExecution> ExecuteAsync(
-        ProcessStartInfo startInfo,
-        CancellationToken cancellationToken)
+    private async Task<ProcessExecution> ExecuteAsync(ProcessStartInfo startInfo, CancellationToken cancellationToken)
     {
         using var process = new Process { StartInfo = startInfo };
         try
@@ -227,12 +178,10 @@ internal sealed class ConstGenericsProcessorRunner(
                 cancellationToken.ThrowIfCancellationRequested();
                 if (exitTask.IsCompleted)
                     break;
-                if (TryGetWorkingSet(process, out var workingSet) &&
-                    workingSet > settings.MaximumProcessorWorkingSetBytes)
+                if (TryGetWorkingSet(process, out var workingSet) && workingSet > settings.MaximumProcessorWorkingSetBytes)
                 {
                     Kill(process);
-                    throw new ArtifactWorkerLimitExceededException(
-                        "The isolated processor exceeded its memory limit.");
+                    throw new ArtifactWorkerLimitExceededException("The isolated processor exceeded its memory limit.");
                 }
             }
             await exitTask.ConfigureAwait(false);
@@ -246,10 +195,7 @@ internal sealed class ConstGenericsProcessorRunner(
 
         var stdout = await stdoutTask.ConfigureAwait(false);
         _ = await stderrTask.ConfigureAwait(false);
-        return new ProcessExecution(
-            process.ExitCode,
-            stdout,
-            Volatile.Read(ref outputExceeded) != 0);
+        return new ProcessExecution(process.ExitCode, stdout, Volatile.Read(ref outputExceeded) != 0);
     }
 
     private static bool TryGetWorkingSet(Process process, out long workingSet)
@@ -268,9 +214,7 @@ internal sealed class ConstGenericsProcessorRunner(
         }
     }
 
-    private static void ValidateResponse(
-        ConstGenericsProcessorResponse response,
-        ConstGenericsProcessorOperation operation)
+    private static void ValidateResponse(ConstGenericsProcessorResponse response, ConstGenericsProcessorOperation operation)
     {
         if (response.ProtocolVersion != ConstGenericsProcessorProtocol.Version)
             throw new ArtifactWorkerProcessorException("The isolated processor protocol identity is invalid.");
@@ -281,10 +225,8 @@ internal sealed class ConstGenericsProcessorRunner(
             _ => "ilverification-const-generics"
         };
         var expectedVersion = operation == ConstGenericsProcessorOperation.Verify
-            ? ConstGenericsProcessorProtocol.VerificationProcessorVersion
-            : ConstGenericsProcessorProtocol.IlSpyProcessorVersion;
-        if (!string.Equals(response.ProcessorId, expectedId, StringComparison.Ordinal) ||
-            !string.Equals(response.ProcessorVersion, expectedVersion, StringComparison.Ordinal))
+            ? ConstGenericsProcessorProtocol.VerificationProcessorVersion : ConstGenericsProcessorProtocol.IlSpyProcessorVersion;
+        if (!string.Equals(response.ProcessorId, expectedId, StringComparison.Ordinal) || !string.Equals(response.ProcessorVersion, expectedVersion, StringComparison.Ordinal))
         {
             throw new ArtifactWorkerProcessorException("The isolated processor component identity is invalid.");
         }
@@ -295,17 +237,13 @@ internal sealed class ConstGenericsProcessorRunner(
         if (Path.IsPathFullyQualified(configuredPath))
             return Path.GetFullPath(configuredPath);
         var currentProcess = Environment.ProcessPath;
-        if (string.Equals(configuredPath, "dotnet", StringComparison.OrdinalIgnoreCase) &&
-            currentProcess is not null &&
-            string.Equals(Path.GetFileNameWithoutExtension(currentProcess), "dotnet", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(configuredPath, "dotnet", StringComparison.OrdinalIgnoreCase) && currentProcess is not null && string.Equals(Path.GetFileNameWithoutExtension(currentProcess), "dotnet", StringComparison.OrdinalIgnoreCase))
         {
             return currentProcess;
         }
         var executable = OperatingSystem.IsWindows() && Path.GetExtension(configuredPath).Length == 0
-            ? configuredPath + ".exe"
-            : configuredPath;
-        foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-                     .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            ? configuredPath + ".exe" : configuredPath;
+        foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             var candidate = Path.Combine(directory, executable);
             if (File.Exists(candidate))
@@ -344,9 +282,7 @@ internal sealed class ConstGenericsProcessorRunner(
             if (!process.HasExited)
                 process.Kill(entireProcessTree: true);
         }
-        catch (InvalidOperationException)
-        {
-        }
+        catch (InvalidOperationException) { }
     }
 
     private sealed record ProcessExecution(int ExitCode, string StandardOutput, bool OutputLimitExceeded);

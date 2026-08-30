@@ -4,27 +4,19 @@ using SharpLabNext.LanguageWorker.Sdk;
 
 namespace SharpLabNext.Worker.GSharp;
 
-internal sealed record ValidatedGSharpWorkspace(
-    WorkspaceSnapshot Snapshot,
-    IReadOnlyList<ValidatedGSharpWorkspaceFile> OrderedFiles,
-    BuildOptions Options);
+internal sealed record ValidatedGSharpWorkspace(WorkspaceSnapshot Snapshot, IReadOnlyList<ValidatedGSharpWorkspaceFile> OrderedFiles, BuildOptions Options);
 
 internal sealed record ValidatedGSharpWorkspaceFile(string Path, long Version, string Text);
 
 internal static class GSharpWorkspaceValidator
 {
-    public static ValidatedGSharpWorkspace Validate(
-        BuildRequest request,
-        LanguageWorkerCapabilityManifest manifest,
-        GSharpToolchainProfile toolchain)
+    public static ValidatedGSharpWorkspace Validate(BuildRequest request, LanguageWorkerCapabilityManifest manifest, GSharpToolchainProfile toolchain)
     {
         ArgumentNullException.ThrowIfNull(request);
         var workspace = request.Workspace;
         if (request.Target is not (BuildTarget.Artifact or BuildTarget.CompileCheck))
             throw Invalid("unsupported-target", "G# supports Artifact and Compile Check builds.");
-        if (!StringComparer.Ordinal.Equals(request.ToolchainId, toolchain.ToolchainId) ||
-            !manifest.ToolchainIds.Contains(request.ToolchainId, StringComparer.Ordinal) ||
-            !StringComparer.Ordinal.Equals(workspace.LanguageId, GSharpToolchain.LanguageId))
+        if (!StringComparer.Ordinal.Equals(request.ToolchainId, toolchain.ToolchainId) || !manifest.ToolchainIds.Contains(request.ToolchainId, StringComparer.Ordinal) || !StringComparer.Ordinal.Equals(workspace.LanguageId, GSharpToolchain.LanguageId))
         {
             throw Invalid("wrong-toolchain", "The request does not target the G# worker.");
         }
@@ -86,10 +78,7 @@ internal static class GSharpWorkspaceValidator
         if (options.NullableContext is not (NullableContextMode.ProjectDefault or NullableContextMode.Disable))
             throw Invalid("unsupported-option", "C# nullable context options do not apply to G#.");
         var featureVersion = GSharpCompilerIdentity.GetFeatureVersion(compilerVersion);
-        if (options.LanguageVersion is not null &&
-            options.LanguageVersion is not "default" &&
-            !string.Equals(options.LanguageVersion, featureVersion, StringComparison.Ordinal) &&
-            !string.Equals(options.LanguageVersion, compilerVersion, StringComparison.Ordinal))
+        if (options.LanguageVersion is not null && options.LanguageVersion is not "default" && !string.Equals(options.LanguageVersion, featureVersion, StringComparison.Ordinal) && !string.Equals(options.LanguageVersion, compilerVersion, StringComparison.Ordinal))
             throw Invalid("unsupported-option", $"G# language version '{options.LanguageVersion}' is not supported.");
         if (options.PreprocessorSymbols is { Count: > 0 })
             throw Invalid("unsupported-option", "G# does not expose C# preprocessor symbols.");
@@ -103,8 +92,5 @@ internal static class GSharpWorkspaceValidator
             throw Invalid("unsupported-option", "G# supports automatic, console, and library outputs only.");
     }
 
-    private static LanguageWorkerRequestException Invalid(
-        string code,
-        string message,
-        int statusCode = StatusCodes.Status400BadRequest) => new(code, message, statusCode);
+    private static LanguageWorkerRequestException Invalid(string code, string message, int statusCode = StatusCodes.Status400BadRequest) => new(code, message, statusCode);
 }

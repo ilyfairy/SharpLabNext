@@ -46,7 +46,7 @@ RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages
       /p:UseAppHost=false \
       /p:ContinuousIntegrationBuild=true \
       /p:SourceRevisionId=${SOURCE_REVISION}
-COPY eng/extract-zip.cs /tools/extract-zip.cs
+COPY eng/tools/extract-zip.cs /tools/extract-zip.cs
 
 FROM publish AS runtime-payload
 ARG DOTNET_RUNTIME_VERSION

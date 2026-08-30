@@ -13,20 +13,11 @@ using SharpLabNext.InternalServices;
 using SharpLabNext.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
-var internalServiceAuthentication = InternalServiceAuthenticationOptions.FromConfiguration(
-    builder.Configuration,
-    builder.Environment);
-var descriptor = new ServiceIdentity(
-    "artifact-store",
-    ServiceKind.ArtifactStore,
-    builder.Configuration["ReleaseId"] ?? "development",
-    ProtocolVersion.WorkerV1,
-    ["health", "content-cas-v1", "artifact-cas-v1", "leases-v1"],
-    "local-sqlite-v1");
+var internalServiceAuthentication = InternalServiceAuthenticationOptions.FromConfiguration(builder.Configuration, builder.Environment);
+var descriptor = new ServiceIdentity("artifact-store", ServiceKind.ArtifactStore, builder.Configuration["ReleaseId"] ?? "development", ProtocolVersion.WorkerV1, ["health", "content-cas-v1", "artifact-cas-v1", "leases-v1"], "local-sqlite-v1");
 builder.AddSharpLabNextObservability(descriptor.Id, descriptor.ReleaseId);
 builder.Services.AddSingleton(descriptor);
-builder.Services.AddOptions<ArtifactStoreOptions>()
-    .Bind(builder.Configuration.GetSection(ArtifactStoreOptions.SectionName));
+builder.Services.AddOptions<ArtifactStoreOptions>().Bind(builder.Configuration.GetSection(ArtifactStoreOptions.SectionName));
 builder.Services.Configure<FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = 320L * 1024 * 1024;
@@ -49,13 +40,7 @@ var store = app.Services.GetRequiredService<LocalArtifactStore>();
 await store.InitializeAsync(app.Lifetime.ApplicationStopping);
 
 app.MapGet("/health/live", () => Results.Ok(new { Status = "live" }));
-app.MapGet("/health/ready", (ServiceIdentity service) => Results.Ok(new
-{
-    Status = "ready",
-    service.Id,
-    service.ReleaseId,
-    Storage = "local-cas-sqlite"
-}));
+app.MapGet("/health/ready", (ServiceIdentity service) => Results.Ok(new { Status = "ready", service.Id, service.ReleaseId, Storage = "local-cas-sqlite" }));
 app.MapGet("/api/v1/artifacts/status", (ServiceIdentity service) => service);
 
 app.MapPut(
@@ -63,12 +48,7 @@ app.MapPut(
     async (string digest, HttpRequest request, LocalArtifactStore artifactStore, CancellationToken cancellationToken) =>
     {
         var contentRef = ParseContentRef(digest);
-        var result = await artifactStore.PutContentAsync(
-            contentRef,
-            request.Body,
-            request.ContentLength,
-            ParseTimeToLive(request),
-            cancellationToken);
+        var result = await artifactStore.PutContentAsync(contentRef, request.Body, request.ContentLength, ParseTimeToLive(request), cancellationToken);
         return Results.Ok(result);
     });
 
@@ -93,18 +73,8 @@ app.MapPut(
         }
 
         var form = await request.ReadFormAsync(cancellationToken);
-        var manifestFieldNames = form.Keys
-            .Where(name => string.Equals(
-                name,
-                ArtifactStoreProtocol.ManifestPartName,
-                StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (manifestFieldNames.Any(name => !string.Equals(
-                name,
-                ArtifactStoreProtocol.ManifestPartName,
-                StringComparison.Ordinal)) ||
-            manifestFieldNames.Length != 1 ||
-            form[manifestFieldNames[0]].Count != 1)
+        var manifestFieldNames = form.Keys.Where(name => string.Equals(name, ArtifactStoreProtocol.ManifestPartName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (manifestFieldNames.Any(name => !string.Equals(name, ArtifactStoreProtocol.ManifestPartName, StringComparison.Ordinal)) || manifestFieldNames.Length != 1 || form[manifestFieldNames[0]].Count != 1)
         {
             throw new ArtifactValidationException("Artifact PUT requires exactly one Manifest field.");
         }
@@ -112,33 +82,20 @@ app.MapPut(
         ArtifactManifest manifest;
         try
         {
-            manifest = JsonSerializer.Deserialize<ArtifactManifest>(
-                form[manifestFieldNames[0]][0]!,
-                ContractJson.CreateSerializerOptions())
-                ?? throw new ArtifactValidationException("Artifact manifest was empty.");
+            manifest = JsonSerializer.Deserialize<ArtifactManifest>(form[manifestFieldNames[0]][0]!, ContractJson.CreateSerializerOptions()) ?? throw new ArtifactValidationException("Artifact manifest was empty.");
         }
         catch (JsonException exception)
         {
             throw new ArtifactValidationException("Artifact manifest JSON is invalid.", exception);
         }
 
-        if (form.Files.Any(file => !string.Equals(
-                file.Name,
-                ArtifactStoreProtocol.FilesPartName,
-                StringComparison.Ordinal)))
+        if (form.Files.Any(file => !string.Equals(file.Name, ArtifactStoreProtocol.FilesPartName, StringComparison.Ordinal)))
         {
             throw new ArtifactValidationException("Unknown multipart file field.");
         }
 
-        var uploads = form.Files
-            .Select(file => new ArtifactUploadSource(file.FileName, file.OpenReadStream))
-            .ToArray();
-        var result = await artifactStore.PutArtifactAsync(
-            ParseArtifactRef(digest),
-            manifest,
-            uploads,
-            ParseTimeToLive(request),
-            cancellationToken);
+        var uploads = form.Files.Select(file => new ArtifactUploadSource(file.FileName, file.OpenReadStream)).ToArray();
+        var result = await artifactStore.PutArtifactAsync(ParseArtifactRef(digest), manifest, uploads, ParseTimeToLive(request), cancellationToken);
         return Results.Ok(result);
     });
 
@@ -152,17 +109,9 @@ app.MapGet(
 
 app.MapGet(
     "/internal/v1/artifacts/sha256/{digest}/files/{**path}",
-    async (
-        string digest,
-        string path,
-        HttpResponse response,
-        LocalArtifactStore artifactStore,
-        CancellationToken cancellationToken) =>
+    async (string digest, string path, HttpResponse response, LocalArtifactStore artifactStore, CancellationToken cancellationToken) =>
     {
-        var content = await artifactStore.OpenArtifactFileReadAsync(
-            ParseArtifactRef(digest),
-            path,
-            cancellationToken);
+        var content = await artifactStore.OpenArtifactFileReadAsync(ParseArtifactRef(digest), path, cancellationToken);
         response.ContentLength = content.Size;
         response.Headers.ETag = new EntityTagHeaderValue($"\"{content.ContentRef.Value}\"").ToString();
         return Results.Stream(content.Stream, MediaTypeNames.Application.Octet);
@@ -170,32 +119,17 @@ app.MapGet(
 
 app.MapPost(
     "/internal/v1/artifacts/sha256/{digest}/leases",
-    async (
-        string digest,
-        ArtifactLeaseRequest request,
-        LocalArtifactStore artifactStore,
-        CancellationToken cancellationToken) =>
+    async (string digest, ArtifactLeaseRequest request, LocalArtifactStore artifactStore, CancellationToken cancellationToken) =>
     {
-        var lease = await artifactStore.AcquireLeaseAsync(
-            ParseArtifactRef(digest),
-            request.Owner,
-            TimeSpan.FromSeconds(request.DurationSeconds),
-            cancellationToken);
+        var lease = await artifactStore.AcquireLeaseAsync(ParseArtifactRef(digest), request.Owner, TimeSpan.FromSeconds(request.DurationSeconds), cancellationToken);
         return Results.Ok(ToResponse(lease));
     });
 
 app.MapPut(
     "/internal/v1/leases/{leaseToken}",
-    async (
-        string leaseToken,
-        ArtifactLeaseRenewalRequest request,
-        LocalArtifactStore artifactStore,
-        CancellationToken cancellationToken) =>
+    async (string leaseToken, ArtifactLeaseRenewalRequest request, LocalArtifactStore artifactStore, CancellationToken cancellationToken) =>
     {
-        var lease = await artifactStore.RenewLeaseAsync(
-            leaseToken,
-            TimeSpan.FromSeconds(request.DurationSeconds),
-            cancellationToken);
+        var lease = await artifactStore.RenewLeaseAsync(leaseToken, TimeSpan.FromSeconds(request.DurationSeconds), cancellationToken);
         return Results.Ok(ToResponse(lease));
     });
 
@@ -207,15 +141,7 @@ app.MapDelete(
         return Results.NoContent();
     });
 
-app.MapPost(
-    "/internal/v1/maintenance/collect",
-    async (
-        GarbageCollectionRequest request,
-        LocalArtifactStore artifactStore,
-        CancellationToken cancellationToken) => Results.Ok(await artifactStore.CollectGarbageAsync(
-            request.MaxArtifacts,
-            request.MaxContents,
-            cancellationToken)));
+app.MapPost("/internal/v1/maintenance/collect", async (GarbageCollectionRequest request, LocalArtifactStore artifactStore, CancellationToken cancellationToken) => Results.Ok(await artifactStore.CollectGarbageAsync(request.MaxArtifacts, request.MaxContents, cancellationToken)));
 
 app.Run();
 
@@ -247,8 +173,7 @@ static TimeSpan? ParseTimeToLive(HttpRequest request)
 {
     if (!PascalCaseQuery.TryGetOptionalInt32(request, "TtlSeconds", out var seconds))
     {
-        throw new ArtifactValidationException(
-            "TtlSeconds must use its exact PascalCase spelling and be a positive integer.");
+        throw new ArtifactValidationException("TtlSeconds must use its exact PascalCase spelling and be a positive integer.");
     }
 
     if (seconds is null)
@@ -287,14 +212,7 @@ static async Task WriteProblemAsync(HttpContext context)
     };
 
     context.Response.StatusCode = status;
-    await context.Response.WriteProblemDetailsAsync(new ProblemDetails
-    {
-        Status = status,
-        Title = title,
-        Detail = detail,
-        Instance = context.Request.Path,
-        Extensions = { ["TraceId"] = context.TraceIdentifier }
-    }, context.RequestAborted);
+    await context.Response.WriteProblemDetailsAsync(new ProblemDetails { Status = status, Title = title, Detail = detail, Instance = context.Request.Path, Extensions = { ["TraceId"] = context.TraceIdentifier } }, context.RequestAborted);
 }
 
 public partial class Program;

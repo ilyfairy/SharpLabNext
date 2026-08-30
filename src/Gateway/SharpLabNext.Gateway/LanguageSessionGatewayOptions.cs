@@ -59,13 +59,7 @@ public sealed class LanguageSessionGatewayOptions
     }
 }
 
-public sealed record LanguageWorkerEndpoint(
-    string WorkerId,
-    Uri BaseAddress,
-    string ExpectedReleaseId,
-    string? ExpectedWorkerImageId,
-    string? ServiceToken,
-    IReadOnlyDictionary<string, string>? ExpectedReferenceSetDigests = null);
+public sealed record LanguageWorkerEndpoint(string WorkerId, Uri BaseAddress, string ExpectedReleaseId, string? ExpectedWorkerImageId, string? ServiceToken, IReadOnlyDictionary<string, string>? ExpectedReferenceSetDigests = null);
 
 public sealed class LanguageWorkerEndpointRegistry
 {
@@ -82,11 +76,7 @@ public sealed class LanguageWorkerEndpointRegistry
 
     public IReadOnlyCollection<LanguageWorkerEndpoint> Endpoints => _endpoints.Values;
 
-    public static LanguageWorkerEndpointRegistry FromConfiguration(
-        IConfiguration configuration,
-        string releaseId,
-        IEnumerable<string> catalogWorkerIds,
-        string? defaultServiceToken = null)
+    public static LanguageWorkerEndpointRegistry FromConfiguration(IConfiguration configuration, string releaseId, IEnumerable<string> catalogWorkerIds, string? defaultServiceToken = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentException.ThrowIfNullOrWhiteSpace(releaseId);
@@ -99,25 +89,14 @@ public sealed class LanguageWorkerEndpointRegistry
             var workerId = child.Key;
             if (!allowedWorkerIds.Contains(workerId))
             {
-                throw new InvalidOperationException(
-                    $"Services:LanguageWorkers:{workerId} does not match a workerId in the active catalog.");
+                throw new InvalidOperationException($"Services:LanguageWorkers:{workerId} does not match a workerId in the active catalog.");
             }
-            endpoints.Add(new LanguageWorkerEndpoint(
-                workerId,
-                ParseBaseAddress(child["BaseAddress"], $"Services:LanguageWorkers:{workerId}:BaseAddress"),
-                releaseId,
-                NullIfWhiteSpace(child["ExpectedWorkerImageId"]),
-                ReadServiceToken(child, workerId) ?? defaultServiceToken));
+            endpoints.Add(new LanguageWorkerEndpoint(workerId, ParseBaseAddress(child["BaseAddress"], $"Services:LanguageWorkers:{workerId}:BaseAddress"), releaseId, NullIfWhiteSpace(child["ExpectedWorkerImageId"]), ReadServiceToken(child, workerId) ?? defaultServiceToken));
         }
         return new LanguageWorkerEndpointRegistry(endpoints);
     }
 
-    public static LanguageWorkerEndpointRegistry FromConfiguration(
-        IConfiguration configuration,
-        string releaseId,
-        IEnumerable<ToolchainManifest> catalogToolchains,
-        IReadOnlyDictionary<string, string> expectedReferenceSetDigests,
-        string? defaultServiceToken = null)
+    public static LanguageWorkerEndpointRegistry FromConfiguration(IConfiguration configuration, string releaseId, IEnumerable<ToolchainManifest> catalogToolchains, IReadOnlyDictionary<string, string> expectedReferenceSetDigests, string? defaultServiceToken = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentException.ThrowIfNullOrWhiteSpace(releaseId);
@@ -132,40 +111,19 @@ public sealed class LanguageWorkerEndpointRegistry
             var workerId = child.Key;
             if (!allowedWorkerIds.Contains(workerId))
             {
-                throw new InvalidOperationException(
-                    $"Services:LanguageWorkers:{workerId} does not match a workerId in the active catalog.");
+                throw new InvalidOperationException($"Services:LanguageWorkers:{workerId} does not match a workerId in the active catalog.");
             }
 
             var baseAddress = ParseBaseAddress(child["BaseAddress"], $"Services:LanguageWorkers:{workerId}:BaseAddress");
-            var expectedReferences = toolchains
-                .Where(toolchain => string.Equals(toolchain.WorkerId, workerId, StringComparison.Ordinal))
-                .SelectMany(static toolchain => toolchain.AllowedReferenceSetIds)
-                .Distinct(StringComparer.Ordinal)
-                .ToDictionary(
-                    static id => id,
-                    id => expectedReferenceSetDigests.TryGetValue(id, out var digest)
-                        ? digest
-                        : throw new InvalidOperationException(
-                            $"Catalog reference set '{id}' has no release-lock identity."),
-                    StringComparer.Ordinal);
-            endpoints[workerId] = new LanguageWorkerEndpoint(
-                workerId,
-                baseAddress,
-                releaseId,
-                NullIfWhiteSpace(child["ExpectedWorkerImageId"]),
-                ReadServiceToken(child, workerId) ?? defaultServiceToken,
-                expectedReferences);
+            var expectedReferences = toolchains.Where(toolchain => string.Equals(toolchain.WorkerId, workerId, StringComparison.Ordinal)).SelectMany(static toolchain => toolchain.AllowedReferenceSetIds).Distinct(StringComparer.Ordinal).ToDictionary(static id => id, id => expectedReferenceSetDigests.TryGetValue(id, out var digest) ? digest : throw new InvalidOperationException($"Catalog reference set '{id}' has no release-lock identity."), StringComparer.Ordinal);
+            endpoints[workerId] = new LanguageWorkerEndpoint(workerId, baseAddress, releaseId, NullIfWhiteSpace(child["ExpectedWorkerImageId"]), ReadServiceToken(child, workerId) ?? defaultServiceToken, expectedReferences);
         }
         return new LanguageWorkerEndpointRegistry(endpoints.Values);
     }
 
     private static Uri ParseBaseAddress(string? value, string configurationKey)
     {
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
-            !string.IsNullOrEmpty(uri.UserInfo) ||
-            !string.IsNullOrEmpty(uri.Query) ||
-            !string.IsNullOrEmpty(uri.Fragment))
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) || !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
         {
             throw new InvalidOperationException($"{configurationKey} must be an absolute HTTP(S) service URI without credentials, query, or fragment.");
         }

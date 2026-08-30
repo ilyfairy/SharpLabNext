@@ -11,12 +11,7 @@ vi.mock('../editor/monacoCore', () => ({
     readonly endLineNumber: number
     readonly endColumn: number
 
-    constructor(
-      startLineNumber: number,
-      startColumn: number,
-      endLineNumber: number,
-      endColumn: number,
-    ) {
+    constructor(startLineNumber: number, startColumn: number, endLineNumber: number, endColumn: number) {
       this.startLineNumber = startLineNumber
       this.startColumn = startColumn
       this.endLineNumber = endLineNumber
@@ -137,7 +132,11 @@ describe('Monaco language adapter', () => {
     expect(
       monacoCompletionList(
         {
-          getWordUntilPosition: () => ({ word: 'c', startColumn: 1, endColumn: 2 }),
+          getWordUntilPosition: () => ({
+            word: 'c',
+            startColumn: 1,
+            endColumn: 2,
+          }),
         } as never,
         {} as never,
         'Program.cs',
@@ -162,40 +161,32 @@ describe('Monaco language adapter', () => {
         },
       ),
     ).toEqual({
-      suggestions: [
-        expect.objectContaining({ label: 'class', filterText: 'class' }),
-        expect.objectContaining({ label: 'class', filterText: 'class' }),
-      ],
+      suggestions: [expect.objectContaining({ label: 'class', filterText: 'class' }), expect.objectContaining({ label: 'class', filterText: 'class' })],
     })
   })
 
   it('uses the replaced postfix expression to keep Roslyn foreach snippets visible', () => {
     const source = '        arr.foreach'
-    const completion = monacoCompletionList(
-      completionModel(source, 13, 20),
-      { lineNumber: 1, column: 20 } as never,
-      'Program.cs',
-      {
-        isIncomplete: false,
-        items: [
-          {
-            label: 'foreach',
-            filterText: 'foreach',
-            kind: 15,
-            insertTextFormat: 2,
-            textEdit: {
-              range: {
-                start: { line: 0, character: 8 },
-                end: { line: 0, character: 19 },
-              },
-              newText: `foreach (var item in arr)\n{\n    \${0}\n}`,
+    const completion = monacoCompletionList(completionModel(source, 13, 20), { lineNumber: 1, column: 20 } as never, 'Program.cs', {
+      isIncomplete: false,
+      items: [
+        {
+          label: 'foreach',
+          filterText: 'foreach',
+          kind: 15,
+          insertTextFormat: 2,
+          textEdit: {
+            range: {
+              start: { line: 0, character: 8 },
+              end: { line: 0, character: 19 },
             },
-            raw: { label: 'foreach' },
-            documentVersion: 1,
+            newText: `foreach (var item in arr)\n{\n    \${0}\n}`,
           },
-        ],
-      },
-    )
+          raw: { label: 'foreach' },
+          documentVersion: 1,
+        },
+      ],
+    })
 
     expect(completion.suggestions).toEqual([
       expect.objectContaining({
@@ -216,85 +207,73 @@ describe('Monaco language adapter', () => {
     ['        arr.fo', 13, 'foreach', 'arr.foreach'],
   ])('keeps the %s postfix candidate filterable while its suffix is typed', (source, wordStartColumn, label, expectedFilterText) => {
     const positionColumn = source.length + 1
-    const completion = monacoCompletionList(
-      completionModel(source, wordStartColumn, positionColumn),
-      { lineNumber: 1, column: positionColumn } as never,
-      'Program.cs',
-      {
-        isIncomplete: false,
-        items: [
-          {
-            label,
-            filterText: label,
-            kind: 15,
-            textEdit: {
-              range: {
-                start: { line: 0, character: 8 },
-                end: { line: 0, character: source.length },
-              },
-              newText: label,
+    const completion = monacoCompletionList(completionModel(source, wordStartColumn, positionColumn), { lineNumber: 1, column: positionColumn } as never, 'Program.cs', {
+      isIncomplete: false,
+      items: [
+        {
+          label,
+          filterText: label,
+          kind: 15,
+          textEdit: {
+            range: {
+              start: { line: 0, character: 8 },
+              end: { line: 0, character: source.length },
             },
-            raw: { label },
-            documentVersion: 1,
+            newText: label,
           },
-        ],
-      },
-    )
+          raw: { label },
+          documentVersion: 1,
+        },
+      ],
+    })
 
-    expect(completion.suggestions).toEqual([
-      expect.objectContaining({ label, filterText: expectedFilterText }),
-    ])
+    expect(completion.suggestions).toEqual([expect.objectContaining({ label, filterText: expectedFilterText })])
   })
 
   it('keeps the coalesced Roslyn await edit visible and complete on the first commit', () => {
     const source = '        task.await'
-    const completion = monacoCompletionList(
-      completionModel(source, 14, 19),
-      { lineNumber: 1, column: 19 } as never,
-      'Program.cs',
-      {
-        isIncomplete: false,
-        items: [
-          {
-            label: 'await',
-            filterText: 'await',
-            kind: 14,
-            textEdit: {
-              range: {
-                start: { line: 0, character: 8 },
-                end: { line: 0, character: 18 },
-              },
-              newText: 'await task',
+    const completion = monacoCompletionList(completionModel(source, 14, 19), { lineNumber: 1, column: 19 } as never, 'Program.cs', {
+      isIncomplete: false,
+      items: [
+        {
+          label: 'await',
+          filterText: 'await',
+          kind: 14,
+          textEdit: {
+            range: {
+              start: { line: 0, character: 8 },
+              end: { line: 0, character: 18 },
             },
-            additionalTextEdits: [
-              {
-                range: {
-                  start: { line: 0, character: 0 },
-                  end: { line: 0, character: 0 },
-                },
-                newText: 'using System.Threading.Tasks;\n\n',
-              },
-              {
-                range: {
-                  start: { line: 2, character: 4 },
-                  end: { line: 2, character: 4 },
-                },
-                newText: 'async ',
-              },
-              {
-                range: {
-                  start: { line: 2, character: 10 },
-                  end: { line: 2, character: 14 },
-                },
-                newText: 'Task',
-              },
-            ],
-            raw: { label: 'await' },
-            documentVersion: 1,
+            newText: 'await task',
           },
-        ],
-      },
-    )
+          additionalTextEdits: [
+            {
+              range: {
+                start: { line: 0, character: 0 },
+                end: { line: 0, character: 0 },
+              },
+              newText: 'using System.Threading.Tasks;\n\n',
+            },
+            {
+              range: {
+                start: { line: 2, character: 4 },
+                end: { line: 2, character: 4 },
+              },
+              newText: 'async ',
+            },
+            {
+              range: {
+                start: { line: 2, character: 10 },
+                end: { line: 2, character: 14 },
+              },
+              newText: 'Task',
+            },
+          ],
+          raw: { label: 'await' },
+          documentVersion: 1,
+        },
+      ],
+    })
 
     expect(completion.suggestions).toEqual([
       expect.objectContaining({
@@ -302,7 +281,9 @@ describe('Monaco language adapter', () => {
         filterText: 'task.await',
         insertText: 'await task',
         additionalTextEdits: [
-          expect.objectContaining({ text: 'using System.Threading.Tasks;\n\n' }),
+          expect.objectContaining({
+            text: 'using System.Threading.Tasks;\n\n',
+          }),
           expect.objectContaining({ text: 'async ' }),
           expect.objectContaining({ text: 'Task' }),
         ],
@@ -374,9 +355,7 @@ describe('Monaco language adapter', () => {
 
   it('falls back to Monaco indentation folding when the server does not support ranges', () => {
     expect(monacoFoldingRanges(null)).toBeNull()
-    expect(
-      monacoFoldingRanges([{ startLine: 1, endLine: 4, startCharacter: 0, endCharacter: 1 }]),
-    ).toEqual([{ start: 2, end: 5 }])
+    expect(monacoFoldingRanges([{ startLine: 1, endLine: 4, startCharacter: 0, endCharacter: 1 }])).toEqual([{ start: 2, end: 5 }])
   })
 
   it('only offers quick fixes for diagnostics represented by the requested markers', () => {
@@ -461,11 +440,7 @@ describe('Monaco language adapter', () => {
       foldingRanges: null,
     }
 
-    const actions = monacoCodeActions(
-      state as never,
-      new Map([['Program.cs', state]]) as never,
-      [firstMarker] as never,
-    )
+    const actions = monacoCodeActions(state as never, new Map([['Program.cs', state]]) as never, [firstMarker] as never)
 
     expect(actions).toHaveLength(1)
     expect(actions[0]).toMatchObject({
@@ -484,11 +459,6 @@ function completionModel(source: string, wordStartColumn: number, wordEndColumn:
       startColumn: wordStartColumn,
       endColumn: wordEndColumn,
     }),
-    getValueInRange: (range: {
-      startLineNumber: number
-      startColumn: number
-      endLineNumber: number
-      endColumn: number
-    }) => source.slice(range.startColumn - 1, range.endColumn - 1),
+    getValueInRange: (range: { startLineNumber: number; startColumn: number; endLineNumber: number; endColumn: number }) => source.slice(range.startColumn - 1, range.endColumn - 1),
   } as never
 }

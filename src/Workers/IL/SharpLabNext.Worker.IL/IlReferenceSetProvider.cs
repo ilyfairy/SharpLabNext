@@ -22,18 +22,14 @@ public sealed class IlReferenceSetProvider
     private readonly ConcurrentDictionary<string, ReferenceSetAttestation> _attestations = new(StringComparer.Ordinal);
     private readonly bool _requireAttestation;
 
-    public IlReferenceSetProvider(
-        IEnumerable<IlReferenceSetDefinition> definitions,
-        bool requireAttestation = false)
+    public IlReferenceSetProvider(IEnumerable<IlReferenceSetDefinition> definitions, bool requireAttestation = false)
     {
         ArgumentNullException.ThrowIfNull(definitions);
         _definitions = definitions.ToDictionary(static item => item.Id, StringComparer.Ordinal);
         _requireAttestation = requireAttestation;
     }
 
-    public IReadOnlyList<ReferenceSetAttestation> Attestations => _attestations.Values
-        .OrderBy(static item => item.Id, StringComparer.Ordinal)
-        .ToArray();
+    public IReadOnlyList<ReferenceSetAttestation> Attestations => _attestations.Values.OrderBy(static item => item.Id, StringComparer.Ordinal).ToArray();
 
     public IlReferenceSetDefinition Get(string id)
     {
@@ -46,32 +42,18 @@ public sealed class IlReferenceSetProvider
         var attestedRuntimeApiPath = AttestedRuntimeApiPath(definition.Path);
         if (_requireAttestation && !File.Exists(attestedRuntimeApiPath))
         {
-            throw new IlReferenceSetUnavailableException(
-                $"Reference set '{id}' is missing its attested SharpLab.Runtime assembly.");
+            throw new IlReferenceSetUnavailableException($"Reference set '{id}' is missing its attested SharpLab.Runtime assembly.");
         }
         ReferenceSetAttestation attestation;
         try
         {
-            attestation = ReferenceSetAttestationReader.LoadAndVerify(
-                definition.Path,
-                definition.Id,
-                definition.TargetFramework,
-                definition.FrameworkVersion,
-                definition.Digest,
-                _requireAttestation,
-                definition.AttestationPath);
+            attestation = ReferenceSetAttestationReader.LoadAndVerify(definition.Path, definition.Id, definition.TargetFramework, definition.FrameworkVersion, definition.Digest, _requireAttestation, definition.AttestationPath);
         }
         catch (InvalidDataException exception)
         {
-            throw new IlReferenceSetUnavailableException(
-                $"Reference set '{id}' attestation validation failed.",
-                exception);
+            throw new IlReferenceSetUnavailableException($"Reference set '{id}' attestation validation failed.", exception);
         }
-        var effective = definition with
-        {
-            TargetFramework = attestation.TargetFramework,
-            FrameworkVersion = attestation.Provenance.ResolvedVersion
-        };
+        var effective = definition with { TargetFramework = attestation.TargetFramework, FrameworkVersion = attestation.Provenance.ResolvedVersion };
         _attestations[id] = attestation;
         return _loadedDefinitions.GetOrAdd(id, effective);
     }
@@ -79,11 +61,7 @@ public sealed class IlReferenceSetProvider
     public async Task<IILMetadataCatalog> GetCatalogAsync(string id, CancellationToken cancellationToken)
     {
         var definition = Get(id);
-        var lazy = _catalogs.GetOrAdd(
-            id,
-            _ => new Lazy<Task<IILMetadataCatalog>>(
-                () => BuildCatalogAsync(definition),
-                LazyThreadSafetyMode.ExecutionAndPublication));
+        var lazy = _catalogs.GetOrAdd(id, _ => new Lazy<Task<IILMetadataCatalog>>(() => BuildCatalogAsync(definition), LazyThreadSafetyMode.ExecutionAndPublication));
         var task = lazy.Value;
         try
         {
@@ -118,71 +96,37 @@ public sealed class IlReferenceSetProvider
     {
         var attestedPath = AttestedRuntimeApiPath(referenceSetPath);
         return File.Exists(attestedPath)
-            ? attestedPath
-            : typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location;
+            ? attestedPath : typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location;
     }
 
     private static async Task<IILMetadataCatalog> BuildCatalogAsync(IlReferenceSetDefinition definition)
     {
         var referenceRoot = Path.GetFullPath(definition.Path);
         var runtimeApiPath = RuntimeApiPath(referenceRoot);
-        var paths = Directory.EnumerateFiles(referenceRoot, "*.dll", SearchOption.TopDirectoryOnly)
-            .Append(runtimeApiPath)
-            .Where(File.Exists)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static path => path, StringComparer.Ordinal)
-            .ToArray();
+        var paths = Directory.EnumerateFiles(referenceRoot, "*.dll", SearchOption.TopDirectoryOnly).Append(runtimeApiPath).Where(File.Exists).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(static path => path, StringComparer.Ordinal).ToArray();
         if (paths.Length == 0 || paths.Length > MaxAssemblies)
         {
-            throw new IlReferenceSetUnavailableException(
-                $"Reference set '{definition.Id}' contains an unsupported number of metadata assemblies.");
+            throw new IlReferenceSetUnavailableException($"Reference set '{definition.Id}' contains an unsupported number of metadata assemblies.");
         }
         var files = paths.Select(static path => new FileInfo(path)).ToArray();
-        if (files.Any(static file => file.Length > MaxAssemblyBytes) ||
-            files.Sum(static file => file.Length) > MaxTotalAssemblyBytes)
+        if (files.Any(static file => file.Length > MaxAssemblyBytes) || files.Sum(static file => file.Length) > MaxTotalAssemblyBytes)
         {
-            throw new IlReferenceSetUnavailableException(
-                $"Reference set '{definition.Id}' exceeds the IL metadata catalog size limits.");
+            throw new IlReferenceSetUnavailableException($"Reference set '{definition.Id}' exceeds the IL metadata catalog size limits.");
         }
 
-        var allowedRoots = paths
-            .Select(Path.GetDirectoryName)
-            .Where(static path => path is not null)
-            .Select(static path => Path.GetFullPath(path!))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToImmutableArray();
-        var catalog = new ILMetadataCatalog(new AssemblyCatalogOptions
-        {
-            MaxAssemblyBytes = MaxAssemblyBytes,
-            MaxTotalAssemblyBytes = MaxTotalAssemblyBytes,
-            MaxAssemblies = MaxAssemblies,
-            MaxImportDuration = TimeSpan.FromMinutes(2),
-            MaxConcurrentImports = 2,
-            MaxPendingImports = 8,
-            UnknownReferenceSetBehavior = UnknownReferenceSetBehavior.Error,
-            AllowedFileRoots = allowedRoots,
-            RequireFileWithinAllowedRoot = true,
-            LazyMemberIndexing = false
-        });
+        var allowedRoots = paths.Select(Path.GetDirectoryName).Where(static path => path is not null).Select(static path => Path.GetFullPath(path!)).Distinct(StringComparer.OrdinalIgnoreCase).ToImmutableArray();
+        var catalog = new ILMetadataCatalog(new AssemblyCatalogOptions { MaxAssemblyBytes = MaxAssemblyBytes, MaxTotalAssemblyBytes = MaxTotalAssemblyBytes, MaxAssemblies = MaxAssemblies, MaxImportDuration = TimeSpan.FromMinutes(2), MaxConcurrentImports = 2, MaxPendingImports = 8, UnknownReferenceSetBehavior = UnknownReferenceSetBehavior.Error, AllowedFileRoots = allowedRoots, RequireFileWithinAllowedRoot = true, LazyMemberIndexing = false });
         try
         {
-            var handles = await catalog.AddRangeAsync(
-                paths.Select(static path => (AssemblySource)new AssemblySource.File(path, Path.GetFileName(path))),
-                new AssemblyImportOptions(IncludeCompilerGeneratedMembers: true),
-                CancellationToken.None).ConfigureAwait(false);
+            var handles = await catalog.AddRangeAsync(paths.Select(static path => (AssemblySource)new AssemblySource.File(path, Path.GetFileName(path))), new AssemblyImportOptions(IncludeCompilerGeneratedMembers: true), CancellationToken.None).ConfigureAwait(false);
             catalog.DefineReferenceSet(definition.Id, handles, cancellationToken: CancellationToken.None);
             return catalog;
         }
         catch (Exception exception) when (exception is MetadataImportException or IOException or UnauthorizedAccessException)
         {
-            throw new IlReferenceSetUnavailableException(
-                $"Reference set '{definition.Id}' could not be indexed for IL language services.",
-                exception);
+            throw new IlReferenceSetUnavailableException($"Reference set '{definition.Id}' could not be indexed for IL language services.", exception);
         }
     }
 
-    private static string AttestedRuntimeApiPath(string referenceSetPath) =>
-        Path.Combine(
-            Path.GetFullPath(referenceSetPath),
-            Path.GetFileName(typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location));
+    private static string AttestedRuntimeApiPath(string referenceSetPath) => Path.Combine(Path.GetFullPath(referenceSetPath), Path.GetFileName(typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location));
 }

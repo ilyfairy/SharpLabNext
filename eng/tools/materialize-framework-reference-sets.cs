@@ -1,5 +1,6 @@
 #:sdk Microsoft.NET.Sdk
 #:property TargetFramework=net10.0
+#:property RestorePackagesWithLockFile=false
 
 using System.IO.Compression;
 using System.Net;
@@ -19,13 +20,8 @@ if (args is ["--self-test"])
 }
 
 var options = Options.Parse(args);
-var matrix = JsonNode.Parse(await File.ReadAllTextAsync(options.MatrixPath))?.AsObject()
-    ?? throw new InvalidDataException("Runtime matrix is not a JSON object.");
-var targets = matrix["framework"]?["targets"]?.AsArray()
-    .Select(static value => value?.AsObject()
-        ?? throw new InvalidDataException("Framework target is not a JSON object."))
-    .ToArray()
-    ?? throw new InvalidDataException("Runtime matrix does not contain framework targets.");
+var matrix = JsonNode.Parse(await File.ReadAllTextAsync(options.MatrixPath))?.AsObject() ?? throw new InvalidDataException("Runtime matrix is not a JSON object.");
+var targets = matrix["framework"]?["targets"]?.AsArray().Select(static value => value?.AsObject() ?? throw new InvalidDataException("Framework target is not a JSON object.")).ToArray() ?? throw new InvalidDataException("Runtime matrix does not contain framework targets.");
 
 ValidateTargets(targets);
 Directory.CreateDirectory(options.OutputDirectory);
@@ -33,12 +29,7 @@ Directory.CreateDirectory(options.ArchiveDirectory);
 
 using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
 var configuredReferenceSets = new JsonObject();
-var packages = targets
-    .Where(static target => target["referencePackage"] is JsonObject)
-    .ToDictionary(
-        static target => Required(target, "id"),
-        ReadPackage,
-        StringComparer.Ordinal);
+var packages = targets.Where(static target => target["referencePackage"] is JsonObject).ToDictionary(static target => Required(target, "id"), ReadPackage, StringComparer.Ordinal);
 
 foreach (var target in targets.Where(static target => target["referencePackage"] is JsonObject))
 {
@@ -46,28 +37,16 @@ foreach (var target in targets.Where(static target => target["referencePackage"]
     var targetFramework = Required(target, "targetFramework");
     var package = packages[Required(target, "id")];
 
-    var archivePath = Path.Combine(
-        options.ArchiveDirectory,
-        $"{package.Id.ToLowerInvariant()}.{package.Version}.nupkg");
+    var archivePath = Path.Combine(options.ArchiveDirectory, $"{package.Id.ToLowerInvariant()}.{package.Version}.nupkg");
     await EnsureArchiveAsync(http, package.Uri, archivePath, package.Sha512);
 
     var referenceSetPath = SafeChild(options.OutputDirectory, id);
     RecreateDirectory(referenceSetPath);
     ExtractReferenceAssemblies(archivePath, referenceSetPath, package.FrameworkVersion);
     ValidateMaterializedSet(referenceSetPath, id, targetFramework);
-    await WriteAttestationAsync(
-        referenceSetPath,
-        id,
-        targetFramework,
-        package.PackageContentHash,
-        PackageProvenance(package));
+    await WriteAttestationAsync(referenceSetPath, id, targetFramework, package.PackageContentHash, PackageProvenance(package));
 
-    AddConfiguration(
-        configuredReferenceSets,
-        id,
-        targetFramework,
-        package.Version,
-        package.PackageContentHash);
+    AddConfiguration(configuredReferenceSets, id, targetFramework, package.Version, package.PackageContentHash);
 }
 
 foreach (var target in targets.Where(static target => target["referenceComposition"] is JsonObject))
@@ -75,79 +54,40 @@ foreach (var target in targets.Where(static target => target["referenceCompositi
     var id = Required(target, "referenceSetId");
     var targetFramework = Required(target, "targetFramework");
     var composition = target["referenceComposition"]!.AsObject();
-    var sources = RequiredArray(composition, "sources")
-        .Select(value => value?.AsObject()
-            ?? throw new InvalidDataException($"Reference composition '{id}' source is not an object."))
-        .Select(source => new CompositionSource(
-            Required(source, "role"),
-            Required(source, "selection"),
-            packages[Required(source, "targetId")]))
-        .ToArray();
+    var sources = RequiredArray(composition, "sources").Select(value => value?.AsObject() ?? throw new InvalidDataException($"Reference composition '{id}' source is not an object.")).Select(source => new CompositionSource(Required(source, "role"), Required(source, "selection"), packages[Required(source, "targetId")])).ToArray();
     var resolvedVersion = Required(composition, "resolvedVersion");
     var sourceIdentityDigest = RequiredLowerSha256(composition, "sourceIdentityDigest");
-    var actualSourceIdentityDigest = ComputeCompositionSourceIdentity(
-        id,
-        targetFramework,
-        Required(composition, "kind"),
-        resolvedVersion,
-        sources);
+    var actualSourceIdentityDigest = ComputeCompositionSourceIdentity(id, targetFramework, Required(composition, "kind"), resolvedVersion, sources);
     if (!string.Equals(sourceIdentityDigest, actualSourceIdentityDigest, StringComparison.Ordinal))
     {
-        throw new InvalidDataException(
-            $"Reference composition '{id}' source identity does not match its locked digest.");
+        throw new InvalidDataException($"Reference composition '{id}' source identity does not match its locked digest.");
     }
 
     var archivePaths = new Dictionary<string, string>(StringComparer.Ordinal);
     foreach (var source in sources)
     {
         var package = source.Package;
-        var archivePath = Path.Combine(
-            options.ArchiveDirectory,
-            $"{package.Id.ToLowerInvariant()}.{package.Version}.nupkg");
+        var archivePath = Path.Combine(options.ArchiveDirectory, $"{package.Id.ToLowerInvariant()}.{package.Version}.nupkg");
         await EnsureArchiveAsync(http, package.Uri, archivePath, package.Sha512);
         archivePaths.Add(source.Role, archivePath);
     }
 
     var referenceSetPath = SafeChild(options.OutputDirectory, id);
     RecreateDirectory(referenceSetPath);
-    ExtractReferenceAssemblies(
-        archivePaths["base"],
-        referenceSetPath,
-        sources.Single(static source => source.Role == "base").Package.FrameworkVersion);
-    ExtractNetFx30Extensions(
-        archivePaths["extension"],
-        referenceSetPath,
-        sources.Single(static source => source.Role == "extension").Package.FrameworkVersion);
+    ExtractReferenceAssemblies(archivePaths["base"], referenceSetPath, sources.Single(static source => source.Role == "base").Package.FrameworkVersion);
+    ExtractNetFx30Extensions(archivePaths["extension"], referenceSetPath, sources.Single(static source => source.Role == "extension").Package.FrameworkVersion);
     ValidateNetFx30Composition(referenceSetPath);
     ValidateMaterializedSet(referenceSetPath, id, targetFramework);
-    await WriteAttestationAsync(
-        referenceSetPath,
-        id,
-        targetFramework,
-        sourceIdentityDigest,
-        CompositionProvenance(composition, sources));
-    AddConfiguration(
-        configuredReferenceSets,
-        id,
-        targetFramework,
-        resolvedVersion,
-        sourceIdentityDigest);
+    await WriteAttestationAsync(referenceSetPath, id, targetFramework, sourceIdentityDigest, CompositionProvenance(composition, sources));
+    AddConfiguration(configuredReferenceSets, id, targetFramework, resolvedVersion, sourceIdentityDigest);
 }
 
-var appsettings = JsonNode.Parse(await File.ReadAllTextAsync(options.AppsettingsTemplatePath))?.AsObject()
-    ?? throw new InvalidDataException("Roslyn Framework appsettings template is not a JSON object.");
+var appsettings = JsonNode.Parse(await File.ReadAllTextAsync(options.AppsettingsTemplatePath))?.AsObject() ?? throw new InvalidDataException("Roslyn Framework appsettings template is not a JSON object.");
 appsettings["ReferenceSets"] = configuredReferenceSets;
 Directory.CreateDirectory(Path.GetDirectoryName(options.AppsettingsOutputPath)!);
-await File.WriteAllTextAsync(
-    options.AppsettingsOutputPath,
-    appsettings.ToJsonString(new JsonSerializerOptions
-    {
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        WriteIndented = true
-    }) + "\n");
+await File.WriteAllTextAsync(options.AppsettingsOutputPath, appsettings.ToJsonString(new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, WriteIndented = true }) + "\n");
 
-Console.WriteLine(
-    $"Materialized {configuredReferenceSets.Count} locked Framework reference sets, including the net30 composition.");
+Console.WriteLine($"Materialized {configuredReferenceSets.Count} locked Framework reference sets, including the net30 composition.");
 
 static void ValidateTargets(IReadOnlyList<JsonObject> targets)
 {
@@ -162,61 +102,43 @@ static void ValidateTargets(IReadOnlyList<JsonObject> targets)
         var referenceSetId = Required(target, "referenceSetId");
         if (!Regex.IsMatch(id, "^netfx[0-9]{2,3}$", RegexOptions.CultureInvariant) || !ids.Add(id))
             throw new InvalidDataException($"Framework target id '{id}' is invalid or duplicated.");
-        if (!Regex.IsMatch(referenceSetId, "^netfx[0-9]{2,3}-managed-ref$", RegexOptions.CultureInvariant) ||
-            !referenceSetIds.Add(referenceSetId))
+        if (!Regex.IsMatch(referenceSetId, "^netfx[0-9]{2,3}-managed-ref$", RegexOptions.CultureInvariant) || !referenceSetIds.Add(referenceSetId))
         {
-            throw new InvalidDataException(
-                $"Framework reference set id '{referenceSetId}' is invalid or duplicated.");
+            throw new InvalidDataException($"Framework reference set id '{referenceSetId}' is invalid or duplicated.");
         }
         if ((target["referencePackage"] is JsonObject) == (target["referenceComposition"] is JsonObject))
         {
-            throw new InvalidDataException(
-                $"Framework target '{id}' must define exactly one reference package or composition.");
+            throw new InvalidDataException($"Framework target '{id}' must define exactly one reference package or composition.");
         }
     }
 
-    var compositionTargets = targets
-        .Where(static target => target["referenceComposition"] is JsonObject)
-        .ToArray();
+    var compositionTargets = targets.Where(static target => target["referenceComposition"] is JsonObject).ToArray();
     if (compositionTargets.Length != 1 || Required(compositionTargets[0], "id") != "netfx30")
     {
-        throw new InvalidDataException(
-            "Exactly netfx30 must use the locked reference composition; every other Framework target requires one package.");
+        throw new InvalidDataException("Exactly netfx30 must use the locked reference composition; every other Framework target requires one package.");
     }
 
     var netFx30 = compositionTargets[0];
-    if (Required(netFx30, "version") != "3.0" ||
-        Required(netFx30, "targetFramework") != "net30" ||
-        Required(netFx30, "referenceSetId") != "netfx30-managed-ref")
+    if (Required(netFx30, "version") != "3.0" || Required(netFx30, "targetFramework") != "net30" || Required(netFx30, "referenceSetId") != "netfx30-managed-ref")
     {
         throw new InvalidDataException("The netfx30 composition target identity is inconsistent.");
     }
     var composition = netFx30["referenceComposition"]!.AsObject();
-    if (Required(composition, "kind") != "nuget-package-composition" ||
-        Required(composition, "resolvedVersion") != "net30-union-v1")
+    if (Required(composition, "kind") != "nuget-package-composition" || Required(composition, "resolvedVersion") != "net30-union-v1")
     {
         throw new InvalidDataException("The netfx30 reference composition recipe is unsupported.");
     }
     _ = RequiredLowerSha256(composition, "sourceIdentityDigest");
-    var sources = RequiredArray(composition, "sources")
-        .Select(value => value?.AsObject()
-            ?? throw new InvalidDataException("The netfx30 reference composition contains an invalid source."))
-        .ToArray();
-    if (sources.Length != 2 ||
-        !MatchesSource(sources[0], "base", "netfx20", "all") ||
-        !MatchesSource(sources[1], "extension", "netfx35", "assembly-version:3.0.0.0"))
+    var sources = RequiredArray(composition, "sources").Select(value => value?.AsObject() ?? throw new InvalidDataException("The netfx30 reference composition contains an invalid source.")).ToArray();
+    if (sources.Length != 2 || !MatchesSource(sources[0], "base", "netfx20", "all") || !MatchesSource(sources[1], "extension", "netfx35", "assembly-version:3.0.0.0"))
     {
-        throw new InvalidDataException(
-            "The netfx30 reference composition must be the ordered netfx20 base plus netfx35 AssemblyVersion 3.0.0.0 extension.");
+        throw new InvalidDataException("The netfx30 reference composition must be the ordered netfx20 base plus netfx35 AssemblyVersion 3.0.0.0 extension.");
     }
     if (!sources.All(source => ids.Contains(Required(source, "targetId"))))
         throw new InvalidDataException("The netfx30 reference composition refers to an unknown Framework target.");
 }
 
-static bool MatchesSource(JsonObject source, string role, string targetId, string selection) =>
-    string.Equals(Required(source, "role"), role, StringComparison.Ordinal) &&
-    string.Equals(Required(source, "targetId"), targetId, StringComparison.Ordinal) &&
-    string.Equals(Required(source, "selection"), selection, StringComparison.Ordinal);
+static bool MatchesSource(JsonObject source, string role, string targetId, string selection) => string.Equals(Required(source, "role"), role, StringComparison.Ordinal) && string.Equals(Required(source, "targetId"), targetId, StringComparison.Ordinal) && string.Equals(Required(source, "selection"), selection, StringComparison.Ordinal);
 
 static LockedReferencePackage ReadPackage(JsonObject target)
 {
@@ -224,39 +146,17 @@ static LockedReferencePackage ReadPackage(JsonObject target)
     var referenceSetId = Required(target, "referenceSetId");
     var targetFramework = Required(target, "targetFramework");
     var frameworkVersion = Required(target, "version");
-    var package = target["referencePackage"]?.AsObject()
-        ?? throw new InvalidDataException($"Framework target '{targetId}' has no reference package.");
+    var package = target["referencePackage"]?.AsObject() ?? throw new InvalidDataException($"Framework target '{targetId}' has no reference package.");
     var packageId = Required(package, "id");
     var packageVersion = Required(package, "version");
     var packageUrl = Required(package, "url");
     var packageSha512 = RequiredLowerHex(package, "sha512", 128);
     var packageContentHash = Required(package, "packageContentHash");
-    ValidatePackageIdentity(
-        referenceSetId,
-        targetFramework,
-        frameworkVersion,
-        packageId,
-        packageVersion,
-        packageUrl,
-        packageContentHash);
-    return new LockedReferencePackage(
-        targetId,
-        frameworkVersion,
-        packageId,
-        packageVersion,
-        new Uri(packageUrl, UriKind.Absolute),
-        packageSha512,
-        packageContentHash);
+    ValidatePackageIdentity(referenceSetId, targetFramework, frameworkVersion, packageId, packageVersion, packageUrl, packageContentHash);
+    return new LockedReferencePackage(targetId, frameworkVersion, packageId, packageVersion, new Uri(packageUrl, UriKind.Absolute), packageSha512, packageContentHash);
 }
 
-static void ValidatePackageIdentity(
-    string referenceSetId,
-    string targetFramework,
-    string frameworkVersion,
-    string packageId,
-    string packageVersion,
-    string packageUrl,
-    string packageContentHash)
+static void ValidatePackageIdentity(string referenceSetId, string targetFramework, string frameworkVersion, string packageId, string packageVersion, string packageUrl, string packageContentHash)
 {
     var expectedReferenceSetId = $"netfx{frameworkVersion.Replace(".", string.Empty, StringComparison.Ordinal)}-managed-ref";
     var expectedTargetFramework = $"net{frameworkVersion.Replace(".", string.Empty, StringComparison.Ordinal)}";
@@ -264,36 +164,21 @@ static void ValidatePackageIdentity(
     var expectedUrl =
         $"https://api.nuget.org/v3-flatcontainer/{expectedPackageId.ToLowerInvariant()}/{packageVersion}/" +
         $"{expectedPackageId.ToLowerInvariant()}.{packageVersion}.nupkg";
-    if (!string.Equals(referenceSetId, expectedReferenceSetId, StringComparison.Ordinal) ||
-        !string.Equals(targetFramework, expectedTargetFramework, StringComparison.Ordinal) ||
-        !string.Equals(packageId, expectedPackageId, StringComparison.Ordinal) ||
-        !string.Equals(packageUrl, expectedUrl, StringComparison.Ordinal) ||
-        !packageContentHash.StartsWith("sha512-", StringComparison.Ordinal) ||
-        packageContentHash.Length <= "sha512-".Length)
+    if (!string.Equals(referenceSetId, expectedReferenceSetId, StringComparison.Ordinal) || !string.Equals(targetFramework, expectedTargetFramework, StringComparison.Ordinal) || !string.Equals(packageId, expectedPackageId, StringComparison.Ordinal) || !string.Equals(packageUrl, expectedUrl, StringComparison.Ordinal) || !packageContentHash.StartsWith("sha512-", StringComparison.Ordinal) || packageContentHash.Length <= "sha512-".Length)
     {
         throw new InvalidDataException($"Framework package identity for '{referenceSetId}' is inconsistent.");
     }
 }
 
-static async Task EnsureArchiveAsync(
-    HttpClient http,
-    Uri uri,
-    string archivePath,
-    string expectedSha512,
-    Func<int, CancellationToken, Task>? retryDelay = null,
-    CancellationToken cancellationToken = default)
+static async Task EnsureArchiveAsync(HttpClient http, Uri uri, string archivePath, string expectedSha512, Func<int, CancellationToken, Task>? retryDelay = null, CancellationToken cancellationToken = default)
 {
     cancellationToken.ThrowIfCancellationRequested();
-    if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal) ||
-        !string.Equals(uri.Host, "api.nuget.org", StringComparison.OrdinalIgnoreCase) ||
-        !string.IsNullOrEmpty(uri.Query) ||
-        !string.IsNullOrEmpty(uri.Fragment))
+    if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal) || !string.Equals(uri.Host, "api.nuget.org", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
     {
         throw new InvalidDataException($"Reference package URI '{uri}' is not an approved NuGet flat-container URI.");
     }
 
-    if (File.Exists(archivePath) &&
-        await HasSha512Async(archivePath, expectedSha512, cancellationToken))
+    if (File.Exists(archivePath) && await HasSha512Async(archivePath, expectedSha512, cancellationToken))
         return;
 
     File.Delete(archivePath);
@@ -303,19 +188,10 @@ static async Task EnsureArchiveAsync(
         var temporaryPath = archivePath + $".tmp-{Guid.NewGuid():N}";
         try
         {
-            using var response = await http.GetAsync(
-                uri,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
+            using var response = await http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             response.EnsureSuccessStatusCode();
             await using (var source = await response.Content.ReadAsStreamAsync(cancellationToken))
-            await using (var destination = new FileStream(
-                temporaryPath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                128 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan))
+            await using (var destination = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
                 await source.CopyToAsync(destination, cancellationToken);
             }
@@ -325,14 +201,9 @@ static async Task EnsureArchiveAsync(
             File.Move(temporaryPath, archivePath);
             return;
         }
-        catch (Exception exception) when (
-            attempt < maximumAttempts &&
-            !cancellationToken.IsCancellationRequested &&
-            IsTransientDownloadFailure(exception))
+        catch (Exception exception) when (attempt < maximumAttempts && !cancellationToken.IsCancellationRequested && IsTransientDownloadFailure(exception))
         {
-            Console.Error.WriteLine(
-                $"Reference package download attempt {attempt}/{maximumAttempts} failed transiently for '{uri}': " +
-                exception.Message);
+            Console.Error.WriteLine($"Reference package download attempt {attempt}/{maximumAttempts} failed transiently for '{uri}': " + exception.Message);
             File.Delete(temporaryPath);
             if (retryDelay is null)
                 await Task.Delay(TimeSpan.FromMilliseconds(250 * attempt), cancellationToken);
@@ -369,9 +240,7 @@ static async Task RunSelfTestAsync()
 
         var payload = Encoding.UTF8.GetBytes("locked reference package");
         var expectedSha512 = Convert.ToHexString(SHA512.HashData(payload)).ToLowerInvariant();
-        var uri = new Uri(
-            "https://api.nuget.org/v3-flatcontainer/example/1.0.0/example.1.0.0.nupkg",
-            UriKind.Absolute);
+        var uri = new Uri("https://api.nuget.org/v3-flatcontainer/example/1.0.0/example.1.0.0.nupkg", UriKind.Absolute);
         var archivePath = Path.Combine(root, "example.1.0.0.nupkg");
         var transientHandler = new SequenceHttpMessageHandler(attempt => attempt switch
         {
@@ -380,35 +249,21 @@ static async Task RunSelfTestAsync()
             _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(payload) }
         });
         using (var http = new HttpClient(transientHandler))
-        {
             await EnsureArchiveAsync(http, uri, archivePath, expectedSha512, static (_, _) => Task.CompletedTask);
-        }
         RequireSelfTest(transientHandler.Attempts == 3, "Transient failures did not use exactly three attempts.");
-        RequireSelfTest(
-            File.ReadAllBytes(archivePath).SequenceEqual(payload),
-            "The successful retry did not publish the verified archive.");
-        RequireSelfTest(
-            !Directory.EnumerateFiles(root, "*.tmp-*", SearchOption.TopDirectoryOnly).Any(),
-            "A retry left a temporary archive behind.");
+        RequireSelfTest(File.ReadAllBytes(archivePath).SequenceEqual(payload), "The successful retry did not publish the verified archive.");
+        RequireSelfTest(!Directory.EnumerateFiles(root, "*.tmp-*", SearchOption.TopDirectoryOnly).Any(), "A retry left a temporary archive behind.");
 
-        var notFoundHandler = new SequenceHttpMessageHandler(_ =>
-            new HttpResponseMessage(HttpStatusCode.NotFound));
+        var notFoundHandler = new SequenceHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
         using (var http = new HttpClient(notFoundHandler))
         {
             var missingPath = Path.Combine(root, "missing.nupkg");
             try
             {
-                await EnsureArchiveAsync(
-                    http,
-                    uri,
-                    missingPath,
-                    expectedSha512,
-                    static (_, _) => Task.CompletedTask);
+                await EnsureArchiveAsync(http, uri, missingPath, expectedSha512, static (_, _) => Task.CompletedTask);
                 throw new InvalidOperationException("A non-transient HTTP status unexpectedly succeeded.");
             }
-            catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.NotFound)
-            {
-            }
+            catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.NotFound) { }
         }
         RequireSelfTest(notFoundHandler.Attempts == 1, "A non-transient HTTP status was retried.");
 
@@ -419,17 +274,10 @@ static async Task RunSelfTestAsync()
             var corruptPath = Path.Combine(root, "corrupt.nupkg");
             try
             {
-                await EnsureArchiveAsync(
-                    http,
-                    uri,
-                    corruptPath,
-                    expectedSha512,
-                    static (_, _) => Task.CompletedTask);
+                await EnsureArchiveAsync(http, uri, corruptPath, expectedSha512, static (_, _) => Task.CompletedTask);
                 throw new InvalidOperationException("A digest mismatch unexpectedly succeeded.");
             }
-            catch (InvalidDataException)
-            {
-            }
+            catch (InvalidDataException) { }
         }
         RequireSelfTest(corruptHandler.Attempts == 1, "A digest mismatch was retried.");
 
@@ -441,18 +289,10 @@ static async Task RunSelfTestAsync()
             cancellation.Cancel();
             try
             {
-                await EnsureArchiveAsync(
-                    http,
-                    uri,
-                    Path.Combine(root, "cancelled.nupkg"),
-                    expectedSha512,
-                    static (_, _) => Task.CompletedTask,
-                    cancellation.Token);
+                await EnsureArchiveAsync(http, uri, Path.Combine(root, "cancelled.nupkg"), expectedSha512, static (_, _) => Task.CompletedTask, cancellation.Token);
                 throw new InvalidOperationException("A cancelled download unexpectedly succeeded.");
             }
-            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-            {
-            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         }
         RequireSelfTest(cancellationHandler.Attempts == 0, "A cancelled download reached the HTTP handler.");
         Console.WriteLine("Framework reference package retry self-test passed.");
@@ -469,20 +309,10 @@ static void RequireSelfTest(bool condition, string message)
         throw new InvalidOperationException(message);
 }
 
-static async Task<bool> HasSha512Async(
-    string path,
-    string expected,
-    CancellationToken cancellationToken = default)
+static async Task<bool> HasSha512Async(string path, string expected, CancellationToken cancellationToken = default)
 {
-    await using var stream = new FileStream(
-        path,
-        FileMode.Open,
-        FileAccess.Read,
-        FileShare.Read,
-        128 * 1024,
-        FileOptions.Asynchronous | FileOptions.SequentialScan);
-    var digest = Convert.ToHexString(
-        await SHA512.HashDataAsync(stream, cancellationToken)).ToLowerInvariant();
+    await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+    var digest = Convert.ToHexString(await SHA512.HashDataAsync(stream, cancellationToken)).ToLowerInvariant();
     return string.Equals(digest, expected, StringComparison.Ordinal);
 }
 
@@ -498,8 +328,7 @@ static void ExtractReferenceAssemblies(string archivePath, string outputPath, st
         var relative = entry.FullName[root.Length..];
         if (relative.StartsWith("Facades/", StringComparison.OrdinalIgnoreCase))
             relative = relative["Facades/".Length..];
-        if (relative.Contains('/', StringComparison.Ordinal) ||
-            !relative.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+        if (relative.Contains('/', StringComparison.Ordinal) || !relative.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
         {
             continue;
         }
@@ -510,11 +339,7 @@ static void ExtractReferenceAssemblies(string archivePath, string outputPath, st
     foreach (var (name, entry) in files.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
     {
         using var source = entry.Open();
-        using var destination = new FileStream(
-            Path.Combine(outputPath, name),
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None);
+        using var destination = new FileStream(Path.Combine(outputPath, name), FileMode.CreateNew, FileAccess.Write, FileShare.None);
         source.CopyTo(destination);
     }
 }
@@ -523,8 +348,7 @@ static void ExtractNetFx30Extensions(string archivePath, string outputPath, stri
 {
     using var archive = ZipFile.OpenRead(archivePath);
     var root = $"build/.NETFramework/v{frameworkVersion}/";
-    var selected = new Dictionary<string, (ZipArchiveEntry Entry, Version AssemblyVersion)>(
-        StringComparer.OrdinalIgnoreCase);
+    var selected = new Dictionary<string, (ZipArchiveEntry Entry, Version AssemblyVersion)>(StringComparer.OrdinalIgnoreCase);
     foreach (var entry in archive.Entries)
     {
         if (!entry.FullName.StartsWith(root, StringComparison.OrdinalIgnoreCase) || entry.Length <= 0)
@@ -532,8 +356,7 @@ static void ExtractNetFx30Extensions(string archivePath, string outputPath, stri
         var relative = entry.FullName[root.Length..];
         if (relative.StartsWith("Facades/", StringComparison.OrdinalIgnoreCase))
             relative = relative["Facades/".Length..];
-        if (relative.Contains('/', StringComparison.Ordinal) ||
-            !relative.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+        if (relative.Contains('/', StringComparison.Ordinal) || !relative.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
         {
             continue;
         }
@@ -551,25 +374,17 @@ static void ExtractNetFx30Extensions(string archivePath, string outputPath, stri
     {
         var missing = expected.Except(observed, StringComparer.Ordinal);
         var unexpected = observed.Except(expected, StringComparer.Ordinal);
-        throw new InvalidDataException(
-            "The netfx35 package's AssemblyVersion 3.0.0.0 extension set does not match the locked net30 recipe. " +
-            $"Missing: [{string.Join(", ", missing)}]; unexpected: [{string.Join(", ", unexpected)}].");
+        throw new InvalidDataException("The netfx35 package's AssemblyVersion 3.0.0.0 extension set does not match the locked net30 recipe. " + $"Missing: [{string.Join(", ", missing)}]; unexpected: [{string.Join(", ", unexpected)}].");
     }
 
-    var existing = Directory.EnumerateFiles(outputPath, "*.dll", SearchOption.TopDirectoryOnly)
-        .Select(Path.GetFileName)
-        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var existing = Directory.EnumerateFiles(outputPath, "*.dll", SearchOption.TopDirectoryOnly).Select(Path.GetFileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
     foreach (var name in expected)
     {
         if (!existing.Add(name))
             throw new InvalidDataException($"The net30 composition contains a colliding assembly '{name}'.");
         var entry = selected[name].Entry;
         using var source = entry.Open();
-        using var destination = new FileStream(
-            Path.Combine(outputPath, name),
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None);
+        using var destination = new FileStream(Path.Combine(outputPath, name), FileMode.CreateNew, FileAccess.Write, FileShare.None);
         source.CopyTo(destination);
     }
 }
@@ -591,10 +406,7 @@ static Version? TryReadAssemblyVersion(ZipArchiveEntry entry)
 
 static void ValidateNetFx30Composition(string path)
 {
-    var files = Directory.EnumerateFiles(path, "*.dll", SearchOption.TopDirectoryOnly)
-        .Select(Path.GetFileName)
-        .Order(StringComparer.Ordinal)
-        .ToArray();
+    var files = Directory.EnumerateFiles(path, "*.dll", SearchOption.TopDirectoryOnly).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
     if (files.Length != 75)
         throw new InvalidDataException($"The net30 composition must contain 75 assemblies, observed {files.Length}.");
     var extensions = NetFx30ExtensionAssemblies();
@@ -633,69 +445,30 @@ static string[] NetFx30ExtensionAssemblies() =>
 static void ValidateMaterializedSet(string path, string id, string targetFramework)
 {
     var files = Directory.EnumerateFiles(path, "*.dll", SearchOption.TopDirectoryOnly).ToArray();
-    if (files.Length == 0 ||
-        !File.Exists(Path.Combine(path, "mscorlib.dll")) ||
-        !File.Exists(Path.Combine(path, "System.dll")) ||
-        File.Exists(Path.Combine(path, "SharpLab.Runtime.dll")))
+    if (files.Length == 0 || !File.Exists(Path.Combine(path, "mscorlib.dll")) || !File.Exists(Path.Combine(path, "System.dll")) || File.Exists(Path.Combine(path, "SharpLab.Runtime.dll")))
     {
         throw new InvalidDataException($"Reference set '{id}' is incomplete or contains a forbidden runtime helper.");
     }
-    if (string.Equals(targetFramework, "net48", StringComparison.Ordinal) &&
-        (!File.Exists(Path.Combine(path, "System.Runtime.dll")) ||
-         !File.Exists(Path.Combine(path, "netstandard.dll"))))
+    if (string.Equals(targetFramework, "net48", StringComparison.Ordinal) && (!File.Exists(Path.Combine(path, "System.Runtime.dll")) || !File.Exists(Path.Combine(path, "netstandard.dll"))))
     {
         throw new InvalidDataException("The net48 reference set is missing required facade assemblies.");
     }
 }
 
-static async Task WriteAttestationAsync(
-    string root,
-    string id,
-    string targetFramework,
-    string digest,
-    JsonObject provenance)
+static async Task WriteAttestationAsync(string root, string id, string targetFramework, string digest, JsonObject provenance)
 {
-    var files = Directory.EnumerateFiles(root, "*.dll", SearchOption.TopDirectoryOnly)
-        .OrderBy(static path => Path.GetFileName(path), StringComparer.Ordinal)
-        .Select(path =>
+    var files = Directory.EnumerateFiles(root, "*.dll", SearchOption.TopDirectoryOnly).OrderBy(static path => Path.GetFileName(path), StringComparer.Ordinal).Select(path =>
         {
             using var stream = File.OpenRead(path);
-            return new AttestedFile(
-                Path.GetFileName(path),
-                stream.Length,
-                $"sha256:{Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant()}");
-        })
-        .ToArray();
+            return new AttestedFile(Path.GetFileName(path), stream.Length, $"sha256:{Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant()}");
+        }).ToArray();
     var canonical = new StringBuilder();
     foreach (var file in files)
         canonical.Append(file.Digest).Append("  ").Append(file.Size).Append("  ").Append(file.Path).Append('\n');
     var contentDigest =
         $"sha256:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString()))).ToLowerInvariant()}";
-    var document = new JsonObject
-    {
-        ["schemaVersion"] = 1,
-        ["referenceSet"] = new JsonObject
-        {
-            ["id"] = id,
-            ["targetFramework"] = targetFramework,
-            ["digest"] = digest,
-            ["contentDigest"] = contentDigest,
-            ["provenance"] = provenance
-        },
-        ["files"] = new JsonArray(files.Select(static file => (JsonNode)new JsonObject
-        {
-            ["path"] = file.Path,
-            ["size"] = file.Size,
-            ["digest"] = file.Digest
-        }).ToArray())
-    };
-    await File.WriteAllTextAsync(
-        Path.Combine(root, "reference-set.attestation.json"),
-        document.ToJsonString(new JsonSerializerOptions
-        {
-            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-            WriteIndented = true
-        }) + "\n");
+    var document = new JsonObject { ["schemaVersion"] = 1, ["referenceSet"] = new JsonObject { ["id"] = id, ["targetFramework"] = targetFramework, ["digest"] = digest, ["contentDigest"] = contentDigest, ["provenance"] = provenance }, ["files"] = new JsonArray(files.Select(static file => (JsonNode)new JsonObject { ["path"] = file.Path, ["size"] = file.Size, ["digest"] = file.Digest }).ToArray()) };
+    await File.WriteAllTextAsync(Path.Combine(root, "reference-set.attestation.json"), document.ToJsonString(new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, WriteIndented = true }) + "\n");
 }
 
 static JsonObject PackageProvenance(LockedReferencePackage package) => new()
@@ -711,80 +484,38 @@ static JsonObject CompositionProvenance(JsonObject composition, IReadOnlyList<Co
 {
     ["kind"] = Required(composition, "kind"),
     ["resolvedVersion"] = Required(composition, "resolvedVersion"),
-    ["sources"] = new JsonArray(sources.Select(source => (JsonNode)new JsonObject
-    {
-        ["role"] = source.Role,
-        ["selection"] = source.Selection,
-        ["package"] = source.Package.Id,
-        ["resolvedVersion"] = source.Package.Version,
-        ["sourceUri"] = source.Package.Uri.AbsoluteUri,
-        ["sourceArchiveDigest"] = $"sha512:{source.Package.Sha512}",
-        ["packageContentHash"] = source.Package.PackageContentHash
-    }).ToArray())
+    ["sources"] = new JsonArray(sources.Select(source => (JsonNode)new JsonObject { ["role"] = source.Role, ["selection"] = source.Selection, ["package"] = source.Package.Id, ["resolvedVersion"] = source.Package.Version, ["sourceUri"] = source.Package.Uri.AbsoluteUri, ["sourceArchiveDigest"] = $"sha512:{source.Package.Sha512}", ["packageContentHash"] = source.Package.PackageContentHash }).ToArray())
 };
 
-static string ComputeCompositionSourceIdentity(
-    string referenceSetId,
-    string targetFramework,
-    string kind,
-    string resolvedVersion,
-    IReadOnlyList<CompositionSource> sources)
+static string ComputeCompositionSourceIdentity(string referenceSetId, string targetFramework, string kind, string resolvedVersion, IReadOnlyList<CompositionSource> sources)
 {
-    var canonical = new StringBuilder()
-        .Append("referenceSet=").Append(referenceSetId).Append('\n')
-        .Append("targetFramework=").Append(targetFramework).Append('\n')
-        .Append("kind=").Append(kind).Append('\n')
-        .Append("resolvedVersion=").Append(resolvedVersion).Append('\n');
+    var canonical = new StringBuilder().Append("referenceSet=").Append(referenceSetId).Append('\n').Append("targetFramework=").Append(targetFramework).Append('\n').Append("kind=").Append(kind).Append('\n').Append("resolvedVersion=").Append(resolvedVersion).Append('\n');
     foreach (var source in sources)
     {
-        canonical.Append("source=")
-            .Append(source.Role).Append('\t')
-            .Append(source.Selection).Append('\t')
-            .Append(source.Package.Id).Append('\t')
-            .Append(source.Package.Version).Append('\t')
-            .Append(source.Package.Uri.AbsoluteUri).Append('\t')
-            .Append("sha512:").Append(source.Package.Sha512).Append('\t')
-            .Append(source.Package.PackageContentHash).Append('\n');
+        canonical.Append("source=").Append(source.Role).Append('\t').Append(source.Selection).Append('\t').Append(source.Package.Id).Append('\t').Append(source.Package.Version).Append('\t').Append(source.Package.Uri.AbsoluteUri).Append('\t').Append("sha512:").Append(source.Package.Sha512).Append('\t').Append(source.Package.PackageContentHash).Append('\n');
     }
     return $"sha256:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString()))).ToLowerInvariant()}";
 }
 
-static void AddConfiguration(
-    JsonObject configuredReferenceSets,
-    string id,
-    string targetFramework,
-    string resolvedVersion,
-    string digest)
+static void AddConfiguration(JsonObject configuredReferenceSets, string id, string targetFramework, string resolvedVersion, string digest)
 {
-    var configuration = new JsonObject
-    {
-        ["Path"] = $"/reference-sets/{id}",
-        ["TargetFramework"] = targetFramework,
-        ["FrameworkVersion"] = resolvedVersion,
-        ["RuntimeFrameworkVersion"] = RuntimeFrameworkVersion(targetFramework),
-        ["Digest"] = digest,
-        ["IncludeSharpLabRuntime"] = false
-    };
+    var configuration = new JsonObject { ["Path"] = $"/reference-sets/{id}", ["TargetFramework"] = targetFramework, ["FrameworkVersion"] = resolvedVersion, ["RuntimeFrameworkVersion"] = RuntimeFrameworkVersion(targetFramework), ["Digest"] = digest, ["IncludeSharpLabRuntime"] = false };
     configuredReferenceSets.Add(id, configuration);
 }
 
 static string RuntimeFrameworkVersion(string targetFramework)
 {
     if (!targetFramework.StartsWith("net", StringComparison.Ordinal))
-        throw new InvalidDataException(
-            $"Target framework '{targetFramework}' is not a recognized .NET Framework TFM.");
+        throw new InvalidDataException($"Target framework '{targetFramework}' is not a recognized .NET Framework TFM.");
 
     var digits = targetFramework.AsSpan(3);
-    if (digits.Length is not (2 or 3) ||
-        digits.IndexOfAnyExceptInRange('0', '9') >= 0)
+    if (digits.Length is not (2 or 3) || digits.IndexOfAnyExceptInRange('0', '9') >= 0)
     {
-        throw new InvalidDataException(
-            $"Target framework '{targetFramework}' is not a recognized .NET Framework TFM.");
+        throw new InvalidDataException($"Target framework '{targetFramework}' is not a recognized .NET Framework TFM.");
     }
 
     return digits.Length == 2
-        ? $"{digits[0]}.{digits[1]}"
-        : $"{digits[0]}.{digits[1]}.{digits[2]}";
+        ? $"{digits[0]}.{digits[1]}" : $"{digits[0]}.{digits[1]}.{digits[2]}";
 }
 
 static string SafeChild(string root, string name)
@@ -803,16 +534,12 @@ static void RecreateDirectory(string path)
     Directory.CreateDirectory(path);
 }
 
-static string Required(JsonObject value, string name) =>
-    value[name]?.GetValue<string>() is { Length: > 0 } result
-        ? result
-        : throw new InvalidDataException($"Required property '{name}' is missing.");
+static string Required(JsonObject value, string name) => value[name]?.GetValue<string>() is { Length: > 0 } result ? result : throw new InvalidDataException($"Required property '{name}' is missing.");
 
 static string RequiredLowerHex(JsonObject value, string name, int length)
 {
     var result = Required(value, name);
-    if (result.Length != length || result.Any(static character =>
-            character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
+    if (result.Length != length || result.Any(static character => character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
     {
         throw new InvalidDataException($"Property '{name}' must contain {length} lowercase hexadecimal characters.");
     }
@@ -822,8 +549,7 @@ static string RequiredLowerHex(JsonObject value, string name, int length)
 static string RequiredLowerSha256(JsonObject value, string name)
 {
     var result = Required(value, name);
-    if (!result.StartsWith("sha256:", StringComparison.Ordinal) ||
-        result.Length != "sha256:".Length + 64)
+    if (!result.StartsWith("sha256:", StringComparison.Ordinal) || result.Length != "sha256:".Length + 64)
     {
         throw new InvalidDataException($"Property '{name}' must contain a lowercase SHA-256 digest.");
     }
@@ -835,33 +561,19 @@ static string RequiredLowerSha256(JsonObject value, string name)
     return result;
 }
 
-static JsonArray RequiredArray(JsonObject value, string name) =>
-    value[name]?.AsArray()
-    ?? throw new InvalidDataException($"Required array property '{name}' is missing.");
+static JsonArray RequiredArray(JsonObject value, string name) => value[name]?.AsArray() ?? throw new InvalidDataException($"Required array property '{name}' is missing.");
 
 sealed record AttestedFile(string Path, long Size, string Digest);
 
-sealed record LockedReferencePackage(
-    string TargetId,
-    string FrameworkVersion,
-    string Id,
-    string Version,
-    Uri Uri,
-    string Sha512,
-    string PackageContentHash);
+sealed record LockedReferencePackage(string TargetId, string FrameworkVersion, string Id, string Version, Uri Uri, string Sha512, string PackageContentHash);
 
-sealed record CompositionSource(
-    string Role,
-    string Selection,
-    LockedReferencePackage Package);
+sealed record CompositionSource(string Role, string Selection, LockedReferencePackage Package);
 
 sealed class SequenceHttpMessageHandler(Func<int, HttpResponseMessage> responseFactory) : HttpMessageHandler
 {
     public int Attempts { get; private set; }
 
-    protected override Task<HttpResponseMessage> SendAsync(
-        HttpRequestMessage request,
-        CancellationToken cancellationToken)
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         Attempts++;
@@ -869,12 +581,7 @@ sealed class SequenceHttpMessageHandler(Func<int, HttpResponseMessage> responseF
     }
 }
 
-sealed record Options(
-    string MatrixPath,
-    string OutputDirectory,
-    string ArchiveDirectory,
-    string AppsettingsTemplatePath,
-    string AppsettingsOutputPath)
+sealed record Options(string MatrixPath, string OutputDirectory, string ArchiveDirectory, string AppsettingsTemplatePath, string AppsettingsOutputPath)
 {
     public static Options Parse(string[] arguments)
     {
@@ -887,16 +594,8 @@ sealed record Options(
                 throw new ArgumentException($"Duplicate argument '{arguments[index - 1]}'.");
         }
 
-        return new(
-            FullPath(values, "matrix"),
-            FullPath(values, "output"),
-            FullPath(values, "archive-cache"),
-            FullPath(values, "appsettings-template"),
-            FullPath(values, "appsettings-output"));
+        return new(FullPath(values, "matrix"), FullPath(values, "output"), FullPath(values, "archive-cache"), FullPath(values, "appsettings-template"), FullPath(values, "appsettings-output"));
     }
 
-    private static string FullPath(Dictionary<string, string> values, string name) =>
-        values.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value)
-            ? Path.GetFullPath(value)
-            : throw new ArgumentException($"--{name} is required.");
+    private static string FullPath(Dictionary<string, string> values, string name) => values.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value) ? Path.GetFullPath(value) : throw new ArgumentException($"--{name} is required.");
 }

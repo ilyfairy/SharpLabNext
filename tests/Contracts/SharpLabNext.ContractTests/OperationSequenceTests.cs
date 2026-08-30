@@ -52,6 +52,5 @@ public sealed class OperationSequenceTests
         Assert.Throws<InvalidOperationException>(() => OperationEventStreamContract.Validate(events));
     }
 
-    private static OperationEvent Event(long sequence, OperationEventPayload payload) =>
-        new("op-1", sequence, DateTimeOffset.UnixEpoch.AddSeconds(sequence), "trace-1", payload);
+    private static OperationEvent Event(long sequence, OperationEventPayload payload) => new("op-1", sequence, DateTimeOffset.UnixEpoch.AddSeconds(sequence), "trace-1", payload);
 }

@@ -22,27 +22,10 @@ export interface AnsiSgrOutputChunk {
   channel: 'stdout' | 'stderr'
 }
 
-const escapeCode = 0x1b
-const csi = 0x9b
+const escapeCode = 0x1b;
+const csi = 0x9b;
 
-const ansi16Colors = [
-  '#0c0c0c',
-  '#c50f1f',
-  '#13a10e',
-  '#c19c00',
-  '#0037da',
-  '#881798',
-  '#3a96dd',
-  '#cccccc',
-  '#767676',
-  '#e74856',
-  '#16c60c',
-  '#f9f1a5',
-  '#3b78ff',
-  '#b4009e',
-  '#61d6d6',
-  '#f2f2f2',
-] as const
+const ansi16Colors = ['#0c0c0c', '#c50f1f', '#13a10e', '#c19c00', '#0037da', '#881798', '#3a96dd', '#cccccc', '#767676', '#e74856', '#16c60c', '#f9f1a5', '#3b78ff', '#b4009e', '#61d6d6', '#f2f2f2'] as const
 
 function defaultStyle(): AnsiSgrStyle {
   return {
@@ -55,31 +38,23 @@ function defaultStyle(): AnsiSgrStyle {
 }
 
 function stylesEqual(left: AnsiSgrStyle, right: AnsiSgrStyle): boolean {
-  return (
-    left.foreground === right.foreground &&
-    left.background === right.background &&
-    left.bold === right.bold &&
-    left.underline === right.underline &&
-    left.inverse === right.inverse
-  )
+  return left.foreground === right.foreground && left.background === right.background && left.bold === right.bold && left.underline === right.underline && left.inverse === right.inverse
 }
 
 function sgrNumber(value: string | undefined): number | null {
-  if (value === undefined) return null
-  if (value === '') return 0
-  if (!/^\d+$/.test(value)) return null
-  const parsed = Number(value)
-  return Number.isSafeInteger(parsed) ? parsed : null
+  if (value === undefined) return null;
+  if (value === '') return 0;
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 function isByte(value: number | null): value is number {
-  return value !== null && value >= 0 && value <= 255
+  return value !== null && value >= 0 && value <= 255;
 }
 
 function rgb(red: number, green: number, blue: number): string {
-  return `#${[red, green, blue]
-    .map((component) => component.toString(16).padStart(2, '0'))
-    .join('')}`
+  return `#${[red, green, blue].map((component) => component.toString(16).padStart(2, '0')).join('')}`;
 }
 
 function ansi256Color(index: number): string {
@@ -87,11 +62,7 @@ function ansi256Color(index: number): string {
   if (index < 232) {
     const cubeIndex = index - 16
     const levels = [0, 95, 135, 175, 215, 255] as const
-    return rgb(
-      levels[Math.floor(cubeIndex / 36)] ?? 0,
-      levels[Math.floor(cubeIndex / 6) % 6] ?? 0,
-      levels[cubeIndex % 6] ?? 0,
-    )
+    return rgb(levels[Math.floor(cubeIndex / 36)] ?? 0, levels[Math.floor(cubeIndex / 6) % 6] ?? 0, levels[cubeIndex % 6] ?? 0)
   }
   const level = 8 + (index - 232) * 10
   return rgb(level, level, level)
@@ -194,11 +165,7 @@ class AnsiSgrParser {
     return sequenceEnd
   }
 
-  private consumeControlString(
-    input: string,
-    sequenceStart: number,
-    allowBell: boolean,
-  ): number | null {
+  private consumeControlString(input: string, sequenceStart: number, allowBell: boolean): number | null {
     let cursor = sequenceStart + 1
     while (cursor < input.length) {
       const code = input.charCodeAt(cursor)
@@ -300,11 +267,7 @@ class AnsiSgrParser {
     }
   }
 
-  private applyExtendedColor(
-    values: readonly string[],
-    index: number,
-    foreground: boolean,
-  ): number {
+  private applyExtendedColor(values: readonly string[], index: number, foreground: boolean): number {
     const mode = sgrNumber(values[index + 1])
     if (mode === 5) {
       const color = sgrNumber(values[index + 2])
@@ -379,9 +342,7 @@ class AnsiSgrParser {
   }
 
   private setColor(foreground: boolean, color: string | null): void {
-    this.style = foreground
-      ? { ...this.style, foreground: color }
-      : { ...this.style, background: color }
+    this.style = foreground ? { ...this.style, foreground: color } : { ...this.style, background: color }
   }
 }
 
@@ -416,8 +377,7 @@ export function parseAnsiSgrOutputChunks(chunks: readonly AnsiSgrOutputChunk[]):
       const previousLength = segmentLengths[index] ?? 0
       if (segment.text.length <= previousLength) continue
       const text = segment.text.slice(previousLength)
-      const style =
-        channel === 'stderr' ? { ...segment.style, foreground: '#c50f1f' } : { ...segment.style }
+      const style = channel === 'stderr' ? { ...segment.style, foreground: '#c50f1f' } : { ...segment.style }
       segments.push({ text, style })
       segmentLengths[index] = segment.text.length
     }
@@ -442,5 +402,9 @@ export function parseAnsiSgrOutputChunks(chunks: readonly AnsiSgrOutputChunk[]):
   }
   for (const channel of parsers.keys()) flush(channel, true)
 
-  return { segments, text: textParts.join(''), copyText: copyTextParts.join('') }
+  return {
+    segments,
+    text: textParts.join(''),
+    copyText: copyTextParts.join(''),
+  }
 }

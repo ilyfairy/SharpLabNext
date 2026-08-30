@@ -1,10 +1,4 @@
-import type {
-  BuildConfiguration,
-  CatalogDocument,
-  OutputManifest,
-  ResolvedSelection,
-  ResolveSelectionResponse,
-} from '../api/types'
+import type { BuildConfiguration, CatalogDocument, OutputManifest, ResolvedSelection, ResolveSelectionResponse } from '../api/types'
 import type { ResultIdentitySummary } from './resultIdentity'
 
 export interface IdentityStripItem {
@@ -51,53 +45,19 @@ function unique(values: readonly string[]): string[] {
   return [...new Set(values)]
 }
 
-export function createResultIdentityPresentation({
-  summary,
-  catalog,
-  catalogRevision,
-  referenceSetSnapshot,
-  resolution,
-  selection,
-  output,
-  fallback,
-  buildMode,
-  operationIds,
-}: ResultIdentityPresentationInput): ResultIdentityPresentation {
+export function createResultIdentityPresentation({ summary, catalog, catalogRevision, referenceSetSnapshot, resolution, selection, output, fallback, buildMode, operationIds }: ResultIdentityPresentationInput): ResultIdentityPresentation {
   const effectiveSelection = selection ?? resolution?.effectiveSelection
-  const languageId =
-    summary.build?.languageId ?? effectiveSelection?.languageId ?? fallback.languageId
-  const toolchainId =
-    summary.build?.toolchainId ??
-    effectiveSelection?.toolchainId ??
-    fallback.toolchainId ??
-    'unresolved'
-  const referenceSetId =
-    summary.build?.referenceSetId ??
-    effectiveSelection?.referenceSetId ??
-    fallback.referenceSetId ??
-    'unresolved'
+  const languageId = summary.build?.languageId ?? effectiveSelection?.languageId ?? fallback.languageId
+  const toolchainId = summary.build?.toolchainId ?? effectiveSelection?.toolchainId ?? fallback.toolchainId ?? 'unresolved'
+  const referenceSetId = summary.build?.referenceSetId ?? effectiveSelection?.referenceSetId ?? fallback.referenceSetId ?? 'unresolved'
   const outputId = effectiveSelection?.outputId ?? output?.id ?? fallback.outputId
   const runtimeId = effectiveSelection?.runtimeId ?? fallback.runtimeId
-  const referenceSet =
-    referenceSetSnapshot?.id === referenceSetId
-      ? referenceSetSnapshot
-      : catalog?.referenceSets.find((candidate) => candidate.id === referenceSetId)
-  const processorStageIds = unique(
-    resolution?.pipelinePlan.stages
-      .filter(
-        (stage) => stage.kind === 'transform' || stage.kind === 'render' || stage.kind === 'verify',
-      )
-      .map((stage) => stage.providerId) ?? [],
-  )
+  const referenceSet = referenceSetSnapshot?.id === referenceSetId ? referenceSetSnapshot : catalog?.referenceSets.find((candidate) => candidate.id === referenceSetId)
+  const processorStageIds = unique(resolution?.pipelinePlan.stages.filter((stage) => stage.kind === 'transform' || stage.kind === 'render' || stage.kind === 'verify').map((stage) => stage.providerId) ?? [])
   const processorExpected = processorStageIds.length > 0
-  const jitExpected =
-    summary.jit !== null ||
-    outputId === 'jit-asm' ||
-    resolution?.pipelinePlan.stages.some((stage) => stage.kind === 'jit') === true
+  const jitExpected = summary.jit !== null || outputId === 'jit-asm' || resolution?.pipelinePlan.stages.some((stage) => stage.kind === 'jit') === true
   const runtimeRequired = output?.requiresRuntime ?? false
-  const releaseIds = summary.releaseIds.length
-    ? summary.releaseIds
-    : [resolution?.pipelinePlan.releaseId ?? catalog?.releaseId ?? 'unavailable']
+  const releaseIds = summary.releaseIds.length ? summary.releaseIds : [resolution?.pipelinePlan.releaseId ?? catalog?.releaseId ?? 'unavailable']
 
   const items: IdentityStripItem[] = []
   if (summary.build) {
@@ -105,12 +65,7 @@ export function createResultIdentityPresentation({
       id: 'compiler',
       label: 'Compiler',
       value: versionAndCommit(summary.build.compilerVersion, summary.build.compilerCommit),
-      title: [
-        `toolchain=${summary.build.toolchainId}`,
-        `compilerVersion=${summary.build.compilerVersion}`,
-        `compilerCommit=${summary.build.compilerCommit ?? 'not-provided'}`,
-        `compilerImage=${summary.build.workerImageId}`,
-      ].join('\n'),
+      title: [`toolchain=${summary.build.toolchainId}`, `compilerVersion=${summary.build.compilerVersion}`, `compilerCommit=${summary.build.compilerCommit ?? 'not-provided'}`, `compilerImage=${summary.build.workerImageId}`].join('\n'),
     })
   } else {
     items.push({
@@ -124,13 +79,8 @@ export function createResultIdentityPresentation({
   items.push({
     id: 'reference-set',
     label: 'Reference set',
-    value: summary.build
-      ? `${referenceSet?.displayName ?? referenceSetId} · ${referenceSet?.digest ? shortToken(referenceSet.digest) : 'digest unavailable'}`
-      : 'Not run',
-    title: [
-      `referenceSet=${referenceSetId}`,
-      `referenceSetDigest=${referenceSet?.digest ?? 'unavailable'}`,
-    ].join('\n'),
+    value: summary.build ? `${referenceSet?.displayName ?? referenceSetId} · ${referenceSet?.digest ? shortToken(referenceSet.digest) : 'digest unavailable'}` : 'Not run',
+    title: [`referenceSet=${referenceSetId}`, `referenceSetDigest=${referenceSet?.digest ?? 'unavailable'}`].join('\n'),
   })
 
   if (processorExpected || summary.processors.length > 0) {
@@ -138,29 +88,18 @@ export function createResultIdentityPresentation({
       summary.processors.length > 0
         ? summary.processors
             .map((processor) => {
-              const manifest = catalog?.artifactProcessors.find(
-                (candidate) => candidate.id === processor.processorId,
-              )
-              return [
-                `processor=${processor.processorId}`,
-                `processorVersion=${processor.processorVersion}`,
-                `catalogVersion=${manifest?.resolvedVersion ?? 'unavailable'}`,
-                `processorImage=${processor.workerImageId}`,
-              ].join('\n')
+              const manifest = catalog?.artifactProcessors.find((candidate) => candidate.id === processor.processorId)
+              return [`processor=${processor.processorId}`, `processorVersion=${processor.processorVersion}`, `catalogVersion=${manifest?.resolvedVersion ?? 'unavailable'}`, `processorImage=${processor.workerImageId}`].join('\n')
             })
             .join('\n\n')
         : processorStageIds
             .map((processorId) => {
-              const manifest = catalog?.artifactProcessors.find(
-                (candidate) => candidate.id === processorId,
-              )
+              const manifest = catalog?.artifactProcessors.find((candidate) => candidate.id === processorId)
               return `expectedProcessor=${processorId}\ncatalogVersion=${manifest?.resolvedVersion ?? 'unavailable'}`
             })
             .join('\n\n')
     const firstProcessor = summary.processors[0]
-    const firstManifest = firstProcessor
-      ? catalog?.artifactProcessors.find((candidate) => candidate.id === firstProcessor.processorId)
-      : undefined
+    const firstManifest = firstProcessor ? catalog?.artifactProcessors.find((candidate) => candidate.id === firstProcessor.processorId) : undefined
     items.push({
       id: 'processor',
       label: 'Processor',
@@ -177,11 +116,7 @@ export function createResultIdentityPresentation({
   items.push({
     id: 'runtime',
     label: 'Runtime',
-    value: !runtimeRequired
-      ? 'Not required'
-      : summary.runtime
-        ? versionAndCommit(summary.runtime.runtimeVersion, summary.runtime.runtimeCommit)
-        : 'Not run',
+    value: !runtimeRequired ? 'Not required' : summary.runtime ? versionAndCommit(summary.runtime.runtimeVersion, summary.runtime.runtimeCommit) : 'Not run',
     title: !runtimeRequired
       ? 'This output does not execute user code.'
       : summary.runtime
@@ -200,9 +135,7 @@ export function createResultIdentityPresentation({
     items.push({
       id: 'jit',
       label: 'JIT',
-      value: summary.jit
-        ? versionAndCommit(summary.jit.jitVersion, summary.jit.jitCommit)
-        : 'Not run',
+      value: summary.jit ? versionAndCommit(summary.jit.jitVersion, summary.jit.jitCommit) : 'Not run',
       title: summary.jit
         ? [
             `jitVersion=${summary.jit.jitVersion}`,
@@ -219,7 +152,12 @@ export function createResultIdentityPresentation({
 
   const imageEntries = [
     ...(summary.build
-      ? [{ role: `compiler:${summary.build.toolchainId}`, value: summary.build.workerImageId }]
+      ? [
+          {
+            role: `compiler:${summary.build.toolchainId}`,
+            value: summary.build.workerImageId,
+          },
+        ]
       : []),
     ...summary.processors.map((processor) => ({
       role: `processor:${processor.processorId}`,
@@ -240,19 +178,11 @@ export function createResultIdentityPresentation({
   items.push({
     id: 'release',
     label: 'Release',
-    value:
-      releaseIds.length === 1 ? (releaseIds[0] ?? 'unavailable') : `Mixed (${releaseIds.length})`,
+    value: releaseIds.length === 1 ? (releaseIds[0] ?? 'unavailable') : `Mixed (${releaseIds.length})`,
     title: releaseIds.map((releaseId) => `release=${releaseId}`).join('\n'),
   })
 
-  const copyLines = [
-    `language=${languageId}`,
-    `toolchain=${toolchainId}`,
-    `referenceSet=${referenceSetId}`,
-    `output=${outputId}`,
-    `runtime=${runtimeRequired ? (runtimeId ?? 'unresolved') : 'not-required'}`,
-    `mode=${buildMode}`,
-  ]
+  const copyLines = [`language=${languageId}`, `toolchain=${toolchainId}`, `referenceSet=${referenceSetId}`, `output=${outputId}`, `runtime=${runtimeRequired ? (runtimeId ?? 'unresolved') : 'not-required'}`, `mode=${buildMode}`]
   if (summary.build) {
     copyLines.push(
       `compilerVersion=${summary.build.compilerVersion}`,
@@ -265,11 +195,7 @@ export function createResultIdentityPresentation({
   }
   if (summary.processors.length > 0) {
     summary.processors.forEach((processor, index) => {
-      copyLines.push(
-        `processor.${index}.id=${processor.processorId}`,
-        `processor.${index}.version=${processor.processorVersion}`,
-        `processor.${index}.image=${processor.workerImageId}`,
-      )
+      copyLines.push(`processor.${index}.id=${processor.processorId}`, `processor.${index}.version=${processor.processorVersion}`, `processor.${index}.image=${processor.workerImageId}`)
     })
   } else {
     copyLines.push(`processor=${processorExpected ? 'not-run' : 'not-required'}`)
@@ -306,12 +232,7 @@ export function createResultIdentityPresentation({
   } else {
     copyLines.push('jit=not-required')
   }
-  copyLines.push(
-    `release=${releaseIds.join(',')}`,
-    `catalog=${catalogRevision ?? catalog?.revision ?? 'unavailable'}`,
-    `pipeline=${resolution?.pipelineResolutionId ?? 'unresolved'}`,
-    `operation=${unique(operationIds).join(',') || 'none'}`,
-  )
+  copyLines.push(`release=${releaseIds.join(',')}`, `catalog=${catalogRevision ?? catalog?.revision ?? 'unavailable'}`, `pipeline=${resolution?.pipelineResolutionId ?? 'unresolved'}`, `operation=${unique(operationIds).join(',') || 'none'}`)
 
   return { items, copyText: copyLines.join('\n') }
 }

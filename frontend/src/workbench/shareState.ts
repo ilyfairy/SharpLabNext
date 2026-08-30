@@ -16,18 +16,10 @@ export interface DecodedWorkbenchShare {
   warnings: string[]
 }
 
-export function createShareWorkspaceState(
-  catalog: CatalogDocument,
-  state: ShareSourceState,
-): ShareWorkspaceState {
+export function createShareWorkspaceState(catalog: CatalogDocument, state: ShareSourceState): ShareWorkspaceState {
   const toolchainId = state.toolchainId ?? catalog.languages[0]?.defaultToolchainId
-  const referenceSetId =
-    state.referenceSetId ??
-    catalog.toolchains.find((toolchain) => toolchain.id === toolchainId)?.defaultReferenceSetId
-  const runtimeId =
-    state.runtimeId ??
-    catalog.runtimes.find((runtime) => runtime.visibility !== 'hidden')?.id ??
-    'not-required'
+  const referenceSetId = state.referenceSetId ?? catalog.toolchains.find((toolchain) => toolchain.id === toolchainId)?.defaultReferenceSetId
+  const runtimeId = state.runtimeId ?? catalog.runtimes.find((runtime) => runtime.visibility !== 'hidden')?.id ?? 'not-required'
   if (!toolchainId || !referenceSetId) {
     throw new Error('The current selection is incomplete and cannot be shared.')
   }
@@ -46,10 +38,7 @@ export function createShareWorkspaceState(
   }
 }
 
-export function decodeWorkbenchShare(
-  decoded: DecodedShare,
-  catalog: CatalogDocument,
-): DecodedWorkbenchShare {
+export function decodeWorkbenchShare(decoded: DecodedShare, catalog: CatalogDocument): DecodedWorkbenchShare {
   if (decoded.sourceFormat === 'v3') {
     const requested: SelectionIntent = {
       languageId: decoded.state.languageId,
@@ -75,20 +64,9 @@ export function decodeWorkbenchShare(
 
   const requestedOptions = decoded.requestedLegacyOptions
   const preset = requestedOptions.branchId
-    ? catalog.presets.find(
-        (candidate) =>
-          candidate.visibility !== 'hidden' &&
-          (candidate.id === requestedOptions.branchId ||
-            candidate.legacyAliases.includes(requestedOptions.branchId ?? '')),
-      )
+    ? catalog.presets.find((candidate) => candidate.visibility !== 'hidden' && (candidate.id === requestedOptions.branchId || candidate.legacyAliases.includes(requestedOptions.branchId ?? '')))
     : undefined
-  const toolchain = requestedOptions.branchId
-    ? catalog.toolchains.find(
-        (candidate) =>
-          candidate.id === requestedOptions.branchId ||
-          candidate.legacyAliases.includes(requestedOptions.branchId ?? ''),
-      )
-    : undefined
+  const toolchain = requestedOptions.branchId ? catalog.toolchains.find((candidate) => candidate.id === requestedOptions.branchId || candidate.legacyAliases.includes(requestedOptions.branchId ?? '')) : undefined
   const requested: SelectionIntent = {
     languageId: requestedOptions.languageId ?? decoded.workspace.languageId,
     toolchainId: preset?.toolchainId ?? toolchain?.id ?? null,
@@ -113,7 +91,5 @@ export function decodeWorkbenchShare(
 
 function templateForLanguage(catalog: CatalogDocument, languageId: string) {
   const language = catalog.languages.find((candidate) => candidate.id === languageId)
-  return language
-    ? { fileName: language.defaultFileName, source: language.defaultSource }
-    : undefined
+  return language ? { fileName: language.defaultFileName, source: language.defaultSource } : undefined
 }

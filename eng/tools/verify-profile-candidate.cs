@@ -1,11 +1,12 @@
 #:sdk Microsoft.NET.Sdk
 #:property TargetFramework=net10.0
+#:property NuGetLockFilePath=obj/verify-profile-candidate.packages.lock.json
 #:property LangVersion=14.0
-#:project ../src/Tools/SharpLabNext.ProfileUpdater/SharpLabNext.ProfileUpdater.csproj
+#:project ../../src/Tools/SharpLabNext.ProfileUpdater/SharpLabNext.ProfileUpdater.csproj
 
 using SharpLabNext.ProfileUpdater;
 
-const string usage = "Usage: dotnet run eng/verify-profile-candidate.cs -- --lock PATH --catalog PATH --endpoints PATH --bundle PATH [--timeout-seconds N]";
+const string usage = "Usage: dotnet run eng/tools/verify-profile-candidate.cs -- --lock PATH --catalog PATH --endpoints PATH --bundle PATH [--timeout-seconds N]";
 
 try
 {
@@ -41,17 +42,8 @@ try
 
     using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
     var verifier = new ProfileCandidateDeploymentVerifier(http);
-    var result = await verifier.VerifyAsync(new ProfileCandidateVerificationOptions
-    {
-        LockPath = values["--lock"],
-        CatalogPath = values["--catalog"],
-        EndpointsPath = values["--endpoints"],
-        BundlePath = values["--bundle"],
-        Timeout = timeout
-    });
-    Console.WriteLine(
-        $"Verified candidate {result.ReleaseId} ({result.CatalogRevision}): " +
-        $"{result.WorkersVerified} workers and {result.RuntimesVerified} runtimes.");
+    var result = await verifier.VerifyAsync(new ProfileCandidateVerificationOptions { LockPath = values["--lock"], CatalogPath = values["--catalog"], EndpointsPath = values["--endpoints"], BundlePath = values["--bundle"], Timeout = timeout });
+    Console.WriteLine($"Verified candidate {result.ReleaseId} ({result.CatalogRevision}): " + $"{result.WorkersVerified} workers and {result.RuntimesVerified} runtimes.");
     return 0;
 }
 catch (Exception exception) when (exception is not OperationCanceledException)

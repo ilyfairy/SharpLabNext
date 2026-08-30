@@ -7,16 +7,8 @@ namespace SharpLabNext.ArtifactWorker.Tests;
 
 internal static class TestSettings
 {
-    public static ArtifactWorkerSettings Create(
-        string root,
-        ArtifactProcessorLimits? limits = null,
-        string? processorPath = null) => new(
-            new ArtifactWorkerIdentity(
-                "test-release",
-                "sha256:test-worker",
-                "artifacts-default",
-                ProcessorProtocol.IlSpyVersion,
-                ProcessorProtocol.IlVerificationVersion),
+    public static ArtifactWorkerSettings Create(string root, ArtifactProcessorLimits? limits = null, string? processorPath = null) => new(
+            new ArtifactWorkerIdentity("test-release", "sha256:test-worker", "artifacts-default", ProcessorProtocol.IlSpyVersion, ProcessorProtocol.IlVerificationVersion),
             limits ?? ArtifactProcessorLimits.Default,
             "http://artifact-store.test",
             processorPath ?? typeof(ProcessorEngine).Assembly.Location,
@@ -24,10 +16,7 @@ internal static class TestSettings
             root,
             new Dictionary<string, ArtifactReferenceSet>(StringComparer.Ordinal)
             {
-                ["net10-ref"] = new(
-                    "net10-ref",
-                    [Path.GetDirectoryName(typeof(object).Assembly.Location)!],
-                    "System.Private.CoreLib")
+                ["net10-ref"] = new("net10-ref", [Path.GetDirectoryName(typeof(object).Assembly.Location)!], "System.Private.CoreLib")
             },
             new HashSet<string>(["default"], StringComparer.Ordinal));
 
@@ -50,9 +39,7 @@ internal static class TestSettings
 
     private sealed class EmptyHandler : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken) =>
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
     }
 }

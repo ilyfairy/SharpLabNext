@@ -4,10 +4,7 @@ using SharpLabNext.ArtifactProcessing.Protocol;
 
 namespace SharpLabNext.ArtifactProcessing;
 
-internal sealed record RuntimeInstrumentationResult(
-    bool RewriteApplied,
-    int InstrumentationPointCount,
-    string? PublicMessage);
+internal sealed record RuntimeInstrumentationResult(bool RewriteApplied, int InstrumentationPointCount, string? PublicMessage);
 
 internal static class RuntimeInstrumentationRewriter
 {
@@ -19,32 +16,19 @@ internal static class RuntimeInstrumentationRewriter
 
     public static RuntimeInstrumentationResult Rewrite(ProcessorRequest request)
     {
-        if (!StringComparer.Ordinal.Equals(
-                request.RewriterProfileId,
-                ProcessorProtocol.RuntimeInstrumentationProfileId))
+        if (!StringComparer.Ordinal.Equals(request.RewriterProfileId, ProcessorProtocol.RuntimeInstrumentationProfileId))
             throw new InvalidDataException("The runtime instrumentation profile is unsupported.");
         if (request.PortablePdbPath is not null && request.PortablePdbOutputPath is null)
             throw new InvalidDataException("A rewritten portable PDB output path is required.");
 
         using var symbolInput = request.PortablePdbPath is null
-            ? null
-            : new FileStream(request.PortablePdbPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        var reader = new ReaderParameters
-        {
-            InMemory = true,
-            ReadingMode = ReadingMode.Immediate,
-            ReadSymbols = symbolInput is not null,
-            SymbolReaderProvider = symbolInput is null ? null : new PortablePdbReaderProvider(),
-            SymbolStream = symbolInput
-        };
+            ? null : new FileStream(request.PortablePdbPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var reader = new ReaderParameters { InMemory = true, ReadingMode = ReadingMode.Immediate, ReadSymbols = symbolInput is not null, SymbolReaderProvider = symbolInput is null ? null : new PortablePdbReaderProvider(), SymbolStream = symbolInput };
         using var assembly = AssemblyDefinition.ReadAssembly(request.AssemblyPath, reader);
         if (HasNoRewriteAttribute(assembly))
         {
             CopyUnchanged(request);
-            return new RuntimeInstrumentationResult(
-                false,
-                0,
-                "The assembly opted out of IL rewriting with NoILRewritingAttribute.");
+            return new RuntimeInstrumentationResult(false, 0, "The assembly opted out of IL rewriting with NoILRewritingAttribute.");
         }
 
         var module = assembly.MainModule;
@@ -58,18 +42,8 @@ internal static class RuntimeInstrumentationRewriter
 
         Directory.CreateDirectory(Path.GetDirectoryName(request.OutputPath)!);
         using var symbolOutput = request.PortablePdbOutputPath is null
-            ? null
-            : new FileStream(
-                request.PortablePdbOutputPath,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None);
-        var writer = new WriterParameters
-        {
-            WriteSymbols = symbolOutput is not null,
-            SymbolWriterProvider = symbolOutput is null ? null : new PortablePdbWriterProvider(),
-            SymbolStream = symbolOutput
-        };
+            ? null : new FileStream(request.PortablePdbOutputPath, FileMode.Create, FileAccess.Write, FileShare.None);
+        var writer = new WriterParameters { WriteSymbols = symbolOutput is not null, SymbolWriterProvider = symbolOutput is null ? null : new PortablePdbWriterProvider(), SymbolStream = symbolOutput };
         assembly.Write(request.OutputPath, writer);
         return new RuntimeInstrumentationResult(true, count, null);
     }
@@ -99,12 +73,7 @@ internal static class RuntimeInstrumentationRewriter
             if (sequencePoint is { IsHidden: false })
             {
                 var document = NormalizeDocumentPath(sequencePoint.Document?.Url);
-                var location = (
-                    document,
-                    sequencePoint.StartLine,
-                    sequencePoint.StartColumn,
-                    sequencePoint.EndLine,
-                    sequencePoint.EndColumn);
+                var location = (document, sequencePoint.StartLine, sequencePoint.StartColumn, sequencePoint.EndLine, sequencePoint.EndColumn);
                 if (location != previousLocation)
                 {
                     AddSourceRangeCall(processor, injected, flow.ReportSequencePoint, location);
@@ -116,8 +85,7 @@ internal static class RuntimeInstrumentationRewriter
             if (instruction.OpCode.FlowControl is FlowControl.Branch or FlowControl.Cond_Branch)
             {
                 var branchLocation = previousLocation.StartLine < 0
-                    ? ((string?)null, -1, 0, -1, 0)
-                    : previousLocation;
+                    ? ((string?)null, -1, 0, -1, 0) : previousLocation;
                 AddSourceRangeCall(processor, injected, flow.ReportBranch, branchLocation);
                 points++;
             }
@@ -129,8 +97,7 @@ internal static class RuntimeInstrumentationRewriter
             RetargetControlFlow(method, instruction, injected[0]);
         }
 
-        method.Body.MaxStackSize = checked(
-            method.Body.MaxStackSize + MaximumInstrumentationStackDepth);
+        method.Body.MaxStackSize = checked(method.Body.MaxStackSize + MaximumInstrumentationStackDepth);
         return points;
     }
 
@@ -159,15 +126,9 @@ internal static class RuntimeInstrumentationRewriter
         }
     }
 
-    private static void AddSourceRangeCall(
-        ILProcessor processor,
-        List<Instruction> target,
-        MethodReference method,
-        (string? Document, int StartLine, int StartColumn, int EndLine, int EndColumn) location)
+    private static void AddSourceRangeCall(ILProcessor processor, List<Instruction> target, MethodReference method, (string? Document, int StartLine, int StartColumn, int EndLine, int EndColumn) location)
     {
-        target.Add(location.Document is null
-            ? processor.Create(OpCodes.Ldnull)
-            : processor.Create(OpCodes.Ldstr, location.Document));
+        target.Add(location.Document is null ? processor.Create(OpCodes.Ldnull) : processor.Create(OpCodes.Ldstr, location.Document));
         target.Add(processor.Create(OpCodes.Ldc_I4, location.StartLine));
         target.Add(processor.Create(OpCodes.Ldc_I4, location.StartColumn));
         target.Add(processor.Create(OpCodes.Ldc_I4, location.EndLine));
@@ -207,8 +168,7 @@ internal static class RuntimeInstrumentationRewriter
 
     private static FlowMethods ImportFlowMethods(ModuleDefinition module)
     {
-        var runtime = module.AssemblyReferences.FirstOrDefault(static reference =>
-            StringComparer.Ordinal.Equals(reference.Name, RuntimeAssemblyName));
+        var runtime = module.AssemblyReferences.FirstOrDefault(static reference => StringComparer.Ordinal.Equals(reference.Name, RuntimeAssemblyName));
         if (runtime is null)
         {
             runtime = new AssemblyNameReference(RuntimeAssemblyName, new Version(1, 0, 0, 0));
@@ -216,33 +176,10 @@ internal static class RuntimeInstrumentationRewriter
         }
 
         var flowType = new TypeReference(FlowTypeNamespace, FlowTypeName, module, runtime);
-        return new FlowMethods(
-            Method(module, flowType, "ReportMethod", module.TypeSystem.String),
-            Method(
-                module,
-                flowType,
-                "ReportSequencePoint",
-                module.TypeSystem.String,
-                module.TypeSystem.Int32,
-                module.TypeSystem.Int32,
-                module.TypeSystem.Int32,
-                module.TypeSystem.Int32),
-            Method(
-                module,
-                flowType,
-                "ReportBranch",
-                module.TypeSystem.String,
-                module.TypeSystem.Int32,
-                module.TypeSystem.Int32,
-                module.TypeSystem.Int32,
-                module.TypeSystem.Int32));
+        return new FlowMethods(Method(module, flowType, "ReportMethod", module.TypeSystem.String), Method(module, flowType, "ReportSequencePoint", module.TypeSystem.String, module.TypeSystem.Int32, module.TypeSystem.Int32, module.TypeSystem.Int32, module.TypeSystem.Int32), Method(module, flowType, "ReportBranch", module.TypeSystem.String, module.TypeSystem.Int32, module.TypeSystem.Int32, module.TypeSystem.Int32, module.TypeSystem.Int32));
     }
 
-    private static MethodReference Method(
-        ModuleDefinition module,
-        TypeReference declaringType,
-        string name,
-        params TypeReference[] parameters)
+    private static MethodReference Method(ModuleDefinition module, TypeReference declaringType, string name, params TypeReference[] parameters)
     {
         var method = new MethodReference(name, module.TypeSystem.Void, declaringType)
         {
@@ -256,8 +193,7 @@ internal static class RuntimeInstrumentationRewriter
     }
 
     private static bool HasNoRewriteAttribute(AssemblyDefinition assembly) =>
-        assembly.CustomAttributes.Any(static attribute =>
-            StringComparer.Ordinal.Equals(attribute.AttributeType.FullName, NoRewriteAttributeName));
+        assembly.CustomAttributes.Any(static attribute => StringComparer.Ordinal.Equals(attribute.AttributeType.FullName, NoRewriteAttributeName));
 
     private static IEnumerable<TypeDefinition> EnumerateTypes(IEnumerable<TypeDefinition> roots)
     {
@@ -292,8 +228,5 @@ internal static class RuntimeInstrumentationRewriter
         return normalized;
     }
 
-    private sealed record FlowMethods(
-        MethodReference ReportMethod,
-        MethodReference ReportSequencePoint,
-        MethodReference ReportBranch);
+    private sealed record FlowMethods(MethodReference ReportMethod, MethodReference ReportSequencePoint, MethodReference ReportBranch);
 }

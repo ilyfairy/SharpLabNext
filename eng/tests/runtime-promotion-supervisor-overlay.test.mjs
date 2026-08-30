@@ -11,12 +11,12 @@ import {
   produceRuntimePromotionSupervisorOverlay,
   runRuntimePromotionSupervisorOverlay,
   RuntimePromotionSupervisorOverlayError,
-} from './runtime-promotion-supervisor-overlay.mjs'
+} from '../release/runtime-promotion-supervisor-overlay.mjs'
 import {
   runtimePromotionPlanSignaturePath,
   serializeRuntimePromotionPlan,
   signRuntimePromotionPlan,
-} from './runtime-promotion-plan-signature.mjs'
+} from '../release/runtime-promotion-plan-signature.mjs'
 
 const profileId = 'wine-dotnet-7-linux-x64'
 const imageId = `sha256:${'a'.repeat(64)}`
@@ -38,15 +38,11 @@ const controlImages = Object.freeze({
 })
 const planPath = `profiles/runtime-promotion-plans/${profileId}.json`
 const profilePath = `profiles/runtime-promotion-plans/${profileId}.profile.json`
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const planKeys = crypto.generateKeyPairSync('ed25519')
-const planKeyId = `sha256:${crypto.createHash('sha256').update(
-  planKeys.publicKey.export({ type: 'spki', format: 'der' }),
-).digest('hex')}`
+const planKeyId = `sha256:${crypto.createHash('sha256').update(planKeys.publicKey.export({ type: 'spki', format: 'der' })).digest('hex')}`;
 
-function sha256(bytes) {
-  return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`
-}
+function sha256(bytes) { return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`; }
 
 function writeJson(root, relativePath, value, serialize = undefined) {
   const filename = path.join(root, ...relativePath.split('/'))
@@ -96,12 +92,7 @@ function createFixture(t) {
   }
   writeSignedPlan(plan)
   const planFilename = path.join(root, ...planPath.split('/'))
-  const outputFilename = path.join(
-    root,
-    '.tmp',
-    'runtime-promotion-preflight',
-    `${profileId}.compose.json`,
-  )
+  const outputFilename = path.join(root, '.tmp', 'runtime-promotion-preflight', `${profileId}.compose.json`);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
   return {
     root,

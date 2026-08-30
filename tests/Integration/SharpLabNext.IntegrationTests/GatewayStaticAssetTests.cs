@@ -27,14 +27,10 @@ public sealed class GatewayStaticAssetTests : IClassFixture<StaticAssetGatewayFa
         Assert.Equal("text/html", index.Content.Headers.ContentType?.MediaType);
         Assert.Equal("Accept-Encoding", Assert.Single(index.Headers.Vary));
         Assert.Equal("no-cache", index.Headers.CacheControl?.ToString());
-        Assert.Equal(
-            "brotli index",
-            await index.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("brotli index", await index.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.Equal(Encoding.UTF8.GetByteCount("brotli index"), index.Content.Headers.ContentLength);
 
-        using var asset = await GetAsync(
-            "/assets/app-12345678.js",
-            "br;q=0.8, zstd;q=0.8, identity;q=0.8");
+        using var asset = await GetAsync("/assets/app-12345678.js", "br;q=0.8, zstd;q=0.8, identity;q=0.8");
         Assert.Equal("br", Assert.Single(asset.Content.Headers.ContentEncoding));
         Assert.Equal("text/javascript", asset.Content.Headers.ContentType?.MediaType);
         Assert.Equal("public, max-age=31536000, immutable", asset.Headers.CacheControl?.ToString());
@@ -43,42 +39,28 @@ public sealed class GatewayStaticAssetTests : IClassFixture<StaticAssetGatewayFa
     [Fact]
     public async Task BrotliFallbackHonorsZeroQualityAndMissingZstdVariant()
     {
-        using var rejectedZstd = await GetAsync(
-            "/assets/app-12345678.js",
-            "zstd;q=0, br;q=0.7, identity;q=0.5");
+        using var rejectedZstd = await GetAsync("/assets/app-12345678.js", "zstd;q=0, br;q=0.7, identity;q=0.5");
         Assert.Equal("br", Assert.Single(rejectedZstd.Content.Headers.ContentEncoding));
-        Assert.Equal(
-            "brotli asset",
-            await rejectedZstd.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("brotli asset", await rejectedZstd.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
         using var missingZstd = await GetAsync("/assets/br-only-12345678.js", "zstd, br");
         Assert.Equal("br", Assert.Single(missingZstd.Content.Headers.ContentEncoding));
-        Assert.Equal(
-            "brotli only",
-            await missingZstd.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("brotli only", await missingZstd.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task GzipFallbackIsNegotiatedDirectlyByGateway()
     {
-        using var preferred = await GetAsync(
-            "/assets/app-12345678.js",
-            "zstd;q=0, br;q=0, gzip;q=0.8, identity;q=0.5");
+        using var preferred = await GetAsync("/assets/app-12345678.js", "zstd;q=0, br;q=0, gzip;q=0.8, identity;q=0.5");
         Assert.Equal(HttpStatusCode.OK, preferred.StatusCode);
         Assert.Equal("gzip", Assert.Single(preferred.Content.Headers.ContentEncoding));
         Assert.Equal("Accept-Encoding", Assert.Single(preferred.Headers.Vary));
-        Assert.Equal(
-            "gzip asset",
-            await preferred.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("gzip asset", await preferred.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
-        using var onlyAvailable = await GetAsync(
-            "/assets/gzip-only-12345678.js",
-            "zstd, br, gzip");
+        using var onlyAvailable = await GetAsync("/assets/gzip-only-12345678.js", "zstd, br, gzip");
         Assert.Equal(HttpStatusCode.OK, onlyAvailable.StatusCode);
         Assert.Equal("gzip", Assert.Single(onlyAvailable.Content.Headers.ContentEncoding));
-        Assert.Equal(
-            "gzip only",
-            await onlyAvailable.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("gzip only", await onlyAvailable.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -86,9 +68,7 @@ public sealed class GatewayStaticAssetTests : IClassFixture<StaticAssetGatewayFa
     {
         using var unsupported = await GetAsync("/assets/identity-only-12345678.js", "compress");
         Assert.Empty(unsupported.Content.Headers.ContentEncoding);
-        Assert.Equal(
-            "identity only",
-            await unsupported.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("identity only", await unsupported.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
         using var unavailable = await GetAsync("/assets/identity-only-12345678.js", "zstd, br");
         Assert.Empty(unavailable.Content.Headers.ContentEncoding);
@@ -98,9 +78,7 @@ public sealed class GatewayStaticAssetTests : IClassFixture<StaticAssetGatewayFa
     [Fact]
     public async Task RejectsRequestWhenEveryRepresentationHasZeroQuality()
     {
-        using var response = await GetAsync(
-            "/assets/app-12345678.js",
-            "zstd;q=0, br;q=0, gzip;q=0, identity;q=0");
+        using var response = await GetAsync("/assets/app-12345678.js", "zstd;q=0, br;q=0, gzip;q=0, identity;q=0");
 
         Assert.Equal(HttpStatusCode.NotAcceptable, response.StatusCode);
         Assert.Equal(0, response.Content.Headers.ContentLength);
@@ -128,9 +106,7 @@ public sealed class GatewayStaticAssetTests : IClassFixture<StaticAssetGatewayFa
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("br", Assert.Single(response.Content.Headers.ContentEncoding));
         Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
-        Assert.Equal(
-            "brotli index",
-            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("brotli index", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -139,14 +115,10 @@ public sealed class GatewayStaticAssetTests : IClassFixture<StaticAssetGatewayFa
         using var rangeRequest = new HttpRequestMessage(HttpMethod.Get, "/assets/app-12345678.js");
         rangeRequest.Headers.TryAddWithoutValidation("Accept-Encoding", "identity");
         rangeRequest.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 3);
-        using var rangeResponse = await _client.SendAsync(
-            rangeRequest,
-            TestContext.Current.CancellationToken);
+        using var rangeResponse = await _client.SendAsync(rangeRequest, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.PartialContent, rangeResponse.StatusCode);
-        Assert.Equal(
-            "iden",
-            await rangeResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("iden", await rangeResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.Equal("bytes 0-3/14", rangeResponse.Content.Headers.ContentRange?.ToString());
 
         using var initial = await GetAsync("/assets/app-12345678.js", "zstd");
@@ -154,9 +126,7 @@ public sealed class GatewayStaticAssetTests : IClassFixture<StaticAssetGatewayFa
         using var conditionalRequest = new HttpRequestMessage(HttpMethod.Get, "/assets/app-12345678.js");
         conditionalRequest.Headers.TryAddWithoutValidation("Accept-Encoding", "zstd");
         conditionalRequest.Headers.IfNoneMatch.Add(initial.Headers.ETag);
-        using var conditionalResponse = await _client.SendAsync(
-            conditionalRequest,
-            TestContext.Current.CancellationToken);
+        using var conditionalResponse = await _client.SendAsync(conditionalRequest, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotModified, conditionalResponse.StatusCode);
         Assert.Equal("zstd", Assert.Single(conditionalResponse.Content.Headers.ContentEncoding));
@@ -176,22 +146,15 @@ public sealed class GatewayStaticAssetTests : IClassFixture<StaticAssetGatewayFa
     public async Task EmptyAcceptEncodingUsesIdentityAndEncodedTraversalCannotEscapeRoot()
     {
         var server = new PrecompressedStaticAssetServer([_factory.WebRoot]);
-        using var emptyEncodingRequest = new HttpRequestMessage(
-            HttpMethod.Get,
-            "/assets/app-12345678.js");
+        using var emptyEncodingRequest = new HttpRequestMessage(HttpMethod.Get, "/assets/app-12345678.js");
         emptyEncodingRequest.Headers.TryAddWithoutValidation("Accept-Encoding", "");
-        using var identityResponse = await _client.SendAsync(
-            emptyEncodingRequest,
-            TestContext.Current.CancellationToken);
+        using var identityResponse = await _client.SendAsync(emptyEncodingRequest, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, identityResponse.StatusCode);
         Assert.Empty(identityResponse.Content.Headers.ContentEncoding);
 
         var outsideName = $"outside-{Guid.NewGuid():N}.js";
         var outsidePath = Path.Combine(Path.GetDirectoryName(_factory.WebRoot)!, outsideName);
-        await File.WriteAllTextAsync(
-            outsidePath,
-            "must not be served",
-            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(outsidePath, "must not be served", TestContext.Current.CancellationToken);
         try
         {
             var traversalContext = new DefaultHttpContext();
@@ -218,10 +181,7 @@ public sealed class GatewayStaticAssetTests : IClassFixture<StaticAssetGatewayFa
 
 public sealed class StaticAssetGatewayFactory : WebApplicationFactory<Program>
 {
-    private readonly string _webRoot = Path.Combine(
-        Path.GetTempPath(),
-        "SharpLabNext-StaticAssets",
-        Guid.NewGuid().ToString("N"));
+    private readonly string _webRoot = Path.Combine(Path.GetTempPath(), "SharpLabNext-StaticAssets", Guid.NewGuid().ToString("N"));
 
     public StaticAssetGatewayFactory()
     {

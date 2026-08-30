@@ -48,9 +48,7 @@ public sealed class TemporaryArtifactDirectoryTests
         {
             var exception = Record.Exception(() => TemporaryArtifactDirectory.Delete(root));
 
-            Assert.True(
-                exception is IOException or UnauthorizedAccessException,
-                $"Expected a file-lock exception, but received {exception?.GetType().FullName ?? "no exception"}.");
+            Assert.True(exception is IOException or UnauthorizedAccessException, $"Expected a file-lock exception, but received {exception?.GetType().FullName ?? "no exception"}.");
             Assert.True(Directory.Exists(root));
         }
         finally

@@ -15,11 +15,7 @@ public enum InspectionKind
 
 public sealed class InspectionRecord
 {
-    public InspectionRecord(
-        InspectionKind kind,
-        string title,
-        object? value,
-        IReadOnlyList<object?>? values = null)
+    public InspectionRecord(InspectionKind kind, string title, object? value, IReadOnlyList<object?>? values = null)
     {
         Kind = kind;
         Title = title ?? throw new ArgumentNullException(nameof(title));
@@ -61,15 +57,7 @@ public enum FlowEventKind
 
 public sealed class FlowRecord
 {
-    public FlowRecord(
-        FlowEventKind kind,
-        string? documentPath,
-        int startLine,
-        int startColumn,
-        int endLine,
-        int endColumn,
-        object? value = null,
-        string? name = null)
+    public FlowRecord(FlowEventKind kind, string? documentPath, int startLine, int startColumn, int endLine, int endColumn, object? value = null, string? name = null)
     {
         Kind = kind;
         DocumentPath = documentPath;
@@ -104,9 +92,7 @@ public static class RuntimeServices
     public static IDisposable PushInspectionSink(IInspectionSink sink)
     {
         if (sink is null)
-        {
             throw new ArgumentNullException(nameof(sink));
-        }
         var previous = CurrentSink.Value;
         CurrentSink.Value = sink;
         return new RestoreScope(previous);
@@ -115,18 +101,13 @@ public static class RuntimeServices
     public static IDisposable PushFlowSink(IFlowSink sink)
     {
         if (sink is null)
-        {
             throw new ArgumentNullException(nameof(sink));
-        }
         var previous = CurrentFlowSink.Value;
         CurrentFlowSink.Value = sink;
         return new RestoreFlowScope(previous);
     }
 
-    internal static void Write(InspectionRecord inspection)
-    {
-        CurrentSink.Value?.Write(inspection);
-    }
+    internal static void Write(InspectionRecord inspection) => CurrentSink.Value?.Write(inspection);
 
     internal static void Write(FlowRecord flow)
     {

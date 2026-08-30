@@ -38,11 +38,7 @@ const assertExactKeys = (value: Record<string, unknown>): void => {
 }
 
 const validateSelectionId = (value: unknown, name: string, limits: UrlCodecLimits): string => {
-  if (
-    typeof value !== 'string' ||
-    value.length === 0 ||
-    value.length > limits.maxSelectionIdLength
-  ) {
+  if (typeof value !== 'string' || value.length === 0 || value.length > limits.maxSelectionIdLength) {
     return fail(`${name} must be a non-empty string within the configured length limit.`)
   }
   if (/\p{Cc}/u.test(value)) return fail(`${name} cannot contain control characters.`)
@@ -50,20 +46,10 @@ const validateSelectionId = (value: unknown, name: string, limits: UrlCodecLimit
 }
 
 export const validateRelativePath = (value: unknown, limits: UrlCodecLimits): string => {
-  if (
-    typeof value !== 'string' ||
-    value.length === 0 ||
-    value.length > limits.maxPathLength ||
-    textEncoder.encode(value).length > limits.maxPathLength
-  ) {
+  if (typeof value !== 'string' || value.length === 0 || value.length > limits.maxPathLength || textEncoder.encode(value).length > limits.maxPathLength) {
     return fail('Workspace paths must be non-empty and within the configured length limit.')
   }
-  if (
-    value.includes('\0') ||
-    value.includes('\\') ||
-    value.startsWith('/') ||
-    value.includes(':')
-  ) {
+  if (value.includes('\0') || value.includes('\\') || value.startsWith('/') || value.includes(':')) {
     return fail(`Workspace path '${value}' is not a normalized relative path.`)
   }
 
@@ -82,8 +68,7 @@ const validateFiles = (value: unknown, limits: UrlCodecLimits): ShareFile[] => {
   const paths = new Set<string>()
   let totalBytes = 0
   return value.map((item) => {
-    if (!Array.isArray(item) || item.length !== 2)
-      return fail('Each v3 file must be a [path,text] tuple.')
+    if (!Array.isArray(item) || item.length !== 2) return fail('Each v3 file must be a [path,text] tuple.')
     const path = validateRelativePath(item[0], limits)
     if (paths.has(path)) return fail(`Workspace path '${path}' is duplicated.`)
     paths.add(path)
@@ -101,11 +86,7 @@ const validateFiles = (value: unknown, limits: UrlCodecLimits): ShareFile[] => {
   })
 }
 
-const validateSourceOrder = (
-  value: unknown,
-  files: readonly ShareFile[],
-  limits: UrlCodecLimits,
-): string[] => {
+const validateSourceOrder = (value: unknown, files: readonly ShareFile[], limits: UrlCodecLimits): string[] => {
   if (!Array.isArray(value) || value.length !== files.length) {
     return fail('Source order must contain every workspace file exactly once.')
   }
@@ -185,24 +166,15 @@ export const stateToPayload = (state: ShareWorkspaceState, limits: UrlCodecLimit
   }
 }
 
-export const encodeCanonicalPayload = (
-  state: ShareWorkspaceState,
-  limits: UrlCodecLimits,
-): Uint8Array => {
+export const encodeCanonicalPayload = (state: ShareWorkspaceState, limits: UrlCodecLimits): Uint8Array => {
   const bytes = textEncoder.encode(JSON.stringify(stateToPayload(state, limits)))
   if (bytes.length > limits.maxUncompressedBytes) {
-    throw new ShareUrlError(
-      'payload-too-large',
-      `The v3 payload exceeds the ${limits.maxUncompressedBytes} byte limit.`,
-    )
+    throw new ShareUrlError('payload-too-large', `The v3 payload exceeds the ${limits.maxUncompressedBytes} byte limit.`)
   }
   return bytes
 }
 
-export const decodeCanonicalPayload = (
-  bytes: Uint8Array,
-  limits: UrlCodecLimits,
-): ShareWorkspaceState => {
+export const decodeCanonicalPayload = (bytes: Uint8Array, limits: UrlCodecLimits): ShareWorkspaceState => {
   let json: string
   try {
     json = new TextDecoder('utf-8', { fatal: true }).decode(bytes)

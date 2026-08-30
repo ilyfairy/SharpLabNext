@@ -25,40 +25,23 @@ internal static partial class JitInspectorProgram
     private const int MaximumExceptionDepth = 32;
     public static async Task<int> RunAsync(string[] args)
     {
-        await using var writer = new RuntimeFrameWriter(
-            Console.OpenStandardOutput(),
-            RuntimeFrameTransport.Base64Line);
+        await using var writer = new RuntimeFrameWriter(Console.OpenStandardOutput(), RuntimeFrameTransport.Base64Line);
         Console.SetOut(TextWriter.Null);
         Console.SetError(TextWriter.Null);
         var started = DateTimeOffset.UtcNow;
         try
         {
             var options = JitInspectorArguments.Parse(args);
-            var loadContext = new RuntimeArtifactLoadContext(
-                options.AssemblyPath,
-                typeof(JitGenericAttribute).Assembly);
+            var loadContext = new RuntimeArtifactLoadContext(options.AssemblyPath, typeof(JitGenericAttribute).Assembly);
             var assembly = loadContext.LoadFromAssemblyPath(options.AssemblyPath);
             var results = InspectAssembly(assembly, options.MethodFilter);
             var sourcePoints = JitSourceMapping.LoadSiblingPortablePdb(options.AssemblyPath);
             FlushJitOutput();
-            var nativeMaps = JitNativeMapLog.Load(
-                Environment.GetEnvironmentVariable("SHARPLABNEXT_JIT_MAP_PATH"));
-            var richMaps = JitRichMapLog.Load(
-                Environment.GetEnvironmentVariable("SHARPLABNEXT_JIT_RICH_MAP_PATH"));
-            var assemblyText = ApplyAssemblyStatistics(
-                results,
-                ReadJitAssembly(),
-                sourcePoints,
-                nativeMaps,
-                richMaps);
+            var nativeMaps = JitNativeMapLog.Load(Environment.GetEnvironmentVariable("SHARPLABNEXT_JIT_MAP_PATH"));
+            var richMaps = JitRichMapLog.Load(Environment.GetEnvironmentVariable("SHARPLABNEXT_JIT_RICH_MAP_PATH"));
+            var assemblyText = ApplyAssemblyStatistics(results, ReadJitAssembly(), sourcePoints, nativeMaps, richMaps);
             await WriteChunksAsync(writer, RuntimeFrameKind.JitAssembly, Encoding.UTF8.GetBytes(assemblyText));
-            await writer.WriteAsync(RuntimeFrameKind.JitSummary, RuntimeStructuredPayloadCodec.Serialize(new
-            {
-                runtimeVersion = Environment.Version.ToString(),
-                assembly = assembly.GetName().Name,
-                methodFilter = options.MethodFilter,
-                methods = results
-            }));
+            await writer.WriteAsync(RuntimeFrameKind.JitSummary, RuntimeStructuredPayloadCodec.Serialize(new { runtimeVersion = Environment.Version.ToString(), assembly = assembly.GetName().Name, methodFilter = options.MethodFilter, methods = results }));
             var preparedAny = results.Any(static result => result.Status == "prepared");
             var exitCode = preparedAny && assemblyText.Length > 0 ? 0 : preparedAny ? 1 : 2;
             await writer.WriteAsync(RuntimeFrameKind.Exit, RuntimeStructuredPayloadCodec.Serialize(new
@@ -76,30 +59,13 @@ internal static partial class JitInspectorProgram
         }
         catch (OutOfMemoryException)
         {
-            await writer.WriteAsync(RuntimeFrameKind.Exit, RuntimeStructuredPayloadCodec.Serialize(new
-            {
-                status = "out-of-memory",
-                exitCode = 137,
-                elapsedMilliseconds = (DateTimeOffset.UtcNow - started).TotalMilliseconds
-            }));
+            await writer.WriteAsync(RuntimeFrameKind.Exit, RuntimeStructuredPayloadCodec.Serialize(new { status = "out-of-memory", exitCode = 137, elapsedMilliseconds = (DateTimeOffset.UtcNow - started).TotalMilliseconds }));
             return 137;
         }
         catch (Exception exception)
         {
-            await writer.WriteAsync(RuntimeFrameKind.Exception, RuntimeStructuredPayloadCodec.Serialize(new
-            {
-                typeName = exception.GetType().FullName ?? exception.GetType().Name,
-                message = exception.Message,
-                stackTrace = exception.StackTrace,
-                innerException = CreateInnerExceptionPayload(exception.InnerException),
-                elapsedMilliseconds = (DateTimeOffset.UtcNow - started).TotalMilliseconds
-            }));
-            await writer.WriteAsync(RuntimeFrameKind.Exit, RuntimeStructuredPayloadCodec.Serialize(new
-            {
-                status = "inspection-failed",
-                exitCode = 1,
-                elapsedMilliseconds = (DateTimeOffset.UtcNow - started).TotalMilliseconds
-            }));
+            await writer.WriteAsync(RuntimeFrameKind.Exception, RuntimeStructuredPayloadCodec.Serialize(new { typeName = exception.GetType().FullName ?? exception.GetType().Name, message = exception.Message, stackTrace = exception.StackTrace, innerException = CreateInnerExceptionPayload(exception.InnerException), elapsedMilliseconds = (DateTimeOffset.UtcNow - started).TotalMilliseconds }));
+            await writer.WriteAsync(RuntimeFrameKind.Exit, RuntimeStructuredPayloadCodec.Serialize(new { status = "inspection-failed", exitCode = 1, elapsedMilliseconds = (DateTimeOffset.UtcNow - started).TotalMilliseconds }));
             return 1;
         }
     }
@@ -109,13 +75,7 @@ internal static partial class JitInspectorProgram
         if (exception is null || depth > MaximumExceptionDepth)
             return null;
 
-        return new
-        {
-            typeName = exception.GetType().FullName ?? exception.GetType().Name,
-            message = exception.Message,
-            stackTrace = exception.StackTrace,
-            innerException = CreateInnerExceptionPayload(exception.InnerException, depth + 1)
-        };
+        return new { typeName = exception.GetType().FullName ?? exception.GetType().Name, message = exception.Message, stackTrace = exception.StackTrace, innerException = CreateInnerExceptionPayload(exception.InnerException, depth + 1) };
     }
 
     private static List<JitMethodResult> InspectAssembly(Assembly assembly, string? methodFilter)
@@ -132,9 +92,7 @@ internal static partial class JitInspectorProgram
                         return results;
                     }
 
-                    if (method.IsAbstract ||
-                        method.ContainsGenericParameters ||
-                        method.GetMethodImplementationFlags().HasFlag(MethodImplAttributes.InternalCall))
+                    if (method.IsAbstract || method.ContainsGenericParameters || method.GetMethodImplementationFlags().HasFlag(MethodImplAttributes.InternalCall))
                     {
                         continue;
                     }
@@ -149,33 +107,11 @@ internal static partial class JitInspectorProgram
                     {
                         RuntimeHelpers.PrepareMethod(method.MethodHandle);
                         var address = method.MethodHandle.GetFunctionPointer();
-                        results.Add(new JitMethodResult(
-                            MethodIdentity(method),
-                            method.MetadataToken,
-                            (nuint)method.MethodHandle.Value,
-                            (nuint)address,
-                            displayName,
-                            "prepared",
-                            $"0x{address:x}",
-                            null,
-                            0,
-                            0,
-                            []));
+                        results.Add(new JitMethodResult(MethodIdentity(method), method.MetadataToken, (nuint)method.MethodHandle.Value, (nuint)address, displayName, "prepared", $"0x{address:x}", null, 0, 0, []));
                     }
                     catch (Exception exception)
                     {
-                        results.Add(new JitMethodResult(
-                            MethodIdentity(method),
-                            method.MetadataToken,
-                            0,
-                            0,
-                            displayName,
-                            "failed",
-                            null,
-                            $"{exception.GetType().Name}: {exception.Message}",
-                            0,
-                            0,
-                            []));
+                        results.Add(new JitMethodResult(MethodIdentity(method), method.MetadataToken, 0, 0, displayName, "failed", null, $"{exception.GetType().Name}: {exception.Message}", 0, 0, []));
                     }
                 }
             }
@@ -210,8 +146,7 @@ internal static partial class JitInspectorProgram
 
         foreach (var attribute in genericMethod.GetCustomAttributes<JitGenericAttribute>(false))
         {
-            if (attribute.ArgumentTypes.Length != genericMethod.GetGenericArguments().Length ||
-                attribute.ArgumentTypes.Any(static argument => argument.ContainsGenericParameters))
+            if (attribute.ArgumentTypes.Length != genericMethod.GetGenericArguments().Length || attribute.ArgumentTypes.Any(static argument => argument.ContainsGenericParameters))
             {
                 continue;
             }
@@ -221,9 +156,7 @@ internal static partial class JitInspectorProgram
             {
                 constructed = genericMethod.MakeGenericMethod(attribute.ArgumentTypes);
             }
-            catch (ArgumentException)
-            {
-            }
+            catch (ArgumentException) { }
             if (constructed is not null)
                 yield return constructed;
         }
@@ -234,8 +167,7 @@ internal static partial class JitInspectorProgram
         var metadataToken = $"0x{method.MetadataToken:x8}";
         if (!method.IsGenericMethod || method.IsGenericMethodDefinition)
             return metadataToken;
-        var arguments = string.Join(",", method.GetGenericArguments().Select(static argument =>
-            argument.FullName ?? argument.Name));
+        var arguments = string.Join(",", method.GetGenericArguments().Select(static argument => argument.FullName ?? argument.Name));
         return $"{metadataToken}[{arguments}]";
     }
 
@@ -244,8 +176,7 @@ internal static partial class JitInspectorProgram
         if (string.IsNullOrWhiteSpace(methodFilter))
             return true;
         return methodFilter.IndexOfAny(['*', '?']) >= 0
-            ? FileSystemName.MatchesSimpleExpression(methodFilter, displayName, ignoreCase: true)
-            : displayName.Contains(methodFilter, StringComparison.OrdinalIgnoreCase);
+            ? FileSystemName.MatchesSimpleExpression(methodFilter, displayName, ignoreCase: true) : displayName.Contains(methodFilter, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IEnumerable<Type> ExpandTypes(Assembly assembly)
@@ -270,9 +201,7 @@ internal static partial class JitInspectorProgram
                 {
                     constructed = type.MakeGenericType(attribute.ArgumentTypes);
                 }
-                catch (ArgumentException)
-                {
-                }
+                catch (ArgumentException) { }
 
                 if (constructed is not null)
                 {
@@ -306,12 +235,7 @@ internal static partial class JitInspectorProgram
     [DllImport("libc", EntryPoint = "fflush")]
     private static extern int FlushNativeStreams(IntPtr stream);
 
-    internal static string ApplyAssemblyStatistics(
-        List<JitMethodResult> results,
-        string assemblyText,
-        IReadOnlyDictionary<int, IReadOnlyList<JitSourcePoint>> sourcePoints,
-        IReadOnlyDictionary<nuint, IReadOnlyList<JitNativeMethodMap>> nativeMaps,
-        IReadOnlyDictionary<nuint, IReadOnlyList<JitRichMethodMap>>? richMaps = null)
+    internal static string ApplyAssemblyStatistics(List<JitMethodResult> results, string assemblyText, IReadOnlyDictionary<int, IReadOnlyList<JitSourcePoint>> sourcePoints, IReadOnlyDictionary<nuint, IReadOnlyList<JitNativeMethodMap>> nativeMaps, IReadOnlyDictionary<nuint, IReadOnlyList<JitRichMethodMap>>? richMaps = null)
     {
         if (assemblyText.Length == 0)
         {
@@ -327,8 +251,7 @@ internal static partial class JitInspectorProgram
             var end = index + 1 < sections.Count ? sections[index + 1].Index : assemblyText.Length;
             var section = assemblyText.AsSpan(header.Index, end - header.Index);
             var jitName = header.Groups[1].Value.Replace(':', '.');
-            var unmatchedIndex = unmatchedResultIndices.FindIndex(
-                resultIndex => MethodNamesMatch(jitName, results[resultIndex].DisplayName));
+            var unmatchedIndex = unmatchedResultIndices.FindIndex(resultIndex => MethodNamesMatch(jitName, results[resultIndex].DisplayName));
             if (unmatchedIndex < 0)
             {
                 continue;
@@ -340,53 +263,29 @@ internal static partial class JitInspectorProgram
             sourcePoints.TryGetValue(results[resultIndex].MetadataToken, out var points);
             var nativeMap = SelectNativeMap(results[resultIndex], nativeMaps);
             var richNativeMap = SelectRichNativeMap(nativeMap, richMaps);
-            var mappedSection = JitSourceMapping.MapNativeSection(
-                rawSectionText,
-                points ?? [],
-                nativeMap);
+            var mappedSection = JitSourceMapping.MapNativeSection(rawSectionText, points ?? [], nativeMap);
             var richRanges = richNativeMap is null
-                ? []
-                : JitSourceMapping.MapNativeSection(
-                    rawSectionText,
-                    points ?? [],
-                    richNativeMap).LinkedRanges;
+                ? [] : JitSourceMapping.MapNativeSection(rawSectionText, points ?? [], richNativeMap).LinkedRanges;
             var sectionText = mappedSection.Text;
             var markerRanges = points is not null
-                ? JitSourceMapping.MapTextMarkers(sectionText, points)
-                : [];
+                ? JitSourceMapping.MapTextMarkers(sectionText, points) : [];
             var methodFallbackRanges = points is not null
-                ? JitSourceMapping.MapMethodFallback(sectionText, points)
-                : [];
+                ? JitSourceMapping.MapMethodFallback(sectionText, points) : [];
             var sizeMatch = TotalBytesRegex().Match(sectionText);
             var nativeSize = sizeMatch.Success && int.TryParse(sizeMatch.Groups[1].Value, out var parsedSize)
-                ? parsedSize
-                : 0;
+                ? parsedSize : 0;
             var instructionCount = 0;
             foreach (var line in sectionText.Split('\n'))
             {
                 var trimmed = line.Trim();
-                if (trimmed.Length > 0 &&
-                    !trimmed.StartsWith(';') &&
-                    !trimmed.EndsWith(':') &&
-                    !trimmed.StartsWith("G_M", StringComparison.Ordinal))
+                if (trimmed.Length > 0 && !trimmed.StartsWith(';') && !trimmed.EndsWith(':') && !trimmed.StartsWith("G_M", StringComparison.Ordinal))
                 {
                     instructionCount++;
                 }
             }
 
-            var linkedRangeSelection = SelectLinkedRanges(
-                nativeMap is not null,
-                mappedSection.LinkedRanges,
-                richRanges,
-                markerRanges,
-                methodFallbackRanges);
-            results[resultIndex] = results[resultIndex] with
-            {
-                NativeCodeSize = nativeSize,
-                InstructionCount = instructionCount,
-                LinkedRanges = linkedRangeSelection.Ranges,
-                MappingSource = linkedRangeSelection.Source
-            };
+            var linkedRangeSelection = SelectLinkedRanges(nativeMap is not null, mappedSection.LinkedRanges, richRanges, markerRanges, methodFallbackRanges);
+            results[resultIndex] = results[resultIndex] with { NativeCodeSize = nativeSize, InstructionCount = instructionCount, LinkedRanges = linkedRangeSelection.Ranges, MappingSource = linkedRangeSelection.Source };
 
             if (filteredAssembly.Length > 0)
             {
@@ -398,12 +297,7 @@ internal static partial class JitInspectorProgram
         return filteredAssembly.ToString();
     }
 
-    private static JitLinkedRangeSelection SelectLinkedRanges(
-        bool hasProfilerMap,
-        IReadOnlyList<JitSourceLinkedRange> nativeRanges,
-        IReadOnlyList<JitSourceLinkedRange> richRanges,
-        IReadOnlyList<JitSourceLinkedRange> markerRanges,
-        IReadOnlyList<JitSourceLinkedRange> methodFallbackRanges)
+    private static JitLinkedRangeSelection SelectLinkedRanges(bool hasProfilerMap, IReadOnlyList<JitSourceLinkedRange> nativeRanges, IReadOnlyList<JitSourceLinkedRange> richRanges, IReadOnlyList<JitSourceLinkedRange> markerRanges, IReadOnlyList<JitSourceLinkedRange> methodFallbackRanges)
     {
         if (CountDistinctSequencePoints(richRanges) > CountDistinctSequencePoints(nativeRanges))
             return new JitLinkedRangeSelection(richRanges, "rich");
@@ -423,39 +317,22 @@ internal static partial class JitInspectorProgram
         return CreateFallbackSelection(methodFallbackRanges);
     }
 
-    private static JitLinkedRangeSelection CreateFallbackSelection(
-        IReadOnlyList<JitSourceLinkedRange> methodFallbackRanges) =>
+    private static JitLinkedRangeSelection CreateFallbackSelection(IReadOnlyList<JitSourceLinkedRange> methodFallbackRanges) =>
         methodFallbackRanges.Count > 0
-            ? new JitLinkedRangeSelection(methodFallbackRanges, "method")
-            : new JitLinkedRangeSelection([], "none");
+            ? new JitLinkedRangeSelection(methodFallbackRanges, "method") : new JitLinkedRangeSelection([], "none");
 
     private static int CountDistinctSequencePoints(IReadOnlyList<JitSourceLinkedRange> ranges) =>
-        ranges
-            .Where(static range => range.Precision == "sequence-point")
-            .Select(static range => (
-                range.SourceFilePath,
-                range.SourceRange.StartLine,
-                range.SourceRange.StartCharacter,
-                range.SourceRange.EndLine,
-                range.SourceRange.EndCharacter))
-            .Distinct()
-            .Count();
+        ranges.Where(static range => range.Precision == "sequence-point").Select(static range => (range.SourceFilePath, range.SourceRange.StartLine, range.SourceRange.StartCharacter, range.SourceRange.EndLine, range.SourceRange.EndCharacter)).Distinct().Count();
 
-    internal static JitNativeMethodMap? SelectRichNativeMap(
-        JitNativeMethodMap? ordinaryMap,
-        IReadOnlyDictionary<nuint, IReadOnlyList<JitRichMethodMap>>? richMaps)
+    internal static JitNativeMethodMap? SelectRichNativeMap(JitNativeMethodMap? ordinaryMap, IReadOnlyDictionary<nuint, IReadOnlyList<JitRichMethodMap>>? richMaps)
     {
-        if (ordinaryMap is null ||
-            richMaps is null ||
-            !richMaps.TryGetValue(ordinaryMap.MethodHandle, out var versions) ||
-            versions.Count != 1)
+        if (ordinaryMap is null || richMaps is null || !richMaps.TryGetValue(ordinaryMap.MethodHandle, out var versions) || versions.Count != 1)
         {
             return null;
         }
 
         var codeEnd = ordinaryMap.Ranges.Count == 0
-            ? 0
-            : ordinaryMap.Ranges.Max(static range => range.NativeEnd);
+            ? 0 : ordinaryMap.Ranges.Max(static range => range.NativeEnd);
         if (codeEnd == 0)
             return null;
 
@@ -471,35 +348,25 @@ internal static partial class JitInspectorProgram
         if (rootOffsets.Count == 0)
             return null;
 
-        var ordered = rootOffsets
-            .OrderBy(static pair => pair.Key)
-            .ToArray();
+        var ordered = rootOffsets.OrderBy(static pair => pair.Key).ToArray();
         var ranges = new List<JitNativeIlRange>(ordered.Length);
         for (var index = 0; index < ordered.Length; index++)
         {
             var start = ordered[index].Key;
             var end = index + 1 < ordered.Length
-                ? ordered[index + 1].Key
-                : codeEnd;
+                ? ordered[index + 1].Key : codeEnd;
             if (end > start)
                 ranges.Add(new JitNativeIlRange(ordered[index].Value, start, end));
         }
         if (ranges.Count == 0)
             return null;
 
-        return new JitNativeMethodMap(
-            ordinaryMap.MethodHandle,
-            ordinaryMap.MetadataToken,
-            ordinaryMap.NativeCodeStart,
-            ranges);
+        return new JitNativeMethodMap(ordinaryMap.MethodHandle, ordinaryMap.MetadataToken, ordinaryMap.NativeCodeStart, ranges);
     }
 
-    internal static JitNativeMethodMap? SelectNativeMap(
-        JitMethodResult result,
-        IReadOnlyDictionary<nuint, IReadOnlyList<JitNativeMethodMap>> nativeMaps)
+    internal static JitNativeMethodMap? SelectNativeMap(JitMethodResult result, IReadOnlyDictionary<nuint, IReadOnlyList<JitNativeMethodMap>> nativeMaps)
     {
-        if (result.MethodHandle != 0 &&
-            nativeMaps.TryGetValue(result.MethodHandle, out var handleVersions))
+        if (result.MethodHandle != 0 && nativeMaps.TryGetValue(result.MethodHandle, out var handleVersions))
         {
             var handleMatch = SelectCandidate(result, handleVersions, out var handleCandidateCount);
             if (handleCandidateCount > 0)
@@ -521,14 +388,10 @@ internal static partial class JitInspectorProgram
         }
 
         return tokenCandidateCount == 1
-            ? soleTokenCandidate
-            : null;
+            ? soleTokenCandidate : null;
     }
 
-    private static JitNativeMethodMap? SelectCandidate(
-        JitMethodResult result,
-        IReadOnlyList<JitNativeMethodMap> versions,
-        out int candidateCount)
+    private static JitNativeMethodMap? SelectCandidate(JitMethodResult result, IReadOnlyList<JitNativeMethodMap> versions, out int candidateCount)
     {
         JitNativeMethodMap? soleCandidate = null;
         JitNativeMethodMap? exactNativeCandidate = null;
@@ -551,8 +414,7 @@ internal static partial class JitInspectorProgram
         if (exactNativeCandidateCount == 1)
             return exactNativeCandidate;
         return exactNativeCandidateCount == 0 && candidateCount == 1
-            ? soleCandidate
-            : null;
+            ? soleCandidate : null;
     }
 
     private static bool MethodNamesMatch(string jitName, string resultDisplayName)
@@ -576,10 +438,7 @@ internal static partial class JitInspectorProgram
         return argumentsStart > 0 ? name[..argumentsStart] : name;
     }
 
-    private static async Task WriteChunksAsync(
-        RuntimeFrameWriter writer,
-        RuntimeFrameKind kind,
-        byte[] content)
+    private static async Task WriteChunksAsync(RuntimeFrameWriter writer, RuntimeFrameKind kind, byte[] content)
     {
         for (var offset = 0; offset < content.Length; offset += JitFrameChunkSize)
         {
@@ -635,12 +494,7 @@ internal sealed record JitMethodResult(
 {
     public string MappingSource { get; init; } = "none";
 
-    public IReadOnlyList<JitEvidenceRange> EvidenceRanges => LinkedRanges
-        .Select(static range => range.EvidenceRange)
-        .OfType<JitEvidenceRange>()
-        .ToArray();
+    public IReadOnlyList<JitEvidenceRange> EvidenceRanges => LinkedRanges.Select(static range => range.EvidenceRange).OfType<JitEvidenceRange>().ToArray();
 }
 
-internal sealed record JitLinkedRangeSelection(
-    IReadOnlyList<JitSourceLinkedRange> Ranges,
-    string Source);
+internal sealed record JitLinkedRangeSelection(IReadOnlyList<JitSourceLinkedRange> Ranges, string Source);

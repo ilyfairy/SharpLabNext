@@ -21,26 +21,22 @@ public sealed class OperationExecutionOptions
     {
         if (QueueCapacity is < 1 or > 100_000)
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:{nameof(QueueCapacity)} is outside the supported range.");
+            throw new InvalidOperationException($"{SectionName}:{nameof(QueueCapacity)} is outside the supported range.");
         }
 
         if (WorkerConcurrency is < 1 or > 256)
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:{nameof(WorkerConcurrency)} is outside the supported range.");
+            throw new InvalidOperationException($"{SectionName}:{nameof(WorkerConcurrency)} is outside the supported range.");
         }
 
         if (ShutdownTimeout <= TimeSpan.Zero || ShutdownTimeout > TimeSpan.FromMinutes(5))
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:{nameof(ShutdownTimeout)} is outside the supported range.");
+            throw new InvalidOperationException($"{SectionName}:{nameof(ShutdownTimeout)} is outside the supported range.");
         }
 
         if (string.IsNullOrWhiteSpace(ExecutorId) || ExecutorId.Length > 128)
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:{nameof(ExecutorId)} is invalid.");
+            throw new InvalidOperationException($"{SectionName}:{nameof(ExecutorId)} is invalid.");
         }
     }
 }
@@ -57,9 +53,7 @@ public sealed class BoundedOperationScheduler : IAsyncDisposable
     private long _queuedCount;
     private int _state;
 
-    public BoundedOperationScheduler(
-        OperationStore operations,
-        OperationExecutionOptions? options = null)
+    public BoundedOperationScheduler(OperationStore operations, OperationExecutionOptions? options = null)
     {
         _operations = operations;
         _options = options ?? new OperationExecutionOptions();
@@ -71,9 +65,7 @@ public sealed class BoundedOperationScheduler : IAsyncDisposable
             SingleReader = _options.WorkerConcurrency == 1,
             SingleWriter = false
         });
-        _workers = Enumerable.Range(0, _options.WorkerConcurrency)
-            .Select(_ => Task.Run(RunWorkerAsync, CancellationToken.None))
-            .ToArray();
+        _workers = Enumerable.Range(0, _options.WorkerConcurrency).Select(_ => Task.Run(RunWorkerAsync, CancellationToken.None)).ToArray();
     }
 
     public bool TryQueue(OperationStart operation, Func<Task> executeAsync)
@@ -90,11 +82,7 @@ public sealed class BoundedOperationScheduler : IAsyncDisposable
             }
             else
             {
-                var item = new WorkItem(
-                    Interlocked.Increment(ref _nextWorkItemId),
-                    operation,
-                    executeAsync,
-                    DateTimeOffset.UtcNow);
+                var item = new WorkItem(Interlocked.Increment(ref _nextWorkItemId), operation, executeAsync, DateTimeOffset.UtcNow);
                 if (!_active.TryAdd(item.Id, item))
                 {
                     throw new InvalidOperationException("Failed to allocate a scheduler work item.");
@@ -133,9 +121,7 @@ public sealed class BoundedOperationScheduler : IAsyncDisposable
         }
 
         foreach (var item in active)
-        {
             Cancel(item.Operation);
-        }
 
         try
         {
@@ -144,9 +130,7 @@ public sealed class BoundedOperationScheduler : IAsyncDisposable
         catch (TimeoutException)
         {
             foreach (var item in _active.Values)
-            {
                 CompleteCancelled(item.Operation);
-            }
         }
         finally
         {
@@ -160,10 +144,7 @@ public sealed class BoundedOperationScheduler : IAsyncDisposable
         {
             var queued = Interlocked.Decrement(ref _queuedCount);
             RecordQueueDepth(queued);
-            SharpLabNextTelemetry.Metrics.RecordQueueWait(
-                _options.ExecutorId,
-                DateTimeOffset.UtcNow - item.EnqueuedAtUtc,
-                SharpLabNextTelemetryOutcome.Succeeded);
+            SharpLabNextTelemetry.Metrics.RecordQueueWait(_options.ExecutorId, DateTimeOffset.UtcNow - item.EnqueuedAtUtc, SharpLabNextTelemetryOutcome.Succeeded);
             try
             {
                 if (Volatile.Read(ref _state) != 0)
@@ -187,13 +168,7 @@ public sealed class BoundedOperationScheduler : IAsyncDisposable
             }
             catch (Exception)
             {
-                FailIfActive(
-                    item.Operation,
-                    "operation-executor-failed",
-                    WorkerErrorCategory.Internal,
-                    "The operation executor failed.",
-                    retryable: true,
-                    safeToRetry: false);
+                FailIfActive(item.Operation, "operation-executor-failed", WorkerErrorCategory.Internal, "The operation executor failed.", retryable: true, safeToRetry: false);
             }
             finally
             {
@@ -211,13 +186,7 @@ public sealed class BoundedOperationScheduler : IAsyncDisposable
         }
         else if (state is not null && !IsTerminal(state.Status))
         {
-            FailIfActive(
-                operation,
-                "operation-executor-incomplete",
-                WorkerErrorCategory.Internal,
-                "The operation executor stopped without a terminal result.",
-                retryable: true,
-                safeToRetry: false);
+            FailIfActive(operation, "operation-executor-incomplete", WorkerErrorCategory.Internal, "The operation executor stopped without a terminal result.", retryable: true, safeToRetry: false);
         }
     }
 
@@ -225,40 +194,19 @@ public sealed class BoundedOperationScheduler : IAsyncDisposable
     {
         SharpLabNextTelemetry.Metrics.RecordQueueRejection(_options.ExecutorId);
         var stopping = rejection == QueueRejection.Stopping;
-        FailIfActive(
-            operation,
-            stopping ? "operation-executor-stopping" : "operation-queue-full",
-            stopping ? WorkerErrorCategory.Unavailable : WorkerErrorCategory.ResourceExhausted,
-            stopping
-                ? "The operation executor is shutting down."
-                : "The operation queue is full. Retry after capacity becomes available.",
-            retryable: true,
-            safeToRetry: true);
+        FailIfActive(operation, stopping ? "operation-executor-stopping" : "operation-queue-full", stopping ? WorkerErrorCategory.Unavailable : WorkerErrorCategory.ResourceExhausted, stopping ? "The operation executor is shutting down." : "The operation queue is full. Retry after capacity becomes available.", retryable: true, safeToRetry: true);
     }
 
     private void Cancel(OperationStart operation) =>
-        _operations.Cancel(
-            operation.Handle.OperationId,
-            "service-shutdown",
-            DateTimeOffset.UtcNow);
+        _operations.Cancel(operation.Handle.OperationId, "service-shutdown", DateTimeOffset.UtcNow);
 
     private void CompleteCancelled(OperationStart operation)
     {
         Cancel(operation);
-        TryAppend(
-            operation,
-            new CompletedOperationEventPayload(
-                OperationCompletionStatus.Cancelled,
-                DateTimeOffset.UtcNow - operation.Handle.CreatedAtUtc));
+        TryAppend(operation, new CompletedOperationEventPayload(OperationCompletionStatus.Cancelled, DateTimeOffset.UtcNow - operation.Handle.CreatedAtUtc));
     }
 
-    private void FailIfActive(
-        OperationStart operation,
-        string code,
-        WorkerErrorCategory category,
-        string publicMessage,
-        bool retryable,
-        bool safeToRetry)
+    private void FailIfActive(OperationStart operation, string code, WorkerErrorCategory category, string publicMessage, bool retryable, bool safeToRetry)
     {
         var state = _operations.Get(operation.Handle.OperationId);
         if (state is null || IsTerminal(state.Status))
@@ -266,15 +214,7 @@ public sealed class BoundedOperationScheduler : IAsyncDisposable
             return;
         }
 
-        TryAppend(operation, new FailedOperationEventPayload(new WorkerError(
-            code,
-            category,
-            publicMessage,
-            retryable,
-            safeToRetry,
-            state.TraceId,
-            _options.ExecutorId,
-            "unknown")));
+        TryAppend(operation, new FailedOperationEventPayload(new WorkerError(code, category, publicMessage, retryable, safeToRetry, state.TraceId, _options.ExecutorId, "unknown")));
     }
 
     private void TryAppend(OperationStart operation, OperationEventPayload payload)
@@ -299,11 +239,7 @@ public sealed class BoundedOperationScheduler : IAsyncDisposable
     private void RecordQueueDepth(long depth) =>
         SharpLabNextTelemetry.Metrics.RecordQueueDepth(_options.ExecutorId, depth);
 
-    private sealed record WorkItem(
-        long Id,
-        OperationStart Operation,
-        Func<Task> ExecuteAsync,
-        DateTimeOffset EnqueuedAtUtc);
+    private sealed record WorkItem(long Id, OperationStart Operation, Func<Task> ExecuteAsync, DateTimeOffset EnqueuedAtUtc);
 
     private enum QueueRejection
     {

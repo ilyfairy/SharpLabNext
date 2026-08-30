@@ -21,9 +21,7 @@ internal sealed record ConstGenericsArtifactWorkerSettings(
     int MaximumProcessOutputBytes,
     TimeSpan ArtifactTimeToLive)
 {
-    public static ConstGenericsArtifactWorkerSettings FromConfiguration(
-        IConfiguration configuration,
-        ArtifactWorkerCapabilityManifest manifest)
+    public static ConstGenericsArtifactWorkerSettings FromConfiguration(IConfiguration configuration, ArtifactWorkerCapabilityManifest manifest)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(manifest);
@@ -43,19 +41,11 @@ internal sealed record ConstGenericsArtifactWorkerSettings(
         if (string.IsNullOrWhiteSpace(runtimeReferenceRoot))
             runtimeReferenceRoot = referenceRoot;
 
-        var maximumAssemblyBytes = PositiveLong(
-            section["MaximumAssemblyBytes"],
-            32L * 1024 * 1024,
-            "ConstGenericsArtifactWorker:MaximumAssemblyBytes");
-        var maximumPdbBytes = PositiveLong(
-            section["MaximumPortablePdbBytes"],
-            16L * 1024 * 1024,
-            "ConstGenericsArtifactWorker:MaximumPortablePdbBytes");
-        if (maximumAssemblyBytes > manifest.Limits.MaximumInputArtifactBytes ||
-            maximumPdbBytes > manifest.Limits.MaximumInputArtifactBytes)
+        var maximumAssemblyBytes = PositiveLong(section["MaximumAssemblyBytes"], 32L * 1024 * 1024, "ConstGenericsArtifactWorker:MaximumAssemblyBytes");
+        var maximumPdbBytes = PositiveLong(section["MaximumPortablePdbBytes"], 16L * 1024 * 1024, "ConstGenericsArtifactWorker:MaximumPortablePdbBytes");
+        if (maximumAssemblyBytes > manifest.Limits.MaximumInputArtifactBytes || maximumPdbBytes > manifest.Limits.MaximumInputArtifactBytes)
         {
-            throw new InvalidOperationException(
-                "ConstGenerics artifact file limits cannot exceed the capability manifest input limit.");
+            throw new InvalidOperationException("ConstGenerics artifact file limits cannot exceed the capability manifest input limit.");
         }
 
         return new ConstGenericsArtifactWorkerSettings(
@@ -74,24 +64,12 @@ internal sealed record ConstGenericsArtifactWorkerSettings(
             PositiveInt(section["MaximumArtifactFiles"], 32, "ConstGenericsArtifactWorker:MaximumArtifactFiles"),
             maximumAssemblyBytes,
             maximumPdbBytes,
-            PositiveLong(
-                section["MaximumProcessorWorkingSetBytes"],
-                512L * 1024 * 1024,
-                "ConstGenericsArtifactWorker:MaximumProcessorWorkingSetBytes"),
-            PositiveInt(
-                section["MaximumProcessOutputBytes"],
-                64 * 1024,
-                "ConstGenericsArtifactWorker:MaximumProcessOutputBytes"),
-            TimeSpan.FromMinutes(PositiveInt(
-                section["ArtifactTimeToLiveMinutes"],
-                60,
-                "ConstGenericsArtifactWorker:ArtifactTimeToLiveMinutes")));
+            PositiveLong(section["MaximumProcessorWorkingSetBytes"], 512L * 1024 * 1024, "ConstGenericsArtifactWorker:MaximumProcessorWorkingSetBytes"),
+            PositiveInt(section["MaximumProcessOutputBytes"], 64 * 1024, "ConstGenericsArtifactWorker:MaximumProcessOutputBytes"),
+            TimeSpan.FromMinutes(PositiveInt(section["ArtifactTimeToLiveMinutes"], 60, "ConstGenericsArtifactWorker:ArtifactTimeToLiveMinutes")));
     }
 
-    private static string Required(string? value, string key) =>
-        !string.IsNullOrWhiteSpace(value)
-            ? value
-            : throw new InvalidOperationException($"Configuration value '{key}' is required.");
+    private static string Required(string? value, string key) => !string.IsNullOrWhiteSpace(value) ? value : throw new InvalidOperationException($"Configuration value '{key}' is required.");
 
     private static int PositiveInt(string? value, int fallback, string key)
     {

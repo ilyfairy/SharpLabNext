@@ -24,13 +24,11 @@ public sealed class ArtifactPipelineOptions
         ValidateDuration(CancellationGracePeriod, nameof(CancellationGracePeriod), TimeSpan.FromMinutes(1));
         if (MaximumEventsPerPoll is <= 0 or > 100_000)
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:{nameof(MaximumEventsPerPoll)} is outside the supported range.");
+            throw new InvalidOperationException($"{SectionName}:{nameof(MaximumEventsPerPoll)} is outside the supported range.");
         }
         if (MaximumPublicContentBytes is <= 0 or > 128L * 1024 * 1024)
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:{nameof(MaximumPublicContentBytes)} is outside the supported range.");
+            throw new InvalidOperationException($"{SectionName}:{nameof(MaximumPublicContentBytes)} is outside the supported range.");
         }
     }
 

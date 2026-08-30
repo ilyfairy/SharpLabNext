@@ -8,27 +8,17 @@ using SharpLabNext.Worker.IL.Compiler;
 
 namespace SharpLabNext.Worker.Artifacts.ILAssembler;
 
-internal sealed record IlCompilerInvocationResult(
-    bool Succeeded,
-    byte[] PeImage,
-    IReadOnlyList<IlCompilerDiagnostic> Diagnostics,
-    string? FailureKind);
+internal sealed record IlCompilerInvocationResult(bool Succeeded, byte[] PeImage, IReadOnlyList<IlCompilerDiagnostic> Diagnostics, string? FailureKind);
 
 internal sealed record IlCompilerProcessHealth(bool IsHealthy, string Message);
 
-internal sealed partial class IlCompilerProcessRunner(
-    IlAssemblerWorkerSettings settings,
-    ArtifactWorkerCapabilityManifest capabilityManifest,
-    ILogger<IlCompilerProcessRunner> logger)
+internal sealed partial class IlCompilerProcessRunner(IlAssemblerWorkerSettings settings, ArtifactWorkerCapabilityManifest capabilityManifest, ILogger<IlCompilerProcessRunner> logger)
 {
     private int _startedProcessCount;
 
     internal int StartedProcessCount => Volatile.Read(ref _startedProcessCount);
 
-    public async Task<IlCompilerInvocationResult> AssembleAsync(
-        ValidatedCilArtifact source,
-        BuildOutputKind outputKind,
-        CancellationToken cancellationToken)
+    public async Task<IlCompilerInvocationResult> AssembleAsync(ValidatedCilArtifact source, BuildOutputKind outputKind, CancellationToken cancellationToken)
     {
         string? jobRoot = null;
         try
@@ -39,11 +29,7 @@ internal sealed partial class IlCompilerProcessRunner(
             var requestPath = Path.Combine(jobRoot, "request.json");
             var responsePath = Path.Combine(jobRoot, "response.json");
             var outputPath = Path.Combine(jobRoot, "output.dll");
-            var request = new IlCompilerRequest(
-                IlCompilerProtocol.Version,
-                outputKind == BuildOutputKind.Library ? "dll" : "exe",
-                capabilityManifest.Limits.MaximumOutputArtifactBytes,
-                [new IlCompilerSource(source.EntryPath, source.SourceText)]);
+            var request = new IlCompilerRequest(IlCompilerProtocol.Version, outputKind == BuildOutputKind.Library ? "dll" : "exe", capabilityManifest.Limits.MaximumOutputArtifactBytes, [new IlCompilerSource(source.EntryPath, source.SourceText)]);
             var requestBytes = JsonSerializer.SerializeToUtf8Bytes(request, IlCompilerProtocol.JsonOptions);
             if (requestBytes.Length > IlCompilerProtocol.MaxRequestBytes)
                 throw new ArtifactWorkerLimitExceededException("The IL compiler request exceeds its transfer limit.");
@@ -66,23 +52,11 @@ internal sealed partial class IlCompilerProcessRunner(
                 throw new ArtifactWorkerProcessorException("The isolated IL compiler returned no response.");
             if (responseInfo.Length > settings.MaxCompilerResponseBytes)
                 throw new ArtifactWorkerLimitExceededException("The isolated IL compiler response exceeded its size limit.");
-            await using var responseStream = new FileStream(
-                responsePath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                16 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            var response = await JsonSerializer.DeserializeAsync<IlCompilerResponse>(
-                responseStream,
-                IlCompilerProtocol.JsonOptions,
-                cancellationToken).ConfigureAwait(false)
-                ?? throw new ArtifactWorkerProcessorException("The isolated IL compiler response was empty.");
-            if (response.ProtocolVersion != IlCompilerProtocol.Version ||
-                response.Diagnostics.Count > IlCompilerProtocol.MaxDiagnostics)
+            await using var responseStream = new FileStream(responsePath, FileMode.Open, FileAccess.Read, FileShare.Read, 16 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var response = await JsonSerializer.DeserializeAsync<IlCompilerResponse>(responseStream, IlCompilerProtocol.JsonOptions, cancellationToken).ConfigureAwait(false) ?? throw new ArtifactWorkerProcessorException("The isolated IL compiler response was empty.");
+            if (response.ProtocolVersion != IlCompilerProtocol.Version || response.Diagnostics.Count > IlCompilerProtocol.MaxDiagnostics)
             {
-                throw new ArtifactWorkerProcessorException(
-                    "The isolated IL compiler response violated the approved protocol.");
+                throw new ArtifactWorkerProcessorException("The isolated IL compiler response violated the approved protocol.");
             }
             if (!response.Succeeded)
                 return new IlCompilerInvocationResult(false, [], response.Diagnostics, response.FailureKind);
@@ -97,9 +71,7 @@ internal sealed partial class IlCompilerProcessRunner(
         }
         catch (JsonException exception)
         {
-            throw new ArtifactWorkerProcessorException(
-                "The isolated IL compiler response was invalid JSON.",
-                exception);
+            throw new ArtifactWorkerProcessorException("The isolated IL compiler response was invalid JSON.", exception);
         }
         finally
         {
@@ -123,18 +95,13 @@ internal sealed partial class IlCompilerProcessRunner(
             var execution = await ExecuteAsync(startInfo, timeout.Token).ConfigureAwait(false);
             if (execution.ExitCode != 0 || execution.OutputLimitExceeded)
                 return new IlCompilerProcessHealth(false, "The isolated IL compiler preflight failed.");
-            var descriptor = JsonSerializer.Deserialize<IlCompilerDescriptor>(
-                execution.StandardOutput,
-                IlCompilerProtocol.JsonOptions);
+            var descriptor = JsonSerializer.Deserialize<IlCompilerDescriptor>(execution.StandardOutput, IlCompilerProtocol.JsonOptions);
             var healthy = descriptor is not null &&
                 descriptor.ProtocolVersion == IlCompilerProtocol.Version &&
                 string.Equals(descriptor.Toolchain, "Mobius.ILasm", StringComparison.Ordinal) &&
                 string.Equals(descriptor.PackageVersion, settings.CompilerVersion, StringComparison.Ordinal);
             return healthy
-                ? new IlCompilerProcessHealth(
-                    true,
-                    $"Mobius.ILasm {descriptor!.PackageVersion} ({descriptor.AssemblyVersion}) is isolated and ready.")
-                : new IlCompilerProcessHealth(false, "The isolated IL compiler identity is not approved.");
+                ? new IlCompilerProcessHealth(true, $"Mobius.ILasm {descriptor!.PackageVersion} ({descriptor.AssemblyVersion}) is isolated and ready.") : new IlCompilerProcessHealth(false, "The isolated IL compiler identity is not approved.");
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
@@ -144,19 +111,8 @@ internal sealed partial class IlCompilerProcessRunner(
 
     private ProcessStartInfo CreateStartInfo(string workingDirectory)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = settings.DotNetHostPath,
-            WorkingDirectory = workingDirectory,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-        var inherited = startInfo.Environment.ToDictionary(
-            static pair => pair.Key,
-            static pair => pair.Value,
-            StringComparer.OrdinalIgnoreCase);
+        var startInfo = new ProcessStartInfo { FileName = settings.DotNetHostPath, WorkingDirectory = workingDirectory, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        var inherited = startInfo.Environment.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.OrdinalIgnoreCase);
         startInfo.Environment.Clear();
         CopyEnvironment("PATH");
         CopyEnvironment("SystemRoot");
@@ -182,9 +138,7 @@ internal sealed partial class IlCompilerProcessRunner(
         }
     }
 
-    private async Task<ProcessExecution> ExecuteAsync(
-        ProcessStartInfo startInfo,
-        CancellationToken cancellationToken)
+    private async Task<ProcessExecution> ExecuteAsync(ProcessStartInfo startInfo, CancellationToken cancellationToken)
     {
         using var process = new Process { StartInfo = startInfo };
         try
@@ -195,9 +149,7 @@ internal sealed partial class IlCompilerProcessRunner(
         }
         catch (Exception exception) when (exception is not ArtifactWorkerProcessorException)
         {
-            throw new ArtifactWorkerProcessorException(
-                "The isolated IL compiler could not be started.",
-                exception);
+            throw new ArtifactWorkerProcessorException("The isolated IL compiler could not be started.", exception);
         }
 
         var outputExceeded = 0;
@@ -223,13 +175,10 @@ internal sealed partial class IlCompilerProcessRunner(
                     if (process.WorkingSet64 > settings.MaxProcessWorkingSetBytes)
                     {
                         Kill(process);
-                        throw new ArtifactWorkerLimitExceededException(
-                            "The isolated IL compiler exceeded its memory limit.");
+                        throw new ArtifactWorkerLimitExceededException("The isolated IL compiler exceeded its memory limit.");
                     }
                 }
-                catch (InvalidOperationException) when (process.HasExited)
-                {
-                }
+                catch (InvalidOperationException) when (process.HasExited) { }
             }
             await exitTask.ConfigureAwait(false);
         }
@@ -242,10 +191,7 @@ internal sealed partial class IlCompilerProcessRunner(
 
         var stdout = await stdoutTask.ConfigureAwait(false);
         _ = await stderrTask.ConfigureAwait(false);
-        return new ProcessExecution(
-            process.ExitCode,
-            stdout,
-            Volatile.Read(ref outputExceeded) != 0);
+        return new ProcessExecution(process.ExitCode, stdout, Volatile.Read(ref outputExceeded) != 0);
     }
 
     private static async Task<string> CaptureAsync(Stream stream, int maximumBytes, Action limitExceeded)
@@ -290,15 +236,10 @@ internal sealed partial class IlCompilerProcessRunner(
             if (!process.HasExited)
                 process.Kill(entireProcessTree: true);
         }
-        catch (InvalidOperationException)
-        {
-        }
+        catch (InvalidOperationException) { }
     }
 
-    [LoggerMessage(
-        EventId = 4300,
-        Level = LogLevel.Warning,
-        Message = "Could not delete IL assembler temporary directory {Path}.")]
+    [LoggerMessage(EventId = 4300, Level = LogLevel.Warning, Message = "Could not delete IL assembler temporary directory {Path}.")]
     private static partial void TemporaryDirectoryCleanupFailed(ILogger logger, string path);
 
     private sealed record ProcessExecution(int ExitCode, string StandardOutput, bool OutputLimitExceeded);

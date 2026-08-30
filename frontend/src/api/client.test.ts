@@ -17,15 +17,7 @@ import {
   subscribeToOperationEvents,
   updateGist,
 } from './client'
-import type {
-  ExplainRequest,
-  GistWorkspaceState,
-  OpenLanguageSessionRequest,
-  OperationEvent,
-  ResolveSelectionRequest,
-  ResolveSelectionResponse,
-  RunRequest,
-} from './types'
+import type { ExplainRequest, GistWorkspaceState, OpenLanguageSessionRequest, OperationEvent, ResolveSelectionRequest, ResolveSelectionResponse, RunRequest } from './types'
 import { decodeWire, stringifyWire } from './wire'
 
 class MockWebSocket {
@@ -60,7 +52,13 @@ class MockWebSocket {
   emitResponse(commandId: string, payload: unknown, status = 200): void {
     this.onmessage?.(
       new MessageEvent('message', {
-        data: stringifyWire({ type: 'response', commandId, ok: true, status, payload }),
+        data: stringifyWire({
+          type: 'response',
+          commandId,
+          ok: true,
+          status,
+          payload,
+        }),
       }),
     )
   }
@@ -68,7 +66,13 @@ class MockWebSocket {
   emitFailure(commandId: string, status: number, error: Record<string, unknown>): void {
     this.onmessage?.(
       new MessageEvent('message', {
-        data: stringifyWire({ type: 'response', commandId, ok: false, status, error }),
+        data: stringifyWire({
+          type: 'response',
+          commandId,
+          ok: false,
+          status,
+          error,
+        }),
       }),
     )
   }
@@ -126,9 +130,7 @@ describe('languageSessionWebSocketUrl', () => {
   it('converts only the Gateway same-origin language-session path', () => {
     const url = languageSessionWebSocketUrl('/api/v1/language-sessions/glsp_0123456789abcdef/lsp')
 
-    expect(url).toBe(
-      `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/language-sessions/glsp_0123456789abcdef/lsp`,
-    )
+    expect(url).toBe(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/language-sessions/glsp_0123456789abcdef/lsp`)
   })
 
   it.each([
@@ -141,9 +143,7 @@ describe('languageSessionWebSocketUrl', () => {
     '/api/v1/language-sessions/session%2Fother/lsp',
     '/api/v1/operations/session/lsp',
   ])('rejects a browser-selectable or malformed upstream path: %s', (path) => {
-    expect(() => languageSessionWebSocketUrl(path)).toThrow(
-      'Gateway returned an invalid language session WebSocket path.',
-    )
+    expect(() => languageSessionWebSocketUrl(path)).toThrow('Gateway returned an invalid language session WebSocket path.')
   })
 })
 
@@ -151,39 +151,21 @@ describe('operationEventsWebSocketUrl', () => {
   it('creates a same-origin WebSocket URL with an explicit resume sequence', () => {
     const operationId = `op_${'a'.repeat(32)}`
 
-    expect(operationEventsWebSocketUrl(operationId, 17)).toBe(
-      `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/operations/${operationId}/events?FromSequence=17`,
-    )
+    expect(operationEventsWebSocketUrl(operationId, 17)).toBe(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/operations/${operationId}/events?FromSequence=17`)
   })
 
-  it.each([
-    'op-build',
-    `op_${'A'.repeat(32)}`,
-    `op_${'a'.repeat(31)}`,
-    `op_${'a'.repeat(33)}`,
-    `op_${'g'.repeat(32)}`,
-  ])('rejects a malformed operation ID: %s', (operationId) => {
-    expect(() => operationEventsWebSocketUrl(operationId, 0)).toThrow(
-      'Gateway returned an invalid operation ID.',
-    )
+  it.each(['op-build', `op_${'A'.repeat(32)}`, `op_${'a'.repeat(31)}`, `op_${'a'.repeat(33)}`, `op_${'g'.repeat(32)}`])('rejects a malformed operation ID: %s', (operationId) => {
+    expect(() => operationEventsWebSocketUrl(operationId, 0)).toThrow('Gateway returned an invalid operation ID.')
   })
 
-  it.each([
-    -1,
-    0.5,
-    Number.MAX_SAFE_INTEGER + 1,
-  ])('rejects an invalid resume sequence: %s', (fromSequence) => {
-    expect(() => operationEventsWebSocketUrl(`op_${'a'.repeat(32)}`, fromSequence)).toThrow(
-      'Operation event sequence must be a non-negative safe integer.',
-    )
+  it.each([-1, 0.5, Number.MAX_SAFE_INTEGER + 1])('rejects an invalid resume sequence: %s', (fromSequence) => {
+    expect(() => operationEventsWebSocketUrl(`op_${'a'.repeat(32)}`, fromSequence)).toThrow('Operation event sequence must be a non-negative safe integer.')
   })
 })
 
 describe('operationCommandsWebSocketUrl', () => {
   it('uses one same-origin operation control endpoint', () => {
-    expect(operationCommandsWebSocketUrl()).toBe(
-      `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/operations/ws`,
-    )
+    expect(operationCommandsWebSocketUrl()).toBe(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/operations/ws`)
   })
 
   it('reports disconnect and reconnect for the persistent operation socket', async () => {
@@ -191,9 +173,7 @@ describe('operationCommandsWebSocketUrl', () => {
     vi.stubGlobal('WebSocket', MockWebSocket)
     const connectionStatuses: string[] = []
     const streamStatuses: string[] = []
-    const unsubscribeStatus = subscribeToGatewayConnectionStatus((status) =>
-      connectionStatuses.push(status),
-    )
+    const unsubscribeStatus = subscribeToGatewayConnectionStatus((status) => connectionStatuses.push(status))
     const unsubscribeOperation = subscribeToOperationEvents(`op_${'c'.repeat(32)}`, 0, {
       onEvent: () => undefined,
       onStatus: (status) => streamStatuses.push(status),
@@ -301,9 +281,7 @@ describe('operationCommandsWebSocketUrl', () => {
     socket.open()
     await waitForCommand(socket, 0)
 
-    const rejected = expect(pending).rejects.toThrow(
-      "Gateway operation command 'resolve-selection' timed out.",
-    )
+    const rejected = expect(pending).rejects.toThrow("Gateway operation command 'resolve-selection' timed out.")
     await vi.advanceTimersByTimeAsync(10_000)
     await rejected
     expect(socket.closeCalls).toContainEqual([1000, 'Gateway operation command timed out.'])
@@ -389,7 +367,10 @@ describe('operationCommandsWebSocketUrl', () => {
     }>(replacement, 0)
     expect(replacement.sent).toHaveLength(1)
     expect(replay).toMatchObject({ type: 'resolve-selection', request })
-    const restartedResponse = { ...response, pipelineResolutionId: 'pr_after_gateway_restart' }
+    const restartedResponse = {
+      ...response,
+      pipelineResolutionId: 'pr_after_gateway_restart',
+    }
     replacement.emitResponse(replay.commandId, restartedResponse)
 
     const firstStart = await waitForCommand<{
@@ -426,9 +407,7 @@ describe('operationCommandsWebSocketUrl', () => {
     })
     await expect(secondRun).resolves.toMatchObject({ requestId: 'req-second' })
 
-    const commands = [...first.sent, ...replacement.sent].map((value) =>
-      decodeWire<{ type: string }>(JSON.parse(value)),
-    )
+    const commands = [...first.sent, ...replacement.sent].map((value) => decodeWire<{ type: string }>(JSON.parse(value)))
     expect(commands.filter((command) => command.type === 'resolve-selection')).toHaveLength(2)
     expect(commands.filter((command) => command.type === 'start')).toHaveLength(2)
   })
@@ -561,7 +540,10 @@ describe('operationCommandsWebSocketUrl', () => {
       type: string
       request: ResolveSelectionRequest
     }>(replacement, 0)
-    expect(refreshCommand).toMatchObject({ type: 'resolve-selection', request: selectionRequest })
+    expect(refreshCommand).toMatchObject({
+      type: 'resolve-selection',
+      request: selectionRequest,
+    })
     // Exercise the bounded retry: the first fresh socket can still be lost
     // during a rolling Gateway replacement, so recovery gets one more socket
     // rather than looping forever or returning the original 400 immediately.
@@ -570,17 +552,17 @@ describe('operationCommandsWebSocketUrl', () => {
       message: 'The command socket was replaced while resolving the selection.',
     })
     const retrySocket = await waitForSocket(2)
-    expect(replacement.closeCalls).toContainEqual([
-      1000,
-      'Refreshing the Gateway pipeline resolution.',
-    ])
+    expect(replacement.closeCalls).toContainEqual([1000, 'Refreshing the Gateway pipeline resolution.'])
     retrySocket.open()
     const retryCommand = await waitForCommand<{
       commandId: string
       type: string
       request: ResolveSelectionRequest
     }>(retrySocket, 0)
-    expect(retryCommand).toMatchObject({ type: 'resolve-selection', request: selectionRequest })
+    expect(retryCommand).toMatchObject({
+      type: 'resolve-selection',
+      request: selectionRequest,
+    })
     retrySocket.emitFailure(retryCommand.commandId, 400, {
       error: 'stale-catalog',
       message: 'The browser is using an older catalog revision.',
@@ -593,7 +575,9 @@ describe('operationCommandsWebSocketUrl', () => {
     expect(refreshedCommand.request.catalogRevision).toBe('catalog-after-restart')
     retrySocket.emitResponse(refreshedCommand.commandId, refreshedResponse)
 
-    await expect(opening).resolves.toMatchObject({ sessionId: 'glsp_recovered' })
+    await expect(opening).resolves.toMatchObject({
+      sessionId: 'glsp_recovered',
+    })
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 })
@@ -682,9 +666,7 @@ describe('secondary language-session selection', () => {
     expect(MockWebSocket.instances).toHaveLength(0)
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/selections/resolve')
-    expect(decodeWire(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)))).toEqual(
-      selectionRequest,
-    )
+    expect(decodeWire(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)))).toEqual(selectionRequest)
   })
 
   it('recovers an output session with its private resolution request', async () => {
@@ -724,18 +706,10 @@ describe('secondary language-session selection', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(
-      openLanguageSessionWithResolution(languageRequest, selectionRequest),
-    ).resolves.toMatchObject({ sessionId: 'glsp_il_output' })
+    await expect(openLanguageSessionWithResolution(languageRequest, selectionRequest)).resolves.toMatchObject({ sessionId: 'glsp_il_output' })
 
-    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
-      '/api/v1/language-sessions',
-      '/api/v1/selections/resolve',
-      '/api/v1/language-sessions',
-    ])
-    const retriedRequest = decodeWire<OpenLanguageSessionRequest>(
-      JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body)),
-    )
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(['/api/v1/language-sessions', '/api/v1/selections/resolve', '/api/v1/language-sessions'])
+    const retriedRequest = decodeWire<OpenLanguageSessionRequest>(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body)))
     expect(retriedRequest.pipelineResolutionId).toBe(selectionResponse.pipelineResolutionId)
   })
 })
@@ -748,10 +722,7 @@ describe('subscribeToOperationEvents', () => {
     const events: OperationEvent[] = []
     const statuses: string[] = []
     const errors: Error[] = []
-    const operationEvent = (
-      sequence: number,
-      payload: OperationEvent['payload'],
-    ): OperationEvent => ({
+    const operationEvent = (sequence: number, payload: OperationEvent['payload']): OperationEvent => ({
       operationId,
       sequence,
       timestampUtc: new Date(0).toISOString(),
@@ -778,8 +749,15 @@ describe('subscribeToOperationEvents', () => {
       operationId: string
       fromSequence: number
     }>(JSON.parse(first?.sent[0] ?? '{}'))
-    expect(firstSubscribe).toMatchObject({ type: 'subscribe', operationId, fromSequence: 4 })
-    first?.emitResponse(firstSubscribe.commandId, { operationId, fromSequence: 4 })
+    expect(firstSubscribe).toMatchObject({
+      type: 'subscribe',
+      operationId,
+      fromSequence: 4,
+    })
+    first?.emitResponse(firstSubscribe.commandId, {
+      operationId,
+      fromSequence: 4,
+    })
     const progress = operationEvent(5, {
       kind: 'progress',
       stage: 'compile',
@@ -804,7 +782,10 @@ describe('subscribeToOperationEvents', () => {
       fromSequence: number
     }>(JSON.parse(resumed?.sent[0] ?? '{}'))
     expect(resumedSubscribe.fromSequence).toBe(5)
-    resumed?.emitResponse(resumedSubscribe.commandId, { operationId, fromSequence: 5 })
+    resumed?.emitResponse(resumedSubscribe.commandId, {
+      operationId,
+      fromSequence: 5,
+    })
     resumed?.emitOperation(
       operationEvent(6, {
         kind: 'completed',
@@ -829,25 +810,15 @@ describe('getOperationContent', () => {
     const fetchMock = vi.fn(async () => new Response('.method public static void Main()'))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(
-      getOperationContent(
-        'op_123',
-        'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      ),
-    ).resolves.toContain('.method')
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/operations/op_123/contents/sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      undefined,
-    )
+    await expect(getOperationContent('op_123', 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')).resolves.toContain('.method')
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/operations/op_123/contents/sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', undefined)
   })
 
   it('rejects malformed references before issuing a request', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(getOperationContent('op_123', 'sha256:not-a-digest')).rejects.toThrow(
-      'invalid content reference',
-    )
+    await expect(getOperationContent('op_123', 'sha256:not-a-digest')).rejects.toThrow('invalid content reference')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
@@ -902,7 +873,11 @@ describe('Explain and Gist API paths', () => {
       operation: string
       request: ExplainRequest
     }>(socket, 0)
-    expect(command).toMatchObject({ type: 'start', operation: 'explain', request })
+    expect(command).toMatchObject({
+      type: 'start',
+      operation: 'explain',
+      request,
+    })
     socket.emitResponse(
       command.commandId,
       {
@@ -913,7 +888,9 @@ describe('Explain and Gist API paths', () => {
       },
       202,
     )
-    await expect(start).resolves.toMatchObject({ requestId: request.requestId })
+    await expect(start).resolves.toMatchObject({
+      requestId: request.requestId,
+    })
   })
 
   it('encodes Gist overrides and sends CSRF only on explicit writes', async () => {

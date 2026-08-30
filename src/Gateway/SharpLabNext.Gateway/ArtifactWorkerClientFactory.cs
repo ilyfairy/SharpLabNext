@@ -7,10 +7,7 @@ public interface IArtifactWorkerClientFactory
     IArtifactWorkerClient Create(string workerId);
 }
 
-public sealed class ArtifactWorkerClientFactory(
-    IHttpClientFactory httpClientFactory,
-    ArtifactWorkerEndpointRegistry endpoints,
-    ArtifactPipelineOptions options) : IArtifactWorkerClientFactory
+public sealed class ArtifactWorkerClientFactory(IHttpClientFactory httpClientFactory, ArtifactWorkerEndpointRegistry endpoints, ArtifactPipelineOptions options) : IArtifactWorkerClientFactory
 {
     public IArtifactWorkerClient Create(string workerId)
     {
@@ -22,18 +19,11 @@ public sealed class ArtifactWorkerClientFactory(
         client.Timeout = Timeout.InfiniteTimeSpan;
         if (endpoint.ServiceToken is not null)
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", endpoint.ServiceToken);
-        return new ArtifactWorkerClient(
-            client,
-            options,
-            new ArtifactWorkerClientSettings(
-                endpoint.WorkerId,
-                endpoint.ExpectedReleaseId,
-                endpoint.ExpectedWorkerImageId));
+        return new ArtifactWorkerClient(client, options, new ArtifactWorkerClientSettings(endpoint.WorkerId, endpoint.ExpectedReleaseId, endpoint.ExpectedWorkerImageId));
     }
 }
 
-public sealed class ArtifactWorkerEndpointUnavailableException(string workerId)
-    : Exception($"Artifact worker '{workerId}' is not installed.")
+public sealed class ArtifactWorkerEndpointUnavailableException(string workerId) : Exception($"Artifact worker '{workerId}' is not installed.")
 {
     public string WorkerId { get; } = workerId;
 }

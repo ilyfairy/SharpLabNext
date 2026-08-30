@@ -6,34 +6,28 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { validateRuntimePromotionReceipts as validateRuntimePromotionReceiptsImpl } from './runtime-promotion-receipt-validation.mjs'
-import { validateJsonSchemaInstance } from './json-schema-instance-validation.mjs'
+import { validateRuntimePromotionReceipts as validateRuntimePromotionReceiptsImpl } from '../release/runtime-promotion-receipt-validation.mjs'
+import { validateJsonSchemaInstance } from '../release/json-schema-instance-validation.mjs'
 import {
   createWineCoreClrOperatorReceipt,
   serializeWineCoreClrOperatorReceipt,
   signWineCoreClrOperatorReceipt,
   wineCoreClrOperatorCommittedFiles,
-} from './wine-coreclr-operator-receipt.mjs'
+} from '../release/wine-coreclr-operator-receipt.mjs'
 import {
   runtimePromotionPlanSignaturePath,
   serializeRuntimePromotionPlan,
   signRuntimePromotionPlan,
-} from './runtime-promotion-plan-signature.mjs'
+} from '../release/runtime-promotion-plan-signature.mjs'
 
 const hex = character => character.repeat(64)
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const performancePolicyRelativePath =
-  'profiles/runtime-performance-policies/runtime-image-linux-x64-v1.json'
-const performancePolicySourcePath = path.join(
-  repositoryRoot,
-  ...performancePolicyRelativePath.split('/'),
-)
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const performancePolicyRelativePath = 'profiles/runtime-performance-policies/runtime-image-linux-x64-v1.json';
+const performancePolicySourcePath = path.join(repositoryRoot, ...performancePolicyRelativePath.split('/'));
 const planSha256 = `sha256:${hex('0')}`
 const operatorKeys = crypto.generateKeyPairSync('ed25519')
 const planKeys = crypto.generateKeyPairSync('ed25519')
-const planKeyId = `sha256:${crypto.createHash('sha256').update(
-  planKeys.publicKey.export({ type: 'spki', format: 'der' }),
-).digest('hex')}`
+const planKeyId = `sha256:${crypto.createHash('sha256').update(planKeys.publicKey.export({ type: 'spki', format: 'der' })).digest('hex')}`;
 const operatorSourceTree = 'f'.repeat(40)
 const operatorSourceFiles = Object.fromEntries(wineCoreClrOperatorCommittedFiles.map(relative => [
   relative, Buffer.from(`committed:${relative}`),
@@ -132,19 +126,12 @@ function writeFixture(
     )
   }
   const profile = runtimeProfile(value, executionUser)
-  const profilePath = path.join(
-    root,
-    'profiles',
-    'runtimes',
-    'candidates',
-    `${value.profileId}.json`,
-  )
+  const profilePath = path.join(root, 'profiles', 'runtimes', 'candidates', `${value.profileId}.json`);
   fs.mkdirSync(path.dirname(profilePath), { recursive: true })
   fs.writeFileSync(profilePath, `${JSON.stringify(profile, null, 2)}\n`)
   const evidencePaths = {}
   for (const check of value.checks) {
-    const relativeEvidencePath =
-      `profiles/runtime-promotion-evidence/${value.profileId}/${check.capability}.json`
+    const relativeEvidencePath = `profiles/runtime-promotion-evidence/${value.profileId}/${check.capability}.json`;
     const absoluteEvidencePath = path.join(root, ...relativeEvidencePath.split('/'))
     const evidenceBytes = Buffer.from(
       `${JSON.stringify(capabilityEvidence(value, check, executionUser), null, 2)}\n`,
@@ -152,8 +139,7 @@ function writeFixture(
     fs.mkdirSync(path.dirname(absoluteEvidencePath), { recursive: true })
     fs.writeFileSync(absoluteEvidencePath, evidenceBytes)
     check.evidencePath ??= relativeEvidencePath
-    check.evidenceSha256 =
-      `sha256:${crypto.createHash('sha256').update(evidenceBytes).digest('hex')}`
+    check.evidenceSha256 = `sha256:${crypto.createHash('sha256').update(evidenceBytes).digest('hex')}`;
     evidencePaths[check.capability] = absoluteEvidencePath
   }
 
@@ -161,14 +147,9 @@ function writeFixture(
   const policyPath = path.join(root, ...performancePolicyRelativePath.split('/'))
   fs.mkdirSync(path.dirname(policyPath), { recursive: true })
   fs.writeFileSync(policyPath, policyBytes)
-  const policySha256 =
-    `sha256:${crypto.createHash('sha256').update(policyBytes).digest('hex')}`
-  const performanceEvidenceRelativePath =
-    `profiles/runtime-promotion-evidence/${value.profileId}/performance.json`
-  const performanceEvidencePath = path.join(
-    root,
-    ...performanceEvidenceRelativePath.split('/'),
-  )
+  const policySha256 = `sha256:${crypto.createHash('sha256').update(policyBytes).digest('hex')}`;
+  const performanceEvidenceRelativePath = `profiles/runtime-promotion-evidence/${value.profileId}/performance.json`;
+  const performanceEvidencePath = path.join(root, ...performanceEvidenceRelativePath.split('/'));
   const capabilities = value.checks.map(check => check.capability).sort()
   const jitCheck = value.checks.find(check => check.capability === 'jit-asm')
   const scenarios = { run: performanceScenario() }
@@ -293,9 +274,7 @@ function writeFixture(
   return fixture
 }
 
-function defaultExecutionUser(value) {
-  return value.platform === 'wine' || value.platform === 'framework' ? '0:0' : '1654:1654'
-}
+function defaultExecutionUser(value) { return value.platform === 'wine' || value.platform === 'framework' ? '0:0' : '1654:1654'; }
 
 function runtimeProfile(value, executionUser = defaultExecutionUser(value)) {
   const operations = {}
@@ -741,8 +720,7 @@ function bindPlanPreflight(fixture, { candidateCapabilities } = {}) {
 
   const planRoot = path.join(fixture.root, 'profiles', 'runtime-promotion-plans')
   fs.mkdirSync(planRoot, { recursive: true })
-  const preflightRelativePath =
-    `profiles/runtime-promotion-plans/${receipt.profileId}.profile.json`
+  const preflightRelativePath = `profiles/runtime-promotion-plans/${receipt.profileId}.profile.json`;
   const preflightPath = path.join(fixture.root, ...preflightRelativePath.split('/'))
   const preflightBytes = Buffer.from(`${JSON.stringify(preflight, null, 2)}\n`)
   fs.writeFileSync(preflightPath, preflightBytes)
@@ -824,9 +802,7 @@ function rewritePlan(fixture, plan) {
   rewriteReceipt(fixture, receipt)
 }
 
-function digest(bytes) {
-  return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`
-}
+function digest(bytes) { return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`; }
 
 test('verified runtime capability is closed against an immutable promotion receipt', t => {
   const fixture = writeFixture()
@@ -1489,8 +1465,7 @@ test('performance evidence binds the trusted measurement helper identity', t => 
   const repository = writeFixture()
   t.after(() => fs.rmSync(repository.root, { recursive: true, force: true }))
   updatePerformanceEvidence(repository, evidence => {
-    evidence.measurementHelper.image.reference =
-      `registry.example/not-the-supervisor@sha256:${'7'.repeat(64)}`
+    evidence.measurementHelper.image.reference = `registry.example/not-the-supervisor@sha256:${'7'.repeat(64)}`;
   })
   assert.match(
     validateRuntimePromotionReceipts(matrix(repository.reference), repository.root).join('\n'),
@@ -2121,8 +2096,7 @@ test('verified receipts require Run and bind instrumentation to the modern Runne
 
   const instrumentation = coreClrReceipt('dotnet-10-linux-x64', 'linux', 'coreclr')
   instrumentation.operations.run.implementation = 'sharplabnext-legacy-jit-inspector-v1'
-  instrumentation.operations.run.assemblyPath =
-    '/opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll'
+  instrumentation.operations.run.assemblyPath = '/opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll';
   instrumentation.checks = [
     instrumentation.checks[0],
     {

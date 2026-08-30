@@ -50,9 +50,7 @@ internal static class StorageSafety
         }
     }
 
-    public static async Task<(long Size, string Digest)> HashFileAsync(
-        FileStream stream,
-        CancellationToken cancellationToken)
+    public static async Task<(long Size, string Digest)> HashFileAsync(FileStream stream, CancellationToken cancellationToken)
     {
         stream.Position = 0;
         var hash = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
@@ -74,10 +72,7 @@ internal static class StorageSafety
 
     public static string FromDatabaseRelativePath(string root, string relativePath)
     {
-        if (string.IsNullOrWhiteSpace(relativePath)
-            || relativePath.Contains('\\')
-            || relativePath[0] == '/'
-            || relativePath.Split('/').Any(segment => segment is "" or "." or ".."))
+        if (string.IsNullOrWhiteSpace(relativePath) || relativePath.Contains('\\') || relativePath[0] == '/' || relativePath.Split('/').Any(segment => segment is "" or "." or ".."))
         {
             throw new ArtifactCorruptedException("Artifact Store metadata contains an invalid relative path.");
         }

@@ -5,9 +5,7 @@ const buildStages = [{ id: 'build', kind: 'build', providerId: 'compiler' }] as 
 const runStages = [...buildStages, { id: 'run', kind: 'run', providerId: 'runtime' }] as const
 
 describe('createWorkbenchBuildOptions', () => {
-  it.each([
-    'csharp',
-  ] as const)('enables every feature exposed by the selected C# compiler', (languageId) => {
+  it.each(['csharp'] as const)('enables every feature exposed by the selected C# compiler', (languageId) => {
     expect(createWorkbenchBuildOptions(languageId, 'release', buildStages)).toEqual(
       expect.objectContaining({
         configuration: 'release',
@@ -19,21 +17,11 @@ describe('createWorkbenchBuildOptions', () => {
     )
   })
 
-  it.each([
-    'csharp',
-    'visual-basic',
-    'gsharp',
-  ] as const)('lets the %s worker choose between a library and top-level program for non-Run output', (languageId) => {
+  it.each(['csharp', 'visual-basic', 'gsharp'] as const)('lets the %s worker choose between a library and top-level program for non-Run output', (languageId) => {
     expect(createWorkbenchBuildOptions(languageId, 'debug', buildStages).outputKind).toBe('auto')
   })
 
-  it.each([
-    'csharp',
-    'visual-basic',
-    'fsharp',
-    'gsharp',
-    'il',
-  ] as const)('requires an entry point for %s when the resolved pipeline executes the program', (languageId) => {
+  it.each(['csharp', 'visual-basic', 'fsharp', 'gsharp', 'il'] as const)('requires an entry point for %s when the resolved pipeline executes the program', (languageId) => {
     expect(createWorkbenchBuildOptions(languageId, 'debug', runStages).outputKind).toBe('console')
   })
 
@@ -41,32 +29,15 @@ describe('createWorkbenchBuildOptions', () => {
     expect(createWorkbenchBuildOptions('fsharp', 'debug', buildStages).outputKind).toBe('console')
   })
 
-  it.each([
-    'il',
-  ] as const)('builds %s as a library when the resolved pipeline does not execute the program', (languageId) => {
+  it.each(['il'] as const)('builds %s as a library when the resolved pipeline does not execute the program', (languageId) => {
     expect(createWorkbenchBuildOptions(languageId, 'debug', buildStages).outputKind).toBe('library')
   })
 
-  it.each([
-    'visual-basic',
-    'fsharp',
-    'il',
-    'php',
-    'gsharp',
-    'cpp-cli',
-  ] as const)('does not impose the C# language version on %s', (languageId) => {
+  it.each(['visual-basic', 'fsharp', 'il', 'php', 'gsharp', 'cpp-cli'] as const)('does not impose the C# language version on %s', (languageId) => {
     const options = createWorkbenchBuildOptions(languageId, 'debug', buildStages)
     expect(options).toEqual(expect.objectContaining({ configuration: 'debug', optimize: false }))
     expect(options.allowUnsafe).toBe(false)
-    expect(options.outputKind).toBe(
-      languageId === 'visual-basic'
-        ? 'auto'
-        : languageId === 'gsharp'
-          ? 'auto'
-          : languageId === 'il'
-            ? 'library'
-            : 'console',
-    )
+    expect(options.outputKind).toBe(languageId === 'visual-basic' ? 'auto' : languageId === 'gsharp' ? 'auto' : languageId === 'il' ? 'library' : 'console')
     expect(options).not.toHaveProperty('languageVersion')
   })
 
@@ -100,22 +71,8 @@ describe('retainResolvedWorkbenchOutputKind', () => {
   it('retains a resolved output kind only while session identity and revision stay unchanged', () => {
     const resolved = retainResolvedWorkbenchOutputKind(selection, 'auto', null)
 
-    expect(retainResolvedWorkbenchOutputKind(selection, null, resolved.remembered)).toEqual(
-      resolved,
-    )
-    expect(
-      retainResolvedWorkbenchOutputKind(
-        { ...selection, selectionRevision: 5 },
-        null,
-        resolved.remembered,
-      ),
-    ).toEqual({ outputKind: 'console', remembered: null })
-    expect(
-      retainResolvedWorkbenchOutputKind(
-        { ...selection, toolchainId: 'roslyn-main' },
-        null,
-        resolved.remembered,
-      ),
-    ).toEqual({ outputKind: 'console', remembered: null })
+    expect(retainResolvedWorkbenchOutputKind(selection, null, resolved.remembered)).toEqual(resolved)
+    expect(retainResolvedWorkbenchOutputKind({ ...selection, selectionRevision: 5 }, null, resolved.remembered)).toEqual({ outputKind: 'console', remembered: null })
+    expect(retainResolvedWorkbenchOutputKind({ ...selection, toolchainId: 'roslyn-main' }, null, resolved.remembered)).toEqual({ outputKind: 'console', remembered: null })
   })
 })

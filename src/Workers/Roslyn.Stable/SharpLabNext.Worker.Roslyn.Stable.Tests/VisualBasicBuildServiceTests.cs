@@ -8,15 +8,7 @@ public sealed class VisualBasicBuildServiceTests
     [Fact]
     public async Task AutomaticOutputKindBuildsVisualBasicAsLibraryWithoutSubMain()
     {
-        var response = await CreateService().ExecuteAsync(
-            CreateRequest(
-                BuildTarget.Artifact,
-                [new WorkspaceFile(
-                    "Program.vb",
-                    1,
-                    "Public NotInheritable Class Calculator\n    Public Function Add(a As Integer, b As Integer) As Integer\n        Return a + b\n    End Function\nEnd Class")],
-                outputKind: BuildOutputKind.Auto),
-            TestContext.Current.CancellationToken);
+        var response = await CreateService().ExecuteAsync(CreateRequest(BuildTarget.Artifact, [new WorkspaceFile("Program.vb", 1, "Public NotInheritable Class Calculator\n    Public Function Add(a As Integer, b As Integer) As Integer\n        Return a + b\n    End Function\nEnd Class")], outputKind: BuildOutputKind.Auto), TestContext.Current.CancellationToken);
 
         var result = Assert.IsType<BuildResult>(response.Result);
         var artifact = Assert.IsType<CompiledArtifact>(response.Artifact);
@@ -29,19 +21,11 @@ public sealed class VisualBasicBuildServiceTests
     [Fact]
     public async Task CompileCheckIncludesTheSharpLabRuntimeApi()
     {
-        var response = await CreateService().ExecuteAsync(
-            CreateRequest(
-                BuildTarget.CompileCheck,
-                [new WorkspaceFile(
-                    "Program.vb",
-                    1,
-                    "Module Program\n    Sub Main()\n        Dim value = 42.Dump()\n        Inspect.MemoryGraph(value)\n    End Sub\nEnd Module")]),
-            TestContext.Current.CancellationToken);
+        var response = await CreateService().ExecuteAsync(CreateRequest(BuildTarget.CompileCheck, [new WorkspaceFile("Program.vb", 1, "Module Program\n    Sub Main()\n        Dim value = 42.Dump()\n        Inspect.MemoryGraph(value)\n    End Sub\nEnd Module")]), TestContext.Current.CancellationToken);
 
         var result = Assert.IsType<CompilationCheckResult>(response.Result);
         Assert.True(result.CompilationSucceeded);
-        Assert.DoesNotContain(result.Diagnostics, static diagnostic =>
-            diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.DoesNotContain(result.Diagnostics, static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
     }
 
     [Fact]
@@ -51,14 +35,8 @@ public sealed class VisualBasicBuildServiceTests
         var request = CreateRequest(
             BuildTarget.Artifact,
             [
-                new WorkspaceFile(
-                    "Greeter.vb",
-                    2,
-                    "Namespace Demo\n    Public Module Greeter\n        Public Function Message() As String\n            Return \"Hello\"\n        End Function\n    End Module\nEnd Namespace"),
-                new WorkspaceFile(
-                    "Program.vb",
-                    4,
-                    "Imports System\nImports Demo\nModule Program\n    Sub Main()\n        Console.WriteLine(Greeter.Message())\n    End Sub\nEnd Module")
+                new WorkspaceFile("Greeter.vb", 2, "Namespace Demo\n    Public Module Greeter\n        Public Function Message() As String\n            Return \"Hello\"\n        End Function\n    End Module\nEnd Namespace"),
+                new WorkspaceFile("Program.vb", 4, "Imports System\nImports Demo\nModule Program\n    Sub Main()\n        Console.WriteLine(Greeter.Message())\n    End Sub\nEnd Module")
             ],
             revision: 50,
             selectionRevision: 8);
@@ -80,43 +58,15 @@ public sealed class VisualBasicBuildServiceTests
     public async Task FrameworkArtifactBuildUsesRealNet48ReferencesAndWineRuntimeContract()
     {
         using var references = new ReferenceSetProvider(
-            [new ReferenceSetDefinition(
-                "netfx48-managed-ref",
-                CSharpBuildServiceTests.GetNetFx48ReferencePathForHost(),
-                "net48",
-                "1.0.3",
-                IncludeSharpLabRuntime: false)
+            [new ReferenceSetDefinition("netfx48-managed-ref", CSharpBuildServiceTests.GetNetFx48ReferencePathForHost(), "net48", "1.0.3", IncludeSharpLabRuntime: false)
             {
                 RequiredRuntimeFeatureTags = ["runtime.netfx48-wine"]
             }]);
-        var identity = new RoslynWorkerIdentity(
-            "development",
-            "roslyn-stable",
-            "5.6.0",
-            null,
-            "development-worker-image");
-        var service = new VisualBasicBuildService(
-            references,
-            identity,
-            CompilationLimits.Default,
-            AstLimits.Default);
-        var request = CreateRequest(
-            BuildTarget.Artifact,
-            [new WorkspaceFile(
-                "Program.vb",
-                1,
-                "Imports System\nImports Microsoft.VisualBasic\nModule Program\n    Sub Main()\n        Console.WriteLine(Strings.UCase(\"net48\"))\n    End Sub\nEnd Module")]);
+        var identity = new RoslynWorkerIdentity("development", "roslyn-stable", "5.6.0", null, "development-worker-image");
+        var service = new VisualBasicBuildService(references, identity, CompilationLimits.Default, AstLimits.Default);
+        var request = CreateRequest(BuildTarget.Artifact, [new WorkspaceFile("Program.vb", 1, "Imports System\nImports Microsoft.VisualBasic\nModule Program\n    Sub Main()\n        Console.WriteLine(Strings.UCase(\"net48\"))\n    End Sub\nEnd Module")]);
         var frameworkOptions = request.EffectiveOptions with { OutputKind = BuildOutputKind.Console };
-        request = request with
-        {
-            ReferenceSetId = "netfx48-managed-ref",
-            Options = frameworkOptions,
-            Workspace = request.Workspace with
-            {
-                ReferenceSetId = "netfx48-managed-ref",
-                BuildOptions = frameworkOptions
-            }
-        };
+        request = request with { ReferenceSetId = "netfx48-managed-ref", Options = frameworkOptions, Workspace = request.Workspace with { ReferenceSetId = "netfx48-managed-ref", BuildOptions = frameworkOptions } };
 
         var response = await service.ExecuteAsync(request, TestContext.Current.CancellationToken);
 
@@ -134,14 +84,7 @@ public sealed class VisualBasicBuildServiceTests
     public async Task CompileCheckReturnsVisualBasicDiagnosticsWithRevisions()
     {
         var service = CreateService();
-        var request = CreateRequest(
-            BuildTarget.CompileCheck,
-            [new WorkspaceFile(
-                "Program.vb",
-                2,
-                "Module Program\n    Sub Main()\n        Dim value As Integer =\n    End Sub\nEnd Module")],
-            revision: 51,
-            selectionRevision: 9);
+        var request = CreateRequest(BuildTarget.CompileCheck, [new WorkspaceFile("Program.vb", 2, "Module Program\n    Sub Main()\n        Dim value As Integer =\n    End Sub\nEnd Module")], revision: 51, selectionRevision: 9);
 
         var response = await service.ExecuteAsync(request, TestContext.Current.CancellationToken);
 
@@ -178,54 +121,13 @@ public sealed class VisualBasicBuildServiceTests
     }
 
     private static VisualBasicBuildService CreateService() =>
-        new(
-            new ReferenceSetProvider(
-                [new ReferenceSetDefinition(
-                    "net10-ref",
-                    CSharpBuildServiceTests.GetNet10ReferencePathForHost(),
-                    "net10.0",
-                    CSharpBuildServiceTests.GetNet10ReferenceVersionForHost())]),
-            new RoslynWorkerIdentity("development", "roslyn-stable", "5.6.0", null, "development-worker-image"),
-            CompilationLimits.Default,
-            AstLimits.Default);
+        new(new ReferenceSetProvider([new ReferenceSetDefinition("net10-ref", CSharpBuildServiceTests.GetNet10ReferencePathForHost(), "net10.0", CSharpBuildServiceTests.GetNet10ReferenceVersionForHost())]), new RoslynWorkerIdentity("development", "roslyn-stable", "5.6.0", null, "development-worker-image"), CompilationLimits.Default, AstLimits.Default);
 
-    internal static BuildRequest CreateRequest(
-        BuildTarget target,
-        IReadOnlyList<WorkspaceFile> files,
-        long revision = 1,
-        long selectionRevision = 1,
-        BuildOutputKind outputKind = BuildOutputKind.Console)
+    internal static BuildRequest CreateRequest(BuildTarget target, IReadOnlyList<WorkspaceFile> files, long revision = 1, long selectionRevision = 1, BuildOutputKind outputKind = BuildOutputKind.Console)
     {
-        var options = new BuildOptions(
-            BuildConfiguration.Release,
-            Optimize: true,
-            outputKind,
-            AllowUnsafe: false,
-            EmitPortablePdb: true,
-            NullableContextMode.Disable,
-            LanguageVersion: "latest",
-            PreprocessorSymbols: ["SHARPLABNEXT"],
-            CheckOverflow: true);
-        var workspace = new WorkspaceSnapshot(
-            ContractSchemaVersions.WorkspaceSnapshot,
-            revision,
-            selectionRevision,
-            "visual-basic",
-            files,
-            files[^1].Path,
-            files.Select(static file => file.Path).ToArray(),
-            "net10-ref",
-            options);
-        return new BuildRequest(
-            $"vb-request-{Guid.NewGuid():N}",
-            $"vb-idempotency-{Guid.NewGuid():N}",
-            "vb-pipeline",
-            "roslyn-stable",
-            "net10-ref",
-            workspace,
-            DateTimeOffset.UtcNow.AddMinutes(1),
-            options,
-            target);
+        var options = new BuildOptions(BuildConfiguration.Release, Optimize: true, outputKind, AllowUnsafe: false, EmitPortablePdb: true, NullableContextMode.Disable, LanguageVersion: "latest", PreprocessorSymbols: ["SHARPLABNEXT"], CheckOverflow: true);
+        var workspace = new WorkspaceSnapshot(ContractSchemaVersions.WorkspaceSnapshot, revision, selectionRevision, "visual-basic", files, files[^1].Path, files.Select(static file => file.Path).ToArray(), "net10-ref", options);
+        return new BuildRequest($"vb-request-{Guid.NewGuid():N}", $"vb-idempotency-{Guid.NewGuid():N}", "vb-pipeline", "roslyn-stable", "net10-ref", workspace, DateTimeOffset.UtcNow.AddMinutes(1), options, target);
     }
 
     private static IEnumerable<AstNode> Flatten(AstNode root)

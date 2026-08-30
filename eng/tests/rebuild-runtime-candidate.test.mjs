@@ -7,7 +7,7 @@ import {
   rebuildRuntimeCandidateFromCommittedSource,
   requireSameRuntimeCandidateBuild,
   RuntimeCandidateRebuildError,
-} from './rebuild-runtime-candidate.mjs'
+} from '../release/rebuild-runtime-candidate.mjs'
 
 test('formal rebuild invokes only the reviewed wrapper with stderr-only diagnostics', () => {
   const calls = []

@@ -7,7 +7,7 @@ import {
   serializeRuntimePromotionPlan,
   signRuntimePromotionPlan,
   verifyRuntimePromotionPlanSignature,
-} from './runtime-promotion-plan-signature.mjs'
+} from '../release/runtime-promotion-plan-signature.mjs'
 
 test('promotion plan canonical JSON preserves ordinal order for numeric-like label keys', () => {
   const bytes = serializeRuntimePromotionPlan({ labels: { 2: 'two', 10: 'ten', 1: 'one' } })
@@ -31,14 +31,11 @@ test('production promotion-plan trust ignores public-key environment overrides',
   process.env.RUNTIME_PROMOTION_PLAN_KEY_ID = 'sha256:deadbeef'
 
   assert.notEqual(runtimePromotionPlanExpectedKeyId(), process.env.RUNTIME_PROMOTION_PLAN_KEY_ID)
-  assert.throws(() => verifyRuntimePromotionPlanSignature(bytes, signature),
-    /runtime promotion plan signature is invalid/)
+  assert.throws(() => verifyRuntimePromotionPlanSignature(bytes, signature), /runtime promotion plan signature is invalid/)
   assert.throws(() => verifyRuntimePromotionPlanSignature(bytes, signature, {
     publicKey: keys.publicKey,
   }), /requires an explicit keyId/)
-  const keyId = `sha256:${crypto.createHash('sha256').update(
-    keys.publicKey.export({ type: 'spki', format: 'der' }),
-  ).digest('hex')}`
+  const keyId = `sha256:${crypto.createHash('sha256').update(keys.publicKey.export({ type: 'spki', format: 'der' })).digest('hex')}`;
   assert.doesNotThrow(() => verifyRuntimePromotionPlanSignature(bytes, signature, {
     publicKey: keys.publicKey,
     keyId,

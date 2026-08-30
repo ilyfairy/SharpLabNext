@@ -16,8 +16,7 @@ const binaryToBytes = (value: string): Uint8Array => {
   return result
 }
 
-export const encodeBase64Url = (bytes: Uint8Array): string =>
-  btoa(bytesToBinary(bytes)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '')
+export const encodeBase64Url = (bytes: Uint8Array): string => btoa(bytesToBinary(bytes)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '')
 
 export const decodeBase64Url = (value: string): Uint8Array => {
   if (!/^[A-Za-z0-9_-]+$/u.test(value) || value.length % 4 === 1) {

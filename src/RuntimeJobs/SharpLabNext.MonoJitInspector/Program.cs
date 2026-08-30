@@ -24,9 +24,7 @@ internal static class Program
 
     private static async Task<int> RunAsync(string[] args)
     {
-        await using var writer = new RuntimeFrameWriter(
-            Console.OpenStandardOutput(),
-            RuntimeFrameTransport.Base64Line);
+        await using var writer = new RuntimeFrameWriter(Console.OpenStandardOutput(), RuntimeFrameTransport.Base64Line);
         Console.SetOut(TextWriter.Null);
         Console.SetError(TextWriter.Null);
         var started = Stopwatch.StartNew();
@@ -56,44 +54,17 @@ internal static class Program
                     if (assemblyText.Length > 0)
                         assemblyText.AppendLine().AppendLine();
                     assemblyText.Append(section.Text);
-                    result = new MonoJitMethodResult(
-                        method.Identity,
-                        method.DisplayName,
-                        "prepared",
-                        section.Address,
-                        null,
-                        section.NativeCodeSize,
-                        section.InstructionCount,
-                        [],
-                        "none");
+                    result = new MonoJitMethodResult(method.Identity, method.DisplayName, "prepared", section.Address, null, section.NativeCodeSize, section.InstructionCount, [], "none");
                 }
                 catch (Exception exception) when (exception is not OutOfMemoryException)
                 {
-                    result = new MonoJitMethodResult(
-                        method.Identity,
-                        method.DisplayName,
-                        "failed",
-                        null,
-                        BoundedError(exception),
-                        0,
-                        0,
-                        [],
-                        "none");
+                    result = new MonoJitMethodResult(method.Identity, method.DisplayName, "failed", null, BoundedError(exception), 0, 0, [], "none");
                 }
                 methodResults.Add(result);
             }
 
-            await WriteChunksAsync(
-                writer,
-                RuntimeFrameKind.JitAssembly,
-                Encoding.UTF8.GetBytes(assemblyText.ToString()));
-            await writer.WriteAsync(RuntimeFrameKind.JitSummary, RuntimeStructuredPayloadCodec.Serialize(new
-            {
-                RuntimeVersion = runtimeVersion,
-                Assembly = inspection.AssemblyName,
-                MethodFilter = options.MethodFilter,
-                Methods = methodResults
-            }));
+            await WriteChunksAsync(writer, RuntimeFrameKind.JitAssembly, Encoding.UTF8.GetBytes(assemblyText.ToString()));
+            await writer.WriteAsync(RuntimeFrameKind.JitSummary, RuntimeStructuredPayloadCodec.Serialize(new { RuntimeVersion = runtimeVersion, Assembly = inspection.AssemblyName, MethodFilter = options.MethodFilter, Methods = methodResults }));
 
             var preparedAny = methodResults.Any(static result => result.Status == "prepared");
             var exitCode = preparedAny && assemblyText.Length > 0 ? 0 : methodResults.Count == 0 ? 2 : 1;
@@ -116,14 +87,7 @@ internal static class Program
         }
         catch (Exception exception)
         {
-            await writer.WriteAsync(RuntimeFrameKind.Exception, RuntimeStructuredPayloadCodec.Serialize(new
-            {
-                TypeName = exception.GetType().FullName ?? exception.GetType().Name,
-                Message = exception.Message,
-                StackTrace = exception.StackTrace,
-                InnerException = CreateInnerExceptionPayload(exception.InnerException),
-                ElapsedMilliseconds = started.Elapsed.TotalMilliseconds
-            }));
+            await writer.WriteAsync(RuntimeFrameKind.Exception, RuntimeStructuredPayloadCodec.Serialize(new { TypeName = exception.GetType().FullName ?? exception.GetType().Name, Message = exception.Message, StackTrace = exception.StackTrace, InnerException = CreateInnerExceptionPayload(exception.InnerException), ElapsedMilliseconds = started.Elapsed.TotalMilliseconds }));
             await WriteExitAsync(writer, "inspection-failed", 1, started.Elapsed.TotalMilliseconds);
             return 1;
         }
@@ -131,11 +95,7 @@ internal static class Program
 
     private static async Task<string> ReadMonoVersionAsync()
     {
-        var capture = await RunProcessAsync(
-            MonoExecutable,
-            ["--version"],
-            workingDirectory: "/tmp",
-            environment: null);
+        var capture = await RunProcessAsync(MonoExecutable, ["--version"], workingDirectory: "/tmp", environment: null);
         if (capture.ExitCode != 0)
             throw new InvalidOperationException("The exact Mono runtime did not report its version.");
         return MonoJitOutputParser.ParseRuntimeVersion(capture.StandardOutput + capture.StandardError);
@@ -157,11 +117,7 @@ internal static class Program
         return capture.StandardOutput + capture.StandardError;
     }
 
-    private static async Task<ProcessCapture> RunProcessAsync(
-        string executable,
-        IReadOnlyList<string> arguments,
-        string workingDirectory,
-        IReadOnlyDictionary<string, string?>? environment)
+    private static async Task<ProcessCapture> RunProcessAsync(string executable, IReadOnlyList<string> arguments, string workingDirectory, IReadOnlyDictionary<string, string?>? environment)
     {
         var startInfo = new ProcessStartInfo(executable)
         {
@@ -179,8 +135,7 @@ internal static class Program
                 startInfo.Environment[pair.Key] = pair.Value;
         }
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException($"Could not start '{executable}'.");
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Could not start '{executable}'.");
         var outputBudget = new ProcessOutputBudget(process, MaximumChildOutputBytes);
         var stdout = ReadBoundedAsync(process.StandardOutput.BaseStream, outputBudget);
         var stderr = ReadBoundedAsync(process.StandardError.BaseStream, outputBudget);
@@ -223,15 +178,10 @@ internal static class Program
             if (!process.HasExited)
                 process.Kill(entireProcessTree: true);
         }
-        catch (InvalidOperationException)
-        {
-        }
+        catch (InvalidOperationException) { }
     }
 
-    private static async Task WriteChunksAsync(
-        RuntimeFrameWriter writer,
-        RuntimeFrameKind kind,
-        byte[] content)
+    private static async Task WriteChunksAsync(RuntimeFrameWriter writer, RuntimeFrameKind kind, byte[] content)
     {
         for (var offset = 0; offset < content.Length; offset += JitFrameChunkSize)
         {
@@ -240,29 +190,14 @@ internal static class Program
         }
     }
 
-    private static ValueTask WriteExitAsync(
-        RuntimeFrameWriter writer,
-        string status,
-        int exitCode,
-        double elapsedMilliseconds) =>
-        writer.WriteAsync(RuntimeFrameKind.Exit, RuntimeStructuredPayloadCodec.Serialize(new
-        {
-            Status = status,
-            ExitCode = exitCode,
-            ElapsedMilliseconds = elapsedMilliseconds
-        }));
+    private static ValueTask WriteExitAsync(RuntimeFrameWriter writer, string status, int exitCode, double elapsedMilliseconds) =>
+        writer.WriteAsync(RuntimeFrameKind.Exit, RuntimeStructuredPayloadCodec.Serialize(new { Status = status, ExitCode = exitCode, ElapsedMilliseconds = elapsedMilliseconds }));
 
     private static object? CreateInnerExceptionPayload(Exception? exception, int depth = 1)
     {
         if (exception is null || depth > MaximumExceptionDepth)
             return null;
-        return new
-        {
-            TypeName = exception.GetType().FullName ?? exception.GetType().Name,
-            Message = exception.Message,
-            StackTrace = exception.StackTrace,
-            InnerException = CreateInnerExceptionPayload(exception.InnerException, depth + 1)
-        };
+        return new { TypeName = exception.GetType().FullName ?? exception.GetType().Name, Message = exception.Message, StackTrace = exception.StackTrace, InnerException = CreateInnerExceptionPayload(exception.InnerException, depth + 1) };
     }
 
     private static string BoundedError(Exception exception)
@@ -289,13 +224,9 @@ internal static class Program
                3:  c3                    retq
             ***
             """;
-        var method = new MonoMethodCandidate(
-            "0x06000001",
-            "Example.Program.Calculate",
-            "Example.Program:Calculate(int)");
+        var method = new MonoMethodCandidate("0x06000001", "Example.Program.Calculate", "Example.Program:Calculate(int)");
         var parsed = MonoJitOutputParser.Parse(sample, method, "6.12.0.182");
-        if (parsed.NativeCodeSize != 4 || parsed.InstructionCount != 2 ||
-            parsed.Address != "0x40c82fd0" || !parsed.Text.Contains("lea", StringComparison.Ordinal))
+        if (parsed.NativeCodeSize != 4 || parsed.InstructionCount != 2 || parsed.Address != "0x40c82fd0" || !parsed.Text.Contains("lea", StringComparison.Ordinal))
         {
             throw new InvalidOperationException("Mono JIT parser self-test failed.");
         }
@@ -310,8 +241,7 @@ internal sealed record MonoJitInspectorArguments(string AssemblyPath, string? Me
     {
         if (args.Length is < 1 or > 2)
         {
-            throw new ArgumentException(
-                "Usage: SharpLabNext.MonoJitInspector <absolute-assembly-path> [method-filter]");
+            throw new ArgumentException("Usage: SharpLabNext.MonoJitInspector <absolute-assembly-path> [method-filter]");
         }
         var assemblyPath = Path.GetFullPath(args[0]);
         if (!File.Exists(assemblyPath))
@@ -319,9 +249,7 @@ internal sealed record MonoJitInspectorArguments(string AssemblyPath, string? Me
         var filter = args.Length == 2 ? args[1] : null;
         if (filter is { Length: > 256 } || filter?.Any(char.IsControl) == true)
             throw new ArgumentException("Method filter is invalid.", nameof(args));
-        return new MonoJitInspectorArguments(
-            assemblyPath,
-            string.IsNullOrWhiteSpace(filter) ? null : filter);
+        return new MonoJitInspectorArguments(assemblyPath, string.IsNullOrWhiteSpace(filter) ? null : filter);
     }
 }
 
@@ -329,13 +257,7 @@ internal static class MonoAssemblyInspection
 {
     public static MonoAssemblyMethods Read(string assemblyPath, string? methodFilter)
     {
-        using var stream = new FileStream(
-            assemblyPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            64 * 1024,
-            FileOptions.SequentialScan);
+        using var stream = new FileStream(assemblyPath, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
         using var pe = new PEReader(stream, PEStreamOptions.LeaveOpen);
         if (!pe.HasMetadata)
             throw new BadImageFormatException("The user assembly has no managed metadata.");
@@ -354,9 +276,7 @@ internal static class MonoAssemblyInspection
             foreach (var methodHandle in type.GetMethods())
             {
                 var method = reader.GetMethodDefinition(methodHandle);
-                if (method.RelativeVirtualAddress == 0 ||
-                    method.Attributes.HasFlag(MethodAttributes.Abstract) ||
-                    method.Attributes.HasFlag(MethodAttributes.PinvokeImpl))
+                if (method.RelativeVirtualAddress == 0 || method.Attributes.HasFlag(MethodAttributes.Abstract) || method.Attributes.HasFlag(MethodAttributes.PinvokeImpl))
                 {
                     continue;
                 }
@@ -370,13 +290,10 @@ internal static class MonoAssemblyInspection
 
         if (raw.Count > MaximumMethods)
         {
-            throw new InvalidDataException(
-                $"Mono JIT inspection matched more than {MaximumMethods} methods; select a narrower method filter.");
+            throw new InvalidDataException($"Mono JIT inspection matched more than {MaximumMethods} methods; select a narrower method filter.");
         }
 
-        var overloadCounts = raw
-            .GroupBy(static method => (method.TypeName, method.MethodName))
-            .ToDictionary(static group => group.Key, static group => group.Count());
+        var overloadCounts = raw.GroupBy(static method => (method.TypeName, method.MethodName)).ToDictionary(static group => group.Key, static group => group.Count());
         var provider = new MonoSignatureTypeProvider(reader);
         var methods = new List<MonoMethodCandidate>(raw.Count);
         foreach (var method in raw)
@@ -389,10 +306,7 @@ internal static class MonoAssemblyInspection
             }
             if (selector.Length > 1024 || selector.Any(char.IsControl))
                 throw new InvalidDataException("A Mono method selector is invalid or too long.");
-            methods.Add(new MonoMethodCandidate(
-                $"0x{MetadataTokens.GetToken(method.Handle):x8}",
-                method.DisplayName,
-                selector));
+            methods.Add(new MonoMethodCandidate($"0x{MetadataTokens.GetToken(method.Handle):x8}", method.DisplayName, selector));
         }
         return new MonoAssemblyMethods(assemblyName, methods);
     }
@@ -408,8 +322,7 @@ internal static class MonoAssemblyInspection
             return $"{GetTypeName(reader, declaring)}/{name}";
         var @namespace = reader.GetString(type.Namespace);
         return string.IsNullOrEmpty(@namespace)
-            ? name
-            : $"{SafeMetadataName(@namespace)}.{name}";
+            ? name : $"{SafeMetadataName(@namespace)}.{name}";
     }
 
     private static string SafeMetadataName(string value)
@@ -424,16 +337,10 @@ internal static class MonoAssemblyInspection
         if (string.IsNullOrWhiteSpace(methodFilter))
             return true;
         return methodFilter.IndexOfAny(['*', '?']) >= 0
-            ? FileSystemName.MatchesSimpleExpression(methodFilter, displayName, ignoreCase: true)
-            : displayName.Contains(methodFilter, StringComparison.OrdinalIgnoreCase);
+            ? FileSystemName.MatchesSimpleExpression(methodFilter, displayName, ignoreCase: true) : displayName.Contains(methodFilter, StringComparison.OrdinalIgnoreCase);
     }
 
-    private sealed record RawMethodCandidate(
-        string TypeName,
-        string MethodName,
-        string DisplayName,
-        MethodDefinitionHandle Handle,
-        MethodDefinition Definition);
+    private sealed record RawMethodCandidate(string TypeName, string MethodName, string DisplayName, MethodDefinitionHandle Handle, MethodDefinition Definition);
 }
 
 internal sealed class MonoSignatureTypeProvider(MetadataReader reader) : ISignatureTypeProvider<string, object?>
@@ -489,11 +396,7 @@ internal sealed class MonoSignatureTypeProvider(MetadataReader reader) : ISignat
     public string GetTypeFromReference(MetadataReader metadataReader, TypeReferenceHandle handle, byte rawTypeKind) =>
         TypeName(metadataReader.GetTypeReference(handle).Namespace, metadataReader.GetTypeReference(handle).Name);
 
-    public string GetTypeFromSpecification(
-        MetadataReader metadataReader,
-        object? genericContext,
-        TypeSpecificationHandle handle,
-        byte rawTypeKind) =>
+    public string GetTypeFromSpecification(MetadataReader metadataReader, object? genericContext, TypeSpecificationHandle handle, byte rawTypeKind) =>
         metadataReader.GetTypeSpecification(handle).DecodeSignature(this, genericContext);
 
     private string TypeName(StringHandle namespaceHandle, StringHandle nameHandle)
@@ -510,14 +413,10 @@ internal static partial class MonoJitOutputParser
     {
         var match = RuntimeVersionRegex().Match(NormalizeLineEndings(text));
         return match.Success
-            ? match.Groups[1].Value
-            : throw new InvalidDataException("Mono runtime version output is not recognized.");
+            ? match.Groups[1].Value : throw new InvalidDataException("Mono runtime version output is not recognized.");
     }
 
-    public static MonoJitSection Parse(
-        string rawOutput,
-        MonoMethodCandidate method,
-        string runtimeVersion)
+    public static MonoJitSection Parse(string rawOutput, MonoMethodCandidate method, string runtimeVersion)
     {
         var text = NormalizeLineEndings(rawOutput);
         var header = AssemblyHeaderRegex().Match(text);
@@ -541,9 +440,7 @@ internal static partial class MonoJitOutputParser
         {
             if (line.TrimStart().StartsWith("<BB>:", StringComparison.Ordinal))
             {
-                output.Append("G_M000_IG")
-                    .Append(block++.ToString("00", CultureInfo.InvariantCulture))
-                    .AppendLine(":");
+                output.Append("G_M000_IG").Append(block++.ToString("00", CultureInfo.InvariantCulture)).AppendLine(":");
                 continue;
             }
             if (!TryParseObjdumpLine(line, out var offset, out var byteCount, out var instruction))
@@ -560,16 +457,11 @@ internal static partial class MonoJitOutputParser
         var emitted = EmittedMethodRegex().Match(text);
         var nativeCodeSize = emitted.Success &&
             int.TryParse(emitted.Groups[2].Value, out var declaredSize)
-            ? declaredSize
-            : computedSize;
+            ? declaredSize : computedSize;
         if (nativeCodeSize <= 0 || nativeCodeSize != computedSize)
             throw new InvalidDataException("Mono JIT native code size is inconsistent with its disassembly.");
         output.Append("; Total bytes of code ").Append(nativeCodeSize);
-        return new MonoJitSection(
-            output.ToString(),
-            emitted.Success ? emitted.Groups[1].Value : null,
-            nativeCodeSize,
-            instructionCount);
+        return new MonoJitSection(output.ToString(), emitted.Success ? emitted.Groups[1].Value : null, nativeCodeSize, instructionCount);
     }
 
     private static bool HeaderMatchesSelector(string header, string selector)
@@ -581,22 +473,13 @@ internal static partial class MonoJitOutputParser
             !expected.Contains('(') && actual.StartsWith(expected + "(", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool TryParseObjdumpLine(
-        string line,
-        out int offset,
-        out int byteCount,
-        out string? instruction)
+    private static bool TryParseObjdumpLine(string line, out int offset, out int byteCount, out string? instruction)
     {
         offset = 0;
         byteCount = 0;
         instruction = null;
         var colon = line.IndexOf(':');
-        if (colon < 0 ||
-            !int.TryParse(
-                line.AsSpan(0, colon).Trim(),
-                NumberStyles.AllowHexSpecifier,
-                CultureInfo.InvariantCulture,
-                out offset))
+        if (colon < 0 || !int.TryParse(line.AsSpan(0, colon).Trim(), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out offset))
         {
             return false;
         }
@@ -635,47 +518,22 @@ internal static partial class MonoJitOutputParser
         RegexOptions.CultureInvariant)]
     private static partial Regex RuntimeVersionRegex();
 
-    [GeneratedRegex(
-        @"^\*\*\* ASM for (.+?) \*\*\*$",
-        RegexOptions.Multiline | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^\*\*\* ASM for (.+?) \*\*\*$", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
     private static partial Regex AssemblyHeaderRegex();
 
-    [GeneratedRegex(
-        @"\bemitted at (0x[0-9a-fA-F]+) to 0x[0-9a-fA-F]+ \(code length ([0-9]+)\)",
-        RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\bemitted at (0x[0-9a-fA-F]+) to 0x[0-9a-fA-F]+ \(code length ([0-9]+)\)", RegexOptions.CultureInvariant)]
     private static partial Regex EmittedMethodRegex();
 }
 
-internal sealed record MonoAssemblyMethods(
-    string AssemblyName,
-    IReadOnlyList<MonoMethodCandidate> Methods);
+internal sealed record MonoAssemblyMethods(string AssemblyName, IReadOnlyList<MonoMethodCandidate> Methods);
 
-internal sealed record MonoMethodCandidate(
-    string Identity,
-    string DisplayName,
-    string Selector);
+internal sealed record MonoMethodCandidate(string Identity, string DisplayName, string Selector);
 
-internal sealed record MonoJitSection(
-    string Text,
-    string? Address,
-    int NativeCodeSize,
-    int InstructionCount);
+internal sealed record MonoJitSection(string Text, string? Address, int NativeCodeSize, int InstructionCount);
 
-internal sealed record MonoJitMethodResult(
-    string Method,
-    string DisplayName,
-    string Status,
-    string? Address,
-    string? Error,
-    int NativeCodeSize,
-    int InstructionCount,
-    IReadOnlyList<object> LinkedRanges,
-    string MappingSource);
+internal sealed record MonoJitMethodResult(string Method, string DisplayName, string Status, string? Address, string? Error, int NativeCodeSize, int InstructionCount, IReadOnlyList<object> LinkedRanges, string MappingSource);
 
-internal sealed record ProcessCapture(
-    int ExitCode,
-    string StandardOutput,
-    string StandardError);
+internal sealed record ProcessCapture(int ExitCode, string StandardOutput, string StandardError);
 
 internal sealed class ProcessOutputBudget(Process process, long maximumBytes)
 {
@@ -697,9 +555,7 @@ internal sealed class ProcessOutputBudget(Process process, long maximumBytes)
                 if (!process.HasExited)
                     process.Kill(entireProcessTree: true);
             }
-            catch (InvalidOperationException)
-            {
-            }
+            catch (InvalidOperationException) { }
         }
         return false;
     }

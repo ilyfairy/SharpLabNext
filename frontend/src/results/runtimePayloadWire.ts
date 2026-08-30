@@ -45,10 +45,7 @@ export function parseRuntimeInspectionPayload(value: unknown): RuntimeInspection
 
 export function parseRuntimeGraphPayload(value: unknown): RuntimeGraphDocument | null {
   if (!isRecord(value) || !Array.isArray(value.Roots) || !Array.isArray(value.Nodes)) return null
-  if (
-    typeof value.Truncated !== 'boolean' ||
-    !(value.TruncationReason == null || typeof value.TruncationReason === 'string')
-  ) {
+  if (typeof value.Truncated !== 'boolean' || !(value.TruncationReason == null || typeof value.TruncationReason === 'string')) {
     return null
   }
 
@@ -62,14 +59,7 @@ export function parseRuntimeGraphPayload(value: unknown): RuntimeGraphDocument |
 
   const nodes: RuntimeGraphNode[] = []
   for (const node of value.Nodes) {
-    if (
-      !isRecord(node) ||
-      !isSafeInteger(node.Id) ||
-      typeof node.TypeName !== 'string' ||
-      typeof node.Kind !== 'string' ||
-      !(node.DisplayValue == null || typeof node.DisplayValue === 'string') ||
-      !Array.isArray(node.Edges)
-    ) {
+    if (!isRecord(node) || !isSafeInteger(node.Id) || typeof node.TypeName !== 'string' || typeof node.Kind !== 'string' || !(node.DisplayValue == null || typeof node.DisplayValue === 'string') || !Array.isArray(node.Edges)) {
       return null
     }
     const edges: RuntimeGraphEdge[] = []

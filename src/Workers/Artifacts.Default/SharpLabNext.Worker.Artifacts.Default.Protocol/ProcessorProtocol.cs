@@ -24,12 +24,9 @@ public static class ProcessorProtocol
     }
 
     private static string RequiredAssemblyMetadata(string key) =>
-        typeof(ProcessorProtocol).Assembly
-            .GetCustomAttributes<AssemblyMetadataAttribute>()
-            .SingleOrDefault(attribute => string.Equals(attribute.Key, key, StringComparison.Ordinal))
-            ?.Value is { Length: > 0 } value
-                ? value
-                : throw new InvalidOperationException($"Assembly metadata '{key}' is missing.");
+        typeof(ProcessorProtocol).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().SingleOrDefault(attribute => string.Equals(attribute.Key, key, StringComparison.Ordinal))
+?.Value is { Length: > 0 } value
+                ? value : throw new InvalidOperationException($"Assembly metadata '{key}' is missing.");
 }
 
 public sealed record ProcessorRequest(
@@ -63,25 +60,11 @@ public sealed record ProcessorResponse(
     bool? RewriteApplied = null,
     int? InstrumentationPointCount = null);
 
-public sealed record ProcessorLinkedRange(
-    string? SourceFilePath,
-    ProcessorTextRange? SourceRange,
-    ProcessorTextRange OutputRange);
+public sealed record ProcessorLinkedRange(string? SourceFilePath, ProcessorTextRange? SourceRange, ProcessorTextRange OutputRange);
 
-public sealed record ProcessorFinding(
-    string Code,
-    string Message,
-    string? TypeName,
-    string? MethodName,
-    int? MetadataToken,
-    string? FilePath,
-    ProcessorTextRange? Range);
+public sealed record ProcessorFinding(string Code, string Message, string? TypeName, string? MethodName, int? MetadataToken, string? FilePath, ProcessorTextRange? Range);
 
-public sealed record ProcessorTextRange(
-    int StartLine,
-    int StartCharacter,
-    int EndLine,
-    int EndCharacter);
+public sealed record ProcessorTextRange(int StartLine, int StartCharacter, int EndLine, int EndCharacter);
 
 public enum ProcessorOperation
 {

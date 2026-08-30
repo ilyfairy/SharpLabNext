@@ -28,16 +28,12 @@ public static class RuntimeCapabilityProbeContract
     public const string InstrumentationAppliedKey = "sharplabnext.instrumentation.applied";
     public const string InstrumentationPointsKey = "sharplabnext.instrumentation.points";
 
-    public static string ExecutionFlowOptionsDigest { get; } = ComputeOptionsDigest(
-        new TransformArtifactOptions(RewriterProfileId: ExecutionFlowProfileId));
+    public static string ExecutionFlowOptionsDigest { get; } = ComputeOptionsDigest(new TransformArtifactOptions(RewriterProfileId: ExecutionFlowProfileId));
 
     private static string ComputeOptionsDigest(TransformArtifactOptions options)
     {
-        var context = new RuntimeCapabilityProbeJsonSerializerContext(
-            ContractJson.CreateCanonicalSerializerOptions());
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(
-            options,
-            context.TransformArtifactOptions);
+        var context = new RuntimeCapabilityProbeJsonSerializerContext(ContractJson.CreateCanonicalSerializerOptions());
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(options, context.TransformArtifactOptions);
         // Keep the contract binary-compatible with the net8 target. The
         // convenience ToHexStringLower API is only available in newer TFMs.
         return $"sha256:{Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant()}";

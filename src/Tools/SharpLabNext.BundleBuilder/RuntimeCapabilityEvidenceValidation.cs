@@ -11,14 +11,12 @@ namespace SharpLabNext.BundleBuilder;
 internal static partial class RuntimeCapabilityEvidenceValidation
 {
     private const long MaximumArtifactBytes = 256L * 1024 * 1024;
-    private const string DesktopClrCaptureHelperPath =
-        "/opt/sharplabnext/SharpLabNext.DesktopClrJitInspector.exe";
+    private const string DesktopClrCaptureHelperPath = "/opt/sharplabnext/SharpLabNext.DesktopClrJitInspector.exe";
     // Reviewed Supervisor sandbox identity from the checked-in appsettings and
     // runtime-job-seccomp.v1.json policy. A well-formed but weaker policy is
     // not valid promotion evidence.
     private const string ApprovedSupervisorPolicyId = "runtime-linux-v1";
-    private const string ApprovedSeccompSha256 =
-        "sha256:01536f1d1df938ae611eba20d6349e0de7a99b6ecdee1549427a0b01b8301e28";
+    private const string ApprovedSeccompSha256 = "sha256:01536f1d1df938ae611eba20d6349e0de7a99b6ecdee1549427a0b01b8301e28";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         AllowTrailingCommas = false,
@@ -28,24 +26,12 @@ internal static partial class RuntimeCapabilityEvidenceValidation
         TypeInfoResolver = new DefaultJsonTypeInfoResolver()
     };
 
-    public static IReadOnlyList<RuntimePromotionImageFileSnapshot> Validate(
-        byte[] bytes,
-        RuntimeProfileDefinition profile,
-        RuntimePromotionReceiptDocument receipt,
-        RuntimePromotionCapabilityCheck check) =>
+    public static IReadOnlyList<RuntimePromotionImageFileSnapshot> Validate(byte[] bytes, RuntimeProfileDefinition profile, RuntimePromotionReceiptDocument receipt, RuntimePromotionCapabilityCheck check) =>
         Validate(bytes, profile, receipt, check, out _);
 
-    public static IReadOnlyList<RuntimePromotionImageFileSnapshot> Validate(
-        byte[] bytes,
-        RuntimeProfileDefinition profile,
-        RuntimePromotionReceiptDocument receipt,
-        RuntimePromotionCapabilityCheck check,
-        out RuntimeCapabilityProbeArtifactSnapshot probeArtifact)
+    public static IReadOnlyList<RuntimePromotionImageFileSnapshot> Validate(byte[] bytes, RuntimeProfileDefinition profile, RuntimePromotionReceiptDocument receipt, RuntimePromotionCapabilityCheck check, out RuntimeCapabilityProbeArtifactSnapshot probeArtifact)
     {
-        var evidence = RuntimePromotionJson.Deserialize<RuntimeCapabilityEvidenceDocument>(
-            bytes,
-            JsonOptions,
-            $"Runtime '{profile.Id}' {check.Capability} evidence");
+        var evidence = RuntimePromotionJson.Deserialize<RuntimeCapabilityEvidenceDocument>(bytes, JsonOptions, $"Runtime '{profile.Id}' {check.Capability} evidence");
 
         var prefix = $"Runtime '{profile.Id}' {check.Capability} evidence";
         Require(evidence.SchemaVersion == 1, $"{prefix} must use schema version 1.");
@@ -56,21 +42,13 @@ internal static partial class RuntimeCapabilityEvidenceValidation
         Require(IsGitCommit(evidence.SourceRevision), $"{prefix} source revision is invalid.");
         Require(IsCanonicalUtcTimestamp(evidence.CompletedAtUtc), $"{prefix} timestamp is not canonical UTC.");
 
-        var image = evidence.Image
-            ?? throw new BundleValidationException($"{prefix} image identity is missing.");
+        var image = evidence.Image ?? throw new BundleValidationException($"{prefix} image identity is missing.");
         RequireEqual(image.Reference, receipt.Image.Reference, $"{prefix} image reference");
         RequireEqual(image.ImageId, receipt.Image.ImageId, $"{prefix} image ID");
         Require(IsSha256(image.ImageId), $"{prefix} image ID is invalid.");
-        var producer = evidence.Producer
-            ?? throw new BundleValidationException($"{prefix} producer identity is missing.");
-        RequireEqual(
-            producer.Id,
-            "sharplabnext-runtime-preflight-v1",
-            $"{prefix} producer ID");
-        RequireEqual(
-            producer.SourceRevision,
-            receipt.SourceRevision,
-            $"{prefix} producer source revision");
+        var producer = evidence.Producer ?? throw new BundleValidationException($"{prefix} producer identity is missing.");
+        RequireEqual(producer.Id, "sharplabnext-runtime-preflight-v1", $"{prefix} producer ID");
+        RequireEqual(producer.SourceRevision, receipt.SourceRevision, $"{prefix} producer source revision");
         RequireEqual(producer.PlanSha256, receipt.PlanSha256, $"{prefix} producer plan digest");
         Require(IsSha256(producer.PlanSha256), $"{prefix} producer plan digest is invalid.");
 
@@ -80,21 +58,10 @@ internal static partial class RuntimeCapabilityEvidenceValidation
         ValidateSandbox(profile, receipt, evidence.Sandbox, prefix);
         ValidateLifecycle(evidence.Lifecycle, prefix);
         ValidateDetails(receipt, check, evidence, artifacts, prefix);
-        return artifacts.Values
-            .OrderBy(static artifact => artifact.Path, StringComparer.Ordinal)
-            .Select(static artifact => new RuntimePromotionImageFileSnapshot(
-                artifact.Path,
-                artifact.Sha256,
-                artifact.SizeBytes,
-                artifact.Role,
-                artifact.Format,
-                artifact.Architecture))
-            .ToArray();
+        return artifacts.Values.OrderBy(static artifact => artifact.Path, StringComparer.Ordinal).Select(static artifact => new RuntimePromotionImageFileSnapshot(artifact.Path, artifact.Sha256, artifact.SizeBytes, artifact.Role, artifact.Format, artifact.Architecture)).ToArray();
     }
 
-    public static void ValidateProbeSet(
-        string profileId,
-        IReadOnlyDictionary<string, RuntimeCapabilityProbeArtifactSnapshot> bindings)
+    public static void ValidateProbeSet(string profileId, IReadOnlyDictionary<string, RuntimeCapabilityProbeArtifactSnapshot> bindings)
     {
         if (!bindings.TryGetValue("run", out var run))
             throw new BundleValidationException($"Runtime '{profileId}' has no canonical Run probe binding.");
@@ -102,42 +69,24 @@ internal static partial class RuntimeCapabilityEvidenceValidation
         {
             if (!StringComparer.Ordinal.Equals(binding.SourceArtifactSha256, run.SourceArtifactSha256))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profileId}' capability documents do not bind one canonical source probe artifact.");
+                throw new BundleValidationException($"Runtime '{profileId}' capability documents do not bind one canonical source probe artifact.");
             }
-            if (!StringComparer.Ordinal.Equals(binding.PlanSha256, run.PlanSha256) ||
-                !StringComparer.Ordinal.Equals(
-                    binding.PreflightProfileSha256,
-                    run.PreflightProfileSha256))
+            if (!StringComparer.Ordinal.Equals(binding.PlanSha256, run.PlanSha256) || !StringComparer.Ordinal.Equals(binding.PreflightProfileSha256, run.PreflightProfileSha256))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profileId}' capability documents do not bind one promotion plan and immutable preflight Runtime Profile.");
+                throw new BundleValidationException($"Runtime '{profileId}' capability documents do not bind one promotion plan and immutable preflight Runtime Profile.");
             }
-            if (capability != "execution-flow" &&
-                (!StringComparer.Ordinal.Equals(binding.ArtifactSha256, run.ArtifactSha256) ||
-                 !StringComparer.Ordinal.Equals(
-                     binding.EntryAssemblySha256,
-                     run.EntryAssemblySha256)))
+            if (capability != "execution-flow" && (!StringComparer.Ordinal.Equals(binding.ArtifactSha256, run.ArtifactSha256) || !StringComparer.Ordinal.Equals(binding.EntryAssemblySha256, run.EntryAssemblySha256)))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profileId}' capability '{capability}' does not execute the canonical Run probe bytes.");
+                throw new BundleValidationException($"Runtime '{profileId}' capability '{capability}' does not execute the canonical Run probe bytes.");
             }
-            if (capability == "execution-flow" &&
-                (binding.Derivation is null ||
-                 !StringComparer.Ordinal.Equals(
-                     binding.Derivation.ParentArtifactSha256,
-                     run.SourceArtifactSha256)))
+            if (capability == "execution-flow" && (binding.Derivation is null || !StringComparer.Ordinal.Equals(binding.Derivation.ParentArtifactSha256, run.SourceArtifactSha256)))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profileId}' Execution Flow evidence is not derived from the canonical Run probe.");
+                throw new BundleValidationException($"Runtime '{profileId}' Execution Flow evidence is not derived from the canonical Run probe.");
             }
         }
     }
 
-    private static RuntimeCapabilityProbeArtifactSnapshot ValidateProbeArtifact(
-        RuntimePromotionCapabilityCheck check,
-        RuntimeCapabilityEvidenceDocument evidence,
-        string prefix)
+    private static RuntimeCapabilityProbeArtifactSnapshot ValidateProbeArtifact(RuntimePromotionCapabilityCheck check, RuntimeCapabilityEvidenceDocument evidence, string prefix)
     {
         var probe = evidence.ProbeArtifact;
         Require(probe is not null &&
@@ -167,38 +116,17 @@ internal static partial class RuntimeCapabilityEvidenceValidation
                     value.ProfileId == RuntimeCapabilityProbeContract.ExecutionFlowProfileId &&
                     value.Applied,
                 $"{prefix} does not bind the required applied Execution Flow derivation.");
-            derivation = new RuntimeCapabilityProbeDerivationSnapshot(
-                value!.ParentArtifactSha256,
-                value.ProcessorId,
-                value.ProcessorVersion,
-                value.OptionsSha256,
-                value.TransformId,
-                value.ProfileId,
-                value.Applied);
+            derivation = new RuntimeCapabilityProbeDerivationSnapshot(value!.ParentArtifactSha256, value.ProcessorId, value.ProcessorVersion, value.OptionsSha256, value.TransformId, value.ProfileId, value.Applied);
         }
         else
         {
-            Require(probe!.Derivation is null &&
-                    probe.ArtifactSha256 == probe.SourceArtifactSha256,
-                $"{prefix} cannot substitute or derive the canonical source probe artifact.");
+            Require(probe!.Derivation is null && probe.ArtifactSha256 == probe.SourceArtifactSha256, $"{prefix} cannot substitute or derive the canonical source probe artifact.");
         }
 
-        return new RuntimeCapabilityProbeArtifactSnapshot(
-            probe!.Contract,
-            probe.SourceArtifactSha256,
-            probe.ArtifactSha256,
-            probe.EntryAssemblySha256,
-            probe.PlanSha256,
-            probe.PreflightProfileSha256,
-            derivation);
+        return new RuntimeCapabilityProbeArtifactSnapshot(probe!.Contract, probe.SourceArtifactSha256, probe.ArtifactSha256, probe.EntryAssemblySha256, probe.PlanSha256, probe.PreflightProfileSha256, derivation);
     }
 
-    private static Dictionary<string, RuntimeCapabilityArtifact> ValidateArtifacts(
-        RuntimeProfileDefinition profile,
-        RuntimePromotionReceiptDocument receipt,
-        RuntimePromotionCapabilityCheck check,
-        List<RuntimeCapabilityArtifact?>? values,
-        string prefix)
+    private static Dictionary<string, RuntimeCapabilityArtifact> ValidateArtifacts(RuntimeProfileDefinition profile, RuntimePromotionReceiptDocument receipt, RuntimePromotionCapabilityCheck check, List<RuntimeCapabilityArtifact?>? values, string prefix)
     {
         Require(values is { Count: >= 2 and <= 8 } && values.All(static value => value is not null),
             $"{prefix} must contain between 2 and 8 non-null artifacts.");
@@ -207,124 +135,84 @@ internal static partial class RuntimeCapabilityEvidenceValidation
         foreach (var artifact in values!.Select(static value => value!))
         {
             Require(IsArtifactRole(artifact.Role), $"{prefix} artifact role '{artifact.Role}' is invalid.");
-            Require(byRole.TryAdd(artifact.Role, artifact),
-                $"{prefix} contains duplicate artifact role '{artifact.Role}'.");
-            Require(IsCanonicalImagePath(artifact.Path),
-                $"{prefix} artifact '{artifact.Role}' has an invalid image path.");
-            Require(paths.Add(artifact.Path),
-                $"{prefix} contains duplicate artifact path '{artifact.Path}'.");
-            Require(IsSha256(artifact.Sha256) && artifact.SizeBytes is > 0 and <= MaximumArtifactBytes,
-                $"{prefix} artifact '{artifact.Role}' has an invalid byte identity.");
-            Require(IsArtifactFormat(artifact.Format, artifact.Architecture),
-                $"{prefix} artifact '{artifact.Role}' has an invalid format or architecture.");
+            Require(byRole.TryAdd(artifact.Role, artifact), $"{prefix} contains duplicate artifact role '{artifact.Role}'.");
+            Require(IsCanonicalImagePath(artifact.Path), $"{prefix} artifact '{artifact.Role}' has an invalid image path.");
+            Require(paths.Add(artifact.Path), $"{prefix} contains duplicate artifact path '{artifact.Path}'.");
+            Require(IsSha256(artifact.Sha256) && artifact.SizeBytes is > 0 and <= MaximumArtifactBytes, $"{prefix} artifact '{artifact.Role}' has an invalid byte identity.");
+            Require(IsArtifactFormat(artifact.Format, artifact.Architecture), $"{prefix} artifact '{artifact.Role}' has an invalid format or architecture.");
         }
 
         var operationName = check.Capability == "jit-asm" ? "jit" : "run";
         var receiptOperation = operationName == "jit" ? receipt.Operations.Jit : receipt.Operations.Run;
         RuntimeOperationDefinition? profileOperation = operationName == "jit"
-            ? profile.Operations?.Jit
-            : profile.Operations?.Run;
+            ? profile.Operations?.Jit : profile.Operations?.Run;
         Require(receiptOperation is not null, $"{prefix} receipt has no {operationName} operation.");
         Require(profileOperation is not null, $"{prefix} profile has no {operationName} operation.");
-        Require(byRole.TryGetValue("helper", out var helper) &&
-                helper.Path == receiptOperation!.AssemblyPath &&
-                helper.Sha256 == receiptOperation.AssemblySha256 &&
-                helper.Format == "managed-pe" && helper.Architecture == "anycpu",
-            $"{prefix} helper artifact does not match receipt operations.{operationName}.");
+        Require(byRole.TryGetValue("helper", out var helper) && helper.Path == receiptOperation!.AssemblyPath && helper.Sha256 == receiptOperation.AssemblySha256 && helper.Format == "managed-pe" && helper.Architecture == "anycpu", $"{prefix} helper artifact does not match receipt operations.{operationName}.");
         ValidateExecutableHosts(profile, profileOperation!, byRole, prefix);
 
         var isCoreClr2 = IsCoreClrMajor(receipt, 2);
         var supportsSupportAssembly = (receipt.Family is "coreclr" or "coreclr-wine") && !isCoreClr2;
-        var requiresSupportAssembly = profile.Capabilities.Any(static capability =>
-            capability is "inspection" or "execution-flow");
+        var requiresSupportAssembly = profile.Capabilities.Any(static capability => capability is "inspection" or "execution-flow");
         if (isCoreClr2 && requiresSupportAssembly)
         {
-            throw new BundleValidationException(
-                $"{prefix} CoreCLR 2.x cannot declare SharpLab.Runtime instrumentation capabilities.");
+            throw new BundleValidationException($"{prefix} CoreCLR 2.x cannot declare SharpLab.Runtime instrumentation capabilities.");
         }
         if (byRole.TryGetValue("support-assembly", out var support))
         {
-            Require(!isCoreClr2,
-                $"{prefix} CoreCLR 2.x cannot bind a SharpLab.Runtime support-assembly artifact.");
-            Require(supportsSupportAssembly &&
-                    support.Path == "/opt/sharplabnext/SharpLab.Runtime.dll" &&
-                    support.Format == "managed-pe" && support.Architecture == "anycpu",
-                $"{prefix} has an invalid SharpLab.Runtime support-assembly artifact.");
+            Require(!isCoreClr2, $"{prefix} CoreCLR 2.x cannot bind a SharpLab.Runtime support-assembly artifact.");
+            Require(supportsSupportAssembly && support.Path == "/opt/sharplabnext/SharpLab.Runtime.dll" && support.Format == "managed-pe" && support.Architecture == "anycpu", $"{prefix} has an invalid SharpLab.Runtime support-assembly artifact.");
         }
         else if (requiresSupportAssembly)
         {
-            throw new BundleValidationException(
-                $"{prefix} has no valid SharpLab.Runtime support-assembly artifact for its instrumentation capabilities.");
+            throw new BundleValidationException($"{prefix} has no valid SharpLab.Runtime support-assembly artifact for its instrumentation capabilities.");
         }
 
         if (check.Capability == "jit-asm")
         {
-            Require(byRole.TryGetValue("jit-library", out var jitLibrary),
-                $"{prefix} has no jit-library artifact.");
+            Require(byRole.TryGetValue("jit-library", out var jitLibrary), $"{prefix} has no jit-library artifact.");
             if (receipt.Platform == "mono")
             {
-                Require(jitLibrary!.Format == "elf" && jitLibrary.Architecture == "x64" &&
-                        jitLibrary.Path == "/usr/bin/mono-sgen",
-                    $"{prefix} Mono jit-library must be the fixed x64 ELF /usr/bin/mono-sgen host.");
+                Require(jitLibrary!.Format == "elf" && jitLibrary.Architecture == "x64" && jitLibrary.Path == "/usr/bin/mono-sgen", $"{prefix} Mono jit-library must be the fixed x64 ELF /usr/bin/mono-sgen host.");
             }
             else if (receipt.Platform == "linux")
             {
-                Require(jitLibrary!.Format == "elf" && jitLibrary.Architecture == "x64" &&
-                        jitLibrary.Path.EndsWith("/libclrjit.so", StringComparison.Ordinal),
-                    $"{prefix} Linux jit-library must be the x64 ELF libclrjit.so.");
+                Require(jitLibrary!.Format == "elf" && jitLibrary.Architecture == "x64" && jitLibrary.Path.EndsWith("/libclrjit.so", StringComparison.Ordinal), $"{prefix} Linux jit-library must be the x64 ELF libclrjit.so.");
             }
             else if (receipt.Platform == "wine")
             {
-                Require(jitLibrary!.Format == "pe" && jitLibrary.Architecture == "x64" &&
-                        jitLibrary.Path.EndsWith("clrjit.dll", StringComparison.OrdinalIgnoreCase),
-                    $"{prefix} Wine jit-library must be the x64 PE clrjit.dll.");
+                Require(jitLibrary!.Format == "pe" && jitLibrary.Architecture == "x64" && jitLibrary.Path.EndsWith("clrjit.dll", StringComparison.OrdinalIgnoreCase), $"{prefix} Wine jit-library must be the x64 PE clrjit.dll.");
             }
 
             if (check.SourceMappingKind == RuntimeJitSourceMappingKinds.LinuxProfiler)
             {
-                Require(byRole.TryGetValue("profiler", out var profiler) &&
-                        profiler.Path == receiptOperation!.ProfilerPath &&
-                        profiler.Sha256 == receiptOperation.ProfilerSha256 &&
-                        profiler.Format == "elf" && profiler.Architecture == "x64",
-                    $"{prefix} profiler artifact does not match the receipt JIT profiler.");
+                Require(byRole.TryGetValue("profiler", out var profiler) && profiler.Path == receiptOperation!.ProfilerPath && profiler.Sha256 == receiptOperation.ProfilerSha256 && profiler.Format == "elf" && profiler.Architecture == "x64", $"{prefix} profiler artifact does not match the receipt JIT profiler.");
             }
             else
             {
-                Require(!byRole.ContainsKey("profiler"),
-                    $"{prefix} cannot bind a profiler for mapping kind '{check.SourceMappingKind}'.");
+                Require(!byRole.ContainsKey("profiler"), $"{prefix} cannot bind a profiler for mapping kind '{check.SourceMappingKind}'.");
             }
             var requiresDesktopHelper = profileOperation!.ImplementationId ==
                 RuntimeOperationImplementationIds.DesktopClrJitInspector;
-            Require(requiresDesktopHelper == byRole.ContainsKey("desktop-helper"),
-                $"{prefix} Desktop CLR helper presence does not match the JIT provider.");
+            Require(requiresDesktopHelper == byRole.ContainsKey("desktop-helper"), $"{prefix} Desktop CLR helper presence does not match the JIT provider.");
             if (requiresDesktopHelper)
             {
                 var desktopHelper = byRole["desktop-helper"];
-                Require(desktopHelper.Path == DesktopClrCaptureHelperPath &&
-                        desktopHelper.Format == "managed-pe" &&
-                        desktopHelper.Architecture == "anycpu",
-                    $"{prefix} Desktop CLR capture helper is invalid.");
+                Require(desktopHelper.Path == DesktopClrCaptureHelperPath && desktopHelper.Format == "managed-pe" && desktopHelper.Architecture == "anycpu", $"{prefix} Desktop CLR capture helper is invalid.");
             }
         }
         else
         {
-            Require(!byRole.ContainsKey("jit-library") && !byRole.ContainsKey("profiler"),
-                $"{prefix} non-JIT capability cannot bind JIT artifacts.");
+            Require(!byRole.ContainsKey("jit-library") && !byRole.ContainsKey("profiler"), $"{prefix} non-JIT capability cannot bind JIT artifacts.");
         }
         return byRole;
     }
 
-    private static void ValidateExecutableHosts(
-        RuntimeProfileDefinition profile,
-        RuntimeOperationDefinition operation,
-        Dictionary<string, RuntimeCapabilityArtifact> artifacts,
-        string prefix)
+    private static void ValidateExecutableHosts(RuntimeProfileDefinition profile, RuntimeOperationDefinition operation, Dictionary<string, RuntimeCapabilityArtifact> artifacts, string prefix)
     {
-        var command = operation.Command
-            ?? throw new BundleValidationException($"{prefix} operation command is missing.");
+        var command = operation.Command ?? throw new BundleValidationException($"{prefix} operation command is missing.");
         var executable = command.Executable;
-        Require(IsCanonicalImagePath(executable),
-            $"{prefix} operation executable must be a canonical absolute image path.");
+        Require(IsCanonicalImagePath(executable), $"{prefix} operation executable must be a canonical absolute image path.");
 
         string? innerHostToken = null;
         string? innerHostPath = null;
@@ -342,12 +230,7 @@ internal static partial class RuntimeCapabilityEvidenceValidation
                     $"{prefix} Wine CoreCLR command has no fixed dotnet.exe host.");
                 innerHostToken = command.Argv[0];
                 innerHostPath = profile.Layout.DotNetHostPath;
-                Require(IsCanonicalImagePath(innerHostPath) &&
-                        string.Equals(
-                            innerHostToken,
-                            $"Z:{innerHostPath.Replace('/', '\\')}",
-                            StringComparison.Ordinal),
-                    $"{prefix} Wine dotnet.exe command token does not match the Runtime Profile image path.");
+                Require(IsCanonicalImagePath(innerHostPath) && string.Equals(innerHostToken, $"Z:{innerHostPath.Replace('/', '\\')}", StringComparison.Ordinal), $"{prefix} Wine dotnet.exe command token does not match the Runtime Profile image path.");
                 break;
             case RuntimeOperationImplementationIds.MonoJitInspector:
                 innerHostToken = "/usr/bin/mono";
@@ -356,52 +239,25 @@ internal static partial class RuntimeCapabilityEvidenceValidation
             case RuntimeOperationImplementationIds.DesktopClrJitInspector:
                 innerHostToken = profile.Layout.WineHostPath;
                 innerHostPath = profile.Layout.WineHostPath;
-                Require(innerHostPath == "/usr/lib/wine/wine64",
-                    $"{prefix} Desktop CLR JIT requires the fixed x64 Wine host.");
+                Require(innerHostPath == "/usr/lib/wine/wine64", $"{prefix} Desktop CLR JIT requires the fixed x64 Wine host.");
                 break;
         }
 
         if (innerHostPath is null)
         {
-            Require(!artifacts.ContainsKey("control-host"),
-                $"{prefix} single-host command cannot declare a control-host artifact.");
-            ValidateExecutableHostArtifact(
-                artifacts,
-                "runtime-host",
-                executable!,
-                expectedFormat: "elf",
-                prefix);
+            Require(!artifacts.ContainsKey("control-host"), $"{prefix} single-host command cannot declare a control-host artifact.");
+            ValidateExecutableHostArtifact(artifacts, "runtime-host", executable!, expectedFormat: "elf", prefix);
             return;
         }
 
-        Require(!string.Equals(executable, innerHostPath, StringComparison.Ordinal),
-            $"{prefix} control and runtime hosts must resolve to distinct image paths.");
-        ValidateExecutableHostArtifact(
-            artifacts,
-            "control-host",
-            executable!,
-            expectedFormat: "elf",
-            prefix);
-        ValidateExecutableHostArtifact(
-            artifacts,
-            "runtime-host",
-            innerHostPath,
-                expectedFormat: innerHostToken!.Contains('\\') ? "pe" : "elf",
-            prefix);
+        Require(!string.Equals(executable, innerHostPath, StringComparison.Ordinal), $"{prefix} control and runtime hosts must resolve to distinct image paths.");
+        ValidateExecutableHostArtifact(artifacts, "control-host", executable!, expectedFormat: "elf", prefix);
+        ValidateExecutableHostArtifact(artifacts, "runtime-host", innerHostPath, expectedFormat: innerHostToken!.Contains('\\') ? "pe" : "elf", prefix);
     }
 
-    private static void ValidateExecutableHostArtifact(
-        Dictionary<string, RuntimeCapabilityArtifact> artifacts,
-        string role,
-        string expectedPath,
-        string expectedFormat,
-        string prefix)
+    private static void ValidateExecutableHostArtifact(Dictionary<string, RuntimeCapabilityArtifact> artifacts, string role, string expectedPath, string expectedFormat, string prefix)
     {
-        Require(artifacts.TryGetValue(role, out var artifact) &&
-                artifact.Path == expectedPath &&
-                artifact.Format == expectedFormat &&
-                artifact.Architecture == "x64",
-            $"{prefix} {role} artifact does not match the Runtime Profile executable host '{expectedPath}'.");
+        Require(artifacts.TryGetValue(role, out var artifact) && artifact.Path == expectedPath && artifact.Format == expectedFormat && artifact.Architecture == "x64", $"{prefix} {role} artifact does not match the Runtime Profile executable host '{expectedPath}'.");
     }
 
     private static string NormalizeHostImagePath(string token, string prefix)
@@ -409,70 +265,42 @@ internal static partial class RuntimeCapabilityEvidenceValidation
         if (IsCanonicalImagePath(token))
             return token;
         const string wineZPrefix = "Z:\\";
-        Require(token.StartsWith(wineZPrefix, StringComparison.Ordinal),
-            $"{prefix} target host is not a canonical Unix or Wine Z: image path.");
+        Require(token.StartsWith(wineZPrefix, StringComparison.Ordinal), $"{prefix} target host is not a canonical Unix or Wine Z: image path.");
         var imagePath = "/" + token[wineZPrefix.Length..].Replace('\\', '/');
-        Require(IsCanonicalImagePath(imagePath),
-            $"{prefix} target host does not normalize to a canonical image path.");
+        Require(IsCanonicalImagePath(imagePath), $"{prefix} target host does not normalize to a canonical image path.");
         return imagePath;
     }
 
-    private static void ValidateInvocation(
-        RuntimeProfileDefinition profile,
-        RuntimePromotionReceiptDocument receipt,
-        RuntimePromotionCapabilityCheck check,
-        RuntimeCapabilityInvocation? invocation,
-        IReadOnlyDictionary<string, RuntimeCapabilityArtifact> artifacts,
-        string prefix)
+    private static void ValidateInvocation(RuntimeProfileDefinition profile, RuntimePromotionReceiptDocument receipt, RuntimePromotionCapabilityCheck check, RuntimeCapabilityInvocation? invocation, IReadOnlyDictionary<string, RuntimeCapabilityArtifact> artifacts, string prefix)
     {
         Require(invocation is not null, $"{prefix} invocation is missing.");
         var isJit = check.Capability == "jit-asm";
         var implementation = isJit
-            ? profile.Operations?.Jit?.ImplementationId
-            : profile.Operations?.Run?.ImplementationId;
+            ? profile.Operations?.Jit?.ImplementationId : profile.Operations?.Run?.ImplementationId;
         var pathStyle = isJit
-            ? profile.Operations?.Jit?.PathStyle
-            : profile.Operations?.Run?.PathStyle;
-        Require(implementation is not null && pathStyle is not null,
-            $"{prefix} profile operation is missing.");
+            ? profile.Operations?.Jit?.PathStyle : profile.Operations?.Run?.PathStyle;
+        Require(implementation is not null && pathStyle is not null, $"{prefix} profile operation is missing.");
         var actualInvocation = invocation!;
         RequireEqual(actualInvocation.Implementation, implementation, $"{prefix} implementation");
         Require(actualInvocation.Command is { Count: >= 2 and <= 64 } &&
                 actualInvocation.Command.All(IsCommandToken),
             $"{prefix} command is invalid.");
         var relativeEntry = NormalizeEntryAssembly(actualInvocation.EntryAssembly?.Path, pathStyle!);
-        Require(actualInvocation.EntryAssembly is not null && IsSha256(actualInvocation.EntryAssembly.Sha256),
-            $"{prefix} entry assembly identity is invalid.");
+        Require(actualInvocation.EntryAssembly is not null && IsSha256(actualInvocation.EntryAssembly.Sha256), $"{prefix} entry assembly identity is invalid.");
         IReadOnlyList<string> expectedCommand = isJit
-            ? RuntimeProfileCommandBuilder.CreateJitCommand(profile, relativeEntry, actualInvocation.MethodFilter)
-            : RuntimeProfileCommandBuilder.CreateRunCommand(
-                profile,
-                relativeEntry,
-                ExpectedRunProbeArguments(check.Capability));
-        Require(expectedCommand.SequenceEqual(actualInvocation.Command!, StringComparer.Ordinal),
-            $"{prefix} command does not match the selected Runtime Profile operation.");
+            ? RuntimeProfileCommandBuilder.CreateJitCommand(profile, relativeEntry, actualInvocation.MethodFilter) : RuntimeProfileCommandBuilder.CreateRunCommand(profile, relativeEntry, ExpectedRunProbeArguments(check.Capability));
+        Require(expectedCommand.SequenceEqual(actualInvocation.Command!, StringComparer.Ordinal), $"{prefix} command does not match the selected Runtime Profile operation.");
         if (isJit)
         {
-            Require(!string.IsNullOrWhiteSpace(actualInvocation.MethodFilter) &&
-                    actualInvocation.MethodFilter.Length <= 256 &&
-                    !actualInvocation.MethodFilter.Any(char.IsControl),
-                $"{prefix} JIT method filter is invalid.");
+            Require(!string.IsNullOrWhiteSpace(actualInvocation.MethodFilter) && actualInvocation.MethodFilter.Length <= 256 && !actualInvocation.MethodFilter.Any(char.IsControl), $"{prefix} JIT method filter is invalid.");
         }
         else
         {
-            Require(actualInvocation.MethodFilter is null,
-                $"{prefix} non-JIT invocation cannot declare a method filter.");
+            Require(actualInvocation.MethodFilter is null, $"{prefix} non-JIT invocation cannot declare a method filter.");
         }
         var firstCommand = actualInvocation.Command![0];
-        Require(artifacts.Values.Any(artifact =>
-                artifact.Role is "runtime-host" or "control-host" && artifact.Path == firstCommand),
-            $"{prefix} command does not start with a bound host artifact.");
-        Require(actualInvocation.Outcome == "succeeded" && actualInvocation.ExitCode == 0 &&
-                actualInvocation.RuntimeFrameCount is >= 1 and <= 100_000 &&
-                actualInvocation.TerminalFrameKind == "Exit" && actualInvocation.TerminalStatus == "completed" &&
-                actualInvocation.StdoutBytes is >= 0 and <= 16_777_216 &&
-                actualInvocation.StderrBytes is >= 0 and <= 16_777_216,
-            $"{prefix} did not produce a successful bounded RuntimeFrame result.");
+        Require(artifacts.Values.Any(artifact => artifact.Role is "runtime-host" or "control-host" && artifact.Path == firstCommand), $"{prefix} command does not start with a bound host artifact.");
+        Require(actualInvocation.Outcome == "succeeded" && actualInvocation.ExitCode == 0 && actualInvocation.RuntimeFrameCount is >= 1 and <= 100_000 && actualInvocation.TerminalFrameKind == "Exit" && actualInvocation.TerminalStatus == "completed" && actualInvocation.StdoutBytes is >= 0 and <= 16_777_216 && actualInvocation.StderrBytes is >= 0 and <= 16_777_216, $"{prefix} did not produce a successful bounded RuntimeFrame result.");
     }
 
     private static IReadOnlyList<string> ExpectedRunProbeArguments(string capability) =>
@@ -481,46 +309,19 @@ internal static partial class RuntimeCapabilityEvidenceValidation
             "run" => ["success-security"],
             "inspection" => ["inspection"],
             "execution-flow" => ["execution-flow"],
-            _ => throw new BundleValidationException(
-                $"Runtime capability evidence uses unsupported Run probe '{capability}'.")
+            _ => throw new BundleValidationException($"Runtime capability evidence uses unsupported Run probe '{capability}'.")
         };
 
-    private static void ValidateSandbox(
-        RuntimeProfileDefinition profile,
-        RuntimePromotionReceiptDocument receipt,
-        RuntimeCapabilitySandbox? sandbox,
-        string prefix)
+    private static void ValidateSandbox(RuntimeProfileDefinition profile, RuntimePromotionReceiptDocument receipt, RuntimeCapabilitySandbox? sandbox, string prefix)
     {
         Require(sandbox is not null, $"{prefix} sandbox is missing.");
-        Require(IsStableId(sandbox!.SupervisorPolicyId) && IsStableId(sandbox.SecurityPolicyId) &&
-                IsSha256(sandbox.SeccompSha256) &&
-                ContainerIdRegex().IsMatch(sandbox.ContainerId ?? string.Empty) &&
-                sandbox.NetworkMode == "none" && sandbox.NetworkProbeBlocked &&
-                sandbox.ReadOnlyRootFilesystem && sandbox.ReadOnlyProbeBlocked &&
-                sandbox.CapDrop is ["ALL"] && sandbox.NoNewPrivileges,
-            $"{prefix} does not prove the required Supervisor isolation.");
-        RequireEqual(
-            sandbox.SupervisorPolicyId,
-            ApprovedSupervisorPolicyId,
-            $"{prefix} Supervisor sandbox policy");
-        RequireEqual(
-            sandbox.SeccompSha256,
-            ApprovedSeccompSha256,
-            $"{prefix} Supervisor seccomp policy");
-        RequireEqual(
-            sandbox.User,
-            profile.Container.ExecutionUser,
-            $"{prefix} sandbox user");
-        var policy = profile.SecurityPolicies.SingleOrDefault(policy =>
-            string.Equals(policy.Id, sandbox.SecurityPolicyId, StringComparison.Ordinal));
-        Require(policy is not null && profile.AllowedSecurityPolicyIds.Contains(policy.Id, StringComparer.Ordinal),
-            $"{prefix} security policy is not selected by the Runtime Profile.");
-        Require(sandbox.MemoryBytes == policy!.MemoryBytes && sandbox.NanoCpus == policy.NanoCpus &&
-                sandbox.PidsLimit == policy.PidsLimit &&
-                sandbox.DeadlineMilliseconds == checked(policy.MaximumDurationSeconds * 1000) &&
-                sandbox.OutputLimitBytes == policy.MaximumOutputBytes &&
-                sandbox.TmpfsBytes == policy.TmpfsBytes,
-            $"{prefix} resource limits do not match the selected security policy.");
+        Require(IsStableId(sandbox!.SupervisorPolicyId) && IsStableId(sandbox.SecurityPolicyId) && IsSha256(sandbox.SeccompSha256) && ContainerIdRegex().IsMatch(sandbox.ContainerId ?? string.Empty) && sandbox.NetworkMode == "none" && sandbox.NetworkProbeBlocked && sandbox.ReadOnlyRootFilesystem && sandbox.ReadOnlyProbeBlocked && sandbox.CapDrop is ["ALL"] && sandbox.NoNewPrivileges, $"{prefix} does not prove the required Supervisor isolation.");
+        RequireEqual(sandbox.SupervisorPolicyId, ApprovedSupervisorPolicyId, $"{prefix} Supervisor sandbox policy");
+        RequireEqual(sandbox.SeccompSha256, ApprovedSeccompSha256, $"{prefix} Supervisor seccomp policy");
+        RequireEqual(sandbox.User, profile.Container.ExecutionUser, $"{prefix} sandbox user");
+        var policy = profile.SecurityPolicies.SingleOrDefault(policy => string.Equals(policy.Id, sandbox.SecurityPolicyId, StringComparison.Ordinal));
+        Require(policy is not null && profile.AllowedSecurityPolicyIds.Contains(policy.Id, StringComparer.Ordinal), $"{prefix} security policy is not selected by the Runtime Profile.");
+        Require(sandbox.MemoryBytes == policy!.MemoryBytes && sandbox.NanoCpus == policy.NanoCpus && sandbox.PidsLimit == policy.PidsLimit && sandbox.DeadlineMilliseconds == checked(policy.MaximumDurationSeconds * 1000) && sandbox.OutputLimitBytes == policy.MaximumOutputBytes && sandbox.TmpfsBytes == policy.TmpfsBytes, $"{prefix} resource limits do not match the selected security policy.");
     }
 
     private static void ValidateLifecycle(RuntimeCapabilityLifecycle? lifecycle, string prefix)
@@ -532,24 +333,12 @@ internal static partial class RuntimeCapabilityEvidenceValidation
         ValidateProbe(lifecycle.ProcessTreeCleanup, "completed", "processTreeCleanup", prefix);
     }
 
-    private static void ValidateProbe(
-        RuntimeCapabilityLifecycleProbe? probe,
-        string terminalStatus,
-        string name,
-        string prefix)
+    private static void ValidateProbe(RuntimeCapabilityLifecycleProbe? probe, string terminalStatus, string name, string prefix)
     {
-        Require(probe is not null && probe.Result == "passed" &&
-                probe.TerminalStatus == terminalStatus &&
-                probe.ContainerRemoved && probe.ProcessTreeRemoved,
-            $"{prefix} lifecycle.{name} did not pass with complete cleanup.");
+        Require(probe is not null && probe.Result == "passed" && probe.TerminalStatus == terminalStatus && probe.ContainerRemoved && probe.ProcessTreeRemoved, $"{prefix} lifecycle.{name} did not pass with complete cleanup.");
     }
 
-    private static void ValidateDetails(
-        RuntimePromotionReceiptDocument receipt,
-        RuntimePromotionCapabilityCheck check,
-        RuntimeCapabilityEvidenceDocument evidence,
-        IReadOnlyDictionary<string, RuntimeCapabilityArtifact> artifacts,
-        string prefix)
+    private static void ValidateDetails(RuntimePromotionReceiptDocument receipt, RuntimePromotionCapabilityCheck check, RuntimeCapabilityEvidenceDocument evidence, IReadOnlyDictionary<string, RuntimeCapabilityArtifact> artifacts, string prefix)
     {
         var present = new[]
         {
@@ -562,25 +351,13 @@ internal static partial class RuntimeCapabilityEvidenceValidation
         switch (check.Capability)
         {
             case "run":
-                Require(evidence.Run is not null &&
-                        !string.IsNullOrEmpty(evidence.Run.ExpectedStdoutMarker) &&
-                        evidence.Run.ExpectedStdoutMarker == evidence.Run.ObservedStdoutMarker &&
-                        !string.IsNullOrEmpty(evidence.Run.ExpectedStderrMarker) &&
-                        evidence.Run.ExpectedStderrMarker == evidence.Run.ObservedStderrMarker &&
-                        evidence.Run.ExceptionFrameValidated,
-                    $"{prefix} Run markers or structured exception probe did not pass.");
+                Require(evidence.Run is not null && !string.IsNullOrEmpty(evidence.Run.ExpectedStdoutMarker) && evidence.Run.ExpectedStdoutMarker == evidence.Run.ObservedStdoutMarker && !string.IsNullOrEmpty(evidence.Run.ExpectedStderrMarker) && evidence.Run.ExpectedStderrMarker == evidence.Run.ObservedStderrMarker && evidence.Run.ExceptionFrameValidated, $"{prefix} Run markers or structured exception probe did not pass.");
                 break;
             case "jit-asm":
                 ValidateJit(receipt, check, evidence.Jit, artifacts, prefix);
                 break;
             case "inspection":
-                Require(evidence.Inspection is not null && evidence.Inspection.RecordCount >= 2 &&
-                        evidence.Inspection.Kinds is not null &&
-                        evidence.Inspection.Kinds.Count == evidence.Inspection.Kinds.Distinct(StringComparer.Ordinal).Count() &&
-                        evidence.Inspection.Kinds.Contains("Value", StringComparer.Ordinal) &&
-                        evidence.Inspection.Kinds.Contains("MemoryGraph", StringComparer.Ordinal) &&
-                        evidence.Inspection.ValueProbePassed && evidence.Inspection.MemoryGraphProbePassed,
-                    $"{prefix} did not prove Value and MemoryGraph behavior.");
+                Require(evidence.Inspection is not null && evidence.Inspection.RecordCount >= 2 && evidence.Inspection.Kinds is not null && evidence.Inspection.Kinds.Count == evidence.Inspection.Kinds.Distinct(StringComparer.Ordinal).Count() && evidence.Inspection.Kinds.Contains("Value", StringComparer.Ordinal) && evidence.Inspection.Kinds.Contains("MemoryGraph", StringComparer.Ordinal) && evidence.Inspection.ValueProbePassed && evidence.Inspection.MemoryGraphProbePassed, $"{prefix} did not prove Value and MemoryGraph behavior.");
                 break;
             case "execution-flow":
                 var flow = evidence.ExecutionFlow;
@@ -606,12 +383,7 @@ internal static partial class RuntimeCapabilityEvidenceValidation
         }
     }
 
-    private static void ValidateJit(
-        RuntimePromotionReceiptDocument receipt,
-        RuntimePromotionCapabilityCheck check,
-        RuntimeCapabilityJit? jit,
-        IReadOnlyDictionary<string, RuntimeCapabilityArtifact> artifacts,
-        string prefix)
+    private static void ValidateJit(RuntimePromotionReceiptDocument receipt, RuntimePromotionCapabilityCheck check, RuntimeCapabilityJit? jit, IReadOnlyDictionary<string, RuntimeCapabilityArtifact> artifacts, string prefix)
     {
         Require(jit is not null, $"{prefix} JIT result is missing.");
         RequireEqual(jit!.RuntimeVersion, receipt.ResolvedVersion, $"{prefix} runtime version");
@@ -622,48 +394,31 @@ internal static partial class RuntimeCapabilityEvidenceValidation
         var ranges = new List<RuntimeCapabilitySourceRange>();
         foreach (var method in jit.Methods!.Select(static method => method!))
         {
-            Require(MethodTokenRegex().IsMatch(method.MetadataToken ?? string.Empty) &&
-                    !string.IsNullOrWhiteSpace(method.DisplayName) &&
-                    method.NativeCodeBytes > 0 && method.InstructionCount > 0 &&
-                    method.SourceRanges is not null,
-                $"{prefix} contains an invalid or empty JIT method.");
+            Require(MethodTokenRegex().IsMatch(method.MetadataToken ?? string.Empty) && !string.IsNullOrWhiteSpace(method.DisplayName) && method.NativeCodeBytes > 0 && method.InstructionCount > 0 && method.SourceRanges is not null, $"{prefix} contains an invalid or empty JIT method.");
             foreach (var range in method.SourceRanges!)
             {
-                Require(range is not null && IsValidSourceRange(range),
-                    $"{prefix} contains an invalid JIT source range.");
+                Require(range is not null && IsValidSourceRange(range), $"{prefix} contains an invalid JIT source range.");
                 ranges.Add(range!);
             }
         }
-        var distinctRanges = ranges.Select(static range =>
-                $"{range.Document}\0{range.StartLine}\0{range.StartColumn}\0{range.EndLine}\0{range.EndColumn}")
-            .Distinct(StringComparer.Ordinal)
-            .Count();
-        var mapping = jit.Mapping
-            ?? throw new BundleValidationException($"{prefix} JIT mapping result is missing.");
+        var distinctRanges = ranges.Select(static range => $"{range.Document}\0{range.StartLine}\0{range.StartColumn}\0{range.EndLine}\0{range.EndColumn}").Distinct(StringComparer.Ordinal).Count();
+        var mapping = jit.Mapping ?? throw new BundleValidationException($"{prefix} JIT mapping result is missing.");
         RequireEqual(mapping.Kind, check.SourceMappingKind, $"{prefix} mapping kind");
         RequireEqual(mapping.Source, check.MappingSource, $"{prefix} mapping source");
-        Require(mapping.RangeCount == ranges.Count &&
-                mapping.DistinctSourceRangeCount == distinctRanges,
-            $"{prefix} mapping counts do not match the retained ranges.");
+        Require(mapping.RangeCount == ranges.Count && mapping.DistinctSourceRangeCount == distinctRanges, $"{prefix} mapping counts do not match the retained ranges.");
         if (check.SourceMappingKind == RuntimeJitSourceMappingKinds.None)
         {
-            Require(jit.Pdb is null && ranges.Count == 0 && !mapping.AllRangesMatchPdb,
-                $"{prefix} mapping-free or method-level JIT evidence cannot claim PDB source ranges.");
+            Require(jit.Pdb is null && ranges.Count == 0 && !mapping.AllRangesMatchPdb, $"{prefix} mapping-free or method-level JIT evidence cannot claim PDB source ranges.");
         }
         else
         {
             var pdb = jit.Pdb;
-            Require(pdb is not null && IsWorkspacePdb(pdb.Path) &&
-                    IsSha256(pdb.Sha256) && PdbContentIdRegex().IsMatch(pdb.ContentId ?? string.Empty),
-                $"{prefix} PDB identity is invalid.");
-            Require(pdb!.SequencePointCount >= 2 && ranges.Count >= 2 && distinctRanges >= 2 &&
-                    mapping.AllRangesMatchPdb,
-                $"{prefix} mapped JIT evidence lacks multiple PDB-matched source ranges.");
+            Require(pdb is not null && IsWorkspacePdb(pdb.Path) && IsSha256(pdb.Sha256) && PdbContentIdRegex().IsMatch(pdb.ContentId ?? string.Empty), $"{prefix} PDB identity is invalid.");
+            Require(pdb!.SequencePointCount >= 2 && ranges.Count >= 2 && distinctRanges >= 2 && mapping.AllRangesMatchPdb, $"{prefix} mapped JIT evidence lacks multiple PDB-matched source ranges.");
         }
         if (check.SourceMappingKind == RuntimeJitSourceMappingKinds.LinuxProfiler)
         {
-            Require(artifacts.ContainsKey("profiler"),
-                $"{prefix} profiler mapping has no bound profiler bytes.");
+            Require(artifacts.ContainsKey("profiler"), $"{prefix} profiler mapping has no bound profiler bytes.");
         }
     }
 
@@ -691,8 +446,7 @@ internal static partial class RuntimeCapabilityEvidenceValidation
 
     private static bool IsWorkspacePdb(string? value)
     {
-        if (value is null || value.Length is < 16 or > 4096 ||
-            !value.EndsWith(".pdb", StringComparison.Ordinal) || value.Any(char.IsControl))
+        if (value is null || value.Length is < 16 or > 4096 || !value.EndsWith(".pdb", StringComparison.Ordinal) || value.Any(char.IsControl))
         {
             return false;
         }
@@ -709,8 +463,7 @@ internal static partial class RuntimeCapabilityEvidenceValidation
     }
 
     private static bool IsCanonicalPathSuffix(string value, char separator) =>
-        value.Split(separator, StringSplitOptions.None)
-            .All(static segment => segment.Length > 0 && segment is not ("." or ".."));
+        value.Split(separator, StringSplitOptions.None).All(static segment => segment.Length > 0 && segment is not ("." or ".."));
 
     private static bool IsCoreClrMajor(RuntimePromotionReceiptDocument receipt, int major)
     {
@@ -741,23 +494,15 @@ internal static partial class RuntimeCapabilityEvidenceValidation
         (format is "elf" or "pe" or "managed-pe" or "script") &&
         (architecture is "x64" or "anycpu" or "shell");
 
-    private static bool IsSha256(string? value) =>
-        value is not null && Sha256Regex().IsMatch(value);
+    private static bool IsSha256(string? value) => value is not null && Sha256Regex().IsMatch(value);
 
-    private static bool IsGitCommit(string? value) =>
-        value is not null && GitCommitRegex().IsMatch(value);
+    private static bool IsGitCommit(string? value) => value is not null && GitCommitRegex().IsMatch(value);
 
-    private static bool IsStableId(string? value) =>
-        value is not null && StableIdRegex().IsMatch(value);
+    private static bool IsStableId(string? value) => value is not null && StableIdRegex().IsMatch(value);
 
     private static bool IsCanonicalUtcTimestamp(string? value) =>
         value is not null && CanonicalUtcRegex().IsMatch(value) &&
-        DateTimeOffset.TryParseExact(
-            value,
-            ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"],
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-            out _);
+        DateTimeOffset.TryParseExact(value, ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"], CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out _);
 
     private static void Require(bool condition, string message)
     {
@@ -1025,11 +770,4 @@ public sealed record RuntimeCapabilityProbeArtifactSnapshot(
     string PreflightProfileSha256,
     RuntimeCapabilityProbeDerivationSnapshot? Derivation);
 
-public sealed record RuntimeCapabilityProbeDerivationSnapshot(
-    string ParentArtifactSha256,
-    string ProcessorId,
-    string ProcessorVersion,
-    string OptionsSha256,
-    string TransformId,
-    string ProfileId,
-    bool Applied);
+public sealed record RuntimeCapabilityProbeDerivationSnapshot(string ParentArtifactSha256, string ProcessorId, string ProcessorVersion, string OptionsSha256, string TransformId, string ProfileId, bool Applied);

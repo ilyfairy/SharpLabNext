@@ -59,16 +59,8 @@ describe('source association presentation', () => {
   })
 
   it.each([
-    [
-      'Monaco',
-      'monaco-editor',
-      'monaco-source-association-line monaco-source-association-line-active',
-    ],
-    [
-      'CodeMirror',
-      'codemirror-host',
-      'cm-line cm-source-association-line cm-source-association-line-active',
-    ],
+    ['Monaco', 'monaco-editor', 'monaco-source-association-line monaco-source-association-line-active'],
+    ['CodeMirror', 'codemirror-host', 'cm-line cm-source-association-line cm-source-association-line-active'],
   ])('keeps the whole-line %s association while its exact source span is active', (_editor, hostClass, lineClass) => {
     const host = document.createElement('div')
     host.className = hostClass
@@ -76,10 +68,7 @@ describe('source association presentation', () => {
     line.className = `${lineClass} source-association source-association-1`
     line.textContent = 'a + b'
     const inactiveLine = document.createElement('div')
-    inactiveLine.className = `${lineClass.replaceAll(
-      /(?:monaco|cm)-source-association-line-active/g,
-      '',
-    )} source-association source-association-1`
+    inactiveLine.className = `${lineClass.replaceAll(/(?:monaco|cm)-source-association-line-active/g, '')} source-association source-association-1`
     inactiveLine.textContent = 'a + b'
     host.append(inactiveLine, line)
     document.body.append(host)

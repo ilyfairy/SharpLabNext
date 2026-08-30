@@ -14,12 +14,7 @@ public sealed class JSharpCompilerProcessTests
         {
             var settings = JSharpTestSettings.CreateSettings(root);
             var jobRoot = Path.Combine(root, "work", "build-test");
-            var command = JSharpCompilerCommand.Create(
-                settings,
-                jobRoot,
-                "Program.jsl",
-                "output/SharpLabNext.User.exe",
-                optimize: true);
+            var command = JSharpCompilerCommand.Create(settings, jobRoot, "Program.jsl", "output/SharpLabNext.User.exe", optimize: true);
             var arguments = command.ArgumentList.ToArray();
 
             Assert.Equal(settings.CompilerHostPath, command.FileName);
@@ -39,8 +34,7 @@ public sealed class JSharpCompilerProcessTests
             Assert.Contains("/optimize+", arguments);
             Assert.Contains("/out:output/SharpLabNext.User.exe", arguments);
             Assert.Equal("Program.jsl", arguments[^1]);
-            Assert.DoesNotContain(arguments, argument =>
-                argument.Contains(jobRoot, StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(arguments, argument => argument.Contains(jobRoot, StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -54,15 +48,7 @@ public sealed class JSharpCompilerProcessTests
         var root = JSharpTestSettings.CreateRoot();
         try
         {
-            var diagnostics = JSharpCompilerProcess.ParseDiagnostics(
-                "Program.jsl(4,7): error VJS1234: missing symbol\n" +
-                "Program.jsl(5,1): warning VJS2000: warning text\n",
-                "vjc : error VJS9999: locationless failure\n",
-                root,
-                ["Program.jsl"],
-                7,
-                3,
-                maximumDiagnostics: 2);
+            var diagnostics = JSharpCompilerProcess.ParseDiagnostics("Program.jsl(4,7): error VJS1234: missing symbol\n" + "Program.jsl(5,1): warning VJS2000: warning text\n", "vjc : error VJS9999: locationless failure\n", root, ["Program.jsl"], 7, 3, maximumDiagnostics: 2);
 
             Assert.Equal(2, diagnostics.Count);
             var compiler = Assert.Single(diagnostics, static diagnostic => diagnostic.Code == "VJS1234");
@@ -86,18 +72,10 @@ public sealed class JSharpCompilerProcessTests
         var root = JSharpTestSettings.CreateRoot();
         try
         {
-            var settings = JSharpTestSettings.CreateSettings(
-                root,
-                new JSharpProcessLimits(4 * 1024, 512L * 1024 * 1024, 100, 10));
-            using var compiler = new JSharpCompilerProcess(
-                settings,
-                JSharpTestSettings.LoadManifest(),
-                NullLogger<JSharpCompilerProcess>.Instance);
+            var settings = JSharpTestSettings.CreateSettings(root, new JSharpProcessLimits(4 * 1024, 512L * 1024 * 1024, 100, 10));
+            using var compiler = new JSharpCompilerProcess(settings, JSharpTestSettings.LoadManifest(), NullLogger<JSharpCompilerProcess>.Instance);
 
-            var exception = await Assert.ThrowsAsync<LanguageWorkerRequestException>(() =>
-                compiler.CompileAsync(
-                    JSharpTestSettings.Validate("OUTPUT_LIMIT"),
-                    TestContext.Current.CancellationToken));
+            var exception = await Assert.ThrowsAsync<LanguageWorkerRequestException>(() => compiler.CompileAsync(JSharpTestSettings.Validate("OUTPUT_LIMIT"), TestContext.Current.CancellationToken));
 
             Assert.Equal("compiler-output-limit", exception.Code);
             Assert.Equal(1, compiler.StartedProcessCount);
@@ -114,17 +92,11 @@ public sealed class JSharpCompilerProcessTests
         var root = JSharpTestSettings.CreateRoot();
         try
         {
-            var settings = JSharpTestSettings.CreateSettings(
-                root,
-                new JSharpProcessLimits(1024 * 1024, 64L * 1024 * 1024, 100, 10));
-            using var compiler = new JSharpCompilerProcess(
-                settings,
-                JSharpTestSettings.LoadManifest(),
-                NullLogger<JSharpCompilerProcess>.Instance);
+            var settings = JSharpTestSettings.CreateSettings(root, new JSharpProcessLimits(1024 * 1024, 64L * 1024 * 1024, 100, 10));
+            using var compiler = new JSharpCompilerProcess(settings, JSharpTestSettings.LoadManifest(), NullLogger<JSharpCompilerProcess>.Instance);
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-            var exception = await Assert.ThrowsAsync<LanguageWorkerRequestException>(() =>
-                compiler.CompileAsync(JSharpTestSettings.Validate("MEMORY_LIMIT"), timeout.Token));
+            var exception = await Assert.ThrowsAsync<LanguageWorkerRequestException>(() => compiler.CompileAsync(JSharpTestSettings.Validate("MEMORY_LIMIT"), timeout.Token));
 
             Assert.Equal("compiler-memory-limit", exception.Code);
             Assert.Equal(1, compiler.StartedProcessCount);
@@ -141,18 +113,12 @@ public sealed class JSharpCompilerProcessTests
         var root = JSharpTestSettings.CreateRoot();
         try
         {
-            using var compiler = new JSharpCompilerProcess(
-                JSharpTestSettings.CreateSettings(root),
-                JSharpTestSettings.LoadManifest(),
-                NullLogger<JSharpCompilerProcess>.Instance);
+            using var compiler = new JSharpCompilerProcess(JSharpTestSettings.CreateSettings(root), JSharpTestSettings.LoadManifest(), NullLogger<JSharpCompilerProcess>.Instance);
             using var cancellation = new CancellationTokenSource();
             var first = compiler.CompileAsync(JSharpTestSettings.Validate("SLEEP"), cancellation.Token);
             await WaitForAsync(() => compiler.StartedProcessCount == 1);
 
-            var exception = await Assert.ThrowsAsync<LanguageWorkerRequestException>(() =>
-                compiler.CompileAsync(
-                    JSharpTestSettings.Validate("public class Second { }"),
-                    TestContext.Current.CancellationToken));
+            var exception = await Assert.ThrowsAsync<LanguageWorkerRequestException>(() => compiler.CompileAsync(JSharpTestSettings.Validate("public class Second { }"), TestContext.Current.CancellationToken));
             Assert.Equal("compiler-capacity-exhausted", exception.Code);
 
             cancellation.Cancel();
@@ -171,12 +137,7 @@ public sealed class JSharpCompilerProcessTests
         try
         {
             var settings = JSharpTestSettings.CreateSettings(root);
-            Assert.Throws<ArgumentException>(() => JSharpCompilerCommand.Create(
-                settings,
-                root,
-                "../Program.jsl",
-                "output/User.exe",
-                optimize: false));
+            Assert.Throws<ArgumentException>(() => JSharpCompilerCommand.Create(settings, root, "../Program.jsl", "output/User.exe", optimize: false));
         }
         finally
         {

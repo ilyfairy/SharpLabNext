@@ -12,13 +12,7 @@ public sealed class CppCliCompilerProcessTests
         {
             var settings = CppCliTestSettings.CreateSettings(root);
             var jobRoot = Path.Combine(root, "work", "build-test");
-            var command = CppCliCompilerCommand.Create(
-                settings,
-                jobRoot,
-                "Program.cpp",
-                "output/SharpLabNext.User.obj",
-                "output/SharpLabNext.User.exe",
-                optimize: true);
+            var command = CppCliCompilerCommand.Create(settings, jobRoot, "Program.cpp", "output/SharpLabNext.User.obj", "output/SharpLabNext.User.exe", optimize: true);
             var arguments = command.ArgumentList.ToArray();
 
             Assert.Equal(settings.CompilerPath, command.FileName);
@@ -40,8 +34,7 @@ public sealed class CppCliCompilerProcessTests
             Assert.Contains("/Fooutput/SharpLabNext.User.obj", arguments);
             Assert.Contains("/Feoutput/SharpLabNext.User.exe", arguments);
             Assert.Equal(["/link", "/Brepro"], arguments[^2..]);
-            Assert.DoesNotContain(arguments, argument =>
-                argument.Contains(jobRoot, StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(arguments, argument => argument.Contains(jobRoot, StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -55,15 +48,7 @@ public sealed class CppCliCompilerProcessTests
         var root = CppCliTestSettings.CreateRoot();
         try
         {
-            var diagnostics = CppCliCompilerProcess.ParseDiagnostics(
-                "Program.cpp(4,7): error C2065: 'missing': undeclared identifier\n" +
-                "Program.cpp(6,1): fatal error C1121: call to CryptoAPI failed\n",
-                "LINK : fatal error LNK1104: cannot open file 'missing.lib'\n",
-                root,
-                ["Program.cpp"],
-                7,
-                3,
-                100);
+            var diagnostics = CppCliCompilerProcess.ParseDiagnostics("Program.cpp(4,7): error C2065: 'missing': undeclared identifier\n" + "Program.cpp(6,1): fatal error C1121: call to CryptoAPI failed\n", "LINK : fatal error LNK1104: cannot open file 'missing.lib'\n", root, ["Program.cpp"], 7, 3, 100);
 
             Assert.Equal(2, diagnostics.Count);
             var compiler = Assert.Single(diagnostics, static diagnostic => diagnostic.Code == "C2065");
@@ -89,13 +74,7 @@ public sealed class CppCliCompilerProcessTests
         try
         {
             var settings = CppCliTestSettings.CreateSettings(root);
-            Assert.Throws<ArgumentException>(() => CppCliCompilerCommand.Create(
-                settings,
-                root,
-                "../Program.cpp",
-                "output/User.obj",
-                "output/User.exe",
-                optimize: false));
+            Assert.Throws<ArgumentException>(() => CppCliCompilerCommand.Create(settings, root, "../Program.cpp", "output/User.obj", "output/User.exe", optimize: false));
         }
         finally
         {

@@ -15,21 +15,14 @@ export const defaultUrlCodecLimits: Readonly<UrlCodecLimits> = Object.freeze({
   workerTimeoutMs: 2_000,
 })
 
-export const resolveUrlCodecLimits = (limits?: UrlCodecLimits): UrlCodecLimits =>
-  limits ?? { ...defaultUrlCodecLimits }
+export const resolveUrlCodecLimits = (limits?: UrlCodecLimits): UrlCodecLimits => limits ?? { ...defaultUrlCodecLimits }
 
-export const classifyUrlLength = (
-  urlLength: number,
-  limits: UrlCodecLimits,
-): UrlLengthDisposition => {
+export const classifyUrlLength = (urlLength: number, limits: UrlCodecLimits): UrlLengthDisposition => {
   if (!Number.isSafeInteger(urlLength) || urlLength < 0) {
     throw new ShareUrlError('url-too-long', 'The URL length is invalid.')
   }
   if (urlLength > limits.hardUrlLength) {
-    throw new ShareUrlError(
-      'url-too-long',
-      `The URL is ${urlLength} characters, exceeding the ${limits.hardUrlLength} character hard limit.`,
-    )
+    throw new ShareUrlError('url-too-long', `The URL is ${urlLength} characters, exceeding the ${limits.hardUrlLength} character hard limit.`)
   }
   return urlLength <= limits.softUrlLength ? 'live' : 'explicit-warning'
 }

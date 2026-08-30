@@ -1,12 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { resolveSelection } from '../api/client'
-import type {
-  CatalogDocument,
-  ResolveSelectionRequest,
-  ResolveSelectionResponse,
-  SelectionChange,
-} from '../api/types'
+import type { CatalogDocument, ResolveSelectionRequest, ResolveSelectionResponse, SelectionChange } from '../api/types'
 import { useWorkbenchStore } from './store'
 
 interface ResolutionSnapshot {
@@ -20,11 +15,7 @@ interface DebouncedResolutionSnapshot extends ResolutionSnapshot {
   initial: boolean
 }
 
-function useDebouncedSnapshot(
-  value: ResolutionSnapshot | null,
-  initialSnapshotReady: boolean,
-  delay: number,
-): [DebouncedResolutionSnapshot | null, (value: ResolutionSnapshot) => void] {
+function useDebouncedSnapshot(value: ResolutionSnapshot | null, initialSnapshotReady: boolean, delay: number): [DebouncedResolutionSnapshot | null, (value: ResolutionSnapshot) => void] {
   const [debounced, setDebounced] = useState<DebouncedResolutionSnapshot | null>(null)
   const initialSnapshotAccepted = useRef(false)
   const initialSnapshotKey = useRef<string | null>(null)
@@ -59,16 +50,7 @@ function useDebouncedSnapshot(
 }
 
 export function selectionRequestSignature(request: ResolveSelectionRequest): string {
-  return JSON.stringify([
-    request.catalogRevision,
-    request.languageId,
-    request.toolchainId,
-    request.referenceSetId,
-    request.outputId,
-    request.runtimeId,
-    request.buildMode,
-    request.workspaceRevision,
-  ])
+  return JSON.stringify([request.catalogRevision, request.languageId, request.toolchainId, request.referenceSetId, request.outputId, request.runtimeId, request.buildMode, request.workspaceRevision])
 }
 
 export interface SelectionResolutionState {
@@ -79,10 +61,7 @@ export interface SelectionResolutionState {
   error: Error | null
 }
 
-export function useSelectionResolution(
-  catalog: CatalogDocument | undefined,
-  initialSnapshotReady: boolean,
-): SelectionResolutionState {
+export function useSelectionResolution(catalog: CatalogDocument | undefined, initialSnapshotReady: boolean): SelectionResolutionState {
   const languageId = useWorkbenchStore((state) => state.languageId)
   const toolchainId = useWorkbenchStore((state) => state.toolchainId)
   const referenceSetId = useWorkbenchStore((state) => state.referenceSetId)
@@ -111,22 +90,8 @@ export function useSelectionResolution(
       workspaceRevision,
       signature: selectionRequestSignature(request),
     }
-  }, [
-    buildMode,
-    catalog,
-    languageId,
-    outputId,
-    referenceSetId,
-    runtimeId,
-    selectionRevision,
-    toolchainId,
-    workspaceRevision,
-  ])
-  const [debouncedSnapshot, continueInitialSnapshot] = useDebouncedSnapshot(
-    snapshot,
-    initialSnapshotReady,
-    250,
-  )
+  }, [buildMode, catalog, languageId, outputId, referenceSetId, runtimeId, selectionRevision, toolchainId, workspaceRevision])
+  const [debouncedSnapshot, continueInitialSnapshot] = useDebouncedSnapshot(snapshot, initialSnapshotReady, 250)
 
   const resolutionQuery = useQuery({
     queryKey: ['selection-resolution', debouncedSnapshot?.signature ?? 'none'],
@@ -161,10 +126,7 @@ export function useSelectionResolution(
     setLastAppliedChanges(resolutionQuery.data.selectionChanges)
 
     const normalized = useWorkbenchStore.getState()
-    if (
-      debouncedSnapshot.initial &&
-      normalized.selectionRevision !== debouncedSnapshot.selectionRevision
-    ) {
+    if (debouncedSnapshot.initial && normalized.selectionRevision !== debouncedSnapshot.selectionRevision) {
       const request: ResolveSelectionRequest = {
         languageId: normalized.languageId,
         toolchainId: normalized.toolchainId,
@@ -188,14 +150,8 @@ export function useSelectionResolution(
   return {
     resolution: aligned ? (resolutionQuery.data ?? null) : null,
     isInitialSnapshot: aligned && debouncedSnapshot?.initial === true,
-    selectionChanges: aligned
-      ? (resolutionQuery.data?.selectionChanges ?? lastAppliedChanges)
-      : lastAppliedChanges,
-    isResolving:
-      catalog !== undefined &&
-      (!aligned ||
-        resolutionQuery.isPending ||
-        (resolutionQuery.isFetching && !resolutionQuery.data)),
+    selectionChanges: aligned ? (resolutionQuery.data?.selectionChanges ?? lastAppliedChanges) : lastAppliedChanges,
+    isResolving: catalog !== undefined && (!aligned || resolutionQuery.isPending || (resolutionQuery.isFetching && !resolutionQuery.data)),
     error: aligned && resolutionQuery.error instanceof Error ? resolutionQuery.error : null,
   }
 }

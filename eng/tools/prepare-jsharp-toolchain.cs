@@ -11,19 +11,15 @@ return await JSharpToolchainPreparation.RunAsync(args);
 
 internal static class JSharpToolchainPreparation
 {
-    private const string DockerfileRelativePath =
-        "deploy/docker/Dockerfile.operator-jsharp20";
-    private const string InstallerRelativePath =
-        "eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe";
+    private const string DockerfileRelativePath = "deploy/docker/Dockerfile.operator-jsharp20";
+    private const string InstallerRelativePath = "eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe";
     private const long InstallerSize = 6_110_048;
-    private const string InstallerSha256 =
-        "3a7a6ff79eeb5d51f8bf4cab188f74de0a220722e3d9d97858092ea3ef41b2b0";
+    private const string InstallerSha256 = "3a7a6ff79eeb5d51f8bf4cab188f74de0a220722e3d9d97858092ea3ef41b2b0";
     private const string InstallerContextName = "visual-jsharp-installer-context";
-    private const string SourceIdentityModeEnvironmentVariable =
-        "SHARPLABNEXT_SOURCE_IDENTITY_MODE";
+    private const string SourceIdentityModeEnvironmentVariable = "SHARPLABNEXT_SOURCE_IDENTITY_MODE";
     private const string ContentSourceIdentityMode = "content";
     private const string Usage =
-        "Usage: dotnet run eng/prepare-jsharp-toolchain.cs -- " +
+        "Usage: dotnet run eng/tools/prepare-jsharp-toolchain.cs -- " +
         "--framework-seed-image REFERENCE --output-image REFERENCE " +
         "--operator-build-input-sha256 HEX " +
         "--accept-microsoft-dotnet-eula --accept-microsoft-jsharp-eula " +
@@ -111,29 +107,16 @@ internal static class JSharpToolchainPreparation
             }
         }
 
-        if (string.IsNullOrWhiteSpace(frameworkSeedImage) ||
-            string.IsNullOrWhiteSpace(outputImage) ||
-            string.IsNullOrWhiteSpace(operatorBuildInputSha256))
+        if (string.IsNullOrWhiteSpace(frameworkSeedImage) || string.IsNullOrWhiteSpace(outputImage) || string.IsNullOrWhiteSpace(operatorBuildInputSha256))
         {
-            throw new UsageException(
-                "Framework seed, output image, and operator build input digest are required.");
+            throw new UsageException("Framework seed, output image, and operator build input digest are required.");
         }
         if (!acceptDotNetEula || !acceptJSharpEula)
         {
-            throw new UsageException(
-                "Both --accept-microsoft-dotnet-eula and " +
-                "--accept-microsoft-jsharp-eula are required.");
+            throw new UsageException("Both --accept-microsoft-dotnet-eula and " + "--accept-microsoft-jsharp-eula are required.");
         }
 
-        return new PreparationOptions(
-            repositoryRoot,
-            dockerCommand ?? "docker",
-            ValidateDigestReference(frameworkSeedImage, "--framework-seed-image"),
-            ValidateOutputImageReference(outputImage),
-            NormalizeSha256(
-                operatorBuildInputSha256,
-                "--operator-build-input-sha256"),
-            dryRun);
+        return new PreparationOptions(repositoryRoot, dockerCommand ?? "docker", ValidateDigestReference(frameworkSeedImage, "--framework-seed-image"), ValidateOutputImageReference(outputImage), NormalizeSha256(operatorBuildInputSha256, "--operator-build-input-sha256"), dryRun);
     }
 
     private static ValidatedInputs Validate(PreparationOptions options)
@@ -142,28 +125,22 @@ internal static class JSharpToolchainPreparation
         var dockerfile = Path.Combine(repositoryRoot, DockerfileRelativePath);
         RequireRegularFile(dockerfile, "The J# operator Dockerfile is missing or invalid.");
 
-        var installer = Path.Combine(
-            repositoryRoot,
-            InstallerRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        var installer = Path.Combine(repositoryRoot, InstallerRelativePath.Replace('/', Path.DirectorySeparatorChar));
         FileInfo info;
         try
         {
             info = new FileInfo(installer);
             if (!info.Exists)
             {
-                throw new InputValidationException(
-                    "The Visual J# Git LFS object is missing. Run git lfs pull before building.");
+                throw new InputValidationException("The Visual J# Git LFS object is missing. Run git lfs pull before building.");
             }
             if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
             {
-                throw new InputValidationException(
-                    "The Visual J# Git LFS input must be one regular non-link file.");
+                throw new InputValidationException("The Visual J# Git LFS input must be one regular non-link file.");
             }
             if (IsLfsPointer(installer, info.Length))
             {
-                throw new InputValidationException(
-                    "The Visual J# input is an unexpanded Git LFS pointer. " +
-                    "Run git lfs pull before building.");
+                throw new InputValidationException("The Visual J# input is an unexpanded Git LFS pointer. " + "Run git lfs pull before building.");
             }
             // The installer bytes are the build input. Git LFS metadata is
             // useful provenance when present, but an exported source tree
@@ -172,27 +149,22 @@ internal static class JSharpToolchainPreparation
                 ValidateLfsAttribute(repositoryRoot);
             if (info.Length != InstallerSize)
             {
-                throw new InputValidationException(
-                    "The Visual J# Git LFS input size or SHA-256 is invalid.");
+                throw new InputValidationException("The Visual J# Git LFS input size or SHA-256 is invalid.");
             }
             using var stream = File.OpenRead(installer);
             var digest = Convert.ToHexStringLower(SHA256.HashData(stream));
             if (!StringComparer.Ordinal.Equals(digest, InstallerSha256))
             {
-                throw new InputValidationException(
-                    "The Visual J# Git LFS input size or SHA-256 is invalid.");
+                throw new InputValidationException("The Visual J# Git LFS input size or SHA-256 is invalid.");
             }
         }
         catch (InputValidationException)
         {
             throw;
         }
-        catch (Exception exception) when (
-            exception is ArgumentException or IOException or
-                NotSupportedException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
         {
-            throw new InputValidationException(
-                "The Visual J# Git LFS input could not be validated.");
+            throw new InputValidationException("The Visual J# Git LFS input could not be validated.");
         }
 
         var context = Path.GetDirectoryName(installer);
@@ -206,9 +178,7 @@ internal static class JSharpToolchainPreparation
         if (size is < 1 or > 1024)
             return false;
         var text = File.ReadAllText(path);
-        return text.StartsWith(
-            "version https://git-lfs.github.com/spec/v1\n",
-            StringComparison.Ordinal);
+        return text.StartsWith("version https://git-lfs.github.com/spec/v1\n", StringComparison.Ordinal);
     }
 
     private static void ValidateLfsAttribute(string repositoryRoot)
@@ -232,43 +202,29 @@ internal static class JSharpToolchainPreparation
         }
         try
         {
-            using var process = Process.Start(startInfo)
-                ?? throw new InputValidationException(
-                    "Git could not validate the Visual J# LFS attribute.");
+            using var process = Process.Start(startInfo) ?? throw new InputValidationException("Git could not validate the Visual J# LFS attribute.");
             var output = process.StandardOutput.ReadToEnd();
             process.WaitForExit();
-            if (process.ExitCode != 0 ||
-                !output.TrimEnd().EndsWith(": filter: lfs", StringComparison.Ordinal))
+            if (process.ExitCode != 0 || !output.TrimEnd().EndsWith(": filter: lfs", StringComparison.Ordinal))
             {
-                throw new InputValidationException(
-                    "The Visual J# installer path is not covered by a Git LFS filter rule.");
+                throw new InputValidationException("The Visual J# installer path is not covered by a Git LFS filter rule.");
             }
         }
         catch (InputValidationException)
         {
             throw;
         }
-        catch (Exception exception) when (
-            exception is InvalidOperationException or Win32Exception)
+        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
         {
-            throw new InputValidationException(
-                "Git could not validate the Visual J# LFS attribute.");
+            throw new InputValidationException("Git could not validate the Visual J# LFS attribute.");
         }
     }
 
-    private static bool HasGitMetadata(string repositoryRoot) =>
-        File.Exists(Path.Combine(repositoryRoot, ".git")) ||
-        Directory.Exists(Path.Combine(repositoryRoot, ".git"));
+    private static bool HasGitMetadata(string repositoryRoot) => File.Exists(Path.Combine(repositoryRoot, ".git")) || Directory.Exists(Path.Combine(repositoryRoot, ".git"));
 
-    private static bool IsContentSourceIdentity() =>
-        string.Equals(
-            Environment.GetEnvironmentVariable(SourceIdentityModeEnvironmentVariable),
-            ContentSourceIdentityMode,
-            StringComparison.OrdinalIgnoreCase);
+    private static bool IsContentSourceIdentity() => string.Equals(Environment.GetEnvironmentVariable(SourceIdentityModeEnvironmentVariable), ContentSourceIdentityMode, StringComparison.OrdinalIgnoreCase);
 
-    private static DockerInvocation CreateDockerInvocation(
-        PreparationOptions options,
-        ValidatedInputs inputs)
+    private static DockerInvocation CreateDockerInvocation(PreparationOptions options, ValidatedInputs inputs)
     {
         var arguments = new List<DockerArgument>
         {
@@ -291,17 +247,13 @@ internal static class JSharpToolchainPreparation
             new("--build-arg"),
             new("ACCEPT_MICROSOFT_JSHARP_EULA=true"),
             new("--build-context"),
-            new(
-                $"{InstallerContextName}={inputs.InstallerContext}",
-                $"{InstallerContextName}=<repository-lfs-context>"),
+            new($"{InstallerContextName}={inputs.InstallerContext}", $"{InstallerContextName}=<repository-lfs-context>"),
             new(inputs.RepositoryRoot)
         };
         return new DockerInvocation(options.DockerCommand, arguments);
     }
 
-    private static async Task<int> ExecuteAsync(
-        DockerInvocation invocation,
-        ValidatedInputs inputs)
+    private static async Task<int> ExecuteAsync(DockerInvocation invocation, ValidatedInputs inputs)
     {
         var startInfo = new ProcessStartInfo(invocation.Command)
         {
@@ -318,8 +270,7 @@ internal static class JSharpToolchainPreparation
         {
             process = Process.Start(startInfo);
         }
-        catch (Exception exception) when (
-            exception is InvalidOperationException or Win32Exception)
+        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
         {
             Console.Error.WriteLine("Could not start Docker Buildx.");
             return 1;
@@ -333,30 +284,20 @@ internal static class JSharpToolchainPreparation
         using (process)
         {
             var sensitive = new[] { inputs.Installer, inputs.InstallerContext };
-            var standardOutput = ForwardRedactedAsync(
-                process.StandardOutput,
-                Console.Out,
-                sensitive);
-            var standardError = ForwardRedactedAsync(
-                process.StandardError,
-                Console.Error,
-                sensitive);
+            var standardOutput = ForwardRedactedAsync(process.StandardOutput, Console.Out, sensitive);
+            var standardError = ForwardRedactedAsync(process.StandardError, Console.Error, sensitive);
             await process.WaitForExitAsync();
             await Task.WhenAll(standardOutput, standardError);
             if (process.ExitCode != 0)
             {
-                Console.Error.WriteLine(
-                    "Docker Buildx did not create the source-built J# operator image.");
+                Console.Error.WriteLine("Docker Buildx did not create the source-built J# operator image.");
                 return 1;
             }
         }
         return 0;
     }
 
-    private static async Task ForwardRedactedAsync(
-        StreamReader source,
-        TextWriter destination,
-        IReadOnlyList<string> sensitiveValues)
+    private static async Task ForwardRedactedAsync(StreamReader source, TextWriter destination, IReadOnlyList<string> sensitiveValues)
     {
         while (await source.ReadLineAsync() is { } line)
         {
@@ -389,14 +330,11 @@ internal static class JSharpToolchainPreparation
         {
             throw;
         }
-        catch (Exception exception) when (
-            exception is ArgumentException or IOException or
-                NotSupportedException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
         {
             throw new InputValidationException("The repository root is invalid.");
         }
-        throw new InputValidationException(
-            "SharpLabNext.slnx was not found above the current directory.");
+        throw new InputValidationException("SharpLabNext.slnx was not found above the current directory.");
     }
 
     private static void RequireRegularFile(string path, string message)
@@ -411,9 +349,7 @@ internal static class JSharpToolchainPreparation
         {
             throw;
         }
-        catch (Exception exception) when (
-            exception is ArgumentException or IOException or
-                NotSupportedException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
         {
             throw new InputValidationException(message);
         }
@@ -421,11 +357,9 @@ internal static class JSharpToolchainPreparation
 
     private static string NormalizeSha256(string value, string option)
     {
-        if (value.Length != 64 ||
-            value.Any(static character => !char.IsAsciiHexDigit(character)))
+        if (value.Length != 64 || value.Any(static character => !char.IsAsciiHexDigit(character)))
         {
-            throw new UsageException(
-                $"{option} must contain exactly 64 hexadecimal characters.");
+            throw new UsageException($"{option} must contain exactly 64 hexadecimal characters.");
         }
         return value.ToLowerInvariant();
     }
@@ -434,30 +368,18 @@ internal static class JSharpToolchainPreparation
     {
         const string marker = "@sha256:";
         var separator = value.LastIndexOf(marker, StringComparison.Ordinal);
-        if (value.Length > 512 || separator <= 0 ||
-            separator + marker.Length + 64 != value.Length ||
-            value[..separator].Any(static character =>
-                char.IsWhiteSpace(character) ||
-                char.IsControl(character) ||
-                character == '@') ||
-            value[(separator + marker.Length)..].Any(static character =>
-                character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
+        if (value.Length > 512 || separator <= 0 || separator + marker.Length + 64 != value.Length || value[..separator].Any(static character => char.IsWhiteSpace(character) || char.IsControl(character) || character == '@') || value[(separator + marker.Length)..].Any(static character => character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
         {
-            throw new UsageException(
-                $"{option} must use repository[:tag]@sha256:<64 lowercase hex>.");
+            throw new UsageException($"{option} must use repository[:tag]@sha256:<64 lowercase hex>.");
         }
         return value;
     }
 
     private static string ValidateOutputImageReference(string value)
     {
-        if (value.Length > 512 || value.Contains('@') ||
-            !value.Contains(':', StringComparison.Ordinal) ||
-            value.Any(static character =>
-                char.IsWhiteSpace(character) || char.IsControl(character)))
+        if (value.Length > 512 || value.Contains('@') || !value.Contains(':', StringComparison.Ordinal) || value.Any(static character => char.IsWhiteSpace(character) || char.IsControl(character)))
         {
-            throw new UsageException(
-                "--output-image must contain one bounded taggable Docker image reference.");
+            throw new UsageException("--output-image must contain one bounded taggable Docker image reference.");
         }
         return value;
     }
@@ -470,25 +392,13 @@ internal static class JSharpToolchainPreparation
         return args[index];
     }
 
-    private sealed record PreparationOptions(
-        string? RepositoryRoot,
-        string DockerCommand,
-        string FrameworkSeedImage,
-        string OutputImage,
-        string OperatorBuildInputSha256,
-        bool DryRun);
+    private sealed record PreparationOptions(string? RepositoryRoot, string DockerCommand, string FrameworkSeedImage, string OutputImage, string OperatorBuildInputSha256, bool DryRun);
 
-    private sealed record ValidatedInputs(
-        string RepositoryRoot,
-        string Dockerfile,
-        string Installer,
-        string InstallerContext);
+    private sealed record ValidatedInputs(string RepositoryRoot, string Dockerfile, string Installer, string InstallerContext);
 
     private sealed record DockerArgument(string Value, string? RedactedValue = null);
 
-    private sealed record DockerInvocation(
-        string Command,
-        IReadOnlyList<DockerArgument> Arguments)
+    private sealed record DockerInvocation(string Command, IReadOnlyList<DockerArgument> Arguments)
     {
         public string RenderRedacted()
         {
@@ -503,9 +413,7 @@ internal static class JSharpToolchainPreparation
 
         private static string Quote(string value)
         {
-            if (value.Length > 0 && value.All(static character =>
-                    !char.IsWhiteSpace(character) &&
-                    character is not ('"' or '\\')))
+            if (value.Length > 0 && value.All(static character => !char.IsWhiteSpace(character) && character is not ('"' or '\\')))
             {
                 return value;
             }

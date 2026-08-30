@@ -8,9 +8,7 @@ public interface IToolchainWorkerClientFactory
     IToolchainWorkerClient Create(string workerId);
 }
 
-public sealed class ToolchainWorkerClientFactory(
-    IHttpClientFactory httpClientFactory,
-    LanguageWorkerEndpointRegistry endpoints) : IToolchainWorkerClientFactory
+public sealed class ToolchainWorkerClientFactory(IHttpClientFactory httpClientFactory, LanguageWorkerEndpointRegistry endpoints) : IToolchainWorkerClientFactory
 {
     public IToolchainWorkerClient Create(string workerId)
     {
@@ -23,18 +21,11 @@ public sealed class ToolchainWorkerClientFactory(
         httpClient.Timeout = Timeout.InfiniteTimeSpan;
         if (endpoint.ServiceToken is not null)
             httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", endpoint.ServiceToken);
-        return new ToolchainWorkerClient(
-            httpClient,
-            new ToolchainWorkerClientSettings(
-                endpoint.WorkerId,
-                endpoint.ExpectedReleaseId,
-                endpoint.ExpectedWorkerImageId,
-                endpoint.ExpectedReferenceSetDigests));
+        return new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings(endpoint.WorkerId, endpoint.ExpectedReleaseId, endpoint.ExpectedWorkerImageId, endpoint.ExpectedReferenceSetDigests));
     }
 }
 
-public sealed class ToolchainWorkerEndpointUnavailableException(string workerId)
-    : Exception($"Toolchain worker '{workerId}' is not installed.")
+public sealed class ToolchainWorkerEndpointUnavailableException(string workerId) : Exception($"Toolchain worker '{workerId}' is not installed.")
 {
     public string WorkerId { get; } = workerId;
 }

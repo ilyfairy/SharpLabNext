@@ -7,52 +7,21 @@ using System.Xml.Linq;
 
 namespace SharpLabNext.ProfileUpdater;
 
-public sealed record DotNetChannelResolution(
-    string Channel,
-    string RuntimeVersion,
-    string RuntimeCommit,
-    string JitCommit,
-    Uri RuntimeUri,
-    string RuntimeSha512,
-    string SdkVersion,
-    Uri SdkUri,
-    string SdkSha512,
-    DateOnly ReleaseDate);
+public sealed record DotNetChannelResolution(string Channel, string RuntimeVersion, string RuntimeCommit, string JitCommit, Uri RuntimeUri, string RuntimeSha512, string SdkVersion, Uri SdkUri, string SdkSha512, DateOnly ReleaseDate);
 
-public sealed record NuGetPackageResolution(
-    string PackageId,
-    string Version,
-    Uri PackageUri,
-    string PackageContentHash,
-    string PackageSha512);
+public sealed record NuGetPackageResolution(string PackageId, string Version, Uri PackageUri, string PackageContentHash, string PackageSha512);
 
-public sealed record GitCommitResolution(
-    string Commit,
-    Uri RepositoryUri,
-    Uri ArchiveUri,
-    string ArchiveSha256,
-    string ProductVersion);
+public sealed record GitCommitResolution(string Commit, Uri RepositoryUri, Uri ArchiveUri, string ArchiveSha256, string ProductVersion);
 
 public interface IProfileSourceClient
 {
-    Task<DotNetChannelResolution> ResolveDotNetChannelAsync(
-        string channel,
-        CancellationToken cancellationToken = default);
+    Task<DotNetChannelResolution> ResolveDotNetChannelAsync(string channel, CancellationToken cancellationToken = default);
 
-    Task<NuGetPackageResolution> ResolveLatestStablePackageAsync(
-        string packageId,
-        CancellationToken cancellationToken = default);
+    Task<NuGetPackageResolution> ResolveLatestStablePackageAsync(string packageId, CancellationToken cancellationToken = default);
 
-    Task<NuGetPackageResolution> ResolveExactPackageAsync(
-        string packageId,
-        string version,
-        CancellationToken cancellationToken = default);
+    Task<NuGetPackageResolution> ResolveExactPackageAsync(string packageId, string version, CancellationToken cancellationToken = default);
 
-    Task<GitCommitResolution> ResolveGitCommitAsync(
-        string owner,
-        string repository,
-        string branch,
-        CancellationToken cancellationToken = default);
+    Task<GitCommitResolution> ResolveGitCommitAsync(string owner, string repository, string branch, CancellationToken cancellationToken = default);
 }
 
 public sealed class OfficialProfileSourceClient(HttpClient httpClient) : IProfileSourceClient
@@ -60,9 +29,7 @@ public sealed class OfficialProfileSourceClient(HttpClient httpClient) : IProfil
     private const long MaximumRuntimeArchiveBytes = 512L * 1024 * 1024;
     private const long MaximumVersionFileBytes = 4096;
 
-    public async Task<DotNetChannelResolution> ResolveDotNetChannelAsync(
-        string channel,
-        CancellationToken cancellationToken = default)
+    public async Task<DotNetChannelResolution> ResolveDotNetChannelAsync(string channel, CancellationToken cancellationToken = default)
     {
         ValidateToken(channel, nameof(channel));
         var uri = new Uri(
@@ -71,8 +38,7 @@ public sealed class OfficialProfileSourceClient(HttpClient httpClient) : IProfil
         var root = document.RootElement;
         var latestRelease = RequiredString(root, "latest-release");
         var releases = RequiredArray(root, "releases");
-        var release = releases.EnumerateArray().SingleOrDefault(candidate =>
-            string.Equals(RequiredString(candidate, "release-version"), latestRelease, StringComparison.Ordinal));
+        var release = releases.EnumerateArray().SingleOrDefault(candidate => string.Equals(RequiredString(candidate, "release-version"), latestRelease, StringComparison.Ordinal));
         if (release.ValueKind == JsonValueKind.Undefined)
         {
             throw new InvalidDataException($".NET channel '{channel}' does not contain latest release '{latestRelease}'.");
@@ -86,40 +52,18 @@ public sealed class OfficialProfileSourceClient(HttpClient httpClient) : IProfil
         var runtimeSha512 = RequiredSha512(runtimeFile, "hash");
         var runtimeIdentity = await ResolveRuntimeIdentityAsync(runtimeUri, runtimeSha512, cancellationToken);
         var releaseDate = DateOnly.Parse(RequiredString(release, "release-date"), System.Globalization.CultureInfo.InvariantCulture);
-        return new DotNetChannelResolution(
-            channel,
-            RequiredString(runtime, "version"),
-            runtimeIdentity.RuntimeCommit,
-            runtimeIdentity.JitCommit,
-            runtimeUri,
-            runtimeSha512,
-            RequiredString(sdk, "version"),
-            RequiredUri(sdkFile, "url"),
-            RequiredSha512(sdkFile, "hash"),
-            releaseDate);
+        return new DotNetChannelResolution(channel, RequiredString(runtime, "version"), runtimeIdentity.RuntimeCommit, runtimeIdentity.JitCommit, runtimeUri, runtimeSha512, RequiredString(sdk, "version"), RequiredUri(sdkFile, "url"), RequiredSha512(sdkFile, "hash"), releaseDate);
     }
 
-    private async Task<RuntimeArchiveIdentity> ResolveRuntimeIdentityAsync(
-        Uri runtimeUri,
-        string expectedSha512,
-        CancellationToken cancellationToken)
+    private async Task<RuntimeArchiveIdentity> ResolveRuntimeIdentityAsync(Uri runtimeUri, string expectedSha512, CancellationToken cancellationToken)
     {
         var archivePath = Path.Combine(Path.GetTempPath(), $"sharplabnext-runtime-{Guid.NewGuid():N}.tar.gz");
         try
         {
-            using var response = await httpClient.GetAsync(
-                runtimeUri,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
+            using var response = await httpClient.GetAsync(runtimeUri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             response.EnsureSuccessStatusCode();
             await using (var source = await response.Content.ReadAsStreamAsync(cancellationToken))
-            await using (var destination = new FileStream(
-                archivePath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                1024 * 128,
-                FileOptions.Asynchronous | FileOptions.SequentialScan))
+            await using (var destination = new FileStream(archivePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 128, FileOptions.Asynchronous | FileOptions.SequentialScan))
             using (var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA512))
             {
                 var buffer = new byte[1024 * 128];
@@ -139,8 +83,7 @@ public sealed class OfficialProfileSourceClient(HttpClient httpClient) : IProfil
                 var actualSha512 = Convert.ToHexStringLower(hash.GetHashAndReset());
                 if (!string.Equals(expectedSha512, actualSha512, StringComparison.Ordinal))
                 {
-                    throw new InvalidDataException(
-                        $".NET runtime archive SHA-512 mismatch: expected '{expectedSha512}', actual '{actualSha512}'.");
+                    throw new InvalidDataException($".NET runtime archive SHA-512 mismatch: expected '{expectedSha512}', actual '{actualSha512}'.");
                 }
             }
 
@@ -149,26 +92,16 @@ public sealed class OfficialProfileSourceClient(HttpClient httpClient) : IProfil
             using var reader = new TarReader(gzip, leaveOpen: false);
             while (await reader.GetNextEntryAsync(copyData: false, cancellationToken) is { } entry)
             {
-                if (!string.Equals(Path.GetFileName(entry.Name), ".version", StringComparison.Ordinal) ||
-                    entry.DataStream is null)
+                if (!string.Equals(Path.GetFileName(entry.Name), ".version", StringComparison.Ordinal) || entry.DataStream is null)
                 {
                     continue;
                 }
                 if (entry.Length is < 1 or > MaximumVersionFileBytes)
                     throw new InvalidDataException(".NET runtime archive .version has an invalid size.");
 
-                using var textReader = new StreamReader(
-                    entry.DataStream,
-                    Encoding.UTF8,
-                    detectEncodingFromByteOrderMarks: true,
-                    bufferSize: 1024,
-                    leaveOpen: false);
+                using var textReader = new StreamReader(entry.DataStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: false);
                 var contents = await textReader.ReadToEndAsync(cancellationToken);
-                var commit = contents.Split(
-                        ['\r', '\n', ' ', '\t'],
-                        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Select(static value => value.ToLowerInvariant())
-                    .FirstOrDefault(IsCommit);
+                var commit = contents.Split(['\r', '\n', ' ', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(static value => value.ToLowerInvariant()).FirstOrDefault(IsCommit);
                 if (commit is null)
                     throw new InvalidDataException(".NET runtime archive .version does not contain a commit SHA.");
                 return new RuntimeArchiveIdentity(commit, commit);
@@ -183,31 +116,18 @@ public sealed class OfficialProfileSourceClient(HttpClient httpClient) : IProfil
         }
     }
 
-    public async Task<NuGetPackageResolution> ResolveLatestStablePackageAsync(
-        string packageId,
-        CancellationToken cancellationToken = default)
+    public async Task<NuGetPackageResolution> ResolveLatestStablePackageAsync(string packageId, CancellationToken cancellationToken = default)
     {
         ValidatePackageId(packageId);
         var id = packageId.ToLowerInvariant();
         var indexUri = new Uri($"https://api.nuget.org/v3-flatcontainer/{id}/index.json");
         using var document = await GetJsonAsync(indexUri, cancellationToken);
-        var versions = RequiredArray(document.RootElement, "versions")
-            .EnumerateArray()
-            .Select(static item => item.GetString())
-            .Where(static version => !string.IsNullOrWhiteSpace(version) && !version.Contains('-'))
-            .Select(static version => version!)
-            .OrderBy(static version => ParseVersion(version))
-            .ThenBy(static version => version, StringComparer.Ordinal)
-            .ToArray();
-        var latest = versions.LastOrDefault()
-            ?? throw new InvalidDataException($"NuGet package '{packageId}' has no stable versions.");
+        var versions = RequiredArray(document.RootElement, "versions").EnumerateArray().Select(static item => item.GetString()).Where(static version => !string.IsNullOrWhiteSpace(version) && !version.Contains('-')).Select(static version => version!).OrderBy(static version => ParseVersion(version)).ThenBy(static version => version, StringComparer.Ordinal).ToArray();
+        var latest = versions.LastOrDefault() ?? throw new InvalidDataException($"NuGet package '{packageId}' has no stable versions.");
         return await ResolveExactPackageAsync(packageId, latest, cancellationToken);
     }
 
-    public async Task<NuGetPackageResolution> ResolveExactPackageAsync(
-        string packageId,
-        string version,
-        CancellationToken cancellationToken = default)
+    public async Task<NuGetPackageResolution> ResolveExactPackageAsync(string packageId, string version, CancellationToken cancellationToken = default)
     {
         ValidatePackageId(packageId);
         ValidateToken(version, nameof(version));
@@ -215,28 +135,16 @@ public sealed class OfficialProfileSourceClient(HttpClient httpClient) : IProfil
         var normalizedVersion = version.ToLowerInvariant();
         var packageUri = new Uri(
             $"https://api.nuget.org/v3-flatcontainer/{id}/{normalizedVersion}/{id}.{normalizedVersion}.nupkg");
-        using var response = await httpClient.GetAsync(
-            packageUri,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
+        using var response = await httpClient.GetAsync(packageUri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
         await using var packageStream = await response.Content.ReadAsStreamAsync(cancellationToken);
         var hash = await SHA512.HashDataAsync(packageStream, cancellationToken);
         var packageContentHash = $"sha512-{Convert.ToBase64String(hash)}";
 
-        return new NuGetPackageResolution(
-            packageId,
-            version,
-            packageUri,
-            packageContentHash,
-            Convert.ToHexStringLower(hash));
+        return new NuGetPackageResolution(packageId, version, packageUri, packageContentHash, Convert.ToHexStringLower(hash));
     }
 
-    public async Task<GitCommitResolution> ResolveGitCommitAsync(
-        string owner,
-        string repository,
-        string branch,
-        CancellationToken cancellationToken = default)
+    public async Task<GitCommitResolution> ResolveGitCommitAsync(string owner, string repository, string branch, CancellationToken cancellationToken = default)
     {
         ValidateToken(owner, nameof(owner));
         ValidateToken(repository, nameof(repository));
@@ -252,46 +160,24 @@ public sealed class OfficialProfileSourceClient(HttpClient httpClient) : IProfil
 
         var repositoryUri = new Uri($"https://github.com/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repository)}");
         var archiveUri = new Uri($"{repositoryUri}/archive/{sha}.tar.gz");
-        using var archiveResponse = await httpClient.GetAsync(
-            archiveUri,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
+        using var archiveResponse = await httpClient.GetAsync(archiveUri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         archiveResponse.EnsureSuccessStatusCode();
         await using var archiveStream = await archiveResponse.Content.ReadAsStreamAsync(cancellationToken);
         var archiveHash = await SHA256.HashDataAsync(archiveStream, cancellationToken);
-        var productVersion = await ResolveGitProductVersionAsync(
-            owner,
-            repository,
-            branch,
-            sha,
-            cancellationToken);
-        return new GitCommitResolution(
-            sha,
-            repositoryUri,
-            archiveUri,
-            Convert.ToHexStringLower(archiveHash),
-            productVersion);
+        var productVersion = await ResolveGitProductVersionAsync(owner, repository, branch, sha, cancellationToken);
+        return new GitCommitResolution(sha, repositoryUri, archiveUri, Convert.ToHexStringLower(archiveHash), productVersion);
     }
 
-    private async Task<string> ResolveGitProductVersionAsync(
-        string owner,
-        string repository,
-        string reference,
-        string commit,
-        CancellationToken cancellationToken)
+    private async Task<string> ResolveGitProductVersionAsync(string owner, string repository, string reference, string commit, CancellationToken cancellationToken)
     {
-        if (!string.Equals(owner, "dotnet", StringComparison.Ordinal) ||
-            !string.Equals(repository, "roslyn", StringComparison.Ordinal))
+        if (!string.Equals(owner, "dotnet", StringComparison.Ordinal) || !string.Equals(repository, "roslyn", StringComparison.Ordinal))
         {
             var tagVersion = reference.StartsWith('v') ? reference[1..] : reference;
-            if (tagVersion.Length > 0 &&
-                tagVersion.All(static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '+') &&
-                char.IsAsciiDigit(tagVersion[0]))
+            if (tagVersion.Length > 0 && tagVersion.All(static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '+') && char.IsAsciiDigit(tagVersion[0]))
             {
                 return tagVersion;
             }
-            throw new InvalidDataException(
-                $"GitHub channel '{owner}/{repository}@{reference}' must use a version tag or register a product-version resolver.");
+            throw new InvalidDataException($"GitHub channel '{owner}/{repository}@{reference}' must use a version tag or register a product-version resolver.");
         }
 
         var uri = new Uri(
@@ -310,8 +196,7 @@ public sealed class OfficialProfileSourceClient(HttpClient httpClient) : IProfil
     {
         var value = document.Descendants(name).Select(static element => element.Value.Trim()).FirstOrDefault();
         return int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out _)
-            ? value!
-            : throw new InvalidDataException($"Roslyn eng/Versions.props has no numeric {name}.");
+            ? value! : throw new InvalidDataException($"Roslyn eng/Versions.props has no numeric {name}.");
     }
 
     private async Task<JsonDocument> GetJsonAsync(Uri uri, CancellationToken cancellationToken)
@@ -324,13 +209,9 @@ public sealed class OfficialProfileSourceClient(HttpClient httpClient) : IProfil
 
     private static JsonElement FindLinuxX64Archive(JsonElement component, string fileNamePrefix)
     {
-        var file = RequiredArray(component, "files").EnumerateArray().FirstOrDefault(candidate =>
-            string.Equals(RequiredString(candidate, "rid"), "linux-x64", StringComparison.Ordinal) &&
-            RequiredString(candidate, "name").StartsWith(fileNamePrefix, StringComparison.Ordinal) &&
-            RequiredString(candidate, "name").EndsWith(".tar.gz", StringComparison.Ordinal));
+        var file = RequiredArray(component, "files").EnumerateArray().FirstOrDefault(candidate => string.Equals(RequiredString(candidate, "rid"), "linux-x64", StringComparison.Ordinal) && RequiredString(candidate, "name").StartsWith(fileNamePrefix, StringComparison.Ordinal) && RequiredString(candidate, "name").EndsWith(".tar.gz", StringComparison.Ordinal));
         return file.ValueKind == JsonValueKind.Undefined
-            ? throw new InvalidDataException(".NET release metadata has no linux-x64 tar.gz asset.")
-            : file;
+            ? throw new InvalidDataException(".NET release metadata has no linux-x64 tar.gz asset.") : file;
     }
 
     private static JsonElement RequiredArray(JsonElement parent, string propertyName)
@@ -367,8 +248,7 @@ public sealed class OfficialProfileSourceClient(HttpClient httpClient) : IProfil
     {
         var value = RequiredString(parent, propertyName);
         return Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
-            ? uri
-            : throw new InvalidDataException($"Official metadata property '{propertyName}' is not an HTTPS URI.");
+            ? uri : throw new InvalidDataException($"Official metadata property '{propertyName}' is not an HTTPS URI.");
     }
 
     private static string RequiredSha512(JsonElement parent, string propertyName)
@@ -394,8 +274,7 @@ public sealed class OfficialProfileSourceClient(HttpClient httpClient) : IProfil
     private static void ValidatePackageId(string packageId)
     {
         ValidateToken(packageId, nameof(packageId));
-        if (packageId.Any(static character =>
-                !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '-' or '_')))
+        if (packageId.Any(static character => !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '-' or '_')))
         {
             throw new ArgumentException("The NuGet package ID is malformed.", nameof(packageId));
         }

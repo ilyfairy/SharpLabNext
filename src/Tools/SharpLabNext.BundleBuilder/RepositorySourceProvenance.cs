@@ -4,38 +4,23 @@ using System.Text;
 
 namespace SharpLabNext.BundleBuilder;
 
-public sealed record RepositorySourceState(
-    bool IsGitRepository,
-    string? HeadRevision,
-    bool IsDirty);
+public sealed record RepositorySourceState(bool IsGitRepository, string? HeadRevision, bool IsDirty);
 
-public sealed record RepositorySourceProvenance(
-    string Revision,
-    string? HeadRevision,
-    bool IsDirty,
-    bool IsVerified,
-    bool DevelopmentOverrideUsed);
+public sealed record RepositorySourceProvenance(string Revision, string? HeadRevision, bool IsDirty, bool IsVerified, bool DevelopmentOverrideUsed);
 
 public interface IRepositorySourceInspector
 {
-    Task<RepositorySourceState> InspectAsync(
-        string repositoryRoot,
-        CancellationToken cancellationToken = default);
+    Task<RepositorySourceState> InspectAsync(string repositoryRoot, CancellationToken cancellationToken = default);
 }
 
 public sealed class ContentRepositorySourceInspector : IRepositorySourceInspector
 {
-    public Task<RepositorySourceState> InspectAsync(
-        string repositoryRoot,
-        CancellationToken cancellationToken = default)
+    public Task<RepositorySourceState> InspectAsync(string repositoryRoot, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
         cancellationToken.ThrowIfCancellationRequested();
         var root = Path.GetFullPath(repositoryRoot);
-        return Task.FromResult(new RepositorySourceState(
-            IsGitRepository: false,
-            HeadRevision: SourceContentFingerprint.Compute(root),
-            IsDirty: true));
+        return Task.FromResult(new RepositorySourceState(IsGitRepository: false, HeadRevision: SourceContentFingerprint.Compute(root), IsDirty: true));
     }
 }
 
@@ -48,17 +33,11 @@ public sealed class GitRepositorySourceInspector : IRepositorySourceInspector
         this.allowFallback = allowFallback;
     }
 
-    public async Task<RepositorySourceState> InspectAsync(
-        string repositoryRoot,
-        CancellationToken cancellationToken = default)
+    public async Task<RepositorySourceState> InspectAsync(string repositoryRoot, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
         var root = Path.GetFullPath(repositoryRoot);
-        if (allowFallback && string.Equals(
-                Environment.GetEnvironmentVariable(
-                    RepositorySourceProvenanceResolver.SourceIdentityModeEnvironmentVariable),
-                RepositorySourceProvenanceResolver.ContentSourceIdentityMode,
-                StringComparison.OrdinalIgnoreCase))
+        if (allowFallback && string.Equals(Environment.GetEnvironmentVariable(RepositorySourceProvenanceResolver.SourceIdentityModeEnvironmentVariable), RepositorySourceProvenanceResolver.ContentSourceIdentityMode, StringComparison.OrdinalIgnoreCase))
         {
             return FallbackState(root);
         }
@@ -71,8 +50,7 @@ public sealed class GitRepositorySourceInspector : IRepositorySourceInspector
         {
             return FallbackState(root);
         }
-        if (workTree.ExitCode != 0 ||
-            !string.Equals(workTree.StandardOutput.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+        if (workTree.ExitCode != 0 || !string.Equals(workTree.StandardOutput.Trim(), "true", StringComparison.OrdinalIgnoreCase))
         {
             if (allowFallback)
                 return FallbackState(root);
@@ -89,8 +67,7 @@ public sealed class GitRepositorySourceInspector : IRepositorySourceInspector
             return FallbackState(root);
         }
         var revision = head.ExitCode == 0 && !string.IsNullOrWhiteSpace(head.StandardOutput)
-            ? head.StandardOutput.Trim()
-            : null;
+            ? head.StandardOutput.Trim() : null;
         if (revision is null)
         {
             if (allowFallback)
@@ -101,10 +78,7 @@ public sealed class GitRepositorySourceInspector : IRepositorySourceInspector
         GitResult status;
         try
         {
-            status = await RunGitAsync(
-                root,
-                ["status", "--porcelain=v1", "--untracked-files=all"],
-                cancellationToken);
+            status = await RunGitAsync(root, ["status", "--porcelain=v1", "--untracked-files=all"], cancellationToken);
         }
         catch (BundleValidationException) when (allowFallback)
         {
@@ -117,39 +91,22 @@ public sealed class GitRepositorySourceInspector : IRepositorySourceInspector
             throw new BundleValidationException("Could not inspect Git worktree status.");
         }
 
-        return new RepositorySourceState(
-            true,
-            revision,
-            !string.IsNullOrWhiteSpace(status.StandardOutput));
+        return new RepositorySourceState(true, revision, !string.IsNullOrWhiteSpace(status.StandardOutput));
     }
 
-    private static RepositorySourceState FallbackState(string root) =>
-        new(false, SourceContentFingerprint.Compute(root), true);
+    private static RepositorySourceState FallbackState(string root) => new(false, SourceContentFingerprint.Compute(root), true);
 
-    private static async Task<GitResult> RunGitAsync(
-        string repositoryRoot,
-        IReadOnlyList<string> arguments,
-        CancellationToken cancellationToken)
+    private static async Task<GitResult> RunGitAsync(string repositoryRoot, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "git",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var startInfo = new ProcessStartInfo { FileName = "git", RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
         startInfo.ArgumentList.Add("-C");
         startInfo.ArgumentList.Add(repositoryRoot);
         foreach (var argument in arguments)
-        {
             startInfo.ArgumentList.Add(argument);
-        }
 
         try
         {
-            using var process = Process.Start(startInfo)
-                ?? throw new BundleValidationException("Could not start Git to inspect source provenance.");
+            using var process = Process.Start(startInfo) ?? throw new BundleValidationException("Could not start Git to inspect source provenance.");
             var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
             var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
             await process.WaitForExitAsync(cancellationToken);
@@ -167,44 +124,30 @@ public sealed class GitRepositorySourceInspector : IRepositorySourceInspector
 public static class RepositorySourceProvenanceResolver
 {
     public const string ImageLabel = "io.sharplabnext.source.revision";
-    public const string SourceIdentityModeEnvironmentVariable =
-        "SHARPLABNEXT_SOURCE_IDENTITY_MODE";
+    public const string SourceIdentityModeEnvironmentVariable = "SHARPLABNEXT_SOURCE_IDENTITY_MODE";
     public const string ContentSourceIdentityMode = "content";
     // A deterministic, non-zero identity for legacy callers that provide only
     // an abstract source state. Real non-Git worktrees use the content hash.
-    public const string LocalUncommittedRevision =
-        "0f92ac96a34a11b45d5a836a4a602b79e9b4e5ba607fce7965d0ee46cea8e408";
+    public const string LocalUncommittedRevision = "0f92ac96a34a11b45d5a836a4a602b79e9b4e5ba607fce7965d0ee46cea8e408";
 
-    public static async Task<RepositorySourceProvenance> ResolveAsync(
-        string repositoryRoot,
-        string? requestedRevision,
-        bool allowUncommittedSourceForDevelopment,
-        IRepositorySourceInspector? inspector = null,
-        CancellationToken cancellationToken = default)
+    public static async Task<RepositorySourceProvenance> ResolveAsync(string repositoryRoot, string? requestedRevision, bool allowUncommittedSourceForDevelopment, IRepositorySourceInspector? inspector = null, CancellationToken cancellationToken = default)
     {
         inspector ??= new GitRepositorySourceInspector();
         var state = await inspector.InspectAsync(repositoryRoot, cancellationToken);
         return Resolve(state, requestedRevision, allowUncommittedSourceForDevelopment);
     }
 
-    public static RepositorySourceProvenance Resolve(
-        RepositorySourceState state,
-        string? requestedRevision,
-        bool allowUncommittedSourceForDevelopment)
+    public static RepositorySourceProvenance Resolve(RepositorySourceState state, string? requestedRevision, bool allowUncommittedSourceForDevelopment)
     {
         ArgumentNullException.ThrowIfNull(state);
         // Kept in the public shape for callers from older entry points. The
         // verification result is derived from the observed source itself.
         _ = allowUncommittedSourceForDevelopment;
         var requested = string.IsNullOrWhiteSpace(requestedRevision) ? null : requestedRevision.Trim();
-        var contentIdentityMode = string.Equals(
-            Environment.GetEnvironmentVariable(SourceIdentityModeEnvironmentVariable),
-            ContentSourceIdentityMode,
-            StringComparison.OrdinalIgnoreCase);
+        var contentIdentityMode = string.Equals(Environment.GetEnvironmentVariable(SourceIdentityModeEnvironmentVariable), ContentSourceIdentityMode, StringComparison.OrdinalIgnoreCase);
         if (requested is not null && IsReservedUnknown(requested))
         {
-            throw new BundleValidationException(
-                "Source revision cannot be 'unknown'; use a source content identity or an explicit revision.");
+            throw new BundleValidationException("Source revision cannot be 'unknown'; use a source content identity or an explicit revision.");
         }
         if (contentIdentityMode)
         {
@@ -213,22 +156,18 @@ public static class RepositorySourceProvenanceResolver
             requested = null;
         }
 
-        if (state.IsGitRepository && state.HeadRevision is not null && requested is not null &&
-            !string.Equals(requested, state.HeadRevision, StringComparison.OrdinalIgnoreCase))
+        if (state.IsGitRepository && state.HeadRevision is not null && requested is not null && !string.Equals(requested, state.HeadRevision, StringComparison.OrdinalIgnoreCase))
         {
-            throw new BundleValidationException(
-                $"Requested source revision '{requested}' does not match Git HEAD '{state.HeadRevision}'.");
+            throw new BundleValidationException($"Requested source revision '{requested}' does not match Git HEAD '{state.HeadRevision}'.");
         }
 
         var revision = requested ?? state.HeadRevision ?? LocalUncommittedRevision;
         if (!IsRevisionLabel(revision))
         {
-            throw new BundleValidationException(
-                "Source revision must be 1-128 ASCII letters, digits, '.', '_', '-', or ':'.");
+            throw new BundleValidationException("Source revision must be 1-128 ASCII letters, digits, '.', '_', '-', or ':'.");
         }
 
-        if (state.HeadRevision is not null &&
-            string.Equals(revision, state.HeadRevision, StringComparison.OrdinalIgnoreCase))
+        if (state.HeadRevision is not null && string.Equals(revision, state.HeadRevision, StringComparison.OrdinalIgnoreCase))
         {
             revision = state.HeadRevision;
         }
@@ -237,12 +176,7 @@ public static class RepositorySourceProvenanceResolver
                        state.HeadRevision is not null &&
                        !state.IsDirty &&
                        string.Equals(revision, state.HeadRevision, StringComparison.Ordinal);
-        return new RepositorySourceProvenance(
-            revision,
-            state.HeadRevision,
-            state.IsDirty,
-            verified,
-            !verified);
+        return new RepositorySourceProvenance(revision, state.HeadRevision, state.IsDirty, verified, !verified);
     }
 
     private static bool IsReservedUnknown(string value) =>
@@ -252,8 +186,7 @@ public static class RepositorySourceProvenanceResolver
 
     private static bool IsRevisionLabel(string value) =>
         value.Length is > 0 and <= 128 &&
-        value.All(static character =>
-            char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-' or ':');
+        value.All(static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-' or ':');
 }
 
 internal static class SourceContentFingerprint
@@ -288,8 +221,7 @@ internal static class SourceContentFingerprint
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            throw new BundleValidationException(
-                $"Could not compute the source content identity: {exception.Message}");
+            throw new BundleValidationException($"Could not compute the source content identity: {exception.Message}");
         }
     }
 
@@ -324,9 +256,7 @@ internal static class SourceContentFingerprint
         }
     }
 
-    private static bool IsExcluded(string relative) =>
-        relative.Split('/').Any(ExcludedDirectories.Contains);
+    private static bool IsExcluded(string relative) => relative.Split('/').Any(ExcludedDirectories.Contains);
 
-    private static void AppendText(IncrementalHash hash, string value) =>
-        hash.AppendData(Encoding.UTF8.GetBytes(value));
+    private static void AppendText(IncrementalHash hash, string value) => hash.AppendData(Encoding.UTF8.GetBytes(value));
 }

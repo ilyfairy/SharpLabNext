@@ -22,11 +22,7 @@ internal sealed class RuntimeSessionLease : IAsyncDisposable
     private readonly RuntimeSessionRegistry _owner;
     private int _completed;
 
-    internal RuntimeSessionLease(
-        RuntimeSessionRegistry owner,
-        RuntimeSessionSlot slot,
-        RuntimeSessionResource resource,
-        bool reused)
+    internal RuntimeSessionLease(RuntimeSessionRegistry owner, RuntimeSessionSlot slot, RuntimeSessionResource resource, bool reused)
     {
         _owner = owner;
         Slot = slot;
@@ -44,8 +40,7 @@ internal sealed class RuntimeSessionLease : IAsyncDisposable
 
     public ValueTask CompleteAsync(bool reusable) =>
         Interlocked.Exchange(ref _completed, 1) == 0
-            ? _owner.CompleteAsync(this, reusable)
-            : ValueTask.CompletedTask;
+            ? _owner.CompleteAsync(this, reusable) : ValueTask.CompletedTask;
 
     public ValueTask DisposeAsync() => CompleteAsync(reusable: false);
 }
@@ -71,18 +66,9 @@ internal sealed class RuntimeSessionSlot
     public int Closing;
 }
 
-internal sealed record RuntimeSessionResource(
-    string Fingerprint,
-    string ContainerId,
-    string MaterializerContainerId,
-    string WorkspaceVolumeName,
-    DateTimeOffset CreatedAtUtc);
+internal sealed record RuntimeSessionResource(string Fingerprint, string ContainerId, string MaterializerContainerId, string WorkspaceVolumeName, DateTimeOffset CreatedAtUtc);
 
-public sealed partial class RuntimeSessionRegistry(
-    IDockerEngineClient docker,
-    IOptions<RuntimeSupervisorOptions> configuredOptions,
-    RuntimeSandboxPolicy sandbox,
-    ILogger<RuntimeSessionRegistry> logger)
+public sealed partial class RuntimeSessionRegistry(IDockerEngineClient docker, IOptions<RuntimeSupervisorOptions> configuredOptions, RuntimeSandboxPolicy sandbox, ILogger<RuntimeSessionRegistry> logger)
 {
     private readonly ConcurrentDictionary<string, RuntimeSessionSlot> _slots =
         new(StringComparer.Ordinal);
@@ -92,10 +78,7 @@ public sealed partial class RuntimeSessionRegistry(
 
     public bool Enabled => _options.SessionReuseEnabled;
 
-    internal async Task<RuntimeSessionLease> AcquireAsync(
-        RuntimeSessionRequest request,
-        Stream archive,
-        CancellationToken cancellationToken)
+    internal async Task<RuntimeSessionLease> AcquireAsync(RuntimeSessionRequest request, Stream archive, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(archive);
@@ -115,8 +98,7 @@ public sealed partial class RuntimeSessionRegistry(
             {
                 slot.Resource = null;
                 await RemoveResourceQuietlyAsync(resource).ConfigureAwait(false);
-                resource = await CreateResourceAsync(request, fingerprint, archive, cancellationToken)
-                    .ConfigureAwait(false);
+                resource = await CreateResourceAsync(request, fingerprint, archive, cancellationToken).ConfigureAwait(false);
                 slot.Resource = resource;
             }
             else
@@ -124,13 +106,8 @@ public sealed partial class RuntimeSessionRegistry(
                 try
                 {
                     ResetArchive(archive);
-                    await docker.StartContainerAsync(
-                        resource!.MaterializerContainerId,
-                        cancellationToken).ConfigureAwait(false);
-                    await docker.UploadArchiveAsync(
-                        resource.MaterializerContainerId,
-                        archive,
-                        cancellationToken: cancellationToken).ConfigureAwait(false);
+                    await docker.StartContainerAsync(resource!.MaterializerContainerId, cancellationToken).ConfigureAwait(false);
+                    await docker.UploadArchiveAsync(resource.MaterializerContainerId, archive, cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception exception)
                 {
@@ -138,8 +115,7 @@ public sealed partial class RuntimeSessionRegistry(
                     slot.Resource = null;
                     await RemoveResourceQuietlyAsync(resource).ConfigureAwait(false);
                     cancellationToken.ThrowIfCancellationRequested();
-                    resource = await CreateResourceAsync(request, fingerprint, archive, cancellationToken)
-                        .ConfigureAwait(false);
+                    resource = await CreateResourceAsync(request, fingerprint, archive, cancellationToken).ConfigureAwait(false);
                     slot.Resource = resource;
                     reused = false;
                 }
@@ -161,9 +137,7 @@ public sealed partial class RuntimeSessionRegistry(
         }
     }
 
-    internal async Task<RuntimeSessionAdmissionLease> AcquireOneShotAdmissionAsync(
-        string sessionId,
-        CancellationToken cancellationToken)
+    internal async Task<RuntimeSessionAdmissionLease> AcquireOneShotAdmissionAsync(string sessionId, CancellationToken cancellationToken)
     {
         var slot = await AcquireOpenSlotAsync(sessionId, cancellationToken).ConfigureAwait(false);
         return new RuntimeSessionAdmissionLease(slot);
@@ -230,24 +204,10 @@ public sealed partial class RuntimeSessionRegistry(
         }
     }
 
-    private async Task<RuntimeSessionResource> CreateResourceAsync(
-        RuntimeSessionRequest request,
-        string fingerprint,
-        Stream archive,
-        CancellationToken cancellationToken)
+    private async Task<RuntimeSessionResource> CreateResourceAsync(RuntimeSessionRequest request, string fingerprint, Stream archive, CancellationToken cancellationToken)
     {
         ResetArchive(archive);
-        var materialization = await docker.MaterializeWorkspaceAsync(
-            request.SessionId,
-            request.ReleaseId,
-            request.Image,
-            archive,
-            request.SecurityPolicy,
-            request.IsolationKind,
-            request.ManagementLabel,
-            request.ResourceScope,
-            createMeasurementControl: false,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        var materialization = await docker.MaterializeWorkspaceAsync(request.SessionId, request.ReleaseId, request.Image, archive, request.SecurityPolicy, request.IsolationKind, request.ManagementLabel, request.ResourceScope, createMeasurementControl: false, cancellationToken: cancellationToken).ConfigureAwait(false);
         string? containerId = null;
         try
         {
@@ -266,21 +226,11 @@ public sealed partial class RuntimeSessionRegistry(
                 IsolationKind: request.IsolationKind,
                 WinePrefixPath: request.WinePrefixPath);
             containerId = await docker.CreateContainerAsync(spec, cancellationToken).ConfigureAwait(false);
-            return new RuntimeSessionResource(
-                fingerprint,
-                containerId,
-                materialization.MaterializerContainerId,
-                materialization.VolumeName,
-                DateTimeOffset.UtcNow);
+            return new RuntimeSessionResource(fingerprint, containerId, materialization.MaterializerContainerId, materialization.VolumeName, DateTimeOffset.UtcNow);
         }
         catch
         {
-            await RemoveResourceQuietlyAsync(new RuntimeSessionResource(
-                fingerprint,
-                containerId ?? string.Empty,
-                materialization.MaterializerContainerId,
-                materialization.VolumeName,
-                DateTimeOffset.UtcNow)).ConfigureAwait(false);
+            await RemoveResourceQuietlyAsync(new RuntimeSessionResource(fingerprint, containerId ?? string.Empty, materialization.MaterializerContainerId, materialization.VolumeName, DateTimeOffset.UtcNow)).ConfigureAwait(false);
             throw;
         }
     }
@@ -290,20 +240,12 @@ public sealed partial class RuntimeSessionRegistry(
         try
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            await docker.StopContainerAsync(
-                resource.MaterializerContainerId,
-                TimeSpan.FromSeconds(2),
-                timeout.Token).ConfigureAwait(false);
-            var exit = await docker.WaitContainerAsync(resource.MaterializerContainerId, timeout.Token)
-                .ConfigureAwait(false);
+            await docker.StopContainerAsync(resource.MaterializerContainerId, TimeSpan.FromSeconds(2), timeout.Token).ConfigureAwait(false);
+            var exit = await docker.WaitContainerAsync(resource.MaterializerContainerId, timeout.Token).ConfigureAwait(false);
             if (exit.StatusCode == 0 && !exit.OomKilled && string.IsNullOrWhiteSpace(exit.Error))
                 return true;
 
-            LogWorkspaceCleanupFailed(
-                logger,
-                resource.MaterializerContainerId,
-                exit.StatusCode,
-                exit.Error ?? string.Empty);
+            LogWorkspaceCleanupFailed(logger, resource.MaterializerContainerId, exit.StatusCode, exit.Error ?? string.Empty);
         }
         catch (Exception exception)
         {
@@ -325,8 +267,7 @@ public sealed partial class RuntimeSessionRegistry(
         try
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            await docker.RemoveWorkspaceVolumeAsync(resource.WorkspaceVolumeName, timeout.Token)
-                .ConfigureAwait(false);
+            await docker.RemoveWorkspaceVolumeAsync(resource.WorkspaceVolumeName, timeout.Token).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -355,35 +296,16 @@ public sealed partial class RuntimeSessionRegistry(
             request.Image,
             Command = request.Command,
             Environment = request.Environment.OrderBy(static pair => pair.Key, StringComparer.Ordinal),
-            Policy = new
-            {
-                request.SecurityPolicy.Id,
-                request.SecurityPolicy.MemoryBytes,
-                request.SecurityPolicy.NanoCpus,
-                request.SecurityPolicy.PidsLimit,
-                request.SecurityPolicy.MaximumDurationSeconds,
-                request.SecurityPolicy.MaximumArtifactBytes,
-                request.SecurityPolicy.MaximumOutputBytes,
-                request.SecurityPolicy.TmpfsBytes
-            },
+            Policy = new { request.SecurityPolicy.Id, request.SecurityPolicy.MemoryBytes, request.SecurityPolicy.NanoCpus, request.SecurityPolicy.PidsLimit, request.SecurityPolicy.MaximumDurationSeconds, request.SecurityPolicy.MaximumArtifactBytes, request.SecurityPolicy.MaximumOutputBytes, request.SecurityPolicy.TmpfsBytes },
             request.IsolationKind,
-            Sandbox = new
-            {
-                sandbox.PolicyId,
-                sandbox.SeccompProfileSha256,
-                sandbox.SecurityOptions,
-                sandbox.OpenFilesSoftLimit,
-                sandbox.OpenFilesHardLimit
-            },
+            Sandbox = new { sandbox.PolicyId, sandbox.SeccompProfileSha256, sandbox.SecurityOptions, sandbox.OpenFilesSoftLimit, sandbox.OpenFilesHardLimit },
             request.ManagementLabel,
             request.ResourceScope
         };
         return Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(payload)));
     }
 
-    private async Task<RuntimeSessionSlot> AcquireOpenSlotAsync(
-        string sessionId,
-        CancellationToken cancellationToken)
+    private async Task<RuntimeSessionSlot> AcquireOpenSlotAsync(string sessionId, CancellationToken cancellationToken)
     {
         ValidateSessionId(sessionId);
         if (IsReleased(sessionId))
@@ -428,10 +350,7 @@ public sealed partial class RuntimeSessionRegistry(
 
     internal static void ValidateSessionId(string sessionId)
     {
-        if (string.IsNullOrWhiteSpace(sessionId) ||
-            sessionId.Length > 128 ||
-            sessionId.Any(static character =>
-                !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.')))
+        if (string.IsNullOrWhiteSpace(sessionId) || sessionId.Length > 128 || sessionId.Any(static character => !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.')))
         {
             throw new ArgumentException("The runtime session ID is malformed.", nameof(sessionId));
         }
@@ -458,7 +377,5 @@ public sealed partial class RuntimeSessionRegistry(
 
 internal sealed class RuntimeSessionClosingException : Exception
 {
-    public RuntimeSessionClosingException() : base("The runtime session is closing.")
-    {
-    }
+    public RuntimeSessionClosingException() : base("The runtime session is closing.") { }
 }

@@ -35,18 +35,12 @@ public sealed class ExternalSourceMaterial : IAsyncDisposable
 
 public sealed class HttpClientExternalSourceMaterialFetcher : IExternalSourceMaterialFetcher
 {
-    private static readonly HttpClient Client = new(new HttpClientHandler
-    {
-        AllowAutoRedirect = false,
-        AutomaticDecompression = DecompressionMethods.None
-    })
+    private static readonly HttpClient Client = new(new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = DecompressionMethods.None })
     {
         Timeout = TimeSpan.FromMinutes(2)
     };
 
-    public async Task<ExternalSourceMaterial> FetchAsync(
-        Uri sourceUri,
-        CancellationToken cancellationToken)
+    public async Task<ExternalSourceMaterial> FetchAsync(Uri sourceUri, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sourceUri);
         if (!string.Equals(sourceUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
@@ -55,20 +49,15 @@ public sealed class HttpClientExternalSourceMaterialFetcher : IExternalSourceMat
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Get, sourceUri);
-        var response = await Client.SendAsync(
-            request,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
+        var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             response.Dispose();
-            throw new BundleValidationException(
-                $"External source material request failed with HTTP {(int)response.StatusCode}.");
+            throw new BundleValidationException($"External source material request failed with HTTP {(int)response.StatusCode}.");
         }
 
         var finalUri = response.RequestMessage?.RequestUri;
-        if (finalUri is null ||
-            !string.Equals(finalUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        if (finalUri is null || !string.Equals(finalUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
             response.Dispose();
             throw new BundleValidationException("External source material redirected away from HTTPS.");
@@ -77,11 +66,7 @@ public sealed class HttpClientExternalSourceMaterialFetcher : IExternalSourceMat
         try
         {
             var content = await response.Content.ReadAsStreamAsync(cancellationToken);
-            return new ExternalSourceMaterial(
-                finalUri,
-                response.Content.Headers.ContentLength,
-                content,
-                response);
+            return new ExternalSourceMaterial(finalUri, response.Content.Headers.ContentLength, content, response);
         }
         catch
         {

@@ -11,15 +11,9 @@ public sealed class CSharpBuildServiceTests
     public async Task MissingLanguageVersionDefaultsToPreview()
     {
         var service = CreateService();
-        var original = CreateRequest(
-            BuildTarget.CompileCheck,
-            [new WorkspaceFile("Program.cs", 1, "#error version")]);
+        var original = CreateRequest(BuildTarget.CompileCheck, [new WorkspaceFile("Program.cs", 1, "#error version")]);
         var options = original.Workspace.BuildOptions with { LanguageVersion = null };
-        var request = original with
-        {
-            Options = null,
-            Workspace = original.Workspace with { BuildOptions = options }
-        };
+        var request = original with { Options = null, Workspace = original.Workspace with { BuildOptions = options } };
 
         var response = await service.ExecuteAsync(request, TestContext.Current.CancellationToken);
 
@@ -31,8 +25,7 @@ public sealed class CSharpBuildServiceTests
     [Fact]
     public void WorkerSettingsResolvePinnedCompilerVersionAndRuntimeFeatureTags()
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["RoslynWorker:ReleaseId"] = "development",
                 ["RoslynWorker:ToolchainId"] = "roslyn-stable-netfx48",
@@ -51,7 +44,7 @@ public sealed class CSharpBuildServiceTests
                 ["ReferenceSets:netfx48-managed-ref:FrameworkVersion"] = "1.0.3",
                 ["ReferenceSets:netfx48-managed-ref:IncludeSharpLabRuntime"] = "false"
             })
-            .Build();
+.Build();
 
         var settings = RoslynWorkerSettings.FromConfiguration(configuration);
 
@@ -71,14 +64,7 @@ public sealed class CSharpBuildServiceTests
     [InlineData("net9.0", "dotnet-managed-pe-v1", "coreclr", "Microsoft.NETCore.App", ".dll", true, "9.0.7")]
     [InlineData("net20", "dotnet-framework-managed-pe-v1", "netfx-clr-wine", ".NETFramework", ".exe", false, "2.0")]
     [InlineData("net48", "dotnet-framework-managed-pe-v1", "netfx-clr-wine", ".NETFramework", ".exe", false, "4.8")]
-    public void ReferenceSetDefaultsAreDerivedFromTheTargetFramework(
-        string targetFramework,
-        string artifactFormat,
-        string runtimeFamily,
-        string frameworkName,
-        string executableExtension,
-        bool includeSharpLabRuntime,
-        string runtimeFrameworkVersion)
+    public void ReferenceSetDefaultsAreDerivedFromTheTargetFramework(string targetFramework, string artifactFormat, string runtimeFamily, string frameworkName, string executableExtension, bool includeSharpLabRuntime, string runtimeFrameworkVersion)
     {
         var referenceSet = new ReferenceSetDefinition(
             "test-ref",
@@ -103,8 +89,7 @@ public sealed class CSharpBuildServiceTests
     [Fact]
     public void ReferenceSetConfigurationOverridesTheLegacyWorkerArtifactContract()
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["RoslynWorker:ReleaseId"] = "development",
                 ["RoslynWorker:ToolchainId"] = "roslyn-stable",
@@ -125,7 +110,7 @@ public sealed class CSharpBuildServiceTests
                 ["ReferenceSets:custom-ref:CompatibilityGroup"] = "custom-group",
                 ["ReferenceSets:custom-ref:IncludeSharpLabRuntime"] = "false"
             })
-            .Build();
+.Build();
 
         var referenceSet = Assert.Single(RoslynWorkerSettings.FromConfiguration(configuration).ReferenceSets);
 
@@ -143,8 +128,7 @@ public sealed class CSharpBuildServiceTests
     [Fact]
     public void FrameworkReferenceSetRetainsExactRuntimeVersionUnderNet48WorkerDefault()
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["RoslynWorker:ReleaseId"] = "development",
                 ["RoslynWorker:ToolchainId"] = "roslyn-stable-netfx48",
@@ -160,7 +144,7 @@ public sealed class CSharpBuildServiceTests
                 ["ReferenceSets:netfx20-managed-ref:FrameworkVersion"] = "1.0.3",
                 ["ReferenceSets:netfx20-managed-ref:RuntimeFrameworkVersion"] = "2.0"
             })
-            .Build();
+.Build();
 
         var settings = RoslynWorkerSettings.FromConfiguration(configuration);
         var referenceSet = Assert.Single(settings.ReferenceSets);
@@ -198,9 +182,7 @@ public sealed class CSharpBuildServiceTests
         Assert.Equal(response.Artifact.ArtifactRef, result.ArtifactRef);
         Assert.Equal(response.Artifact.ArtifactRef, response.Artifact.Manifest.ArtifactId);
         Assert.Equal("Microsoft.NETCore.App", Assert.Single(response.Artifact.Manifest.RuntimeRequirement.Frameworks).Name);
-        Assert.Equal(
-            GetNet10ReferenceVersionForHost(),
-            Assert.Single(response.Artifact.Manifest.RuntimeRequirement.Frameworks).MinimumVersion);
+        Assert.Equal(GetNet10ReferenceVersionForHost(), Assert.Single(response.Artifact.Manifest.RuntimeRequirement.Frameworks).MinimumVersion);
         Assert.Equal("coreclr", response.Artifact.Manifest.RuntimeRequirement.Family);
         Assert.Empty(response.Artifact.Manifest.RuntimeRequirement.RequiredRuntimeFeatureTags);
         Assert.Empty(response.Artifact.Manifest.MetadataFeatureTags);
@@ -210,12 +192,7 @@ public sealed class CSharpBuildServiceTests
     [Fact]
     public async Task AutomaticOutputKindBuildsOrdinaryCodeAsLibraryWithoutMain()
     {
-        var response = await CreateService().ExecuteAsync(
-            CreateRequest(
-                BuildTarget.Artifact,
-                [new WorkspaceFile("Program.cs", 1, "public sealed class Calculator { public int Add(int a, int b) => a + b; }")],
-                outputKind: BuildOutputKind.Auto),
-            TestContext.Current.CancellationToken);
+        var response = await CreateService().ExecuteAsync(CreateRequest(BuildTarget.Artifact, [new WorkspaceFile("Program.cs", 1, "public sealed class Calculator { public int Add(int a, int b) => a + b; }")], outputKind: BuildOutputKind.Auto), TestContext.Current.CancellationToken);
 
         var result = Assert.IsType<BuildResult>(response.Result);
         var artifact = Assert.IsType<CompiledArtifact>(response.Artifact);
@@ -228,12 +205,7 @@ public sealed class CSharpBuildServiceTests
     [Fact]
     public async Task AutomaticOutputKindBuildsTopLevelStatementsAsConsoleApplication()
     {
-        var response = await CreateService().ExecuteAsync(
-            CreateRequest(
-                BuildTarget.Artifact,
-                [new WorkspaceFile("Program.cs", 1, "System.Console.WriteLine(42);")],
-                outputKind: BuildOutputKind.Auto),
-            TestContext.Current.CancellationToken);
+        var response = await CreateService().ExecuteAsync(CreateRequest(BuildTarget.Artifact, [new WorkspaceFile("Program.cs", 1, "System.Console.WriteLine(42);")], outputKind: BuildOutputKind.Auto), TestContext.Current.CancellationToken);
 
         var result = Assert.IsType<BuildResult>(response.Result);
         var artifact = Assert.IsType<CompiledArtifact>(response.Artifact);
@@ -246,12 +218,7 @@ public sealed class CSharpBuildServiceTests
     [Fact]
     public async Task ExplicitConsoleOutputStillRequiresMain()
     {
-        var response = await CreateService().ExecuteAsync(
-            CreateRequest(
-                BuildTarget.Artifact,
-                [new WorkspaceFile("Program.cs", 1, "public sealed class Calculator { }")],
-                outputKind: BuildOutputKind.Console),
-            TestContext.Current.CancellationToken);
+        var response = await CreateService().ExecuteAsync(CreateRequest(BuildTarget.Artifact, [new WorkspaceFile("Program.cs", 1, "public sealed class Calculator { }")], outputKind: BuildOutputKind.Console), TestContext.Current.CancellationToken);
 
         var result = Assert.IsType<BuildResult>(response.Result);
         Assert.Equal(BuildOutcome.CompilationFailed, result.Outcome);
@@ -263,11 +230,7 @@ public sealed class CSharpBuildServiceTests
     public async Task CompileCheckReturnsRevisionedDiagnosticsWithoutRetainingArtifact()
     {
         var service = CreateService();
-        var request = CreateRequest(
-            BuildTarget.CompileCheck,
-            [new WorkspaceFile("Program.cs", 2, "int value = \"not an int\";")],
-            revision: 19,
-            selectionRevision: 5);
+        var request = CreateRequest(BuildTarget.CompileCheck, [new WorkspaceFile("Program.cs", 2, "int value = \"not an int\";")], revision: 19, selectionRevision: 5);
 
         var response = await service.ExecuteAsync(request, TestContext.Current.CancellationToken);
 
@@ -285,19 +248,11 @@ public sealed class CSharpBuildServiceTests
     [Fact]
     public async Task CompileCheckIncludesTheSharpLabRuntimeApi()
     {
-        var response = await CreateService().ExecuteAsync(
-            CreateRequest(
-                BuildTarget.CompileCheck,
-                [new WorkspaceFile(
-                    "Program.cs",
-                    1,
-                    "var value = 42.Dump(); Inspect.MemoryGraph(value); System.Console.WriteLine(value);")]),
-            TestContext.Current.CancellationToken);
+        var response = await CreateService().ExecuteAsync(CreateRequest(BuildTarget.CompileCheck, [new WorkspaceFile("Program.cs", 1, "var value = 42.Dump(); Inspect.MemoryGraph(value); System.Console.WriteLine(value);")]), TestContext.Current.CancellationToken);
 
         var result = Assert.IsType<CompilationCheckResult>(response.Result);
         Assert.True(result.CompilationSucceeded);
-        Assert.DoesNotContain(result.Diagnostics, static diagnostic =>
-            diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.DoesNotContain(result.Diagnostics, static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
     }
 
     [Fact]
@@ -345,8 +300,7 @@ public sealed class CSharpBuildServiceTests
         Assert.Equal("C#", declaration.Properties["language"]);
         Assert.Contains(declaration.Properties.Keys, static key => key == "containsDiagnostics");
 
-        var keyword = Assert.Single(nodes, static node =>
-            node.Kind == "ClassKeyword" && node.Properties.GetValueOrDefault("isToken") == "true");
+        var keyword = Assert.Single(nodes, static node => node.Kind == "ClassKeyword" && node.Properties.GetValueOrDefault("isToken") == "true");
         Assert.Equal("SyntaxToken", keyword.Properties["type"]);
         Assert.Equal("true", keyword.Properties["isKeyword"]);
 
@@ -359,33 +313,24 @@ public sealed class CSharpBuildServiceTests
     public async Task CancelledBuildStopsBeforeCompilationCompletes()
     {
         var service = CreateService();
-        var request = CreateRequest(
-            BuildTarget.Artifact,
-            [new WorkspaceFile("Program.cs", 1, "Console.WriteLine(1);")]);
+        var request = CreateRequest(BuildTarget.Artifact, [new WorkspaceFile("Program.cs", 1, "Console.WriteLine(1);")]);
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => service.ExecuteAsync(request, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.ExecuteAsync(request, cancellation.Token));
     }
 
     [Fact]
     public async Task MissingExplicitReferenceBundleIsUnhealthyAndCannotCompile()
     {
         var missingPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-        var provider = new ReferenceSetProvider(
-            [new ReferenceSetDefinition(
-                "net10-ref",
-                missingPath,
-                "net10.0",
-                GetNet10ReferenceVersionForHost())]);
+        var provider = new ReferenceSetProvider([new ReferenceSetDefinition("net10-ref", missingPath, "net10.0", GetNet10ReferenceVersionForHost())]);
 
         var health = await provider.CheckHealthAsync(TestContext.Current.CancellationToken);
 
         Assert.False(health.IsHealthy);
         Assert.Contains("does not exist", health.Message, StringComparison.OrdinalIgnoreCase);
-        await Assert.ThrowsAsync<ReferenceSetUnavailableException>(
-            () => provider.GetAsync("net10-ref", TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ReferenceSetUnavailableException>(() => provider.GetAsync("net10-ref", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -406,26 +351,14 @@ public sealed class CSharpBuildServiceTests
             {
                 File.Copy(Path.Combine(source, fileName), Path.Combine(root, fileName));
             }
-            File.Copy(
-                typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location,
-                Path.Combine(root, "SharpLab.Runtime.dll"));
-            using var provider = new ReferenceSetProvider(
-                [new ReferenceSetDefinition(
-                    "net10-ref",
-                    root,
-                    "net10.0",
-                    GetNet10ReferenceVersionForHost())]);
+            File.Copy(typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location, Path.Combine(root, "SharpLab.Runtime.dll"));
+            using var provider = new ReferenceSetProvider([new ReferenceSetDefinition("net10-ref", root, "net10.0", GetNet10ReferenceVersionForHost())]);
 
             var loaded = await provider.GetAsync("net10-ref", TestContext.Current.CancellationToken);
 
-            var attestedPaths = Directory.EnumerateFiles(root, "*.dll", SearchOption.TopDirectoryOnly)
-                .Order(StringComparer.Ordinal)
-                .ToArray();
+            var attestedPaths = Directory.EnumerateFiles(root, "*.dll", SearchOption.TopDirectoryOnly).Order(StringComparer.Ordinal).ToArray();
             Assert.Equal(attestedPaths, loaded.AssemblyPaths);
-            Assert.DoesNotContain(
-                typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location,
-                loaded.AssemblyPaths,
-                StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location, loaded.AssemblyPaths, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
@@ -440,34 +373,15 @@ public sealed class CSharpBuildServiceTests
         Directory.CreateDirectory(root);
         try
         {
-            File.Copy(
-                Path.Combine(GetNetFx48ReferencePathForHost(), "mscorlib.dll"),
-                Path.Combine(root, "mscorlib.dll"));
-            File.Copy(
-                typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location,
-                Path.Combine(root, "SharpLab.Runtime.dll"));
-            await File.WriteAllTextAsync(
-                Path.Combine(root, "native-helper.dll"),
-                "not a managed PE",
-                TestContext.Current.CancellationToken);
-            using var provider = new ReferenceSetProvider(
-                [new ReferenceSetDefinition(
-                    "netfx48-managed-ref",
-                    root,
-                    "net48",
-                    "1.0.3",
-                    IncludeSharpLabRuntime: false)]);
+            File.Copy(Path.Combine(GetNetFx48ReferencePathForHost(), "mscorlib.dll"), Path.Combine(root, "mscorlib.dll"));
+            File.Copy(typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location, Path.Combine(root, "SharpLab.Runtime.dll"));
+            await File.WriteAllTextAsync(Path.Combine(root, "native-helper.dll"), "not a managed PE", TestContext.Current.CancellationToken);
+            using var provider = new ReferenceSetProvider([new ReferenceSetDefinition("netfx48-managed-ref", root, "net48", "1.0.3", IncludeSharpLabRuntime: false)]);
 
-            var loaded = await provider.GetAsync(
-                "netfx48-managed-ref",
-                TestContext.Current.CancellationToken);
+            var loaded = await provider.GetAsync("netfx48-managed-ref", TestContext.Current.CancellationToken);
 
-            Assert.DoesNotContain(
-                loaded.AssemblyPaths,
-                path => Path.GetFileName(path).Equals("SharpLab.Runtime.dll", StringComparison.OrdinalIgnoreCase));
-            Assert.DoesNotContain(
-                loaded.AssemblyPaths,
-                path => Path.GetFileName(path).Equals("native-helper.dll", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(loaded.AssemblyPaths, path => Path.GetFileName(path).Equals("SharpLab.Runtime.dll", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(loaded.AssemblyPaths, path => Path.GetFileName(path).Equals("native-helper.dll", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -482,15 +396,10 @@ public sealed class CSharpBuildServiceTests
         Directory.CreateDirectory(root);
         try
         {
-            File.Copy(
-                Path.Combine(GetNetFx20ReferencePathForHost(), "mscorlib.dll"),
-                Path.Combine(root, "mscorlib.dll"));
-            using var provider = new ReferenceSetProvider(
-                [new ReferenceSetDefinition("netfx20-managed-ref", root, "net20", "1.0.3")]);
+            File.Copy(Path.Combine(GetNetFx20ReferencePathForHost(), "mscorlib.dll"), Path.Combine(root, "mscorlib.dll"));
+            using var provider = new ReferenceSetProvider([new ReferenceSetDefinition("netfx20-managed-ref", root, "net20", "1.0.3")]);
 
-            var loaded = await provider.GetAsync(
-                "netfx20-managed-ref",
-                TestContext.Current.CancellationToken);
+            var loaded = await provider.GetAsync("netfx20-managed-ref", TestContext.Current.CancellationToken);
 
             Assert.Single(loaded.AssemblyPaths);
             Assert.Equal("mscorlib.dll", Path.GetFileName(loaded.AssemblyPaths[0]));
@@ -507,20 +416,8 @@ public sealed class CSharpBuildServiceTests
     public async Task BuildNeverLoadsOrExecutesUserModuleInitializer()
     {
         var service = CreateService();
-        var request = CreateRequest(
-            BuildTarget.Artifact,
-            [new WorkspaceFile(
-                "Library.cs",
-                1,
-                "using System; using System.Runtime.CompilerServices; public static class Startup { [ModuleInitializer] public static void Initialize() => throw new Exception(\"must not execute in compiler worker\"); }")]);
-        request = request with
-        {
-            Options = request.EffectiveOptions with { OutputKind = BuildOutputKind.Library },
-            Workspace = request.Workspace with
-            {
-                BuildOptions = request.Workspace.BuildOptions with { OutputKind = BuildOutputKind.Library }
-            }
-        };
+        var request = CreateRequest(BuildTarget.Artifact, [new WorkspaceFile("Library.cs", 1, "using System; using System.Runtime.CompilerServices; public static class Startup { [ModuleInitializer] public static void Initialize() => throw new Exception(\"must not execute in compiler worker\"); }")]);
+        request = request with { Options = request.EffectiveOptions with { OutputKind = BuildOutputKind.Library }, Workspace = request.Workspace with { BuildOptions = request.Workspace.BuildOptions with { OutputKind = BuildOutputKind.Library } } };
 
         var response = await service.ExecuteAsync(request, TestContext.Current.CancellationToken);
 
@@ -532,71 +429,35 @@ public sealed class CSharpBuildServiceTests
     [Fact]
     public async Task OneWorkerBuildsUnsafeCoreClrAndFrameworkArtifactsWithIndependentContracts()
     {
-        var identity = new RoslynWorkerIdentity(
-            "development",
-            "roslyn-stable",
-            "5.6.0",
-            null,
-            "development-worker-image");
+        var identity = new RoslynWorkerIdentity("development", "roslyn-stable", "5.6.0", null, "development-worker-image");
         using var references = new ReferenceSetProvider(
             [
-                new ReferenceSetDefinition(
-                    "net10-ref",
-                    GetNet10ReferencePathForHost(),
-                    "net10.0",
-                    GetNet10ReferenceVersionForHost()),
-                new ReferenceSetDefinition(
-                    "netfx20-managed-ref",
-                    GetNetFx20ReferencePathForHost(),
-                    "net20",
-                    "1.0.3")
+                new ReferenceSetDefinition("net10-ref", GetNet10ReferencePathForHost(), "net10.0", GetNet10ReferenceVersionForHost()),
+                new ReferenceSetDefinition("netfx20-managed-ref", GetNetFx20ReferencePathForHost(), "net20", "1.0.3")
                 {
                     RequiredRuntimeFeatureTags = ["runtime.netfx20-wine"]
                 },
-                new ReferenceSetDefinition(
-                    "netfx48-managed-ref",
-                    GetNetFx48ReferencePathForHost(),
-                    "net48",
-                    "1.0.3")
+                new ReferenceSetDefinition("netfx48-managed-ref", GetNetFx48ReferencePathForHost(), "net48", "1.0.3")
                 {
                     RequiredRuntimeFeatureTags = ["runtime.netfx48-wine"]
                 }
             ]);
-        var service = new CSharpBuildService(
-            references,
-            identity,
-            CompilationLimits.Default,
-            AstLimits.Default);
-        var executableRequest = CreateRequest(
-            BuildTarget.Artifact,
-            [new WorkspaceFile(
-                "Program.cs",
-                1,
-                "public static unsafe class Program { public static void Main() { int value = 42; int* pointer = &value; System.Console.WriteLine(*pointer); } }")]);
+        var service = new CSharpBuildService(references, identity, CompilationLimits.Default, AstLimits.Default);
+        var executableRequest = CreateRequest(BuildTarget.Artifact, [new WorkspaceFile("Program.cs", 1, "public static unsafe class Program { public static void Main() { int value = 42; int* pointer = &value; System.Console.WriteLine(*pointer); } }")]);
         var coreRequest = ForReference(executableRequest, "net10-ref", BuildOutputKind.Console);
         var net20Request = ForReference(executableRequest, "netfx20-managed-ref", BuildOutputKind.Console);
         var net48Request = ForReference(executableRequest, "netfx48-managed-ref", BuildOutputKind.Console);
         var libraryRequest = ForReference(net48Request, "netfx48-managed-ref", BuildOutputKind.Library);
 
-        var core = Assert.IsType<CompiledArtifact>((await service.ExecuteAsync(
-            coreRequest,
-            TestContext.Current.CancellationToken)).Artifact);
-        var net20 = Assert.IsType<CompiledArtifact>((await service.ExecuteAsync(
-            net20Request,
-            TestContext.Current.CancellationToken)).Artifact);
-        var net48 = Assert.IsType<CompiledArtifact>((await service.ExecuteAsync(
-            net48Request,
-            TestContext.Current.CancellationToken)).Artifact);
-        var library = Assert.IsType<CompiledArtifact>((await service.ExecuteAsync(
-            libraryRequest,
-            TestContext.Current.CancellationToken)).Artifact);
+        var core = Assert.IsType<CompiledArtifact>((await service.ExecuteAsync(coreRequest, TestContext.Current.CancellationToken)).Artifact);
+        var net20 = Assert.IsType<CompiledArtifact>((await service.ExecuteAsync(net20Request, TestContext.Current.CancellationToken)).Artifact);
+        var net48 = Assert.IsType<CompiledArtifact>((await service.ExecuteAsync(net48Request, TestContext.Current.CancellationToken)).Artifact);
+        var library = Assert.IsType<CompiledArtifact>((await service.ExecuteAsync(libraryRequest, TestContext.Current.CancellationToken)).Artifact);
 
         Assert.Equal("dotnet-managed-pe-v1", core.ArtifactFormat);
         Assert.Equal("SharpLabNext.User.dll", core.Manifest.EntryAssembly);
         Assert.Equal("coreclr", core.Manifest.RuntimeRequirement.Family);
-        Assert.Equal(
-            GetNet10ReferenceVersionForHost(),
-            Assert.Single(core.Manifest.RuntimeRequirement.Frameworks).MinimumVersion);
+        Assert.Equal(GetNet10ReferenceVersionForHost(), Assert.Single(core.Manifest.RuntimeRequirement.Frameworks).MinimumVersion);
 
         Assert.Equal("dotnet-framework-managed-pe-v1", net20.ArtifactFormat);
         Assert.Equal("SharpLabNext.User.exe", net20.Manifest.EntryAssembly);
@@ -610,91 +471,31 @@ public sealed class CSharpBuildServiceTests
         Assert.Equal("SharpLabNext.User.dll", library.Manifest.EntryAssembly);
         Assert.Equal("netfx-clr-wine", net48.Manifest.RuntimeRequirement.Family);
         Assert.Equal("anycpu", net48.Manifest.RuntimeRequirement.Architecture);
-        Assert.Equal(
-            ["runtime.netfx48-wine"],
-            net48.Manifest.RuntimeRequirement.RequiredRuntimeFeatureTags);
+        Assert.Equal(["runtime.netfx48-wine"], net48.Manifest.RuntimeRequirement.RequiredRuntimeFeatureTags);
         var framework = Assert.Single(net48.Manifest.RuntimeRequirement.Frameworks);
         Assert.Equal(".NETFramework", framework.Name);
         Assert.Equal("4.8", framework.MinimumVersion);
 
-        static BuildRequest ForReference(
-            BuildRequest request,
-            string referenceSetId,
-            BuildOutputKind outputKind)
+        static BuildRequest ForReference(BuildRequest request, string referenceSetId, BuildOutputKind outputKind)
         {
-            var options = request.EffectiveOptions with
-            {
-                OutputKind = outputKind,
-                AllowUnsafe = true
-            };
-            return request with
-            {
-                ReferenceSetId = referenceSetId,
-                Options = options,
-                Workspace = request.Workspace with
-                {
-                    ReferenceSetId = referenceSetId,
-                    BuildOptions = options
-                }
-            };
+            var options = request.EffectiveOptions with { OutputKind = outputKind, AllowUnsafe = true };
+            return request with { ReferenceSetId = referenceSetId, Options = options, Workspace = request.Workspace with { ReferenceSetId = referenceSetId, BuildOptions = options } };
         }
     }
 
     private static CSharpBuildService CreateService(AstLimits? astLimits = null)
     {
-        var references = new ReferenceSetProvider(
-            [new ReferenceSetDefinition(
-                "net10-ref",
-                GetNet10ReferencePathForHost(),
-                "net10.0",
-                GetNet10ReferenceVersionForHost())]);
-        return new CSharpBuildService(
-            references,
-            new RoslynWorkerIdentity("development", "roslyn-stable", "5.6.0", null, "development-worker-image"),
-            CompilationLimits.Default,
-            astLimits ?? AstLimits.Default);
+        var references = new ReferenceSetProvider([new ReferenceSetDefinition("net10-ref", GetNet10ReferencePathForHost(), "net10.0", GetNet10ReferenceVersionForHost())]);
+        return new CSharpBuildService(references, new RoslynWorkerIdentity("development", "roslyn-stable", "5.6.0", null, "development-worker-image"), CompilationLimits.Default, astLimits ?? AstLimits.Default);
     }
 
-    private static BuildRequest CreateRequest(
-        BuildTarget target,
-        IReadOnlyList<WorkspaceFile> files,
-        long revision = 1,
-        long selectionRevision = 1,
-        string? activeFile = null,
-        BuildOutputKind outputKind = BuildOutputKind.Console)
+    private static BuildRequest CreateRequest(BuildTarget target, IReadOnlyList<WorkspaceFile> files, long revision = 1, long selectionRevision = 1, string? activeFile = null, BuildOutputKind outputKind = BuildOutputKind.Console)
     {
         activeFile ??= files[^1].Path;
-        var options = new BuildOptions(
-            BuildConfiguration.Release,
-            Optimize: true,
-            outputKind,
-            AllowUnsafe: false,
-            EmitPortablePdb: true,
-            NullableContextMode.Enable,
-            LanguageVersion: "14.0",
-            PreprocessorSymbols: ["SHARPLABNEXT"],
-            CheckOverflow: true);
-        var workspace = new WorkspaceSnapshot(
-            ContractSchemaVersions.WorkspaceSnapshot,
-            revision,
-            selectionRevision,
-            "csharp",
-            files,
-            activeFile,
-            files.Select(static file => file.Path).ToArray(),
-            "net10-ref",
-            options);
+        var options = new BuildOptions(BuildConfiguration.Release, Optimize: true, outputKind, AllowUnsafe: false, EmitPortablePdb: true, NullableContextMode.Enable, LanguageVersion: "14.0", PreprocessorSymbols: ["SHARPLABNEXT"], CheckOverflow: true);
+        var workspace = new WorkspaceSnapshot(ContractSchemaVersions.WorkspaceSnapshot, revision, selectionRevision, "csharp", files, activeFile, files.Select(static file => file.Path).ToArray(), "net10-ref", options);
 
-        return new BuildRequest(
-            $"request-{Guid.NewGuid():N}",
-            $"idempotency-{Guid.NewGuid():N}",
-            "pipeline-test",
-            "roslyn-stable",
-            "net10-ref",
-            workspace,
-            DateTimeOffset.UtcNow.AddMinutes(1),
-            options,
-            target);
+        return new BuildRequest($"request-{Guid.NewGuid():N}", $"idempotency-{Guid.NewGuid():N}", "pipeline-test", "roslyn-stable", "net10-ref", workspace, DateTimeOffset.UtcNow.AddMinutes(1), options, target);
     }
 
     private static IEnumerable<AstNode> Flatten(AstNode root)

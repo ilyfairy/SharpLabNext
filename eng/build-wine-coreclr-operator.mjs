@@ -21,7 +21,7 @@ import {
   inspectDockerImage,
   inspectGitSourceState,
   validateGitSourceState,
-} from './runtime-promotion-image-binding.mjs'
+} from './release/runtime-promotion-image-binding.mjs'
 import {
   wineCoreClrOperatorExpectedLabels,
 } from './build-runtime-candidate.mjs'
@@ -39,7 +39,7 @@ import {
   wineCoreClrOperatorCommittedFiles,
   wineCoreClrOperatorReceiptPublicKeyPath,
   writeWineCoreClrOperatorReceiptAtomically,
-} from './wine-coreclr-operator-receipt.mjs'
+} from './release/wine-coreclr-operator-receipt.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const target = 'operator-wine-coreclr'
@@ -53,7 +53,7 @@ const publishDestinationInput = 'WINE_CORECLR_OPERATOR_PUBLISH_DESTINATION'
 const receiptPathInput = 'WINE_CORECLR_OPERATOR_RECEIPT_PATH'
 const signingKeyInput = 'WINE_CORECLR_OPERATOR_SIGNING_KEY_PATH'
 
-function fail(message) { throw new Error(message) }
+function fail(message) { throw new Error(message); }
 
 function isNonBuildInvocation(arguments_) {
   return arguments_.some((argument, index) =>
@@ -96,9 +96,7 @@ function isSafeBuildTagPart(value) {
     !/[\s\\"'\r\n]/.test(value)
 }
 
-export function wineCoreClrOperatorImageTag(values) {
-  return `${values.IMAGE_PREFIX}/operator-wine-coreclr:${values.RELEASE_ID}`
-}
+export function wineCoreClrOperatorImageTag(values) { return `${values.IMAGE_PREFIX}/operator-wine-coreclr:${values.RELEASE_ID}`; }
 
 export function validateWineCoreClrOperatorBuildInputs(values, sourceRoot = repositoryRoot) {
   const failures = []
@@ -137,9 +135,7 @@ export function createWineCoreClrOperatorBakeArguments(additionalArguments = [],
   ]
 }
 
-function committedSourceFiles() {
-  return [...wineCoreClrOperatorCommittedFiles]
-}
+function committedSourceFiles() { return [...wineCoreClrOperatorCommittedFiles]; }
 
 function sourceEnvironment(values, binding) {
   return {
@@ -245,13 +241,7 @@ function publishAndReceipt(configuration, image, values, expectedLabels, source,
   return written
 }
 
-export function runWineCoreClrOperatorBuild(
-  argv,
-  values = process.env,
-  spawn = spawnSync,
-  output = console,
-  testHooks = {},
-) {
+export function runWineCoreClrOperatorBuild(argv, values = process.env, spawn = spawnSync, output = console, testHooks = {}) {
   const effectiveRepositoryRoot = path.resolve(testHooks.repositoryRoot ?? repositoryRoot)
   const developmentOverrideCount = argv.filter(argument => argument === developmentSourceOverride).length
   if (developmentOverrideCount > 1) {
@@ -259,8 +249,7 @@ export function runWineCoreClrOperatorBuild(
     return 64
   }
   const allowUncommittedSourceForDevelopment = developmentOverrideCount === 1
-  const developmentImageInputsOverrideCount = argv
-    .filter(argument => argument === developmentImageInputsOverride).length
+  const developmentImageInputsOverrideCount = argv.filter(argument => argument === developmentImageInputsOverride).length
   if (developmentImageInputsOverrideCount > 1) {
     output.error(`Wine operator input error: ${developmentImageInputsOverride} may be specified once`)
     return 64

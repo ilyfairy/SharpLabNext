@@ -1,6 +1,6 @@
-import { expect, type Page, test } from '@playwright/test'
-import type { GistDocument, GistWorkspaceState } from '../src/api/types'
-import { decodeWire } from '../src/api/wire'
+import { expect, type Page, test } from '@playwright/test';
+import type { GistDocument, GistWorkspaceState } from '../src/api/types';
+import { decodeWire } from '../src/api/wire';
 
 const authenticatedStatus = {
   available: true,
@@ -21,7 +21,7 @@ function workspace(source: string): GistWorkspaceState {
     activeFile: 'Program.cs',
     sourceOrder: ['Program.cs'],
     files: [{ path: 'Program.cs', text: source }],
-  }
+  };
 }
 
 function gist(id: string, source: string, overrides: Partial<GistDocument> = {}): GistDocument {
@@ -36,30 +36,26 @@ function gist(id: string, source: string, overrides: Partial<GistDocument> = {})
     workspace: workspace(source),
     warnings: [],
     ...overrides,
-  }
+  };
 }
 
 async function openWorkbench(page: Page, fragment = '') {
-  await page.goto(`/${fragment}`)
-  await expect(page.getByLabel('Language')).toBeEnabled()
+  await page.goto(`/${fragment}`);
+  await expect(page.getByLabel('Language')).toBeEnabled();
 }
 
 async function mockAuthenticatedGitHub(page: Page) {
-  await page.route('**/api/v1/auth/github/status', (route) =>
-    route.fulfill({ status: 200, json: authenticatedStatus }),
-  )
+  await page.route('**/api/v1/auth/github/status', (route) => route.fulfill({ status: 200, json: authenticatedStatus }));
 }
 
 test.describe('GitHub Gist browser workflows', () => {
   test.beforeEach(({ isMobile }) => {
-    test.skip(isMobile, 'Desktop Gist coverage.')
+    test.skip(isMobile, 'Desktop Gist coverage.');
   })
 
   test('restores an anonymous public Gist fragment into the workbench', async ({ page }) => {
     const document = gist('abcde1', 'public static class RestoredFromPublicGist {}')
-    await page.route('**/api/v1/shares/gists/abcde1', (route) =>
-      route.fulfill({ status: 200, json: document }),
-    )
+    await page.route('**/api/v1/shares/gists/abcde1', (route) => route.fulfill({ status: 200, json: document }))
 
     await openWorkbench(page, '#gist:abcde1')
 
@@ -121,16 +117,20 @@ test.describe('GitHub Gist browser workflows', () => {
       canUpdate: true,
       description: 'Before update',
     })
-    let capturedRequest: { description: string; workspace: GistWorkspaceState } | null = null
+    let capturedRequest: {
+      description: string
+      workspace: GistWorkspaceState
+    } | null = null
     let capturedCsrf: string | undefined
     await page.route('**/api/v1/shares/gists/decaf1', async (route) => {
       if (route.request().method() === 'GET') {
         await route.fulfill({ status: 200, json: current })
         return
       }
-      capturedRequest = decodeWire<{ description: string; workspace: GistWorkspaceState }>(
-        route.request().postDataJSON(),
-      )
+      capturedRequest = decodeWire<{
+        description: string
+        workspace: GistWorkspaceState
+      }>(route.request().postDataJSON())
       capturedCsrf = route.request().headers()['x-sharplabnext-csrf']
       await route.fulfill({
         status: 200,
@@ -157,7 +157,10 @@ test.describe('GitHub Gist browser workflows', () => {
 
   test('shows a not-found error when an anonymous Gist cannot be loaded', async ({ page }) => {
     await page.route('**/api/v1/shares/gists/deadbe', (route) =>
-      route.fulfill({ status: 404, json: { message: 'The Gist was not found.' } }),
+      route.fulfill({
+        status: 404,
+        json: { message: 'The Gist was not found.' },
+      }),
     )
 
     await openWorkbench(page, '#gist:deadbe')
@@ -167,14 +170,29 @@ test.describe('GitHub Gist browser workflows', () => {
   })
 
   for (const scenario of [
-    { status: 401, label: 'unauthorized', message: 'The GitHub session has expired.' },
-    { status: 403, label: 'forbidden', message: 'GitHub denied access to this Gist.' },
-    { status: 429, label: 'rate limited', message: 'GitHub rate limit exceeded.' },
+    {
+      status: 401,
+      label: 'unauthorized',
+      message: 'The GitHub session has expired.',
+    },
+    {
+      status: 403,
+      label: 'forbidden',
+      message: 'GitHub denied access to this Gist.',
+    },
+    {
+      status: 429,
+      label: 'rate limited',
+      message: 'GitHub rate limit exceeded.',
+    },
   ]) {
     test(`shows the ${scenario.label} create error inside the Gist dialog`, async ({ page }) => {
       await mockAuthenticatedGitHub(page)
       await page.route('**/api/v1/shares/gists', (route) =>
-        route.fulfill({ status: scenario.status, json: { message: scenario.message } }),
+        route.fulfill({
+          status: scenario.status,
+          json: { message: scenario.message },
+        }),
       )
 
       await openWorkbench(page)

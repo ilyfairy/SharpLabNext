@@ -1,12 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { mobileEditorMediaQuery } from '../editor/editorPreference'
 import * as monaco from '../editor/monacoCore'
-import {
-  type CodeMirrorLspHover,
-  type LspRange,
-  lspSemanticTokenModifiers,
-  lspSemanticTokenTypes,
-} from '../lsp/codeMirrorLanguageClient'
+import { type CodeMirrorLspHover, type LspRange, lspSemanticTokenModifiers, lspSemanticTokenTypes } from '../lsp/codeMirrorLanguageClient'
 import { registerSourceLanguages, sourceEditorTheme } from '../lsp/languageRegistration'
 import { encodeSemanticTokens } from '../lsp/monacoLanguageClient'
 import type { CodeDocumentLineAction, CodeDocumentViewProps } from './CodeDocumentView'
@@ -30,11 +25,7 @@ export function MonacoCodeDocumentView(props: CodeDocumentViewProps) {
     const id = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
     outputModelSchemeRef.current = `sharplabnext-output-${id.toLowerCase()}`
   }
-  const ilLanguageSession = useIlOutputLanguageSession(
-    props.text,
-    props.generationKey ?? null,
-    props.languageId === 'il' ? props.ilOutputLanguageSessionOptions : null,
-  )
+  const ilLanguageSession = useIlOutputLanguageSession(props.text, props.generationKey ?? null, props.languageId === 'il' ? props.ilOutputLanguageSessionOptions : null)
   latestRef.current = props
   const lineActionsSignature = (props.lineActions ?? []).map(lineActionKey).join('|')
   const pendingActivationInputsRef = useRef({
@@ -47,11 +38,7 @@ export function MonacoCodeDocumentView(props: CodeDocumentViewProps) {
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
-    const model = monaco.editor.createModel(
-      latestRef.current.text,
-      latestRef.current.languageId,
-      monaco.Uri.parse(`${outputModelSchemeRef.current}:///Output.il`),
-    )
+    const model = monaco.editor.createModel(latestRef.current.text, latestRef.current.languageId, monaco.Uri.parse(`${outputModelSchemeRef.current}:///Output.il`))
     const isMobile = typeof matchMedia === 'function' && matchMedia(mobileEditorMediaQuery).matches
     const editor = monaco.editor.create(host, {
       model,
@@ -103,18 +90,14 @@ export function MonacoCodeDocumentView(props: CodeDocumentViewProps) {
       const position = event.target.position
       const selection = editor.getSelection()
       if (!event.event.leftButton || detail > 1 || !position || !selection?.isEmpty()) return
-      const assemblyLabel =
-        latestRef.current.languageId === 'asm' ? assemblyLabelTarget(model, position) : null
+      const assemblyLabel = latestRef.current.languageId === 'asm' ? assemblyLabelTarget(model, position) : null
       if (assemblyLabel) {
         clearActivation()
         const scheduledGenerationKey = latestRef.current.generationKey ?? null
         const scheduledText = latestRef.current.text
         activationTimerRef.current = window.setTimeout(() => {
           activationTimerRef.current = null
-          if (
-            (latestRef.current.generationKey ?? null) !== scheduledGenerationKey ||
-            latestRef.current.text !== scheduledText
-          ) {
+          if ((latestRef.current.generationKey ?? null) !== scheduledGenerationKey || latestRef.current.text !== scheduledText) {
             return
           }
           editor.setSelection(assemblyLabel)
@@ -123,10 +106,7 @@ export function MonacoCodeDocumentView(props: CodeDocumentViewProps) {
         }, 400)
         return
       }
-      const action = latestRef.current.lineActions?.find(
-        (candidate) =>
-          position.lineNumber >= candidate.startLine && position.lineNumber <= candidate.endLine,
-      )
+      const action = latestRef.current.lineActions?.find((candidate) => position.lineNumber >= candidate.startLine && position.lineNumber <= candidate.endLine)
       if (!action) return
       clearActivation()
       const actionKey = lineActionKey(action)
@@ -134,33 +114,22 @@ export function MonacoCodeDocumentView(props: CodeDocumentViewProps) {
       const scheduledText = latestRef.current.text
       activationTimerRef.current = window.setTimeout(() => {
         activationTimerRef.current = null
-        if (
-          (latestRef.current.generationKey ?? null) !== scheduledGenerationKey ||
-          latestRef.current.text !== scheduledText
-        ) {
+        if ((latestRef.current.generationKey ?? null) !== scheduledGenerationKey || latestRef.current.text !== scheduledText) {
           return
         }
-        latestRef.current.lineActions
-          ?.find((candidate) => lineActionKey(candidate) === actionKey)
-          ?.onActivate()
+        latestRef.current.lineActions?.find((candidate) => lineActionKey(candidate) === actionKey)?.onActivate()
       }, 400)
     })
     const mouseMove = editor.onMouseMove((event) => {
       const lineNumber = event.target.position?.lineNumber
-      const association =
-        lineNumber === undefined
-          ? null
-          : latestRef.current.lineAssociations?.find(
-              (candidate) => lineNumber >= candidate.startLine && lineNumber <= candidate.endLine,
-            )
+      const association = lineNumber === undefined ? null : latestRef.current.lineAssociations?.find((candidate) => lineNumber >= candidate.startLine && lineNumber <= candidate.endLine)
       updateHoveredAssociation(association?.association.key ?? null)
     })
     const mouseLeave = editor.onMouseLeave(() => updateHoveredAssociation(null))
     const scroll = editor.onDidScrollChange((event) => {
       if (event.scrollTopChanged || event.scrollLeftChanged) clearActivation()
     })
-    const resizeObserver =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => editor.layout())
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => editor.layout())
     resizeObserver?.observe(host)
     return () => {
       clearActivation()
@@ -181,12 +150,12 @@ export function MonacoCodeDocumentView(props: CodeDocumentViewProps) {
   useEffect(() => {
     const generationKey = props.generationKey ?? null
     const previous = pendingActivationInputsRef.current
-    pendingActivationInputsRef.current = { generationKey, lineActionsSignature, text: props.text }
-    if (
-      previous.generationKey === generationKey &&
-      previous.lineActionsSignature === lineActionsSignature &&
-      previous.text === props.text
-    ) {
+    pendingActivationInputsRef.current = {
+      generationKey,
+      lineActionsSignature,
+      text: props.text,
+    }
+    if (previous.generationKey === generationKey && previous.lineActionsSignature === lineActionsSignature && previous.text === props.text) {
       return
     }
     if (activationTimerRef.current !== null) {
@@ -230,7 +199,9 @@ export function MonacoCodeDocumentView(props: CodeDocumentViewProps) {
       }),
       provideDocumentSemanticTokens: (candidate, _lastResultId, token) => {
         if (candidate !== model || token.isCancellationRequested) return null
-        return { data: encodeSemanticTokens(ilLanguageSession.semanticTokens) }
+        return {
+          data: encodeSemanticTokens(ilLanguageSession.semanticTokens),
+        }
       },
       releaseDocumentSemanticTokens() {},
     })
@@ -254,12 +225,7 @@ export function MonacoCodeDocumentView(props: CodeDocumentViewProps) {
           line: position.lineNumber - 1,
           character: position.column - 1,
         })
-        if (
-          token.isCancellationRequested ||
-          candidate !== modelRef.current ||
-          model.getVersionId() !== version ||
-          !result
-        ) {
+        if (token.isCancellationRequested || candidate !== modelRef.current || model.getVersionId() !== version || !result) {
           return null
         }
         return monacoHover(result)
@@ -297,41 +263,18 @@ export function MonacoCodeDocumentView(props: CodeDocumentViewProps) {
     const model = modelRef.current
     if (!editor || !model) return
     const decorations = (props.lineAssociations ?? []).flatMap((lineAssociation) => {
-      if (
-        lineAssociation.startLine < 1 ||
-        lineAssociation.startLine > model.getLineCount() ||
-        lineAssociation.endLine < lineAssociation.startLine
-      ) {
+      if (lineAssociation.startLine < 1 || lineAssociation.startLine > model.getLineCount() || lineAssociation.endLine < lineAssociation.startLine) {
         return []
       }
       const endLine = Math.min(model.getLineCount(), lineAssociation.endLine)
-      const navigable = props.lineActions?.some(
-        (action) =>
-          action.startLine <= lineAssociation.endLine &&
-          action.endLine >= lineAssociation.startLine,
-      )
-      const tooltip = props.lineTooltips?.find(
-        (candidate) =>
-          candidate.startLine <= lineAssociation.endLine &&
-          candidate.endLine >= lineAssociation.startLine,
-      )
+      const navigable = props.lineActions?.some((action) => action.startLine <= lineAssociation.endLine && action.endLine >= lineAssociation.startLine)
+      const tooltip = props.lineTooltips?.find((candidate) => candidate.startLine <= lineAssociation.endLine && candidate.endLine >= lineAssociation.startLine)
       return [
         {
-          range: new monaco.Range(
-            lineAssociation.startLine,
-            1,
-            endLine,
-            model.getLineMaxColumn(endLine),
-          ),
+          range: new monaco.Range(lineAssociation.startLine, 1, endLine, model.getLineMaxColumn(endLine)),
           options: {
             isWholeLine: true,
-            className: [
-              navigable ? 'monaco-output-source-navigable' : '',
-              lineAssociation.association.key === props.activeAssociationKey
-                ? 'monaco-output-source-active'
-                : '',
-              sourceAssociationClass(lineAssociation.association.colorIndex),
-            ]
+            className: [navigable ? 'monaco-output-source-navigable' : '', lineAssociation.association.key === props.activeAssociationKey ? 'monaco-output-source-active' : '', sourceAssociationClass(lineAssociation.association.colorIndex)]
               .filter(Boolean)
               .join(' '),
             ...(tooltip
@@ -353,9 +296,7 @@ export function MonacoCodeDocumentView(props: CodeDocumentViewProps) {
     const editor = editorRef.current
     const revision = props.activeAssociationRevision ?? 0
     if (handledAssociationRevealRevisionRef.current === revision) return
-    const association = props.lineAssociations?.find(
-      (candidate) => candidate.association.key === props.activeAssociationKey,
-    )
+    const association = props.lineAssociations?.find((candidate) => candidate.association.key === props.activeAssociationKey)
     if (!editor || !association) return
     editor.revealLineInCenter(association.startLine)
     handledAssociationRevealRevisionRef.current = revision
@@ -381,10 +322,7 @@ function markdownContents(value: unknown): monaco.IMarkdownString[] {
   if (Array.isArray(value)) return value.flatMap(markdownContents)
   if (typeof value === 'string') return value ? [safeMarkdown(value)] : []
   if (!isRecord(value) || typeof value.value !== 'string' || !value.value) return []
-  const content =
-    typeof value.language === 'string'
-      ? `\`\`\`${value.language}\n${value.value}\n\`\`\``
-      : value.value
+  const content = typeof value.language === 'string' ? `\`\`\`${value.language}\n${value.value}\n\`\`\`` : value.value
   return [safeMarkdown(content)]
 }
 
@@ -393,12 +331,7 @@ function safeMarkdown(value: string): monaco.IMarkdownString {
 }
 
 function toMonacoRange(range: LspRange): monaco.Range {
-  return new monaco.Range(
-    range.start.line + 1,
-    range.start.character + 1,
-    range.end.line + 1,
-    range.end.character + 1,
-  )
+  return new monaco.Range(range.start.line + 1, range.start.character + 1, range.end.line + 1, range.end.character + 1)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -414,25 +347,14 @@ function isGutterTarget(target: monaco.editor.MouseTargetType): boolean {
   )
 }
 
-function assemblyLabelTarget(
-  model: monaco.editor.ITextModel,
-  position: monaco.Position,
-): monaco.Range | null {
+function assemblyLabelTarget(model: monaco.editor.ITextModel, position: monaco.Position): monaco.Range | null {
   const reference = model.getWordAtPosition(position)?.word
   if (!reference || !/^G_M\w+$/i.test(reference)) return null
   const clickedWord = model.getWordAtPosition(position)
   if (clickedWord && model.getLineContent(position.lineNumber)[clickedWord.endColumn - 1] === ':') {
     return null
   }
-  const match = model.findMatches(
-    `^\\s*${escapeRegExp(reference)}:`,
-    false,
-    true,
-    false,
-    null,
-    false,
-    1,
-  )[0]
+  const match = model.findMatches(`^\\s*${escapeRegExp(reference)}:`, false, true, false, null, false, 1)[0]
   return match ? monaco.Range.lift(match.range) : null
 }
 

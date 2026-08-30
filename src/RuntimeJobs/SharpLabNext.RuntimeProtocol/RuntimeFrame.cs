@@ -42,10 +42,7 @@ public static class RuntimeFrameCodec
         stream.Flush();
     }
 
-    public static async ValueTask WriteAsync(
-        Stream stream,
-        RuntimeFrame frame,
-        CancellationToken cancellationToken = default)
+    public static async ValueTask WriteAsync(Stream stream, RuntimeFrame frame, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stream);
         var header = CreateHeader(frame);
@@ -76,10 +73,7 @@ public static class RuntimeFrameCodec
         return header;
     }
 
-    public static async ValueTask<RuntimeFrame?> ReadAsync(
-        Stream stream,
-        int maximumPayloadBytes = DefaultMaximumPayloadBytes,
-        CancellationToken cancellationToken = default)
+    public static async ValueTask<RuntimeFrame?> ReadAsync(Stream stream, int maximumPayloadBytes = DefaultMaximumPayloadBytes, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stream);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumPayloadBytes);
@@ -116,8 +110,7 @@ public static class RuntimeFrameCodec
         var length = BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(14, 4));
         if (length < 0 || length > maximumPayloadBytes)
         {
-            throw new InvalidDataException(
-                $"Runtime frame payload length {length} is outside the 0..{maximumPayloadBytes} limit.");
+            throw new InvalidDataException($"Runtime frame payload length {length} is outside the 0..{maximumPayloadBytes} limit.");
         }
 
         var payload = new byte[length];
@@ -133,9 +126,7 @@ public sealed class RuntimeFrameLogReader(Stream stream)
     private int _readOffset;
     private int _readCount;
 
-    public async ValueTask<RuntimeFrame?> ReadAsync(
-        int maximumPayloadBytes = RuntimeFrameCodec.DefaultMaximumPayloadBytes,
-        CancellationToken cancellationToken = default)
+    public async ValueTask<RuntimeFrame?> ReadAsync(int maximumPayloadBytes = RuntimeFrameCodec.DefaultMaximumPayloadBytes, CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumPayloadBytes);
         var maximumEncodedBytes = checked(((maximumPayloadBytes + RuntimeFrameCodec.HeaderSize + 2) / 3) * 4);
@@ -188,8 +179,7 @@ public sealed class RuntimeFrameLogReader(Stream stream)
         if (frameBytes.Length > maximumPayloadBytes + RuntimeFrameCodec.HeaderSize)
             throw new InvalidDataException("Runtime decoded frame exceeds the protocol limit.");
         using var frameStream = new MemoryStream(frameBytes, writable: false);
-        var frame = await RuntimeFrameCodec.ReadAsync(frameStream, maximumPayloadBytes, cancellationToken)
-            ?? throw new InvalidDataException("Runtime encoded frame was empty.");
+        var frame = await RuntimeFrameCodec.ReadAsync(frameStream, maximumPayloadBytes, cancellationToken) ?? throw new InvalidDataException("Runtime encoded frame was empty.");
         if (frameStream.Position != frameStream.Length)
             throw new InvalidDataException("Runtime encoded line contains more than one frame.");
         return frame;
@@ -199,9 +189,7 @@ public sealed class RuntimeFrameLogReader(Stream stream)
         SearchValues.Create("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="u8);
 }
 
-public sealed class RuntimeFrameWriter(
-    Stream stream,
-    RuntimeFrameTransport transport = RuntimeFrameTransport.Binary) : IAsyncDisposable
+public sealed class RuntimeFrameWriter(Stream stream, RuntimeFrameTransport transport = RuntimeFrameTransport.Binary) : IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private long _sequence;
@@ -220,10 +208,7 @@ public sealed class RuntimeFrameWriter(
         }
     }
 
-    public async ValueTask WriteAsync(
-        RuntimeFrameKind kind,
-        ReadOnlyMemory<byte> payload,
-        CancellationToken cancellationToken = default)
+    public async ValueTask WriteAsync(RuntimeFrameKind kind, ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken);
         try

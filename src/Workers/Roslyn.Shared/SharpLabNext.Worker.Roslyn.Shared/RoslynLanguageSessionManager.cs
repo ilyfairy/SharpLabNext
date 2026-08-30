@@ -11,62 +11,34 @@ using SharpLabNext.Contracts;
 
 namespace SharpLabNext.Worker.Roslyn;
 
-public sealed class RoslynLanguageSessionManager(
-    ReferenceSetProvider referenceSets,
-    RoslynWorkerIdentity identity,
-    CompilationLimits compilationLimits,
-    LspLimits lspLimits) : IAsyncDisposable
+public sealed class RoslynLanguageSessionManager(ReferenceSetProvider referenceSets, RoslynWorkerIdentity identity, CompilationLimits compilationLimits, LspLimits lspLimits) : IAsyncDisposable
 {
     private static readonly Lazy<MefHostServices> HostServices = new(CreateHostServices);
 
     private readonly ConcurrentDictionary<string, RoslynLanguageSession> _sessions = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
 
-    public async Task<LanguageSession> OpenAsync(
-        OpenLanguageSessionRequest request,
-        CancellationToken cancellationToken)
+    public async Task<LanguageSession> OpenAsync(OpenLanguageSessionRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (!identity.SupportsLanguage(request.LanguageId))
             throw new LspInvalidParamsException($"This Roslyn worker does not support languageId '{request.LanguageId}'.");
         if (identity.SupportsLanguage("csharp"))
         {
-            RoslynCompilerIdentity.Ensure(
-                identity,
-                "C# compiler",
-                CSharpBuildService.GetLoadedCompilerVersion(),
-                CSharpBuildService.GetLoadedCompilerCommit());
+            RoslynCompilerIdentity.Ensure(identity, "C# compiler", CSharpBuildService.GetLoadedCompilerVersion(), CSharpBuildService.GetLoadedCompilerCommit());
         }
         if (identity.SupportsLanguage("visual-basic"))
         {
-            RoslynCompilerIdentity.Ensure(
-                identity,
-                "Visual Basic compiler",
-                VisualBasicBuildService.GetLoadedCompilerVersion(),
-                VisualBasicBuildService.GetLoadedCompilerCommit());
+            RoslynCompilerIdentity.Ensure(identity, "Visual Basic compiler", VisualBasicBuildService.GetLoadedCompilerVersion(), VisualBasicBuildService.GetLoadedCompilerCommit());
         }
         cancellationToken.ThrowIfCancellationRequested();
         if (!StringComparer.Ordinal.Equals(request.LspVersion, ContractSchemaVersions.Lsp))
             throw new LspInvalidParamsException($"LSP version '{request.LspVersion}' is not supported.");
 
-        var validated = WorkspaceValidator.Validate(
-            new BuildRequest(
-                request.RequestId,
-                request.RequestId,
-                request.PipelineResolutionId,
-                request.ToolchainId,
-                request.ReferenceSetId,
-                request.Workspace,
-                DateTimeOffset.UtcNow.AddMilliseconds(compilationLimits.MaxBuildMilliseconds),
-                request.Workspace.BuildOptions,
-                BuildTarget.CompileCheck),
-            compilationLimits,
-            identity);
+        var validated = WorkspaceValidator.Validate(new BuildRequest(request.RequestId, request.RequestId, request.PipelineResolutionId, request.ToolchainId, request.ReferenceSetId, request.Workspace, DateTimeOffset.UtcNow.AddMilliseconds(compilationLimits.MaxBuildMilliseconds), request.Workspace.BuildOptions, BuildTarget.CompileCheck), compilationLimits, identity);
         if (!StringComparer.Ordinal.Equals(request.LanguageId, validated.Snapshot.LanguageId))
             throw new LspInvalidParamsException("The language session request and workspace language IDs must match.");
-        var loadedReferences = await referenceSets
-            .GetAsync(request.ReferenceSetId, cancellationToken)
-            .ConfigureAwait(false);
+        var loadedReferences = await referenceSets.GetAsync(request.ReferenceSetId, cancellationToken).ConfigureAwait(false);
 
         await _lifecycleLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -78,30 +50,14 @@ public sealed class RoslynLanguageSessionManager(
             var sessionId = $"lsp_{Guid.NewGuid():N}";
             var expiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(lspLimits.SessionTtlMinutes);
             var workspace = CreateWorkspace(sessionId, validated, loadedReferences, cancellationToken);
-            var session = new RoslynLanguageSession(
-                sessionId,
-                workspace.Workspace,
-                workspace.ProjectId,
-                workspace.Documents,
-                validated,
-                compilationLimits,
-                lspLimits,
-                expiresAtUtc);
+            var session = new RoslynLanguageSession(sessionId, workspace.Workspace, workspace.ProjectId, workspace.Documents, validated, compilationLimits, lspLimits, expiresAtUtc);
             if (!_sessions.TryAdd(sessionId, session))
             {
                 await session.DisposeAsync().ConfigureAwait(false);
                 throw new InvalidOperationException("A unique language session ID could not be allocated.");
             }
 
-            return new LanguageSession(
-                sessionId,
-                validated.Snapshot.LanguageId,
-                identity.ToolchainId,
-                $"{identity.ToolchainId}/{identity.CompilerVersion}",
-                ContractSchemaVersions.Lsp,
-                validated.Snapshot.Revision,
-                validated.Snapshot.SelectionRevision,
-                expiresAtUtc);
+            return new LanguageSession(sessionId, validated.Snapshot.LanguageId, identity.ToolchainId, $"{identity.ToolchainId}/{identity.CompilerVersion}", ContractSchemaVersions.Lsp, validated.Snapshot.Revision, validated.Snapshot.SelectionRevision, expiresAtUtc);
         }
         finally
         {
@@ -142,11 +98,7 @@ public sealed class RoslynLanguageSessionManager(
         _lifecycleLock.Dispose();
     }
 
-    private static SessionWorkspace CreateWorkspace(
-        string sessionId,
-        ValidatedWorkspace validated,
-        LoadedReferenceSet references,
-        CancellationToken cancellationToken)
+    private static SessionWorkspace CreateWorkspace(string sessionId, ValidatedWorkspace validated, LoadedReferenceSet references, CancellationToken cancellationToken)
     {
         var workspace = new AdhocWorkspace(HostServices.Value, "SharpLabNext.Lsp");
         var projectId = ProjectId.CreateNewId($"{sessionId}-project");
@@ -157,35 +109,17 @@ public sealed class RoslynLanguageSessionManager(
             _ => throw new BuildRequestValidationException("The Roslyn worker only accepts C# or Visual Basic language sessions.")
         };
         var parseOptions = language == LanguageNames.CSharp
-            ? (ParseOptions)CSharpBuildService.CreateParseOptions(validated.Options)
-            : VisualBasicBuildService.CreateParseOptions(validated.Options);
+            ? (ParseOptions)CSharpBuildService.CreateParseOptions(validated.Options) : VisualBasicBuildService.CreateParseOptions(validated.Options);
         var compilationOptions = language == LanguageNames.CSharp
-            ? (CompilationOptions)CreateCSharpCompilationOptions(
-                validated,
-                (CSharpParseOptions)parseOptions,
-                cancellationToken)
-            : VisualBasicBuildService.CreateCompilationOptions(validated.Options);
-        var projectInfo = ProjectInfo.Create(
-            projectId,
-            VersionStamp.Create(),
-            $"SharpLabNext {sessionId}",
-            $"SharpLabNext.LanguageSession.{sessionId}",
-            language,
-            compilationOptions: compilationOptions,
-            parseOptions: parseOptions,
-            metadataReferences: references.References);
+            ? (CompilationOptions)CreateCSharpCompilationOptions(validated, (CSharpParseOptions)parseOptions, cancellationToken) : VisualBasicBuildService.CreateCompilationOptions(validated.Options);
+        var projectInfo = ProjectInfo.Create(projectId, VersionStamp.Create(), $"SharpLabNext {sessionId}", $"SharpLabNext.LanguageSession.{sessionId}", language, compilationOptions: compilationOptions, parseOptions: parseOptions, metadataReferences: references.References);
         var solution = workspace.CurrentSolution.AddProject(projectInfo);
         var documents = new Dictionary<string, DocumentId>(StringComparer.Ordinal);
         foreach (var file in validated.OrderedFiles)
         {
             var documentId = DocumentId.CreateNewId(projectId, file.Path);
             var text = SourceText.From(file.Text, Encoding.UTF8, SourceHashAlgorithm.Sha256);
-            solution = solution.AddDocument(
-                documentId,
-                Path.GetFileName(file.Path),
-                text,
-                folders: GetFolders(file.Path),
-                filePath: file.Path);
+            solution = solution.AddDocument(documentId, Path.GetFileName(file.Path), text, folders: GetFolders(file.Path), filePath: file.Path);
             documents.Add(file.Path, documentId);
         }
 
@@ -198,22 +132,10 @@ public sealed class RoslynLanguageSessionManager(
         return new SessionWorkspace(workspace, projectId, documents);
     }
 
-    private static CSharpCompilationOptions CreateCSharpCompilationOptions(
-        ValidatedWorkspace validated,
-        CSharpParseOptions parseOptions,
-        CancellationToken cancellationToken)
+    private static CSharpCompilationOptions CreateCSharpCompilationOptions(ValidatedWorkspace validated, CSharpParseOptions parseOptions, CancellationToken cancellationToken)
     {
-        var syntaxTrees = validated.OrderedFiles
-            .Select(file => (SyntaxTree)CSharpSyntaxTree.ParseText(
-                SourceText.From(file.Text, Encoding.UTF8, SourceHashAlgorithm.Sha256),
-                parseOptions,
-                file.Path,
-                cancellationToken))
-            .ToArray();
-        var outputKind = CSharpBuildService.ResolveOutputKind(
-            validated.Options.OutputKind,
-            syntaxTrees,
-            cancellationToken);
+        var syntaxTrees = validated.OrderedFiles.Select(file => (SyntaxTree)CSharpSyntaxTree.ParseText(SourceText.From(file.Text, Encoding.UTF8, SourceHashAlgorithm.Sha256), parseOptions, file.Path, cancellationToken)).ToArray();
+        var outputKind = CSharpBuildService.ResolveOutputKind(validated.Options.OutputKind, syntaxTrees, cancellationToken);
         return CSharpBuildService.CreateCompilationOptions(validated.Options, outputKind);
     }
 
@@ -231,10 +153,7 @@ public sealed class RoslynLanguageSessionManager(
             Assembly.Load(new AssemblyName("Microsoft.CodeAnalysis.VisualBasic.Workspaces")),
             Assembly.Load(new AssemblyName("Microsoft.CodeAnalysis.VisualBasic.Features"))
         };
-        var assemblies = MefHostServices.DefaultAssemblies
-            .Concat(explicitAssemblies)
-            .Distinct()
-            .ToArray();
+        var assemblies = MefHostServices.DefaultAssemblies.Concat(explicitAssemblies).Distinct().ToArray();
         return MefHostServices.Create(assemblies);
     }
 
@@ -255,8 +174,5 @@ public sealed class RoslynLanguageSessionManager(
             : path[..separator].Split('/');
     }
 
-    private sealed record SessionWorkspace(
-        AdhocWorkspace Workspace,
-        ProjectId ProjectId,
-        IReadOnlyDictionary<string, DocumentId> Documents);
+    private sealed record SessionWorkspace(AdhocWorkspace Workspace, ProjectId ProjectId, IReadOnlyDictionary<string, DocumentId> Documents);
 }

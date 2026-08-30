@@ -17,13 +17,9 @@ namespace SharpLabNext.TargetRuntimeRunner
 
         public static RunArguments Parse(string[] args)
         {
-            if (args == null || args.Length < 3 ||
-                !string.Equals(args[0], "run", StringComparison.Ordinal) ||
-                !string.Equals(args[2], "--", StringComparison.Ordinal))
+            if (args == null || args.Length < 3 || !string.Equals(args[0], "run", StringComparison.Ordinal) || !string.Equals(args[2], "--", StringComparison.Ordinal))
             {
-                throw new ArgumentException(
-                    "Usage: SharpLabNext.TargetRuntimeRunner run <absolute-assembly-path> -- [arguments]",
-                    nameof(args));
+                throw new ArgumentException("Usage: SharpLabNext.TargetRuntimeRunner run <absolute-assembly-path> -- [arguments]", nameof(args));
             }
 
             string path = Path.GetFullPath(args[1]);

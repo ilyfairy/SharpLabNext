@@ -21,8 +21,7 @@ internal static class JitNativeMapLog
             if (file.Length is <= 0 or > MaximumFileBytes)
                 return new Dictionary<nuint, IReadOnlyList<JitNativeMethodMap>>();
 
-            using var reader = new StreamReader(
-                new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
+            using var reader = new StreamReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
             if (!string.Equals(reader.ReadLine(), "SLJM1", StringComparison.Ordinal))
                 return new Dictionary<nuint, IReadOnlyList<JitNativeMethodMap>>();
 
@@ -32,8 +31,7 @@ internal static class JitNativeMapLog
             while (totalRecords < MaximumRecords && reader.ReadLine() is { } line)
             {
                 var parsed = ParseLine(line);
-                if (parsed is null ||
-                    parsed.Ranges.Count > MaximumTotalMapEntries - totalMapEntries)
+                if (parsed is null || parsed.Ranges.Count > MaximumTotalMapEntries - totalMapEntries)
                     continue;
 
                 if (!methods.TryGetValue(parsed.MethodHandle, out var versions))
@@ -43,23 +41,16 @@ internal static class JitNativeMapLog
                     versions = [];
                     methods.Add(parsed.MethodHandle, versions);
                 }
-                if (versions.Count >= MaximumNativeCodeVersions ||
-                    versions.Any(version => version.NativeCodeStart == parsed.NativeCodeStart))
+                if (versions.Count >= MaximumNativeCodeVersions || versions.Any(version => version.NativeCodeStart == parsed.NativeCodeStart))
                     continue;
 
                 versions.Add(parsed);
                 totalRecords++;
                 totalMapEntries += parsed.Ranges.Count;
             }
-            return methods.ToDictionary(
-                static pair => pair.Key,
-                static pair => (IReadOnlyList<JitNativeMethodMap>)pair.Value.ToArray());
+            return methods.ToDictionary(static pair => pair.Key, static pair => (IReadOnlyList<JitNativeMethodMap>)pair.Value.ToArray());
         }
-        catch (Exception exception) when (exception is
-            IOException or
-            UnauthorizedAccessException or
-            InvalidDataException or
-            ArgumentException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
         {
             return new Dictionary<nuint, IReadOnlyList<JitNativeMethodMap>>();
         }
@@ -71,15 +62,7 @@ internal static class JitNativeMapLog
             return null;
 
         var fields = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (fields.Length < 5 ||
-            !TryParseHexField(fields[0], "handle=", out var methodHandle) ||
-            !TryParseHexField(fields[1], "token=", out var metadataTokenValue) ||
-            metadataTokenValue > int.MaxValue ||
-            (metadataTokenValue & 0xff000000) != 0x06000000 ||
-            !TryParseHexField(fields[2], "native=", out var nativeCodeStart) ||
-            !TryParseDecimalField(fields[3], "count=", out var count) ||
-            count is <= 0 or > MaximumMapEntriesPerMethod ||
-            fields.Length != count + 4)
+        if (fields.Length < 5 || !TryParseHexField(fields[0], "handle=", out var methodHandle) || !TryParseHexField(fields[1], "token=", out var metadataTokenValue) || metadataTokenValue > int.MaxValue || (metadataTokenValue & 0xff000000) != 0x06000000 || !TryParseHexField(fields[2], "native=", out var nativeCodeStart) || !TryParseDecimalField(fields[3], "count=", out var count) || count is <= 0 or > MaximumMapEntriesPerMethod || fields.Length != count + 4)
         {
             return null;
         }
@@ -88,22 +71,14 @@ internal static class JitNativeMapLog
         for (var index = 0; index < count; index++)
         {
             var parts = fields[index + 4].Split(':');
-            if (parts.Length != 3 ||
-                !int.TryParse(parts[0], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var ilOffset) ||
-                !uint.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var nativeStart) ||
-                !uint.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture, out var nativeEnd) ||
-                nativeEnd < nativeStart ||
-                nativeEnd > MaximumNativeOffset)
+            if (parts.Length != 3 || !int.TryParse(parts[0], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var ilOffset) || !uint.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var nativeStart) || !uint.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture, out var nativeEnd) || nativeEnd < nativeStart || nativeEnd > MaximumNativeOffset)
             {
                 return null;
             }
             ranges[index] = new JitNativeIlRange(ilOffset, nativeStart, nativeEnd);
         }
 
-        var orderedRanges = ranges
-            .OrderBy(static range => range.NativeStart)
-            .ThenBy(static range => range.NativeEnd)
-            .ToArray();
+        var orderedRanges = ranges.OrderBy(static range => range.NativeStart).ThenBy(static range => range.NativeEnd).ToArray();
         uint previousNativeEnd = 0;
         var hasPreviousRange = false;
         foreach (var range in orderedRanges)
@@ -116,22 +91,14 @@ internal static class JitNativeMapLog
             hasPreviousRange = true;
         }
 
-        return new JitNativeMethodMap(
-            methodHandle,
-            (int)metadataTokenValue,
-            nativeCodeStart,
-            orderedRanges);
+        return new JitNativeMethodMap(methodHandle, (int)metadataTokenValue, nativeCodeStart, orderedRanges);
     }
 
     private static bool TryParseHexField(string field, string prefix, out nuint value)
     {
         value = 0;
         return field.StartsWith(prefix, StringComparison.Ordinal) &&
-            nuint.TryParse(
-                field.AsSpan(prefix.Length),
-                NumberStyles.AllowHexSpecifier,
-                CultureInfo.InvariantCulture,
-                out value) &&
+            nuint.TryParse(field.AsSpan(prefix.Length), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value) &&
             value != 0;
     }
 
@@ -139,21 +106,10 @@ internal static class JitNativeMapLog
     {
         value = 0;
         return field.StartsWith(prefix, StringComparison.Ordinal) &&
-            int.TryParse(
-                field.AsSpan(prefix.Length),
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out value);
+            int.TryParse(field.AsSpan(prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out value);
     }
 }
 
-internal sealed record JitNativeMethodMap(
-    nuint MethodHandle,
-    int MetadataToken,
-    nuint NativeCodeStart,
-    IReadOnlyList<JitNativeIlRange> Ranges);
+internal sealed record JitNativeMethodMap(nuint MethodHandle, int MetadataToken, nuint NativeCodeStart, IReadOnlyList<JitNativeIlRange> Ranges);
 
-internal sealed record JitNativeIlRange(
-    int IlOffset,
-    uint NativeStart,
-    uint NativeEnd);
+internal sealed record JitNativeIlRange(int IlOffset, uint NativeStart, uint NativeEnd);

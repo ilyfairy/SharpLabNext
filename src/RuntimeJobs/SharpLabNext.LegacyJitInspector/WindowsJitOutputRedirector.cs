@@ -18,9 +18,7 @@ namespace SharpLabNext.LegacyJitInspector
                 int descriptor = DuplicateLinux(1);
                 if (descriptor < 0)
                     throw new IOException("The runtime frame stdout descriptor could not be duplicated.");
-                return new FileStream(
-                    new SafeFileHandle(new IntPtr(descriptor), true),
-                    FileAccess.Write);
+                return new FileStream(new SafeFileHandle(new IntPtr(descriptor), true), FileAccess.Write);
             }
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 throw new PlatformNotSupportedException("Runtime frames support Linux and Windows only.");
@@ -30,18 +28,9 @@ namespace SharpLabNext.LegacyJitInspector
             if (standardOutput == IntPtr.Zero || standardOutput == new IntPtr(-1))
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "The runtime frame stdout handle is invalid.");
 
-            if (!DuplicateHandle(
-                currentProcess,
-                standardOutput,
-                currentProcess,
-                out IntPtr duplicate,
-                0,
-                false,
-                DuplicateSameAccess))
+            if (!DuplicateHandle(currentProcess, standardOutput, currentProcess, out IntPtr duplicate, 0, false, DuplicateSameAccess))
             {
-                throw new Win32Exception(
-                    Marshal.GetLastWin32Error(),
-                    "The runtime frame stdout handle could not be duplicated.");
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "The runtime frame stdout handle could not be duplicated.");
             }
 
             return new FileStream(new SafeFileHandle(duplicate, true), FileAccess.Write);
@@ -55,14 +44,7 @@ namespace SharpLabNext.LegacyJitInspector
 
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool DuplicateHandle(
-            IntPtr sourceProcess,
-            IntPtr sourceHandle,
-            IntPtr targetProcess,
-            out IntPtr targetHandle,
-            uint desiredAccess,
-            [MarshalAs(UnmanagedType.Bool)] bool inheritHandle,
-            uint options);
+        private static extern bool DuplicateHandle(IntPtr sourceProcess, IntPtr sourceHandle, IntPtr targetProcess, out IntPtr targetHandle, uint desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint options);
 
         [DllImport("libc", EntryPoint = "dup", CallingConvention = CallingConvention.Cdecl)]
         private static extern int DuplicateLinux(int descriptor);
@@ -86,14 +68,10 @@ namespace SharpLabNext.LegacyJitInspector
             string path = Environment.GetEnvironmentVariable("SHARPLABNEXT_JIT_OUTPUT_PATH");
             if (string.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path))
             {
-                throw new InvalidOperationException(
-                    "Windows JIT inspection requires an absolute SHARPLABNEXT_JIT_OUTPUT_PATH.");
+                throw new InvalidOperationException("Windows JIT inspection requires an absolute SHARPLABNEXT_JIT_OUTPUT_PATH.");
             }
 
-            int descriptor = OpenUcrt(
-                path,
-                WriteOnly | Create | Truncate | Binary,
-                OwnerRead | OwnerWrite);
+            int descriptor = OpenUcrt(path, WriteOnly | Create | Truncate | Binary, OwnerRead | OwnerWrite);
             if (descriptor < 0)
                 throw new IOException("The Windows JIT output file could not be opened through ucrtbase.");
 
@@ -107,9 +85,7 @@ namespace SharpLabNext.LegacyJitInspector
                     throw new IOException("ucrtbase returned an invalid redirected stdout handle.");
                 if (!SetStdHandle(StandardOutputHandle, outputHandle))
                 {
-                    throw new Win32Exception(
-                        Marshal.GetLastWin32Error(),
-                        "The Windows standard output handle could not be redirected.");
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "The Windows standard output handle could not be redirected.");
                 }
             }
             catch
@@ -122,10 +98,7 @@ namespace SharpLabNext.LegacyJitInspector
         }
 
         [DllImport("ucrtbase.dll", EntryPoint = "_wopen", CallingConvention = CallingConvention.Cdecl)]
-        private static extern int OpenUcrt(
-            [MarshalAs(UnmanagedType.LPWStr)] string path,
-            int flags,
-            int permissionMode);
+        private static extern int OpenUcrt([MarshalAs(UnmanagedType.LPWStr)] string path, int flags, int permissionMode);
 
         [DllImport("ucrtbase.dll", EntryPoint = "_dup2", CallingConvention = CallingConvention.Cdecl)]
         private static extern int DuplicateDescriptorUcrt(int source, int destination);

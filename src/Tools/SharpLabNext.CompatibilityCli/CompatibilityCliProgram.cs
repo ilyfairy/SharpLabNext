@@ -29,8 +29,7 @@ public static class CompatibilityCliProgram
 
             var report = CompatibilityAuditor.Audit(catalog, releaseLock, DateTimeOffset.UtcNow);
             var content = command.Format == CompatibilityOutputFormat.Markdown
-                ? ToMarkdown(report)
-                : JsonSerializer.Serialize(report, JsonOptions) + Environment.NewLine;
+                ? ToMarkdown(report) : JsonSerializer.Serialize(report, JsonOptions) + Environment.NewLine;
             await WriteOutputAsync(command.OutputPath, content);
             return report.IsValid ? 0 : 2;
         }
@@ -67,9 +66,7 @@ public static class CompatibilityCliProgram
         else
         {
             foreach (var issue in report.Issues)
-            {
                 builder.Append("- ").AppendLine(issue);
-            }
         }
 
         builder.AppendLine();
@@ -78,15 +75,7 @@ public static class CompatibilityCliProgram
         builder.AppendLine("| Language | Toolchain | API | Output | Runtime | Result |");
         builder.AppendLine("| --- | --- | --- | --- | --- | --- |");
         foreach (var entry in report.Matrix)
-        {
-            builder.Append("| ").Append(entry.LanguageId)
-                .Append(" | ").Append(entry.ToolchainId)
-                .Append(" | ").Append(entry.ReferenceSetId)
-                .Append(" | ").Append(entry.OutputId)
-                .Append(" | ").Append(entry.RuntimeId ?? "-")
-                .Append(" | ").Append(entry.Disposition.ToString().ToLowerInvariant())
-                .AppendLine(" |");
-        }
+            builder.Append("| ").Append(entry.LanguageId).Append(" | ").Append(entry.ToolchainId).Append(" | ").Append(entry.ReferenceSetId).Append(" | ").Append(entry.OutputId).Append(" | ").Append(entry.RuntimeId ?? "-").Append(" | ").Append(entry.Disposition.ToString().ToLowerInvariant()).AppendLine(" |");
 
         return builder.ToString().ReplaceLineEndings("\n");
     }
@@ -95,44 +84,19 @@ public static class CompatibilityCliProgram
     {
         try
         {
-            var response = Resolver.Resolve(
-                catalog,
-                new ResolveSelectionRequest(
-                    command.LanguageId!,
-                    command.ToolchainId,
-                    command.ReferenceSetId,
-                    command.OutputId!,
-                    command.RuntimeId,
-                    command.BuildMode,
-                    catalog.Revision,
-                    1),
-                DateTimeOffset.UtcNow);
-            await WriteOutputAsync(
-                command.OutputPath,
-                JsonSerializer.Serialize(response, JsonOptions) + Environment.NewLine);
+            var response = Resolver.Resolve(catalog, new ResolveSelectionRequest(command.LanguageId!, command.ToolchainId, command.ReferenceSetId, command.OutputId!, command.RuntimeId, command.BuildMode, catalog.Revision, 1), DateTimeOffset.UtcNow);
+            await WriteOutputAsync(command.OutputPath, JsonSerializer.Serialize(response, JsonOptions) + Environment.NewLine);
             return 0;
         }
         catch (SelectionResolutionException exception)
         {
-            var error = new
-            {
-                exception.Code,
-                field = exception.Field,
-                exception.Value,
-                exception.Message
-            };
-            await WriteOutputAsync(
-                command.OutputPath,
-                JsonSerializer.Serialize(error, JsonOptions) + Environment.NewLine,
-                useStandardError: command.OutputPath is null);
+            var error = new { exception.Code, field = exception.Field, exception.Value, exception.Message };
+            await WriteOutputAsync(command.OutputPath, JsonSerializer.Serialize(error, JsonOptions) + Environment.NewLine, useStandardError: command.OutputPath is null);
             return 2;
         }
     }
 
-    private static async Task WriteOutputAsync(
-        string? path,
-        string content,
-        bool useStandardError = false)
+    private static async Task WriteOutputAsync(string? path, string content, bool useStandardError = false)
     {
         if (path is null)
         {
@@ -147,8 +111,7 @@ public static class CompatibilityCliProgram
             return;
         }
 
-        var directory = Path.GetDirectoryName(path)
-            ?? throw new InvalidOperationException("Output path has no parent directory.");
+        var directory = Path.GetDirectoryName(path) ?? throw new InvalidOperationException("Output path has no parent directory.");
         Directory.CreateDirectory(directory);
         await File.WriteAllTextAsync(path, content);
     }

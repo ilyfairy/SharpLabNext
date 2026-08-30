@@ -43,7 +43,11 @@ export function createCatalogFixture(): CatalogDocument {
         capabilities: ['compile-check', 'managed-pe', 'ast', 'explain'],
         metadataFeatureTags: [],
         legacyAliases: [],
-        availability: { installed: true, health: 'skeleton', reason: 'Fake worker only.' },
+        availability: {
+          installed: true,
+          health: 'skeleton',
+          reason: 'Fake worker only.',
+        },
       },
       {
         id: 'fsharp-stable',
@@ -58,7 +62,11 @@ export function createCatalogFixture(): CatalogDocument {
         capabilities: ['compile-check', 'managed-pe', 'ast'],
         metadataFeatureTags: [],
         legacyAliases: [],
-        availability: { installed: false, health: 'not-built', reason: 'Not built.' },
+        availability: {
+          installed: false,
+          health: 'not-built',
+          reason: 'Not built.',
+        },
       },
     ],
     referenceSets: [
@@ -80,7 +88,11 @@ export function createCatalogFixture(): CatalogDocument {
         runtimeFamily: 'coreclr',
         requiredRuntimeFeatureTags: ['runtime.dotnet-11'],
         metadataFeatureTags: [],
-        availability: { installed: false, health: 'not-built', reason: 'Not built.' },
+        availability: {
+          installed: false,
+          health: 'not-built',
+          reason: 'Not built.',
+        },
       },
     ],
     runtimes: [
@@ -96,7 +108,11 @@ export function createCatalogFixture(): CatalogDocument {
         providedRuntimeFeatureTags: [],
         providedMetadataFeatureTags: [],
         legacyAliases: [],
-        availability: { installed: false, health: 'not-built', reason: 'Not built.' },
+        availability: {
+          installed: false,
+          health: 'not-built',
+          reason: 'Not built.',
+        },
       },
       {
         id: 'dotnet-11-linux-x64',
@@ -110,7 +126,11 @@ export function createCatalogFixture(): CatalogDocument {
         providedRuntimeFeatureTags: ['runtime.dotnet-11'],
         providedMetadataFeatureTags: [],
         legacyAliases: [],
-        availability: { installed: false, health: 'not-built', reason: 'Not built.' },
+        availability: {
+          installed: false,
+          health: 'not-built',
+          reason: 'Not built.',
+        },
       },
     ],
     artifactProcessors: [
@@ -124,7 +144,11 @@ export function createCatalogFixture(): CatalogDocument {
         capabilities: ['il', 'decompiled-csharp'],
         transformations: [],
         acceptedMetadataFeatureTags: [],
-        availability: { installed: false, health: 'not-built', reason: 'Not built.' },
+        availability: {
+          installed: false,
+          health: 'not-built',
+          reason: 'Not built.',
+        },
       },
     ],
     outputs: [

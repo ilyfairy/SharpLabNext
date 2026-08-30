@@ -11,17 +11,9 @@ public sealed class ReferenceSetAttestationReaderTests
     [Fact]
     public async Task ValidManifestIsLoadedAndVerified()
     {
-        using var fixture = await ReferenceSetFixture.CreateAsync(
-            writeManifest: true,
-            TestContext.Current.CancellationToken);
+        using var fixture = await ReferenceSetFixture.CreateAsync(writeManifest: true, TestContext.Current.CancellationToken);
 
-        var attestation = ReferenceSetAttestationReader.LoadAndVerify(
-            fixture.Root,
-            ReferenceSetFixture.ReferenceSetId,
-            ReferenceSetFixture.TargetFramework,
-            ReferenceSetFixture.ResolvedVersion,
-            expectedDigest: ReferenceSetFixture.LockedDigest,
-            requireManifest: true);
+        var attestation = ReferenceSetAttestationReader.LoadAndVerify(fixture.Root, ReferenceSetFixture.ReferenceSetId, ReferenceSetFixture.TargetFramework, ReferenceSetFixture.ResolvedVersion, expectedDigest: ReferenceSetFixture.LockedDigest, requireManifest: true);
 
         Assert.Equal(ReferenceSetFixture.ReferenceSetId, attestation.Id);
         Assert.Equal(ReferenceSetFixture.LockedDigest, attestation.Digest);
@@ -31,21 +23,12 @@ public sealed class ReferenceSetAttestationReaderTests
     [Fact]
     public async Task ValidCompositeManifestIsLoadedAndVerified()
     {
-        using var fixture = await CompositeReferenceSetFixture.CreateAsync(
-            mutation: null,
-            TestContext.Current.CancellationToken);
+        using var fixture = await CompositeReferenceSetFixture.CreateAsync(mutation: null, TestContext.Current.CancellationToken);
 
-        var attestation = ReferenceSetAttestationReader.LoadAndVerify(
-            fixture.Root,
-            CompositeReferenceSetFixture.ReferenceSetId,
-            CompositeReferenceSetFixture.TargetFramework,
-            CompositeReferenceSetFixture.ResolvedVersion,
-            expectedDigest: CompositeReferenceSetFixture.LockedDigest,
-            requireManifest: true);
+        var attestation = ReferenceSetAttestationReader.LoadAndVerify(fixture.Root, CompositeReferenceSetFixture.ReferenceSetId, CompositeReferenceSetFixture.TargetFramework, CompositeReferenceSetFixture.ResolvedVersion, expectedDigest: CompositeReferenceSetFixture.LockedDigest, requireManifest: true);
 
         Assert.Equal(CompositeReferenceSetFixture.LockedDigest, attestation.Digest);
-        var sources = Assert.IsAssignableFrom<IReadOnlyList<SharpLabNext.Contracts.ReferenceSetProvenanceSource>>(
-            attestation.Provenance.Sources);
+        var sources = Assert.IsAssignableFrom<IReadOnlyList<SharpLabNext.Contracts.ReferenceSetProvenanceSource>>(attestation.Provenance.Sources);
         Assert.Collection(
             sources,
             source =>
@@ -63,22 +46,11 @@ public sealed class ReferenceSetAttestationReaderTests
     [Theory]
     [InlineData(0, "role", "extension")]
     [InlineData(1, "selection", "assembly-version:3.5.0.0")]
-    public async Task CompositeRoleOrSelectionTamperingIsRejected(
-        int sourceIndex,
-        string propertyName,
-        string replacement)
+    public async Task CompositeRoleOrSelectionTamperingIsRejected(int sourceIndex, string propertyName, string replacement)
     {
-        using var fixture = await CompositeReferenceSetFixture.CreateAsync(
-            document => GetCompositeSources(document)[sourceIndex]![propertyName] = replacement,
-            TestContext.Current.CancellationToken);
+        using var fixture = await CompositeReferenceSetFixture.CreateAsync(document => GetCompositeSources(document)[sourceIndex]![propertyName] = replacement, TestContext.Current.CancellationToken);
 
-        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(
-            fixture.Root,
-            CompositeReferenceSetFixture.ReferenceSetId,
-            CompositeReferenceSetFixture.TargetFramework,
-            CompositeReferenceSetFixture.ResolvedVersion,
-            expectedDigest: CompositeReferenceSetFixture.LockedDigest,
-            requireManifest: true));
+        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(fixture.Root, CompositeReferenceSetFixture.ReferenceSetId, CompositeReferenceSetFixture.TargetFramework, CompositeReferenceSetFixture.ResolvedVersion, expectedDigest: CompositeReferenceSetFixture.LockedDigest, requireManifest: true));
 
         Assert.Contains("source provenance is invalid", exception.Message, StringComparison.Ordinal);
     }
@@ -86,18 +58,9 @@ public sealed class ReferenceSetAttestationReaderTests
     [Fact]
     public async Task CompositeSourceDigestTamperingIsRejected()
     {
-        using var fixture = await CompositeReferenceSetFixture.CreateAsync(
-            document => GetCompositeSources(document)[0]!["sourceArchiveDigest"] =
-                $"sha512:{new string('0', 128)}",
-            TestContext.Current.CancellationToken);
+        using var fixture = await CompositeReferenceSetFixture.CreateAsync(document => GetCompositeSources(document)[0]!["sourceArchiveDigest"] = $"sha512:{new string('0', 128)}", TestContext.Current.CancellationToken);
 
-        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(
-            fixture.Root,
-            CompositeReferenceSetFixture.ReferenceSetId,
-            CompositeReferenceSetFixture.TargetFramework,
-            CompositeReferenceSetFixture.ResolvedVersion,
-            expectedDigest: CompositeReferenceSetFixture.LockedDigest,
-            requireManifest: true));
+        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(fixture.Root, CompositeReferenceSetFixture.ReferenceSetId, CompositeReferenceSetFixture.TargetFramework, CompositeReferenceSetFixture.ResolvedVersion, expectedDigest: CompositeReferenceSetFixture.LockedDigest, requireManifest: true));
 
         Assert.Contains("source identity digest", exception.Message, StringComparison.Ordinal);
     }
@@ -106,17 +69,9 @@ public sealed class ReferenceSetAttestationReaderTests
     public async Task CompositeIdentityDigestTamperingIsRejectedAfterConfigurationMatch()
     {
         var tamperedDigest = $"sha256:{new string('0', 64)}";
-        using var fixture = await CompositeReferenceSetFixture.CreateAsync(
-            document => document["referenceSet"]!["digest"] = tamperedDigest,
-            TestContext.Current.CancellationToken);
+        using var fixture = await CompositeReferenceSetFixture.CreateAsync(document => document["referenceSet"]!["digest"] = tamperedDigest, TestContext.Current.CancellationToken);
 
-        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(
-            fixture.Root,
-            CompositeReferenceSetFixture.ReferenceSetId,
-            CompositeReferenceSetFixture.TargetFramework,
-            CompositeReferenceSetFixture.ResolvedVersion,
-            expectedDigest: tamperedDigest,
-            requireManifest: true));
+        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(fixture.Root, CompositeReferenceSetFixture.ReferenceSetId, CompositeReferenceSetFixture.TargetFramework, CompositeReferenceSetFixture.ResolvedVersion, expectedDigest: tamperedDigest, requireManifest: true));
 
         Assert.Contains("source identity digest", exception.Message, StringComparison.Ordinal);
     }
@@ -124,21 +79,10 @@ public sealed class ReferenceSetAttestationReaderTests
     [Fact]
     public async Task ModifiedAssemblyIsRejected()
     {
-        using var fixture = await ReferenceSetFixture.CreateAsync(
-            writeManifest: true,
-            TestContext.Current.CancellationToken);
-        await File.AppendAllTextAsync(
-            fixture.AssemblyPath,
-            "modified",
-            TestContext.Current.CancellationToken);
+        using var fixture = await ReferenceSetFixture.CreateAsync(writeManifest: true, TestContext.Current.CancellationToken);
+        await File.AppendAllTextAsync(fixture.AssemblyPath, "modified", TestContext.Current.CancellationToken);
 
-        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(
-            fixture.Root,
-            ReferenceSetFixture.ReferenceSetId,
-            ReferenceSetFixture.TargetFramework,
-            ReferenceSetFixture.ResolvedVersion,
-            expectedDigest: ReferenceSetFixture.LockedDigest,
-            requireManifest: true));
+        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(fixture.Root, ReferenceSetFixture.ReferenceSetId, ReferenceSetFixture.TargetFramework, ReferenceSetFixture.ResolvedVersion, expectedDigest: ReferenceSetFixture.LockedDigest, requireManifest: true));
 
         Assert.Contains("modified assembly", exception.Message, StringComparison.Ordinal);
     }
@@ -146,21 +90,10 @@ public sealed class ReferenceSetAttestationReaderTests
     [Fact]
     public async Task ExtraAssemblyIsRejected()
     {
-        using var fixture = await ReferenceSetFixture.CreateAsync(
-            writeManifest: true,
-            TestContext.Current.CancellationToken);
-        await File.WriteAllBytesAsync(
-            Path.Combine(fixture.Root, "Extra.dll"),
-            [4, 5, 6],
-            TestContext.Current.CancellationToken);
+        using var fixture = await ReferenceSetFixture.CreateAsync(writeManifest: true, TestContext.Current.CancellationToken);
+        await File.WriteAllBytesAsync(Path.Combine(fixture.Root, "Extra.dll"), [4, 5, 6], TestContext.Current.CancellationToken);
 
-        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(
-            fixture.Root,
-            ReferenceSetFixture.ReferenceSetId,
-            ReferenceSetFixture.TargetFramework,
-            ReferenceSetFixture.ResolvedVersion,
-            expectedDigest: ReferenceSetFixture.LockedDigest,
-            requireManifest: true));
+        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(fixture.Root, ReferenceSetFixture.ReferenceSetId, ReferenceSetFixture.TargetFramework, ReferenceSetFixture.ResolvedVersion, expectedDigest: ReferenceSetFixture.LockedDigest, requireManifest: true));
 
         Assert.Contains("file set", exception.Message, StringComparison.Ordinal);
     }
@@ -168,17 +101,9 @@ public sealed class ReferenceSetAttestationReaderTests
     [Fact]
     public async Task RequiredManifestCannotBeMissing()
     {
-        using var fixture = await ReferenceSetFixture.CreateAsync(
-            writeManifest: false,
-            TestContext.Current.CancellationToken);
+        using var fixture = await ReferenceSetFixture.CreateAsync(writeManifest: false, TestContext.Current.CancellationToken);
 
-        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(
-            fixture.Root,
-            ReferenceSetFixture.ReferenceSetId,
-            ReferenceSetFixture.TargetFramework,
-            ReferenceSetFixture.ResolvedVersion,
-            expectedDigest: ReferenceSetFixture.LockedDigest,
-            requireManifest: true));
+        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(fixture.Root, ReferenceSetFixture.ReferenceSetId, ReferenceSetFixture.TargetFramework, ReferenceSetFixture.ResolvedVersion, expectedDigest: ReferenceSetFixture.LockedDigest, requireManifest: true));
 
         Assert.Contains("manifest is missing", exception.Message, StringComparison.Ordinal);
     }
@@ -186,17 +111,9 @@ public sealed class ReferenceSetAttestationReaderTests
     [Fact]
     public async Task ManifestDigestMustMatchConfiguredDigest()
     {
-        using var fixture = await ReferenceSetFixture.CreateAsync(
-            writeManifest: true,
-            TestContext.Current.CancellationToken);
+        using var fixture = await ReferenceSetFixture.CreateAsync(writeManifest: true, TestContext.Current.CancellationToken);
 
-        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(
-            fixture.Root,
-            ReferenceSetFixture.ReferenceSetId,
-            ReferenceSetFixture.TargetFramework,
-            ReferenceSetFixture.ResolvedVersion,
-            expectedDigest: "sha512-wrong-reference-package",
-            requireManifest: true));
+        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(fixture.Root, ReferenceSetFixture.ReferenceSetId, ReferenceSetFixture.TargetFramework, ReferenceSetFixture.ResolvedVersion, expectedDigest: "sha512-wrong-reference-package", requireManifest: true));
 
         Assert.Contains("digest does not match", exception.Message, StringComparison.Ordinal);
     }
@@ -204,26 +121,13 @@ public sealed class ReferenceSetAttestationReaderTests
     [Fact]
     public async Task OrdinaryPackageManifestCannotDeclareCompositeSources()
     {
-        using var fixture = await ReferenceSetFixture.CreateAsync(
-            writeManifest: true,
-            TestContext.Current.CancellationToken);
+        using var fixture = await ReferenceSetFixture.CreateAsync(writeManifest: true, TestContext.Current.CancellationToken);
         var manifestPath = Path.Combine(fixture.Root, ReferenceSetAttestationReader.ManifestFileName);
-        var document = JsonNode.Parse(await File.ReadAllTextAsync(
-            manifestPath,
-            TestContext.Current.CancellationToken))!.AsObject();
+        var document = JsonNode.Parse(await File.ReadAllTextAsync(manifestPath, TestContext.Current.CancellationToken))!.AsObject();
         document["referenceSet"]!["provenance"]!["sources"] = new JsonArray();
-        await File.WriteAllTextAsync(
-            manifestPath,
-            document.ToJsonString(),
-            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(manifestPath, document.ToJsonString(), TestContext.Current.CancellationToken);
 
-        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(
-            fixture.Root,
-            ReferenceSetFixture.ReferenceSetId,
-            ReferenceSetFixture.TargetFramework,
-            ReferenceSetFixture.ResolvedVersion,
-            expectedDigest: ReferenceSetFixture.LockedDigest,
-            requireManifest: true));
+        var exception = Assert.Throws<InvalidDataException>(() => ReferenceSetAttestationReader.LoadAndVerify(fixture.Root, ReferenceSetFixture.ReferenceSetId, ReferenceSetFixture.TargetFramework, ReferenceSetFixture.ResolvedVersion, expectedDigest: ReferenceSetFixture.LockedDigest, requireManifest: true));
 
         Assert.Contains("not valid for its kind", exception.Message, StringComparison.Ordinal);
     }
@@ -248,13 +152,9 @@ public sealed class ReferenceSetAttestationReaderTests
         public string Root { get; }
         public string AssemblyPath { get; }
 
-        public static async Task<ReferenceSetFixture> CreateAsync(
-            bool writeManifest,
-            CancellationToken cancellationToken)
+        public static async Task<ReferenceSetFixture> CreateAsync(bool writeManifest, CancellationToken cancellationToken)
         {
-            var root = Path.Combine(
-                Path.GetTempPath(),
-                $"SharpLabNext.ReferenceSetAttestation.{Guid.NewGuid():N}");
+            var root = Path.Combine(Path.GetTempPath(), $"SharpLabNext.ReferenceSetAttestation.{Guid.NewGuid():N}");
             Directory.CreateDirectory(root);
             var fixture = new ReferenceSetFixture(root);
             byte[] assemblyBytes = [1, 2, 3];
@@ -266,10 +166,7 @@ public sealed class ReferenceSetAttestationReaderTests
 
         public void Dispose() => Directory.Delete(Root, recursive: true);
 
-        private static async Task WriteManifestAsync(
-            string root,
-            byte[] assemblyBytes,
-            CancellationToken cancellationToken)
+        private static async Task WriteManifestAsync(string root, byte[] assemblyBytes, CancellationToken cancellationToken)
         {
             var fileDigest = Sha256(assemblyBytes);
             var canonical = $"{fileDigest}  {assemblyBytes.LongLength}  {AssemblyFileName}\n";
@@ -277,35 +174,13 @@ public sealed class ReferenceSetAttestationReaderTests
             var document = new
             {
                 schemaVersion = 1,
-                referenceSet = new
-                {
-                    id = ReferenceSetId,
-                    targetFramework = TargetFramework,
-                    digest = LockedDigest,
-                    contentDigest,
-                    provenance = new
-                    {
-                        kind = "nuget-package",
-                        resolvedVersion = ResolvedVersion,
-                        package = "Microsoft.NETCore.App.Ref",
-                        sourceUri = "https://example.test/microsoft.netcore.app.ref.10.0.9.nupkg",
-                        sourceArchiveDigest = $"sha512:{new string('b', 128)}"
-                    }
-                },
+                referenceSet = new { id = ReferenceSetId, targetFramework = TargetFramework, digest = LockedDigest, contentDigest, provenance = new { kind = "nuget-package", resolvedVersion = ResolvedVersion, package = "Microsoft.NETCore.App.Ref", sourceUri = "https://example.test/microsoft.netcore.app.ref.10.0.9.nupkg", sourceArchiveDigest = $"sha512:{new string('b', 128)}" } },
                 files = new[]
                 {
-                    new
-                    {
-                        path = AssemblyFileName,
-                        size = assemblyBytes.LongLength,
-                        digest = fileDigest
-                    }
+                    new { path = AssemblyFileName, size = assemblyBytes.LongLength, digest = fileDigest }
                 }
             };
-            await File.WriteAllTextAsync(
-                Path.Combine(root, ReferenceSetAttestationReader.ManifestFileName),
-                JsonSerializer.Serialize(document),
-                cancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(root, ReferenceSetAttestationReader.ManifestFileName), JsonSerializer.Serialize(document), cancellationToken);
         }
 
         private static string Sha256(byte[] value) =>
@@ -317,38 +192,26 @@ public sealed class ReferenceSetAttestationReaderTests
         public const string ReferenceSetId = "netfx30-managed-ref";
         public const string TargetFramework = "net30";
         public const string ResolvedVersion = "net30-union-v1";
-        public const string LockedDigest =
-            "sha256:d61880a865bf41757cd61d1006f72aade7fcf574a369a7c7189aea0d60579b96";
+        public const string LockedDigest = "sha256:d61880a865bf41757cd61d1006f72aade7fcf574a369a7c7189aea0d60579b96";
         private const string AssemblyFileName = "mscorlib.dll";
 
         private CompositeReferenceSetFixture(string root) => Root = root;
 
         public string Root { get; }
 
-        public static async Task<CompositeReferenceSetFixture> CreateAsync(
-            Action<JsonObject>? mutation,
-            CancellationToken cancellationToken)
+        public static async Task<CompositeReferenceSetFixture> CreateAsync(Action<JsonObject>? mutation, CancellationToken cancellationToken)
         {
-            var root = Path.Combine(
-                Path.GetTempPath(),
-                $"SharpLabNext.CompositeReferenceSetAttestation.{Guid.NewGuid():N}");
+            var root = Path.Combine(Path.GetTempPath(), $"SharpLabNext.CompositeReferenceSetAttestation.{Guid.NewGuid():N}");
             Directory.CreateDirectory(root);
             var fixture = new CompositeReferenceSetFixture(root);
             byte[] assemblyBytes = [1, 2, 3];
-            await File.WriteAllBytesAsync(
-                Path.Combine(root, AssemblyFileName),
-                assemblyBytes,
-                cancellationToken);
+            await File.WriteAllBytesAsync(Path.Combine(root, AssemblyFileName), assemblyBytes, cancellationToken);
 
             var fileDigest = Sha256(assemblyBytes);
-            var contentDigest = Sha256(Encoding.UTF8.GetBytes(
-                $"{fileDigest}  {assemblyBytes.LongLength}  {AssemblyFileName}\n"));
+            var contentDigest = Sha256(Encoding.UTF8.GetBytes($"{fileDigest}  {assemblyBytes.LongLength}  {AssemblyFileName}\n"));
             var document = CreateDocument(contentDigest, fileDigest, assemblyBytes.LongLength);
             mutation?.Invoke(document);
-            await File.WriteAllTextAsync(
-                Path.Combine(root, ReferenceSetAttestationReader.ManifestFileName),
-                document.ToJsonString(),
-                cancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(root, ReferenceSetAttestationReader.ManifestFileName), document.ToJsonString(), cancellationToken);
             return fixture;
         }
 
@@ -392,15 +255,7 @@ public sealed class ReferenceSetAttestationReaderTests
                     }
                 }
             },
-            ["files"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["path"] = AssemblyFileName,
-                    ["size"] = fileSize,
-                    ["digest"] = fileDigest
-                }
-            }
+            ["files"] = new JsonArray { new JsonObject { ["path"] = AssemblyFileName, ["size"] = fileSize, ["digest"] = fileDigest } }
         };
 
         private static string Sha256(byte[] value) =>

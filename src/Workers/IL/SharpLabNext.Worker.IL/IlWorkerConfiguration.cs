@@ -3,20 +3,9 @@ using SharpLabNext.ArtifactStore.Client;
 
 namespace SharpLabNext.Worker.IL;
 
-public sealed record IlWorkerIdentity(
-    string ReleaseId,
-    string ToolchainId,
-    string CompilerVersion,
-    string? CompilerCommit,
-    string WorkerImageId);
+public sealed record IlWorkerIdentity(string ReleaseId, string ToolchainId, string CompilerVersion, string? CompilerCommit, string WorkerImageId);
 
-public sealed record IlReferenceSetDefinition(
-    string Id,
-    string Path,
-    string TargetFramework,
-    string FrameworkVersion,
-    string? Digest = null,
-    string? AttestationPath = null);
+public sealed record IlReferenceSetDefinition(string Id, string Path, string TargetFramework, string FrameworkVersion, string? Digest = null, string? AttestationPath = null);
 
 public sealed record IlCompilationLimits(
     int MaxFiles,
@@ -43,15 +32,7 @@ public sealed record IlCompilationLimits(
         MaxProcessWorkingSetBytes: 512 * 1024 * 1024);
 }
 
-public sealed record IlLspLimits(
-    int MaxSessions,
-    int SessionTtlMinutes,
-    int MaxMessageBytes,
-    int MaxCompletionItems,
-    int MaxDiagnostics,
-    int MaxDocumentSymbols,
-    int MaxCodeActions,
-    int DiagnosticsDebounceMilliseconds)
+public sealed record IlLspLimits(int MaxSessions, int SessionTtlMinutes, int MaxMessageBytes, int MaxCompletionItems, int MaxDiagnostics, int MaxDocumentSymbols, int MaxCodeActions, int DiagnosticsDebounceMilliseconds)
 {
     public static IlLspLimits Default { get; } = new(
         MaxSessions: 64,
@@ -84,12 +65,7 @@ public sealed record IlWorkerSettings(
     {
         ArgumentNullException.ThrowIfNull(configuration);
         var worker = configuration.GetSection("IlWorker");
-        var identity = new IlWorkerIdentity(
-            Required(worker["ReleaseId"], "IlWorker:ReleaseId"),
-            "mobius-ilasm-stable",
-            PinnedOrConfigured(worker["CompilerVersion"], Compiler.IlCompilerProtocol.PackageVersion),
-            worker["CompilerCommit"],
-            Required(worker["WorkerImageId"], "IlWorker:WorkerImageId"));
+        var identity = new IlWorkerIdentity(Required(worker["ReleaseId"], "IlWorker:ReleaseId"), "mobius-ilasm-stable", PinnedOrConfigured(worker["CompilerVersion"], Compiler.IlCompilerProtocol.PackageVersion), worker["CompilerCommit"], Required(worker["WorkerImageId"], "IlWorker:WorkerImageId"));
         if (!StringComparer.Ordinal.Equals(identity.CompilerVersion, Compiler.IlCompilerProtocol.PackageVersion))
             throw new InvalidOperationException("Configured IL compiler identity does not match the pinned Mobius.ILasm package.");
 
@@ -121,9 +97,7 @@ public sealed record IlWorkerSettings(
             PositiveInt(lsp["DiagnosticsDebounceMilliseconds"], lspDefaults.DiagnosticsDebounceMilliseconds, "DiagnosticsDebounceMilliseconds"));
 
         var envelope = worker.GetSection("DevelopmentArtifactEnvelope");
-        var envelopeOptions = new IlDevelopmentArtifactEnvelopeOptions(
-            bool.TryParse(envelope["Enabled"], out var enabled) && enabled,
-            PositiveInt(envelope["MaxBytes"], IlDevelopmentArtifactEnvelopeOptions.Default.MaxBytes, "MaxBytes"));
+        var envelopeOptions = new IlDevelopmentArtifactEnvelopeOptions(bool.TryParse(envelope["Enabled"], out var enabled) && enabled, PositiveInt(envelope["MaxBytes"], IlDevelopmentArtifactEnvelopeOptions.Default.MaxBytes, "MaxBytes"));
         var artifactPublishing = CreateArtifactPublishingOptions(configuration, worker);
 
         var workRoot = worker["WorkRoot"];
@@ -138,61 +112,26 @@ public sealed record IlWorkerSettings(
         if (string.IsNullOrWhiteSpace(dotNetHostPath))
             dotNetHostPath = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
 
-        var referenceSets = configuration.GetSection("ReferenceSets")
-            .GetChildren()
-            .Select(section => new IlReferenceSetDefinition(
-                section.Key,
-                Path.GetFullPath(Required(section["Path"], $"ReferenceSets:{section.Key}:Path")),
-                Required(section["TargetFramework"], $"ReferenceSets:{section.Key}:TargetFramework"),
-                Required(section["FrameworkVersion"], $"ReferenceSets:{section.Key}:FrameworkVersion"),
-                section["Digest"],
-                section["AttestationPath"]))
-            .ToArray();
+        var referenceSets = configuration.GetSection("ReferenceSets").GetChildren().Select(section => new IlReferenceSetDefinition(section.Key, Path.GetFullPath(Required(section["Path"], $"ReferenceSets:{section.Key}:Path")), Required(section["TargetFramework"], $"ReferenceSets:{section.Key}:TargetFramework"), Required(section["FrameworkVersion"], $"ReferenceSets:{section.Key}:FrameworkVersion"), section["Digest"], section["AttestationPath"])).ToArray();
 
-        return new IlWorkerSettings(
-            identity,
-            compilationLimits,
-            lspLimits,
-            envelopeOptions,
-            artifactPublishing,
-            Path.GetFullPath(workRoot),
-            dotNetHostPath,
-            Path.GetFullPath(compilerAssemblyPath),
-            referenceSets);
+        return new IlWorkerSettings(identity, compilationLimits, lspLimits, envelopeOptions, artifactPublishing, Path.GetFullPath(workRoot), dotNetHostPath, Path.GetFullPath(compilerAssemblyPath), referenceSets);
     }
 
     private static string PinnedOrConfigured(string? value, string pinned) =>
         string.IsNullOrWhiteSpace(value) || string.Equals(value, "__pinned__", StringComparison.Ordinal)
-            ? pinned
-            : value;
+            ? pinned : value;
 
-    private static ArtifactBundlePublishingOptions CreateArtifactPublishingOptions(
-        IConfiguration configuration,
-        IConfigurationSection worker)
+    private static ArtifactBundlePublishingOptions CreateArtifactPublishingOptions(IConfiguration configuration, IConfigurationSection worker)
     {
         var baseUrl = configuration["ArtifactStore:BaseUrl"] ?? "http://artifact-store:8080";
-        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseAddress) ||
-            (!string.Equals(baseAddress.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
-             !string.Equals(baseAddress.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) ||
-            !string.IsNullOrEmpty(baseAddress.UserInfo) ||
-            !string.IsNullOrEmpty(baseAddress.Query) ||
-            !string.IsNullOrEmpty(baseAddress.Fragment))
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseAddress) || (!string.Equals(baseAddress.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) && !string.Equals(baseAddress.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) || !string.IsNullOrEmpty(baseAddress.UserInfo) || !string.IsNullOrEmpty(baseAddress.Query) || !string.IsNullOrEmpty(baseAddress.Fragment))
         {
-            throw new InvalidOperationException(
-                "Configuration value 'ArtifactStore:BaseUrl' must be an absolute HTTP(S) URL without credentials, query, or fragment.");
+            throw new InvalidOperationException("Configuration value 'ArtifactStore:BaseUrl' must be an absolute HTTP(S) URL without credentials, query, or fragment.");
         }
-        return new ArtifactBundlePublishingOptions(
-            baseAddress,
-            TimeSpan.FromMinutes(PositiveInt(
-                worker["ArtifactTimeToLiveMinutes"],
-                60,
-                "ArtifactTimeToLiveMinutes")));
+        return new ArtifactBundlePublishingOptions(baseAddress, TimeSpan.FromMinutes(PositiveInt(worker["ArtifactTimeToLiveMinutes"], 60, "ArtifactTimeToLiveMinutes")));
     }
 
-    private static string Required(string? value, string key) =>
-        !string.IsNullOrWhiteSpace(value)
-            ? value
-            : throw new InvalidOperationException($"Configuration value '{key}' is required.");
+    private static string Required(string? value, string key) => !string.IsNullOrWhiteSpace(value) ? value : throw new InvalidOperationException($"Configuration value '{key}' is required.");
 
     private static int PositiveInt(string? value, int fallback, string key)
     {

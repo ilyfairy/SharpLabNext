@@ -2,12 +2,7 @@ import { assertStandardBase64 } from './base64'
 import { ShareUrlError } from './errors'
 import { legacyPredecompress } from './legacyPrecompressor'
 import { resolveUrlCodecLimits } from './limits'
-import type {
-  ImportedWorkspace,
-  LegacyImportResult,
-  LegacyRequestedOptions,
-  UrlCodecLimits,
-} from './types'
+import type { ImportedWorkspace, LegacyImportResult, LegacyRequestedOptions, UrlCodecLimits } from './types'
 
 const languageIds: Readonly<Record<string, string>> = {
   cs: 'csharp',
@@ -55,10 +50,7 @@ const decodeHashText = (fragment: string, limits: UrlCodecLimits): string => {
   try {
     const decoded = decodeURIComponent(hash)
     if (decoded.length > limits.maxLegacyEncodedLength) {
-      throw new ShareUrlError(
-        'legacy-too-large',
-        'The decoded legacy URL exceeds its length limit.',
-      )
+      throw new ShareUrlError('legacy-too-large', 'The decoded legacy URL exceeds its length limit.')
     }
     return decoded
   } catch (error) {
@@ -69,25 +61,13 @@ const decodeHashText = (fragment: string, limits: UrlCodecLimits): string => {
   }
 }
 
-const assertLegacyDecodedLength = (
-  value: string,
-  limits: UrlCodecLimits,
-  description: string,
-): void => {
-  if (
-    value.length > limits.maxLegacyDecodedCharacters ||
-    new TextEncoder().encode(value).length > limits.maxUncompressedBytes
-  ) {
+const assertLegacyDecodedLength = (value: string, limits: UrlCodecLimits, description: string): void => {
+  if (value.length > limits.maxLegacyDecodedCharacters || new TextEncoder().encode(value).length > limits.maxUncompressedBytes) {
     throw new ShareUrlError('legacy-too-large', `${description} exceeds the legacy decode limit.`)
   }
 }
 
-const createRequestedOptions = (
-  branchId: string | undefined,
-  languageKey: string,
-  targetKey: string,
-  release: boolean,
-): LegacyRequestedOptions => ({
+const createRequestedOptions = (branchId: string | undefined, languageKey: string, targetKey: string, release: boolean): LegacyRequestedOptions => ({
   branchId,
   languageKey,
   languageId: languageIds[languageKey],
@@ -106,31 +86,17 @@ const createWorkspace = (code: string, languageId: string): ImportedWorkspace =>
   }
 }
 
-const createResult = (
-  sourceFormat: LegacyImportResult['sourceFormat'],
-  code: string,
-  requestedLegacyOptions: LegacyRequestedOptions,
-): LegacyImportResult => {
+const createResult = (sourceFormat: LegacyImportResult['sourceFormat'], code: string, requestedLegacyOptions: LegacyRequestedOptions): LegacyImportResult => {
   if (!requestedLegacyOptions.languageId) {
-    throw new ShareUrlError(
-      'legacy-invalid',
-      `SharpLab language '${requestedLegacyOptions.languageKey}' is not recognized.`,
-    )
+    throw new ShareUrlError('legacy-invalid', `SharpLab language '${requestedLegacyOptions.languageKey}' is not recognized.`)
   }
   if (!requestedLegacyOptions.outputId) {
-    throw new ShareUrlError(
-      'legacy-invalid',
-      `SharpLab target '${requestedLegacyOptions.targetKey}' is not recognized.`,
-    )
+    throw new ShareUrlError('legacy-invalid', `SharpLab target '${requestedLegacyOptions.targetKey}' is not recognized.`)
   }
 
-  const warnings = [
-    'Legacy selections must be resolved against the current catalog before execution.',
-  ]
+  const warnings = ['Legacy selections must be resolved against the current catalog before execution.']
   if (requestedLegacyOptions.branchId) {
-    warnings.push(
-      `Legacy branch '${requestedLegacyOptions.branchId}' must be resolved through profile aliases.`,
-    )
+    warnings.push(`Legacy branch '${requestedLegacyOptions.branchId}' must be resolved through profile aliases.`)
   }
   return {
     sourceFormat,
@@ -176,10 +142,7 @@ const importV2 = async (hash: string, limits: UrlCodecLimits): Promise<LegacyImp
   const languageKey = options.l ?? 'cs'
   const languageId = languageIds[languageKey]
   if (!languageId) {
-    throw new ShareUrlError(
-      'legacy-invalid',
-      `SharpLab language '${languageKey}' is not recognized.`,
-    )
+    throw new ShareUrlError('legacy-invalid', `SharpLab language '${languageKey}' is not recognized.`)
   }
 
   let code: string
@@ -192,16 +155,9 @@ const importV2 = async (hash: string, limits: UrlCodecLimits): Promise<LegacyImp
   }
   assertLegacyDecodedLength(code, limits, 'The imported SharpLab source')
   if (new TextEncoder().encode(code).length > limits.maxFileBytes) {
-    throw new ShareUrlError(
-      'legacy-too-large',
-      'The imported SharpLab source exceeds the file limit.',
-    )
+    throw new ShareUrlError('legacy-too-large', 'The imported SharpLab source exceeds the file limit.')
   }
-  return createResult(
-    'sharplab-v2',
-    code,
-    createRequestedOptions(options.b, languageKey, options.t ?? 'cs', options.d !== '+'),
-  )
+  return createResult('sharplab-v2', code, createRequestedOptions(options.b, languageKey, options.t ?? 'cs', options.d !== '+'))
 }
 
 const importV1 = async (hash: string, limits: UrlCodecLimits): Promise<LegacyImportResult> => {
@@ -227,22 +183,12 @@ const importV1 = async (hash: string, limits: UrlCodecLimits): Promise<LegacyImp
   }
   assertLegacyDecodedLength(code, limits, 'The imported SharpLab v1 source')
   if (new TextEncoder().encode(code).length > limits.maxFileBytes) {
-    throw new ShareUrlError(
-      'legacy-too-large',
-      'The imported SharpLab source exceeds the file limit.',
-    )
+    throw new ShareUrlError('legacy-too-large', 'The imported SharpLab source exceeds the file limit.')
   }
-  return createResult(
-    'sharplab-v1',
-    code,
-    createRequestedOptions(match[1], languageKey, targetKey, flags[3] === 'r'),
-  )
+  return createResult('sharplab-v1', code, createRequestedOptions(match[1], languageKey, targetKey, flags[3] === 'r'))
 }
 
-export const importSharpLabLegacy = async (
-  fragment: string,
-  providedLimits?: UrlCodecLimits,
-): Promise<LegacyImportResult> => {
+export const importSharpLabLegacy = async (fragment: string, providedLimits?: UrlCodecLimits): Promise<LegacyImportResult> => {
   const limits = resolveUrlCodecLimits(providedLimits)
   const hash = decodeHashText(fragment, limits)
   if (hash.startsWith('v2:')) return importV2(hash, limits)

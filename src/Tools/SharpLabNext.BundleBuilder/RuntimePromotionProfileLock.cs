@@ -21,41 +21,27 @@ public sealed class RuntimePromotionProfileLock : IDisposable
     private RuntimePromotionProfileLock(FileStream stream, string path)
     {
         _stream = stream;
-        Path = path;
+        LockFilePath = path;
     }
 
-    public string Path { get; }
+    public string LockFilePath { get; }
 
-    public static async Task<RuntimePromotionProfileLock> AcquireAsync(
-        string repositoryRoot,
-        string profileId,
-        TimeSpan timeout,
-        CancellationToken cancellationToken = default)
+    public static async Task<RuntimePromotionProfileLock> AcquireAsync(string repositoryRoot, string profileId, TimeSpan timeout, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
-        if (timeout <= TimeSpan.Zero)
-            throw new ArgumentOutOfRangeException(nameof(timeout), "The profile lock timeout must be positive.");
-        if (!IsCanonicalProfileId(profileId))
-            throw new ArgumentException("The runtime profile ID is not canonical.", nameof(profileId));
+        if (timeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout), "The profile lock timeout must be positive.");
+        if (!IsCanonicalProfileId(profileId)) throw new ArgumentException("The runtime profile ID is not canonical.", nameof(profileId));
 
-        var root = System.IO.Path.GetFullPath(repositoryRoot)
-            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
-        var lockDirectory = System.IO.Path.Combine(
-            root,
-            LockDirectory.Replace('/', System.IO.Path.DirectorySeparatorChar));
+        var root = Path.GetFullPath(repositoryRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var lockDirectory = Path.Combine(root, LockDirectory.Replace('/', Path.DirectorySeparatorChar));
         EnsureNoReparsePoints(root, lockDirectory);
         Directory.CreateDirectory(lockDirectory);
         EnsureNoReparsePoints(root, lockDirectory);
-        var key = Convert.ToHexStringLower(
-            SHA256.HashData(Encoding.UTF8.GetBytes(profileId)));
-        var lockPath = System.IO.Path.Combine(lockDirectory, $"{key}.lock");
+        var key = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(profileId)));
+        var lockPath = Path.Combine(lockDirectory, $"{key}.lock");
         EnsureNoReparsePoints(root, lockPath);
-        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
-        {
-            throw new PlatformNotSupportedException(
-                "Runtime promotion profile locks require Windows or Linux advisory file locks.");
-        }
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux()) throw new PlatformNotSupportedException("Runtime promotion profile locks require Windows or Linux advisory file locks.");
 
         var stopwatch = Stopwatch.StartNew();
         while (true)
@@ -64,13 +50,7 @@ public sealed class RuntimePromotionProfileLock : IDisposable
             FileStream? stream = null;
             try
             {
-                stream = new FileStream(
-                    lockPath,
-                    FileMode.OpenOrCreate,
-                    FileAccess.ReadWrite,
-                    FileShare.ReadWrite,
-                    bufferSize: 1,
-                    FileOptions.WriteThrough);
+                stream = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite, bufferSize: 1, FileOptions.WriteThrough);
                 if (stream.Length == 0)
                 {
                     stream.WriteByte(0);
@@ -83,26 +63,18 @@ public sealed class RuntimePromotionProfileLock : IDisposable
             catch (IOException) when (stream is not null)
             {
                 stream.Dispose();
-                if (stopwatch.Elapsed >= timeout)
-                {
-                    throw new TimeoutException(
-                        $"Another promotion already holds the runtime profile lock for '{profileId}'.");
-                }
+                if (stopwatch.Elapsed >= timeout) throw new TimeoutException($"Another promotion already holds the runtime profile lock for '{profileId}'.");
             }
 
             var remaining = timeout - stopwatch.Elapsed;
-            var delay = remaining < TimeSpan.FromMilliseconds(100)
-                ? remaining
-                : TimeSpan.FromMilliseconds(100);
-            if (delay > TimeSpan.Zero)
-                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            var delay = remaining < TimeSpan.FromMilliseconds(100) ? remaining : TimeSpan.FromMilliseconds(100);
+            if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
         }
     }
 
     public void Dispose()
     {
-        if (_released)
-            return;
+        if (_released) return;
         _released = true;
         try
         {
@@ -118,39 +90,31 @@ public sealed class RuntimePromotionProfileLock : IDisposable
     private static bool IsCanonicalProfileId(string value) =>
         value.Length is > 0 and <= 128 &&
         value[0] is >= 'a' and <= 'z' or >= '0' and <= '9' &&
-        value.All(static character =>
-            character is >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '_' or '-');
+        value.All(static character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '_' or '-');
 
     private static void EnsureNoReparsePoints(string root, string path)
     {
-        var relative = System.IO.Path.GetRelativePath(root, path);
-        if (System.IO.Path.IsPathRooted(relative) || relative == ".." ||
-            relative.StartsWith($"..{System.IO.Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
-            relative.StartsWith($"..{System.IO.Path.AltDirectorySeparatorChar}", StringComparison.Ordinal))
+        var relative = Path.GetRelativePath(root, path);
+        if (Path.IsPathRooted(relative) || relative == ".." || relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) || relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal))
         {
             throw new InvalidDataException("The promotion profile lock path escapes the repository root.");
         }
 
         var segments = relative == "."
-            ? Array.Empty<string>()
-            : relative.Split(
-                [System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar],
-                StringSplitOptions.RemoveEmptyEntries);
+            ? Array.Empty<string>() : relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
         var current = root;
-        if (Directory.Exists(current) &&
-            (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+        if (Directory.Exists(current) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
         {
             throw new InvalidDataException("The repository root cannot be a reparse point.");
         }
         foreach (var segment in segments)
         {
-            current = System.IO.Path.Combine(current, segment);
+            current = Path.Combine(current, segment);
             if (!File.Exists(current) && !Directory.Exists(current))
                 continue;
             if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
             {
-                throw new InvalidDataException(
-                    $"The promotion profile lock path contains a reparse point '{current}'.");
+                throw new InvalidDataException($"The promotion profile lock path contains a reparse point '{current}'.");
             }
         }
     }

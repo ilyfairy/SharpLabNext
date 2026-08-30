@@ -20,10 +20,7 @@ public sealed class GistShareServiceTests
             ],
             activeFile: "src/Program.cs");
 
-        var document = await service.CreateAsync(
-            new CreateGistRequest("multi-file", IsPublic: false, workspace),
-            session,
-            TestContext.Current.CancellationToken);
+        var document = await service.CreateAsync(new CreateGistRequest("multi-file", IsPublic: false, workspace), session, TestContext.Current.CancellationToken);
 
         Assert.Equal("sharplabnext-v1", document.SourceFormat);
         Assert.Equal(workspace.Files, document.Workspace.Files);
@@ -60,11 +57,7 @@ public sealed class GistShareServiceTests
             }));
         var service = new GistShareService(github);
 
-        var document = await service.GetAsync(
-            "abcde12345",
-            new GistLoadOverrides("asm", "roslyn-main", BuildConfiguration.Release),
-            null,
-            TestContext.Current.CancellationToken);
+        var document = await service.GetAsync("abcde12345", new GistLoadOverrides("asm", "roslyn-main", BuildConfiguration.Release), null, TestContext.Current.CancellationToken);
 
         Assert.Equal("sharplab-v1", document.SourceFormat);
         Assert.Equal("csharp", document.Workspace.LanguageId);
@@ -93,11 +86,7 @@ public sealed class GistShareServiceTests
             }));
         var service = new GistShareService(github);
 
-        var document = await service.GetAsync(
-            "abcde54321",
-            new GistLoadOverrides(null, null, null),
-            null,
-            TestContext.Current.CancellationToken);
+        var document = await service.GetAsync("abcde54321", new GistLoadOverrides(null, null, null), null, TestContext.Current.CancellationToken);
 
         Assert.Equal("github-gist", document.SourceFormat);
         Assert.Equal("php", document.Workspace.LanguageId);
@@ -112,22 +101,10 @@ public sealed class GistShareServiceTests
         var github = new FakeGitHubGistClient();
         var service = new GistShareService(github);
         var session = Session("owner");
-        var created = await service.CreateAsync(
-            new CreateGistRequest(
-                "first",
-                false,
-                Workspace([new GistSourceFile("Old.cs", "class Old { }")], "Old.cs")),
-            session,
-            TestContext.Current.CancellationToken);
+        var created = await service.CreateAsync(new CreateGistRequest("first", false, Workspace([new GistSourceFile("Old.cs", "class Old { }")], "Old.cs")), session, TestContext.Current.CancellationToken);
         github.AddFile(created.Id, "notes.md", "keep me");
 
-        var updated = await service.UpdateAsync(
-            created.Id,
-            new UpdateGistRequest(
-                "second",
-                Workspace([new GistSourceFile("New.cs", "class New { }")], "New.cs")),
-            session,
-            TestContext.Current.CancellationToken);
+        var updated = await service.UpdateAsync(created.Id, new UpdateGistRequest("second", Workspace([new GistSourceFile("New.cs", "class New { }")], "New.cs")), session, TestContext.Current.CancellationToken);
 
         Assert.Equal("second", updated.Description);
         Assert.Equal("New.cs", Assert.Single(updated.Workspace.Files).Path);
@@ -143,16 +120,9 @@ public sealed class GistShareServiceTests
         var github = new FakeGitHubGistClient();
         var service = new GistShareService(github);
         var owner = Session("owner");
-        var created = await service.CreateAsync(
-            new CreateGistRequest("owned", false, Workspace([new GistSourceFile("A.cs", "class A { }")], "A.cs")),
-            owner,
-            TestContext.Current.CancellationToken);
+        var created = await service.CreateAsync(new CreateGistRequest("owned", false, Workspace([new GistSourceFile("A.cs", "class A { }")], "A.cs")), owner, TestContext.Current.CancellationToken);
 
-        await Assert.ThrowsAsync<GistAuthorizationException>(() => service.UpdateAsync(
-            created.Id,
-            new UpdateGistRequest("stolen", Workspace([new GistSourceFile("A.cs", "class B { }")], "A.cs")),
-            Session("other"),
-            TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<GistAuthorizationException>(() => service.UpdateAsync(created.Id, new UpdateGistRequest("stolen", Workspace([new GistSourceFile("A.cs", "class B { }")], "A.cs")), Session("other"), TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -162,33 +132,15 @@ public sealed class GistShareServiceTests
         var service = new GistShareService(github);
         var invalid = Workspace([new GistSourceFile("../secret.cs", "class C { }")], "../secret.cs");
 
-        await Assert.ThrowsAsync<GistValidationException>(() => service.CreateAsync(
-            new CreateGistRequest("invalid", false, invalid),
-            Session("owner"),
-            TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<GistValidationException>(() => service.CreateAsync(new CreateGistRequest("invalid", false, invalid), Session("owner"), TestContext.Current.CancellationToken));
         Assert.Empty(github.CreatedRequests);
     }
 
-    internal static GistWorkspaceState Workspace(
-        IReadOnlyList<GistSourceFile> files,
-        string activeFile) => new(
-            ContractSchemaVersions.WorkspaceSnapshot,
-            "csharp",
-            "roslyn-stable",
-            "net10-ref",
-            "il",
-            null,
-            BuildConfiguration.Release,
-            "development",
-            activeFile,
-            files.Select(static file => file.Path).ToArray(),
-            files);
+    internal static GistWorkspaceState Workspace(IReadOnlyList<GistSourceFile> files, string activeFile) => new(ContractSchemaVersions.WorkspaceSnapshot, "csharp", "roslyn-stable", "net10-ref", "il", null, BuildConfiguration.Release, "development", activeFile, files.Select(static file => file.Path).ToArray(), files);
 
-    internal static GitHubOAuthSession Session(string login) =>
-        new($"session-{login}", $"token-{login}", login, $"csrf-{login}", DateTimeOffset.UtcNow.AddHours(1));
+    internal static GitHubOAuthSession Session(string login) => new($"session-{login}", $"token-{login}", login, $"csrf-{login}", DateTimeOffset.UtcNow.AddHours(1));
 
-    private static GitHubGistFile File(string name, string content) =>
-        new(name, content, false, null, content.Length);
+    private static GitHubGistFile File(string name, string content) => new(name, content, false, null, content.Length);
 }
 
 internal sealed class FakeGitHubGistClient : IGitHubGistClient
@@ -212,10 +164,7 @@ internal sealed class FakeGitHubGistClient : IGitHubGistClient
         return Task.FromResult(gist);
     }
 
-    public Task<GitHubGist> CreateAsync(
-        GitHubGistWriteRequest request,
-        string accessToken,
-        CancellationToken cancellationToken)
+    public Task<GitHubGist> CreateAsync(GitHubGistWriteRequest request, string accessToken, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         CreatedRequests.Add(request);
@@ -228,21 +177,12 @@ internal sealed class FakeGitHubGistClient : IGitHubGistClient
             request.IsPublic == true,
             request.Description,
             DateTimeOffset.UtcNow,
-            request.Files
-                .Where(static item => item.Value is not null)
-                .ToDictionary(
-                    static item => item.Key,
-                    static item => new GitHubGistFile(item.Key, item.Value, false, null, item.Value!.Length),
-                    StringComparer.Ordinal));
+            request.Files.Where(static item => item.Value is not null).ToDictionary(static item => item.Key, static item => new GitHubGistFile(item.Key, item.Value, false, null, item.Value!.Length), StringComparer.Ordinal));
         _gists[id] = gist;
         return Task.FromResult(gist);
     }
 
-    public Task<GitHubGist> UpdateAsync(
-        string id,
-        GitHubGistWriteRequest request,
-        string accessToken,
-        CancellationToken cancellationToken)
+    public Task<GitHubGist> UpdateAsync(string id, GitHubGistWriteRequest request, string accessToken, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var current = _gists[id];

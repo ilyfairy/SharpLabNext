@@ -9,15 +9,13 @@ import { fileURLToPath } from 'node:url'
 import {
   refreshRuntimeFunctionalMatrix,
   runRuntimeFunctionalMatrix,
-} from './runtime-functional-matrix.mjs'
+} from '../smoke/runtime-functional-matrix.mjs'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const matrixPath = path.join(repositoryRoot, 'profiles', 'runtime-matrix.json')
 const candidateDirectory = path.join(repositoryRoot, 'profiles', 'runtimes', 'candidates')
 
-function imageId(reference, suffix = '') {
-  return `sha256:${crypto.createHash('sha256').update(`${reference}:${suffix}`).digest('hex')}`
-}
+function imageId(reference, suffix = '') { return `sha256:${crypto.createHash('sha256').update(`${reference}:${suffix}`).digest('hex')}`; }
 
 function inspection(reference, suffix = '') {
   return {

@@ -6,21 +6,14 @@ namespace SharpLabNext.Worker.Roslyn;
 
 internal static class VisualBasicLspFeatureAdapter
 {
-    public static LspSignatureHelp? CreateSignatureHelp(
-        SyntaxNode root,
-        SemanticModel semanticModel,
-        SourceText text,
-        int position,
-        CancellationToken cancellationToken)
+    public static LspSignatureHelp? CreateSignatureHelp(SyntaxNode root, SemanticModel semanticModel, SourceText text, int position, CancellationToken cancellationToken)
     {
         if (text.Length == 0)
             return null;
 
         var tokenPosition = Math.Clamp(position == 0 ? 0 : position - 1, 0, text.Length - 1);
         var token = root.FindToken(tokenPosition, findInsideTrivia: true);
-        var argumentList = token.Parent?.AncestorsAndSelf()
-            .OfType<ArgumentListSyntax>()
-            .FirstOrDefault(list => list.SpanStart <= position && position <= list.Span.End);
+        var argumentList = token.Parent?.AncestorsAndSelf().OfType<ArgumentListSyntax>().FirstOrDefault(list => list.SpanStart <= position && position <= list.Span.End);
         if (argumentList is null)
             return null;
 
@@ -37,51 +30,32 @@ internal static class VisualBasicLspFeatureAdapter
                 semanticModel.GetSymbolInfo(creation, cancellationToken).Symbol as IMethodSymbol,
             _ => null
         };
-        var signatures = methods
-            .Take(50)
-            .Select(method => CreateSignature(method, activeParameter))
-            .ToArray();
+        var signatures = methods.Take(50).Select(method => CreateSignature(method, activeParameter)).ToArray();
         var activeSignature = boundMethod is null
-            ? 0
-            : Array.FindIndex(methods, method => SymbolEqualityComparer.Default.Equals(method, boundMethod));
+            ? 0 : Array.FindIndex(methods, method => SymbolEqualityComparer.Default.Equals(method, boundMethod));
         if (activeSignature < 0 || activeSignature >= signatures.Length)
             activeSignature = 0;
 
         return new LspSignatureHelp(signatures, activeSignature, activeParameter);
     }
 
-    public static IReadOnlyList<LspDocumentSymbol> CreateDocumentSymbols(
-        SyntaxNode root,
-        SourceText text,
-        int maxSymbols,
-        CancellationToken cancellationToken)
+    public static IReadOnlyList<LspDocumentSymbol> CreateDocumentSymbols(SyntaxNode root, SourceText text, int maxSymbols, CancellationToken cancellationToken)
     {
         var remaining = maxSymbols;
         return CreateSymbols(root, text, ref remaining, cancellationToken);
     }
 
-    private static IMethodSymbol[] GetCandidateMethods(
-        ArgumentListSyntax argumentList,
-        SemanticModel semanticModel,
-        CancellationToken cancellationToken)
+    private static IMethodSymbol[] GetCandidateMethods(ArgumentListSyntax argumentList, SemanticModel semanticModel, CancellationToken cancellationToken)
     {
         IEnumerable<IMethodSymbol> methods = argumentList.Parent switch
         {
-            InvocationExpressionSyntax invocation => semanticModel
-                .GetMemberGroup(invocation.Expression, cancellationToken)
-                .OfType<IMethodSymbol>()
-                .Concat(GetSymbolMethods(semanticModel.GetSymbolInfo(invocation.Expression, cancellationToken))),
+            InvocationExpressionSyntax invocation => semanticModel.GetMemberGroup(invocation.Expression, cancellationToken).OfType<IMethodSymbol>().Concat(GetSymbolMethods(semanticModel.GetSymbolInfo(invocation.Expression, cancellationToken))),
             ObjectCreationExpressionSyntax creation =>
                 GetSymbolMethods(semanticModel.GetSymbolInfo(creation, cancellationToken)),
             _ => []
         };
 
-        return methods
-            .GroupBy(static method => method.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
-            .Select(static group => group.First())
-            .OrderBy(static method => method.Parameters.Length)
-            .ThenBy(static method => method.ToDisplayString(), StringComparer.Ordinal)
-            .ToArray();
+        return methods.GroupBy(static method => method.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal).Select(static group => group.First()).OrderBy(static method => method.Parameters.Length).ThenBy(static method => method.ToDisplayString(), StringComparer.Ordinal).ToArray();
     }
 
     private static IEnumerable<IMethodSymbol> GetSymbolMethods(SymbolInfo symbolInfo)
@@ -107,23 +81,11 @@ internal static class VisualBasicLspFeatureAdapter
                 SymbolDisplayParameterOptions.IncludeDefaultValue,
             miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes |
                 SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
-        var parameters = method.Parameters
-            .Select(parameter => new LspParameterInformation(
-                parameter.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
-                null))
-            .ToArray();
-        return new LspSignatureInformation(
-            method.ToDisplayString(format),
-            null,
-            parameters,
-            activeParameter < parameters.Length ? activeParameter : null);
+        var parameters = method.Parameters.Select(parameter => new LspParameterInformation(parameter.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat), null)).ToArray();
+        return new LspSignatureInformation(method.ToDisplayString(format), null, parameters, activeParameter < parameters.Length ? activeParameter : null);
     }
 
-    private static List<LspDocumentSymbol> CreateSymbols(
-        SyntaxNode node,
-        SourceText text,
-        ref int remaining,
-        CancellationToken cancellationToken)
+    private static List<LspDocumentSymbol> CreateSymbols(SyntaxNode node, SourceText text, ref int remaining, CancellationToken cancellationToken)
     {
         var symbols = new List<LspDocumentSymbol>();
         foreach (var child in node.ChildNodes())
@@ -142,11 +104,7 @@ internal static class VisualBasicLspFeatureAdapter
         return symbols;
     }
 
-    private static List<LspDocumentSymbol> TryCreateSymbol(
-        SyntaxNode node,
-        SourceText text,
-        ref int remaining,
-        CancellationToken cancellationToken)
+    private static List<LspDocumentSymbol> TryCreateSymbol(SyntaxNode node, SourceText text, ref int remaining, CancellationToken cancellationToken)
     {
         if (remaining <= 0)
             return [];
@@ -275,13 +233,7 @@ internal static class VisualBasicLspFeatureAdapter
         }
     }
 
-    private static List<LspDocumentSymbol> CreateTypeSymbol(
-        SyntaxNode block,
-        TypeStatementSyntax statement,
-        int kind,
-        SourceText text,
-        ref int remaining,
-        CancellationToken cancellationToken)
+    private static List<LspDocumentSymbol> CreateTypeSymbol(SyntaxNode block, TypeStatementSyntax statement, int kind, SourceText text, ref int remaining, CancellationToken cancellationToken)
     {
         remaining--;
         return [CreateSymbol(
@@ -295,10 +247,7 @@ internal static class VisualBasicLspFeatureAdapter
             cancellationToken)];
     }
 
-    private static List<LspDocumentSymbol> CreateFieldSymbols(
-        FieldDeclarationSyntax declaration,
-        SourceText text,
-        ref int remaining)
+    private static List<LspDocumentSymbol> CreateFieldSymbols(FieldDeclarationSyntax declaration, SourceText text, ref int remaining)
     {
         var symbols = new List<LspDocumentSymbol>();
         foreach (var declarator in declaration.Declarators)
@@ -307,48 +256,15 @@ internal static class VisualBasicLspFeatureAdapter
             {
                 if (remaining-- <= 0)
                     return symbols;
-                symbols.Add(CreateLeafSymbol(
-                    name.Identifier.ValueText,
-                    declarator.AsClause?.ToString(),
-                    8,
-                    declaration,
-                    name.Identifier.Span,
-                    text));
+                symbols.Add(CreateLeafSymbol(name.Identifier.ValueText, declarator.AsClause?.ToString(), 8, declaration, name.Identifier.Span, text));
             }
         }
 
         return symbols;
     }
 
-    private static LspDocumentSymbol CreateSymbol(
-        string name,
-        string? detail,
-        int kind,
-        SyntaxNode node,
-        TextSpan selectionSpan,
-        SourceText text,
-        ref int remaining,
-        CancellationToken cancellationToken) =>
-        new(
-            name,
-            detail,
-            kind,
-            RoslynLanguageSession.ToRange(text, node.Span),
-            RoslynLanguageSession.ToRange(text, selectionSpan),
-            CreateSymbols(node, text, ref remaining, cancellationToken));
+    private static LspDocumentSymbol CreateSymbol(string name, string? detail, int kind, SyntaxNode node, TextSpan selectionSpan, SourceText text, ref int remaining, CancellationToken cancellationToken) =>
+        new(name, detail, kind, RoslynLanguageSession.ToRange(text, node.Span), RoslynLanguageSession.ToRange(text, selectionSpan), CreateSymbols(node, text, ref remaining, cancellationToken));
 
-    private static LspDocumentSymbol CreateLeafSymbol(
-        string name,
-        string? detail,
-        int kind,
-        SyntaxNode node,
-        TextSpan selectionSpan,
-        SourceText text) =>
-        new(
-            name,
-            detail,
-            kind,
-            RoslynLanguageSession.ToRange(text, node.Span),
-            RoslynLanguageSession.ToRange(text, selectionSpan),
-            []);
+    private static LspDocumentSymbol CreateLeafSymbol(string name, string? detail, int kind, SyntaxNode node, TextSpan selectionSpan, SourceText text) => new(name, detail, kind, RoslynLanguageSession.ToRange(text, node.Span), RoslynLanguageSession.ToRange(text, selectionSpan), []);
 }

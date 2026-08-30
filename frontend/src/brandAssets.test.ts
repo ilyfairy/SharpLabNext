@@ -44,12 +44,8 @@ describe('SharpLabNext brand assets', () => {
 
     expect(html).toContain('<meta name="theme-color" content="#4589e8" />')
     expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg" />')
-    expect(html).toContain(
-      '<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />',
-    )
-    expect(html).toContain(
-      '<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />',
-    )
+    expect(html).toContain('<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />')
+    expect(html).toContain('<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />')
     expect(html).toContain('<link rel="manifest" href="/manifest.webmanifest" />')
     expect(manifest.theme_color).toBe('#4589e8')
     expect(manifest.icons).toEqual(

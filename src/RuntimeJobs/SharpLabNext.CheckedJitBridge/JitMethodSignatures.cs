@@ -9,17 +9,9 @@ using System.Text;
 
 namespace SharpLabNext.CheckedJitBridge;
 
-internal sealed record ChildGenericArgument(
-    string AssemblyName,
-    string TypeName,
-    bool IsValueType,
-    string JitName);
+internal sealed record ChildGenericArgument(string AssemblyName, string TypeName, bool IsValueType, string JitName);
 
-internal sealed record JitMethodSignatureIdentity(
-    string NameKey,
-    string? HeaderKey,
-    string? NamespaceShortenedNameKey = null,
-    string? NamespaceShortenedHeaderKey = null);
+internal sealed record JitMethodSignatureIdentity(string NameKey, string? HeaderKey, string? NamespaceShortenedNameKey = null, string? NamespaceShortenedHeaderKey = null);
 
 internal static class JitMethodSignatures
 {
@@ -32,17 +24,10 @@ internal static class JitMethodSignatures
         if (type.ContainsGenericParameters || type == typeof(void) || type.IsByRef || type.IsPointer)
             throw new ArgumentException("A Checked JIT generic argument must be a closed runtime type.", nameof(type));
 
-        return new ChildGenericArgument(
-            type.Assembly.GetName().Name ?? string.Empty,
-            type.FullName ?? type.Name,
-            type.IsValueType,
-            type.IsValueType ? FormatConstructedValueType(type) : CanonicalReferenceTypeName);
+        return new ChildGenericArgument(type.Assembly.GetName().Name ?? string.Empty, type.FullName ?? type.Name, type.IsValueType, type.IsValueType ? FormatConstructedValueType(type) : CanonicalReferenceTypeName);
     }
 
-    public static string CreateMethodIdentity(
-        int metadataToken,
-        IReadOnlyList<ChildGenericArgument> declaringTypeArguments,
-        IReadOnlyList<ChildGenericArgument> methodArguments)
+    public static string CreateMethodIdentity(int metadataToken, IReadOnlyList<ChildGenericArgument> declaringTypeArguments, IReadOnlyList<ChildGenericArgument> methodArguments)
     {
         if (declaringTypeArguments is null)
             throw new ArgumentNullException(nameof(declaringTypeArguments));
@@ -66,11 +51,7 @@ internal static class JitMethodSignatures
         return identity.ToString();
     }
 
-    public static JitMethodSignatureIdentity CreateFromMetadata(
-        MetadataReader reader,
-        MethodDefinitionHandle methodHandle,
-        IReadOnlyList<ChildGenericArgument> declaringTypeArguments,
-        IReadOnlyList<ChildGenericArgument> methodArguments)
+    public static JitMethodSignatureIdentity CreateFromMetadata(MetadataReader reader, MethodDefinitionHandle methodHandle, IReadOnlyList<ChildGenericArgument> declaringTypeArguments, IReadOnlyList<ChildGenericArgument> methodArguments)
     {
         if (reader is null)
             throw new ArgumentNullException(nameof(reader));
@@ -88,48 +69,22 @@ internal static class JitMethodSignatures
         var declaringTypeName = GetTypeFullName(reader, declaringType);
         var namespaceShortenedDeclaringTypeName = GetTypeNameWithoutNamespace(reader, declaringType);
         var nameKey = declaringTypeName + ":" + methodName;
-        var namespaceShortenedNameKey = string.Equals(
-            declaringTypeName,
-            namespaceShortenedDeclaringTypeName,
-            StringComparison.Ordinal)
-                ? null
-                : namespaceShortenedDeclaringTypeName + ":" + methodName;
-        var context = new JitGenericContext(
-            declaringTypeArguments.Select(static argument => argument.JitName).ToArray(),
-            methodArguments.Select(static argument => argument.JitName).ToArray());
+        var namespaceShortenedNameKey = string.Equals(declaringTypeName, namespaceShortenedDeclaringTypeName, StringComparison.Ordinal)
+                ? null : namespaceShortenedDeclaringTypeName + ":" + methodName;
+        var context = new JitGenericContext(declaringTypeArguments.Select(static argument => argument.JitName).ToArray(), methodArguments.Select(static argument => argument.JitName).ToArray());
         var signature = definition.DecodeSignature(JitSignatureTypeProvider.Instance, context);
         if (!signature.ReturnType.IsSupported || signature.ParameterTypes.Any(static type => !type.IsSupported))
             return new JitMethodSignatureIdentity(nameKey, null, namespaceShortenedNameKey, null);
 
         var isInstance = (definition.Attributes & MethodAttributes.Static) == 0;
-        var headerKey = CreateHeader(
-            declaringTypeName,
-            methodName,
-            context,
-            signature,
-            isInstance);
+        var headerKey = CreateHeader(declaringTypeName, methodName, context, signature, isInstance);
         var namespaceShortenedHeaderKey = namespaceShortenedNameKey is null
-            ? null
-            : CreateHeader(
-                namespaceShortenedDeclaringTypeName,
-                methodName,
-                context,
-                signature,
-                isInstance);
+            ? null : CreateHeader(namespaceShortenedDeclaringTypeName, methodName, context, signature, isInstance);
 
-        return new JitMethodSignatureIdentity(
-            nameKey,
-            headerKey,
-            namespaceShortenedNameKey,
-            namespaceShortenedHeaderKey);
+        return new JitMethodSignatureIdentity(nameKey, headerKey, namespaceShortenedNameKey, namespaceShortenedHeaderKey);
     }
 
-    private static string CreateHeader(
-        string declaringTypeName,
-        string methodName,
-        JitGenericContext context,
-        MethodSignature<JitSignatureType> signature,
-        bool isInstance)
+    private static string CreateHeader(string declaringTypeName, string methodName, JitGenericContext context, MethodSignature<JitSignatureType> signature, bool isInstance)
     {
         var header = new StringBuilder(declaringTypeName);
         AppendJitArguments(header, context.DeclaringTypeArguments);
@@ -211,8 +166,7 @@ internal static class JitMethodSignatures
         var name = reader.GetString(definition.Name);
         var declaring = definition.GetDeclaringType();
         return declaring.IsNil
-            ? name
-            : GetTypeNameWithoutNamespace(reader, declaring) + "+" + name;
+            ? name : GetTypeNameWithoutNamespace(reader, declaring) + "+" + name;
     }
 
     private static string GetTypeFullName(MetadataReader reader, TypeReferenceHandle handle)
@@ -237,10 +191,7 @@ internal static class JitMethodSignatures
 
         var definition = type.GetGenericTypeDefinition();
         var name = definition.FullName ?? definition.Name;
-        var arguments = type.GetGenericArguments()
-            .Select(static argument => argument.IsValueType
-                ? FormatConstructedValueType(argument)
-                : CanonicalReferenceTypeName);
+        var arguments = type.GetGenericArguments().Select(static argument => argument.IsValueType ? FormatConstructedValueType(argument) : CanonicalReferenceTypeName);
         return name + "[" + string.Join(",", arguments) + "]";
     }
 
@@ -263,10 +214,7 @@ internal static class JitMethodSignatures
         return null;
     }
 
-    private static void AppendArguments(
-        StringBuilder identity,
-        string kind,
-        IReadOnlyList<ChildGenericArgument> arguments)
+    private static void AppendArguments(StringBuilder identity, string kind, IReadOnlyList<ChildGenericArgument> arguments)
     {
         if (arguments.Count == 0)
             return;
@@ -275,16 +223,12 @@ internal static class JitMethodSignatures
         {
             if (index > 0)
                 identity.Append(',');
-            identity.Append(arguments[index].AssemblyName)
-                .Append('/')
-                .Append(arguments[index].TypeName);
+            identity.Append(arguments[index].AssemblyName).Append('/').Append(arguments[index].TypeName);
         }
         identity.Append(']');
     }
 
-    private static void AppendStructuralArguments(
-        StringBuilder identity,
-        IReadOnlyList<ChildGenericArgument>? arguments)
+    private static void AppendStructuralArguments(StringBuilder identity, IReadOnlyList<ChildGenericArgument>? arguments)
     {
         if (arguments is null)
         {
@@ -377,20 +321,14 @@ internal static class JitMethodSignatures
         if (start < 0)
             return value;
         var qualifier = value.Substring(start + 2, value.Length - start - 3);
-        if (!qualifier.Contains("Tier", StringComparison.OrdinalIgnoreCase) &&
-            !qualifier.Contains("FullOpts", StringComparison.OrdinalIgnoreCase) &&
-            !qualifier.Contains("MinOpts", StringComparison.OrdinalIgnoreCase) &&
-            !qualifier.Contains("OSR", StringComparison.OrdinalIgnoreCase) &&
-            !qualifier.Contains("Instrumented", StringComparison.OrdinalIgnoreCase))
+        if (!qualifier.Contains("Tier", StringComparison.OrdinalIgnoreCase) && !qualifier.Contains("FullOpts", StringComparison.OrdinalIgnoreCase) && !qualifier.Contains("MinOpts", StringComparison.OrdinalIgnoreCase) && !qualifier.Contains("OSR", StringComparison.OrdinalIgnoreCase) && !qualifier.Contains("Instrumented", StringComparison.OrdinalIgnoreCase))
         {
             return value;
         }
         return value.Substring(0, start);
     }
 
-    private readonly record struct JitGenericContext(
-        IReadOnlyList<string> DeclaringTypeArguments,
-        IReadOnlyList<string> MethodArguments);
+    private readonly record struct JitGenericContext(IReadOnlyList<string> DeclaringTypeArguments, IReadOnlyList<string> MethodArguments);
 
     private readonly record struct JitSignatureType(string? Text)
     {
@@ -416,14 +354,11 @@ internal static class JitMethodSignatures
         public JitSignatureType GetFunctionPointerType(MethodSignature<JitSignatureType> signature) =>
             JitSignatureType.Unsupported;
 
-        public JitSignatureType GetGenericInstantiation(
-            JitSignatureType genericType,
-            ImmutableArray<JitSignatureType> typeArguments)
+        public JitSignatureType GetGenericInstantiation(JitSignatureType genericType, ImmutableArray<JitSignatureType> typeArguments)
         {
             if (!genericType.IsSupported || typeArguments.Any(static type => !type.IsSupported))
                 return JitSignatureType.Unsupported;
-            return new JitSignatureType(
-                genericType.Text + "[" + string.Join(",", typeArguments.Select(static type => type.Text)) + "]");
+            return new JitSignatureType(genericType.Text + "[" + string.Join(",", typeArguments.Select(static type => type.Text)) + "]");
         }
 
         public JitSignatureType GetGenericMethodParameter(JitGenericContext genericContext, int index) =>
@@ -432,10 +367,7 @@ internal static class JitMethodSignatures
         public JitSignatureType GetGenericTypeParameter(JitGenericContext genericContext, int index) =>
             GetGenericParameter(genericContext.DeclaringTypeArguments, index);
 
-        public JitSignatureType GetModifiedType(
-            JitSignatureType modifier,
-            JitSignatureType unmodifiedType,
-            bool isRequired) => unmodifiedType;
+        public JitSignatureType GetModifiedType(JitSignatureType modifier, JitSignatureType unmodifiedType, bool isRequired) => unmodifiedType;
 
         public JitSignatureType GetPinnedType(JitSignatureType elementType) => elementType;
 
@@ -467,29 +399,17 @@ internal static class JitMethodSignatures
 
         public JitSignatureType GetSZArrayType(JitSignatureType elementType) =>
             elementType.IsSupported
-                ? new JitSignatureType(elementType.Text + "[]")
-                : JitSignatureType.Unsupported;
+                ? new JitSignatureType(elementType.Text + "[]") : JitSignatureType.Unsupported;
 
-        public JitSignatureType GetTypeFromDefinition(
-            MetadataReader reader,
-            TypeDefinitionHandle handle,
-            byte rawTypeKind) => new(GetTypeFullName(reader, handle));
+        public JitSignatureType GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind) => new(GetTypeFullName(reader, handle));
 
-        public JitSignatureType GetTypeFromReference(
-            MetadataReader reader,
-            TypeReferenceHandle handle,
-            byte rawTypeKind) => new(GetTypeFullName(reader, handle));
+        public JitSignatureType GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind) => new(GetTypeFullName(reader, handle));
 
-        public JitSignatureType GetTypeFromSpecification(
-            MetadataReader reader,
-            JitGenericContext genericContext,
-            TypeSpecificationHandle handle,
-            byte rawTypeKind) =>
+        public JitSignatureType GetTypeFromSpecification(MetadataReader reader, JitGenericContext genericContext, TypeSpecificationHandle handle, byte rawTypeKind) =>
             reader.GetTypeSpecification(handle).DecodeSignature(this, genericContext);
 
         private static JitSignatureType GetGenericParameter(IReadOnlyList<string> arguments, int index) =>
             index >= 0 && index < arguments.Count
-                ? new JitSignatureType(arguments[index])
-                : JitSignatureType.Unsupported;
+                ? new JitSignatureType(arguments[index]) : JitSignatureType.Unsupported;
     }
 }

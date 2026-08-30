@@ -11,17 +11,12 @@ namespace SharpLabNext.Http;
 /// </summary>
 public static class PascalCaseQuery
 {
-    public static bool TryGetOptionalSingle(
-        HttpRequest request,
-        string name,
-        out string? value)
+    public static bool TryGetOptionalSingle(HttpRequest request, string name, out string? value)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        var matchingKeys = request.Query.Keys
-            .Where(key => string.Equals(key, name, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var matchingKeys = request.Query.Keys.Where(key => string.Equals(key, name, StringComparison.OrdinalIgnoreCase)).ToArray();
         if (matchingKeys.Length == 0)
         {
             value = null;
@@ -47,10 +42,7 @@ public static class PascalCaseQuery
         return true;
     }
 
-    public static bool TryGetOptionalInt32(
-        HttpRequest request,
-        string name,
-        out int? value)
+    public static bool TryGetOptionalInt32(HttpRequest request, string name, out int? value)
     {
         if (!TryGetOptionalSingle(request, name, out var raw))
         {
@@ -74,10 +66,7 @@ public static class PascalCaseQuery
         return true;
     }
 
-    public static bool TryGetOptionalInt64(
-        HttpRequest request,
-        string name,
-        out long? value)
+    public static bool TryGetOptionalInt64(HttpRequest request, string name, out long? value)
     {
         if (!TryGetOptionalSingle(request, name, out var raw))
         {

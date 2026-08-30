@@ -1,14 +1,6 @@
 import { foldService } from '@codemirror/language'
 import { type Extension, Prec, RangeSet, StateEffect, StateField } from '@codemirror/state'
-import {
-  Decoration,
-  type DecorationSet,
-  EditorView,
-  GutterMarker,
-  gutterLineClass,
-  showTooltip,
-  type Tooltip,
-} from '@codemirror/view'
+import { Decoration, type DecorationSet, EditorView, GutterMarker, gutterLineClass, showTooltip, type Tooltip } from '@codemirror/view'
 
 export interface CodeMirrorDecorationRange {
   from: number
@@ -33,10 +25,8 @@ export interface CodeMirrorFoldingRange {
 }
 
 export const setSemanticDecorations = StateEffect.define<readonly CodeMirrorDecorationRange[]>()
-export const setExecutionFlowDecorations =
-  StateEffect.define<readonly CodeMirrorDecorationRange[]>()
-export const setSourceAssociationDecorations =
-  StateEffect.define<readonly CodeMirrorDecorationRange[]>()
+export const setExecutionFlowDecorations = StateEffect.define<readonly CodeMirrorDecorationRange[]>()
+export const setSourceAssociationDecorations = StateEffect.define<readonly CodeMirrorDecorationRange[]>()
 export const setSignatureHelp = StateEffect.define<CodeMirrorSignaturePresentation | null>()
 export const setFoldingRanges = StateEffect.define<readonly CodeMirrorFoldingRange[]>()
 
@@ -86,9 +76,7 @@ export const sourceAssociationDecorationField = StateField.define<DecorationSet>
 export const selectionLineDecorationField = StateField.define<DecorationSet>({
   create: (state) => selectedLineDecorations(state),
   update(value, transaction) {
-    return transaction.docChanged || transaction.selection !== undefined
-      ? selectedLineDecorations(transaction.state)
-      : value
+    return transaction.docChanged || transaction.selection !== undefined ? selectedLineDecorations(transaction.state) : value
   },
   provide: (field) => EditorView.decorations.from(field),
 })
@@ -120,9 +108,7 @@ export const signatureHelpField = StateField.define<CodeMirrorSignaturePresentat
       transaction.changes.iterChanges((_fromA, _toA, _fromB, _toB, inserted) => {
         if (inserted.toString().includes(')')) closesSignature = true
       })
-      next = closesSignature
-        ? null
-        : { ...next, position: transaction.changes.mapPos(next.position, 1) }
+      next = closesSignature ? null : { ...next, position: transaction.changes.mapPos(next.position, 1) }
     }
     if (next && transaction.selection && !transaction.docChanged) next = null
     for (const effect of transaction.effects) {
@@ -130,10 +116,7 @@ export const signatureHelpField = StateField.define<CodeMirrorSignaturePresentat
     }
     return next
   },
-  provide: (field) =>
-    showTooltip.from(field, (presentation) =>
-      presentation ? signatureTooltip(presentation) : null,
-    ),
+  provide: (field) => showTooltip.from(field, (presentation) => (presentation ? signatureTooltip(presentation) : null)),
 })
 
 export const foldingRangeField = StateField.define<readonly CodeMirrorFoldingRange[]>({
@@ -150,9 +133,7 @@ export const foldingRangeField = StateField.define<readonly CodeMirrorFoldingRan
 export const lspFoldingExtension: Extension = [
   foldingRangeField,
   foldService.of((state, lineStart, lineEnd) => {
-    const range = state
-      .field(foldingRangeField)
-      .find((candidate) => candidate.from >= lineStart && candidate.from <= lineEnd + 1)
+    const range = state.field(foldingRangeField).find((candidate) => candidate.from >= lineStart && candidate.from <= lineEnd + 1)
     return range ? { from: range.from, to: range.to } : null
   }),
 ]
@@ -180,14 +161,7 @@ function decorationSet(ranges: readonly CodeMirrorDecorationRange[]): Decoration
 }
 
 function selectedLineDecorations(state: import('@codemirror/state').EditorState): DecorationSet {
-  return Decoration.set(
-    selectedLineNumbers(state).map((line) =>
-      Decoration.line({ attributes: { class: 'cm-selection-line' } }).range(
-        state.doc.line(line).from,
-      ),
-    ),
-    true,
-  )
+  return Decoration.set(selectedLineNumbers(state).map((line) => Decoration.line({ attributes: { class: 'cm-selection-line' } }).range(state.doc.line(line).from)), true);
 }
 
 function selectedLineNumbers(state: import('@codemirror/state').EditorState): number[] {
@@ -232,11 +206,7 @@ function signatureTooltip(presentation: CodeMirrorSignaturePresentation): Toolti
   }
 }
 
-function appendSignatureLabel(
-  parent: HTMLElement,
-  label: string,
-  activeParameterLabel: string | undefined,
-): void {
+function appendSignatureLabel(parent: HTMLElement, label: string, activeParameterLabel: string | undefined): void {
   if (!activeParameterLabel) {
     parent.append(document.createTextNode(label))
     return
@@ -250,8 +220,5 @@ function appendSignatureLabel(
   const parameter = document.createElement('strong')
   parameter.className = 'cm-signature-parameter'
   parameter.textContent = activeParameterLabel
-  parent.append(
-    parameter,
-    document.createTextNode(label.slice(index + activeParameterLabel.length)),
-  )
+  parent.append(parameter, document.createTextNode(label.slice(index + activeParameterLabel.length)))
 }

@@ -22,8 +22,7 @@ public sealed class GatewayTrafficOptions
     {
         if (MaximumRequestBodyBytes is < 1024 * 1024 or > 64L * 1024 * 1024)
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:{nameof(MaximumRequestBodyBytes)} must be between 1 MiB and 64 MiB.");
+            throw new InvalidOperationException($"{SectionName}:{nameof(MaximumRequestBodyBytes)} must be between 1 MiB and 64 MiB.");
         }
 
         ValidateLimit(PublicGlobalPermitLimit, nameof(PublicGlobalPermitLimit));
@@ -34,14 +33,12 @@ public sealed class GatewayTrafficOptions
         ValidateWindow(RuntimeWindow, nameof(RuntimeWindow));
         if (PublicPermitLimit > PublicGlobalPermitLimit)
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:{nameof(PublicPermitLimit)} cannot exceed {nameof(PublicGlobalPermitLimit)}.");
+            throw new InvalidOperationException($"{SectionName}:{nameof(PublicPermitLimit)} cannot exceed {nameof(PublicGlobalPermitLimit)}.");
         }
 
         if (RuntimeClientPermitLimit > RuntimeGlobalPermitLimit)
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:{nameof(RuntimeClientPermitLimit)} cannot exceed {nameof(RuntimeGlobalPermitLimit)}.");
+            throw new InvalidOperationException($"{SectionName}:{nameof(RuntimeClientPermitLimit)} cannot exceed {nameof(RuntimeGlobalPermitLimit)}.");
         }
     }
 

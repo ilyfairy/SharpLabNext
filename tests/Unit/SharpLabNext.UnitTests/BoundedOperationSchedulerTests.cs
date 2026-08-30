@@ -118,46 +118,20 @@ public sealed class BoundedOperationSchedulerTests
         Assert.Equal(OperationStatus.Cancelled, operations.Get(queued.Handle.OperationId)?.Status);
     }
 
-    private static BoundedOperationScheduler CreateScheduler(
-        OperationStore operations,
-        int queueCapacity,
-        int workerConcurrency) => new(
+    private static BoundedOperationScheduler CreateScheduler(OperationStore operations, int queueCapacity, int workerConcurrency) => new(
             operations,
-            new OperationExecutionOptions
-            {
-                QueueCapacity = queueCapacity,
-                WorkerConcurrency = workerConcurrency,
-                ShutdownTimeout = TimeSpan.FromSeconds(5),
-                ExecutorId = "test-executor"
-            });
+            new OperationExecutionOptions { QueueCapacity = queueCapacity, WorkerConcurrency = workerConcurrency, ShutdownTimeout = TimeSpan.FromSeconds(5), ExecutorId = "test-executor" });
 
-    private static OperationStart Start(OperationStore operations, int index) =>
-        operations.Start(
-            $"request-{index}",
-            $"key-{index}",
-            OperationKind.Build,
-            $"trace-{index}",
-            DateTimeOffset.UtcNow);
+    private static OperationStart Start(OperationStore operations, int index) => operations.Start($"request-{index}", $"key-{index}", OperationKind.Build, $"trace-{index}", DateTimeOffset.UtcNow);
 
-    private static void Complete(OperationStore operations, OperationStart operation) =>
-        operations.Append(
-            operation.Handle.OperationId,
-            new CompletedOperationEventPayload(OperationCompletionStatus.Completed, TimeSpan.Zero),
-            DateTimeOffset.UtcNow);
+    private static void Complete(OperationStore operations, OperationStart operation) => operations.Append(operation.Handle.OperationId, new CompletedOperationEventPayload(OperationCompletionStatus.Completed, TimeSpan.Zero), DateTimeOffset.UtcNow);
 
-    private static async Task WaitForAllTerminalAsync(
-        OperationStore operations,
-        IEnumerable<OperationStart> starts)
+    private static async Task WaitForAllTerminalAsync(OperationStore operations, IEnumerable<OperationStart> starts)
     {
-        foreach (var start in starts)
-        {
-            await WaitForTerminalAsync(operations, start.Handle.OperationId);
-        }
+        foreach (var start in starts) await WaitForTerminalAsync(operations, start.Handle.OperationId);
     }
 
-    private static async Task<OperationState> WaitForTerminalAsync(
-        OperationStore operations,
-        string operationId)
+    private static async Task<OperationState> WaitForTerminalAsync(OperationStore operations, string operationId)
     {
         for (var attempt = 0; attempt < 200; attempt++)
         {

@@ -1,8 +1,4 @@
-import type {
-  BuildOutputKind,
-  GatewayLanguageSession,
-  OpenLanguageSessionRequest,
-} from '../api/types'
+import type { BuildOutputKind, GatewayLanguageSession, OpenLanguageSessionRequest } from '../api/types'
 
 export type LanguageSessionStatus = 'disabled' | 'connecting' | 'ready' | 'reconnecting' | 'error'
 
@@ -37,16 +33,7 @@ export interface LanguageSessionKeyInput {
 }
 
 export function createLanguageSessionKey(input: LanguageSessionKeyInput): string {
-  return JSON.stringify([
-    input.languageId,
-    input.toolchainId,
-    input.referenceSetId,
-    input.buildMode,
-    input.outputKind,
-    input.selectionRevision,
-    input.filePaths,
-    input.sourceOrder,
-  ])
+  return JSON.stringify([input.languageId, input.toolchainId, input.referenceSetId, input.buildMode, input.outputKind, input.selectionRevision, input.filePaths, input.sourceOrder])
 }
 
 export interface LanguageClientHandle {
@@ -54,12 +41,7 @@ export interface LanguageClientHandle {
   dispose: () => Promise<void>
 }
 
-export type LanguageSessionTransportFailureKind =
-  | 'websocket-not-open'
-  | 'websocket-open-failed'
-  | 'websocket-closed'
-  | 'initialize-timeout'
-  | 'request-timeout'
+export type LanguageSessionTransportFailureKind = 'websocket-not-open' | 'websocket-open-failed' | 'websocket-closed' | 'initialize-timeout' | 'request-timeout'
 
 export class LanguageSessionTransportError extends Error {
   readonly kind: LanguageSessionTransportFailureKind
@@ -78,12 +60,7 @@ export class LanguageSessionProtocolError extends Error {
   }
 }
 
-export type LanguageSessionInitialFailurePhase =
-  | 'request'
-  | 'open'
-  | 'descriptor'
-  | 'socket'
-  | 'initialize'
+export type LanguageSessionInitialFailurePhase = 'request' | 'open' | 'descriptor' | 'socket' | 'initialize'
 
 export interface LanguageSessionInitialRetryContext {
   phase: LanguageSessionInitialFailurePhase
@@ -122,18 +99,10 @@ class InitialLanguageSessionFailure {
 }
 
 export interface LanguageSessionLifecycleDependencies {
-  open: (
-    request: OpenLanguageSessionRequest,
-    signal: AbortSignal,
-  ) => Promise<GatewayLanguageSession>
+  open: (request: OpenLanguageSessionRequest, signal: AbortSignal) => Promise<GatewayLanguageSession>
   close: (sessionId: string) => Promise<void>
   createSocket: (url: string) => WebSocket
-  createClient: (
-    plan: LanguageSessionConnectionPlan,
-    descriptor: GatewayLanguageSession,
-    socket: WebSocket,
-    isCurrent: () => boolean,
-  ) => LanguageClientHandle
+  createClient: (plan: LanguageSessionConnectionPlan, descriptor: GatewayLanguageSession, socket: WebSocket, isCurrent: () => boolean) => LanguageClientHandle
   schedule: (callback: () => void, delay: number) => number
   cancelSchedule: (handle: number) => void
 }
@@ -151,11 +120,7 @@ export class LanguageSessionLifecycle {
   private readonly dependencies: LanguageSessionLifecycleDependencies
   private readonly initialRetryPolicy: LanguageSessionInitialRetryPolicy | undefined
 
-  constructor(
-    onStatus: (change: LanguageSessionStatusChange) => void,
-    dependencies: LanguageSessionLifecycleDependencies,
-    initialRetryPolicy?: LanguageSessionInitialRetryPolicy,
-  ) {
+  constructor(onStatus: (change: LanguageSessionStatusChange) => void, dependencies: LanguageSessionLifecycleDependencies, initialRetryPolicy?: LanguageSessionInitialRetryPolicy) {
     this.onStatus = onStatus
     this.dependencies = dependencies
     this.initialRetryPolicy = initialRetryPolicy
@@ -234,10 +199,7 @@ export class LanguageSessionLifecycle {
           await this.startOnce(plan, generation, attempt)
           return
         } catch (failure) {
-          const initialFailure =
-            failure instanceof InitialLanguageSessionFailure
-              ? failure
-              : new InitialLanguageSessionFailure('initialize', failure)
+          const initialFailure = failure instanceof InitialLanguageSessionFailure ? failure : new InitialLanguageSessionFailure('initialize', failure)
           if (attempt.signal.aborted || isAbortError(initialFailure.error)) return
           const delay = this.initialRetryDelay(initialFailure, retryAttempt)
           if (delay === null) throw initialFailure.error
@@ -250,11 +212,7 @@ export class LanguageSessionLifecycle {
     }
   }
 
-  private async startOnce(
-    plan: LanguageSessionConnectionPlan,
-    generation: number,
-    attempt: AbortController,
-  ): Promise<void> {
+  private async startOnce(plan: LanguageSessionConnectionPlan, generation: number, attempt: AbortController): Promise<void> {
     let phase: LanguageSessionInitialFailurePhase = 'request'
     let descriptor: GatewayLanguageSession | null = null
     let socket: WebSocket | null = null
@@ -263,12 +221,7 @@ export class LanguageSessionLifecycle {
       const request = plan.createRequest()
       phase = 'open'
       descriptor = await this.dependencies.open(request, attempt.signal)
-      if (
-        attempt.signal.aborted ||
-        this.disposed ||
-        generation !== this.generation ||
-        this.desired?.key !== plan.key
-      ) {
+      if (attempt.signal.aborted || this.disposed || generation !== this.generation || this.desired?.key !== plan.key) {
         await this.closeDescriptor(descriptor)
         return
       }
@@ -280,16 +233,7 @@ export class LanguageSessionLifecycle {
       const freshness: SessionFreshness = { current: true }
       let candidate: ActiveLanguageSession
       phase = 'initialize'
-      const client = this.dependencies.createClient(
-        plan,
-        descriptor,
-        socket,
-        () =>
-          freshness.current &&
-          this.active === candidate &&
-          generation === this.generation &&
-          this.desired?.key === plan.key,
-      )
+      const client = this.dependencies.createClient(plan, descriptor, socket, () => freshness.current && this.active === candidate && generation === this.generation && this.desired?.key === plan.key)
       candidate = {
         plan,
         descriptor,
@@ -303,11 +247,7 @@ export class LanguageSessionLifecycle {
       this.active = candidate
       socket.addEventListener('close', () => this.handleUnexpectedClose(candidate))
       await waitForAbortable(client.start(), attempt.signal)
-      if (
-        this.active !== candidate ||
-        generation !== this.generation ||
-        this.desired?.key !== plan.key
-      ) {
+      if (this.active !== candidate || generation !== this.generation || this.desired?.key !== plan.key) {
         if (this.active === candidate) this.active = null
         await this.stop(candidate)
         return
@@ -332,12 +272,14 @@ export class LanguageSessionLifecycle {
     }
   }
 
-  private initialRetryDelay(
-    failure: InitialLanguageSessionFailure,
-    retryAttempt: number,
-  ): number | null {
+  private initialRetryDelay(failure: InitialLanguageSessionFailure, retryAttempt: number): number | null {
     const policy = this.initialRetryPolicy
-    if (!policy?.shouldRetry(failure.error, { phase: failure.phase, attempt: retryAttempt })) {
+    if (
+      !policy?.shouldRetry(failure.error, {
+        phase: failure.phase,
+        attempt: retryAttempt,
+      })
+    ) {
       return null
     }
     const initialDelay = finiteNonNegativeDelay(policy.initialDelayMs)
@@ -347,12 +289,7 @@ export class LanguageSessionLifecycle {
 
   private handleUnexpectedClose(active: ActiveLanguageSession): void {
     const initialRetryOwnsClose = !active.ready && this.initialRetryPolicy !== undefined
-    if (
-      this.disposed ||
-      active.intentionalClose ||
-      initialRetryOwnsClose ||
-      this.active !== active
-    ) {
+    if (this.disposed || active.intentionalClose || initialRetryOwnsClose || this.active !== active) {
       return
     }
     this.active = null
@@ -384,10 +321,7 @@ export class LanguageSessionLifecycle {
     active.intentionalClose = true
     active.freshness.current = false
     await active.client.dispose().catch(() => undefined)
-    if (
-      active.socket.readyState === WebSocket.OPEN ||
-      active.socket.readyState === WebSocket.CONNECTING
-    ) {
+    if (active.socket.readyState === WebSocket.OPEN || active.socket.readyState === WebSocket.CONNECTING) {
       try {
         active.socket.close(1000, 'Language session replaced.')
       } catch {
@@ -406,10 +340,7 @@ export class LanguageSessionLifecycle {
     if (!this.active) return
     this.active.intentionalClose = true
     this.active.freshness.current = false
-    if (
-      this.active.socket.readyState === WebSocket.OPEN ||
-      this.active.socket.readyState === WebSocket.CONNECTING
-    ) {
+    if (this.active.socket.readyState === WebSocket.OPEN || this.active.socket.readyState === WebSocket.CONNECTING) {
       try {
         this.active.socket.close(1000, 'Language session selection changed.')
       } catch {
@@ -425,11 +356,7 @@ export class LanguageSessionLifecycle {
   }
 }
 
-function validateDescriptor(
-  plan: LanguageSessionConnectionPlan,
-  request: OpenLanguageSessionRequest,
-  descriptor: GatewayLanguageSession,
-): void {
+function validateDescriptor(plan: LanguageSessionConnectionPlan, request: OpenLanguageSessionRequest, descriptor: GatewayLanguageSession): void {
   if (
     !descriptor.sessionId ||
     !descriptor.compilerBuildIdentity ||
@@ -472,15 +399,9 @@ function finiteNonNegativeDelay(value: number): number {
   return Number.isFinite(value) && value >= 0 ? value : 0
 }
 
-function waitForScheduledRetry(
-  delay: number,
-  signal: AbortSignal,
-  dependencies: LanguageSessionLifecycleDependencies,
-): Promise<void> {
+function waitForScheduledRetry(delay: number, signal: AbortSignal, dependencies: LanguageSessionLifecycleDependencies): Promise<void> {
   if (signal.aborted) {
-    return Promise.reject(
-      signal.reason ?? new DOMException('Language session retry was aborted.', 'AbortError'),
-    )
+    return Promise.reject(signal.reason ?? new DOMException('Language session retry was aborted.', 'AbortError'))
   }
 
   return new Promise<void>((resolve, reject) => {
@@ -506,22 +427,13 @@ export interface LspDiagnosticRevision {
   documentVersion: number
 }
 
-export function isCurrentLspDiagnostic(
-  data: unknown,
-  selectionRevision: number,
-  documentVersion: number | undefined,
-): boolean {
+export function isCurrentLspDiagnostic(data: unknown, selectionRevision: number, documentVersion: number | undefined): boolean {
   if (!isDiagnosticRevision(data)) return true
-  return (
-    data.selectionRevision === selectionRevision &&
-    (documentVersion === undefined || data.documentVersion === documentVersion)
-  )
+  return data.selectionRevision === selectionRevision && (documentVersion === undefined || data.documentVersion === documentVersion)
 }
 
 function isDiagnosticRevision(value: unknown): value is LspDiagnosticRevision {
   if (typeof value !== 'object' || value === null) return false
   const candidate = value as Record<string, unknown>
-  return (
-    typeof candidate.selectionRevision === 'number' && typeof candidate.documentVersion === 'number'
-  )
+  return typeof candidate.selectionRevision === 'number' && typeof candidate.documentVersion === 'number'
 }

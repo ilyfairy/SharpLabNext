@@ -1,4 +1,5 @@
 #:property TargetFramework=net10.0
+#:property RestorePackagesWithLockFile=false
 #:property PublishAot=false
 #:property NoWarn=IL2026
 
@@ -48,17 +49,14 @@ foreach (var dependency in new[] { immutable, metadata })
 {
     if (dependency.GetName().Version != compilerDependencyVersion)
     {
-        throw new InvalidDataException(
-            $"{dependency.GetName().Name} version '{dependency.GetName().Version}' does not match '{compilerDependencyVersion}'.");
+        throw new InvalidDataException($"{dependency.GetName().Name} version '{dependency.GetName().Version}' does not match '{compilerDependencyVersion}'.");
     }
 }
 
-var immutableReference = metadata.GetReferencedAssemblies()
-    .SingleOrDefault(static reference => reference.Name == "System.Collections.Immutable");
+var immutableReference = metadata.GetReferencedAssemblies().SingleOrDefault(static reference => reference.Name == "System.Collections.Immutable");
 if (immutableReference?.Version != compilerDependencyVersion)
 {
-    throw new InvalidDataException(
-        $"System.Reflection.Metadata references System.Collections.Immutable '{immutableReference?.Version}', expected '{compilerDependencyVersion}'.");
+    throw new InvalidDataException($"System.Reflection.Metadata references System.Collections.Immutable '{immutableReference?.Version}', expected '{compilerDependencyVersion}'.");
 }
 
 var common = context.LoadFromAssemblyPath(Path.Combine(assemblyDirectory, "Microsoft.CodeAnalysis.dll"));
@@ -67,13 +65,8 @@ var visualBasic = context.LoadFromAssemblyPath(Path.Combine(assemblyDirectory, "
 foreach (var assembly in new[] { csharp, visualBasic })
 {
     var version = assembly.GetName().Version is { } assemblyVersion
-        ? $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{assemblyVersion.Build}"
-        : "unknown";
-    var commit = assembly.GetCustomAttributesData()
-        .Where(static attribute => attribute.AttributeType.FullName == "Microsoft.CodeAnalysis.CommitHashAttribute")
-        .SelectMany(static attribute => attribute.ConstructorArguments)
-        .Select(static argument => argument.Value as string)
-        .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
+        ? $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{assemblyVersion.Build}" : "unknown";
+    var commit = assembly.GetCustomAttributesData().Where(static attribute => attribute.AttributeType.FullName == "Microsoft.CodeAnalysis.CommitHashAttribute").SelectMany(static attribute => attribute.ConstructorArguments).Select(static argument => argument.Value as string).FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
 
     if (!string.Equals(version, expectedVersion, StringComparison.Ordinal))
         throw new InvalidDataException($"{assembly.GetName().Name} version '{version}' does not match '{expectedVersion}'.");
@@ -88,8 +81,7 @@ if (common.GetType("Microsoft.CodeAnalysis.ITypeParameterSymbol")?.GetProperty("
 
 if (metadata.GetType("System.Reflection.Metadata.GenericParameter")?.GetProperty("Type") is null)
     throw new InvalidDataException("The matching metadata build does not expose GenericParameter.Type.");
-if (metadata.GetType("System.Reflection.Metadata.Ecma335.SignatureTypeEncoder")?
-        .GetMethod("ConstValueType", BindingFlags.Public | BindingFlags.Instance) is null)
+if (metadata.GetType("System.Reflection.Metadata.Ecma335.SignatureTypeEncoder")?.GetMethod("ConstValueType", BindingFlags.Public | BindingFlags.Instance) is null)
 {
     throw new InvalidDataException("The matching metadata build does not expose SignatureTypeEncoder.ConstValueType.");
 }

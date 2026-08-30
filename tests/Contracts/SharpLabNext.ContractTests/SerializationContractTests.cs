@@ -14,16 +14,11 @@ public sealed class SerializationContractTests
     [Fact]
     public void RuntimeCapabilityOptionsDigestMatchesCanonicalTransformOptions()
     {
-        var options = new TransformArtifactOptions(
-            RewriterProfileId: RuntimeCapabilityProbeContract.ExecutionFlowProfileId);
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(
-            options,
-            ContractJson.CreateCanonicalSerializerOptions());
+        var options = new TransformArtifactOptions(RewriterProfileId: RuntimeCapabilityProbeContract.ExecutionFlowProfileId);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(options, ContractJson.CreateCanonicalSerializerOptions());
         var digest = $"sha256:{Convert.ToHexStringLower(SHA256.HashData(bytes))}";
 
-        Assert.Equal(
-            "sha256:5a459984587b8b65eea31d51e935dc7efa05c25a0150c88984c81328a4ac5051",
-            digest);
+        Assert.Equal("sha256:5a459984587b8b65eea31d51e935dc7efa05c25a0150c88984c81328a4ac5051", digest);
         Assert.Equal(RuntimeCapabilityProbeContract.ExecutionFlowOptionsDigest, digest);
     }
 
@@ -137,9 +132,7 @@ public sealed class SerializationContractTests
         Assert.True(unrelated.ContainsKey("Metadata"));
         Assert.True(unrelated["Metadata"]!.AsObject().ContainsKey("customName"));
 
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<DictionaryEnvelope>(
-            "{\"metadata\":{\"customName\":\"value\"}}",
-            options));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<DictionaryEnvelope>("{\"metadata\":{\"customName\":\"value\"}}", options));
     }
 
     [Fact]
@@ -147,12 +140,7 @@ public sealed class SerializationContractTests
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         ContractJson.ApplySerializerOptions(options);
-        var eventValue = new OperationEvent(
-            "op-1",
-            1,
-            DateTimeOffset.UnixEpoch,
-            "trace-1",
-            new CompletedOperationEventPayload(OperationCompletionStatus.Completed, TimeSpan.Zero));
+        var eventValue = new OperationEvent("op-1", 1, DateTimeOffset.UnixEpoch, "trace-1", new CompletedOperationEventPayload(OperationCompletionStatus.Completed, TimeSpan.Zero));
 
         var document = JsonNode.Parse(JsonSerializer.Serialize(eventValue, options))!.AsObject();
         Assert.Equal("completed", document["Payload"]!["Kind"]!.GetValue<string>());
@@ -162,12 +150,7 @@ public sealed class SerializationContractTests
     public void CanonicalOptionsKeepStorageMemberNamesUnchanged()
     {
         var options = ContractJson.CreateCanonicalSerializerOptions();
-        var value = new OperationEvent(
-            "op-1",
-            1,
-            DateTimeOffset.UnixEpoch,
-            "trace-1",
-            new CompletedOperationEventPayload(OperationCompletionStatus.Completed, TimeSpan.Zero));
+        var value = new OperationEvent("op-1", 1, DateTimeOffset.UnixEpoch, "trace-1", new CompletedOperationEventPayload(OperationCompletionStatus.Completed, TimeSpan.Zero));
 
         var document = JsonNode.Parse(JsonSerializer.Serialize(value, options))!.AsObject();
         Assert.Equal("completed", document["payload"]!["kind"]!.GetValue<string>());
@@ -192,14 +175,7 @@ public sealed class SerializationContractTests
     [Fact]
     public void ArtifactReferencesSerializeAsOpaqueStrings()
     {
-        var request = new RunRequest(
-            "req-02",
-            "run-key",
-            "pipeline-01",
-            new ArtifactRef("sha256:abc"),
-            "dotnet-11-preview-linux-x64",
-            new RunOptions([], null, RunInstrumentation.None, "runtime-job-default"),
-            DateTimeOffset.Parse("2026-07-11T00:00:05Z", CultureInfo.InvariantCulture));
+        var request = new RunRequest("req-02", "run-key", "pipeline-01", new ArtifactRef("sha256:abc"), "dotnet-11-preview-linux-x64", new RunOptions([], null, RunInstrumentation.None, "runtime-job-default"), DateTimeOffset.Parse("2026-07-11T00:00:05Z", CultureInfo.InvariantCulture));
 
         var document = JsonNode.Parse(JsonSerializer.Serialize(request, JsonOptions))!.AsObject();
         Assert.Equal("sha256:abc", document["ArtifactRef"]!.GetValue<string>());
@@ -211,19 +187,8 @@ public sealed class SerializationContractTests
     [Fact]
     public void OperationPayloadAndTypedResultRoundTripWithDiscriminators()
     {
-        var result = new RunResult(
-            RunTerminalStatus.UserException,
-            1,
-            new UserExceptionInfo("System.InvalidOperationException", "failed", null, null),
-            TimeSpan.FromMilliseconds(25),
-            false,
-            new RuntimeIdentity("11.0.0-preview.5", "runtime-commit", "sha256:image", "linux-x64", "x64"));
-        var operationEvent = new OperationEvent(
-            "op-1",
-            3,
-            DateTimeOffset.Parse("2026-07-11T00:00:01Z", CultureInfo.InvariantCulture),
-            "trace-1",
-            new TypedResultOperationEventPayload(result));
+        var result = new RunResult(RunTerminalStatus.UserException, 1, new UserExceptionInfo("System.InvalidOperationException", "failed", null, null), TimeSpan.FromMilliseconds(25), false, new RuntimeIdentity("11.0.0-preview.5", "runtime-commit", "sha256:image", "linux-x64", "x64"));
+        var operationEvent = new OperationEvent("op-1", 3, DateTimeOffset.Parse("2026-07-11T00:00:01Z", CultureInfo.InvariantCulture), "trace-1", new TypedResultOperationEventPayload(result));
 
         var json = JsonSerializer.Serialize(operationEvent, JsonOptions);
         var document = JsonNode.Parse(json)!.AsObject();
@@ -241,25 +206,9 @@ public sealed class SerializationContractTests
     [Fact]
     public void UserExceptionDetailsPreserveStackTraceAndInnerExceptionAcrossWire()
     {
-        const string outerStackTrace =
-            "System.InvalidOperationException: outer\n   at Program.Main() in Program.cs:line 7";
-        const string innerStackTrace =
-            "System.ArgumentException: inner\n   at Program.Parse() in Program.cs:line 3";
-        var result = new RunResult(
-            RunTerminalStatus.UserException,
-            1,
-            new UserExceptionInfo(
-                "System.InvalidOperationException",
-                "outer",
-                outerStackTrace,
-                new UserExceptionInfo(
-                    "System.ArgumentException",
-                    "inner",
-                    innerStackTrace,
-                    null)),
-            TimeSpan.FromMilliseconds(25),
-            false,
-            new RuntimeIdentity("11.0.0-preview.5", "runtime-commit", "sha256:image", "linux-x64", "x64"));
+        const string outerStackTrace = "System.InvalidOperationException: outer\n   at Program.Main() in Program.cs:line 7";
+        const string innerStackTrace = "System.ArgumentException: inner\n   at Program.Parse() in Program.cs:line 3";
+        var result = new RunResult(RunTerminalStatus.UserException, 1, new UserExceptionInfo("System.InvalidOperationException", "outer", outerStackTrace, new UserExceptionInfo("System.ArgumentException", "inner", innerStackTrace, null)), TimeSpan.FromMilliseconds(25), false, new RuntimeIdentity("11.0.0-preview.5", "runtime-commit", "sha256:image", "linux-x64", "x64"));
 
         var json = JsonSerializer.Serialize<OperationResult>(result, JsonOptions);
         var document = JsonNode.Parse(json)!.AsObject();
@@ -269,8 +218,7 @@ public sealed class SerializationContractTests
         Assert.Equal("System.ArgumentException", exception["InnerException"]!["TypeName"]!.GetValue<string>());
         Assert.Equal(innerStackTrace, exception["InnerException"]!["StackTrace"]!.GetValue<string>());
 
-        var roundTrip = Assert.IsType<RunResult>(
-            JsonSerializer.Deserialize<OperationResult>(json, JsonOptions));
+        var roundTrip = Assert.IsType<RunResult>(JsonSerializer.Deserialize<OperationResult>(json, JsonOptions));
         Assert.Equal(outerStackTrace, roundTrip.Exception?.StackTrace);
         Assert.Equal("System.ArgumentException", roundTrip.Exception?.InnerException?.TypeName);
         Assert.Equal(innerStackTrace, roundTrip.Exception?.InnerException?.StackTrace);
@@ -286,21 +234,9 @@ public sealed class SerializationContractTests
             5,
             [new ExplanationFile(
                 "Program.cs",
-                [new ExplanationNode(
-                    "return",
-                    "Return statement",
-                    "Returns control to the caller.",
-                    new TextRange(2, 4, 2, 11),
-                    1)])],
+                [new ExplanationNode("return", "Return statement", "Returns control to the caller.", new TextRange(2, 4, 2, 11), 1)])],
             false),
-            new BuildIdentity(
-                "release-1",
-                "csharp",
-                "roslyn-stable",
-                "5.6.0",
-                "compiler-commit",
-                "net10-ref",
-                "sha256:worker"));
+            new BuildIdentity("release-1", "csharp", "roslyn-stable", "5.6.0", "compiler-commit", "net10-ref", "sha256:worker"));
 
         var json = JsonSerializer.Serialize(result, JsonOptions);
         var document = JsonNode.Parse(json)!.AsObject();
@@ -315,46 +251,21 @@ public sealed class SerializationContractTests
     [Fact]
     public void ArtifactProcessorIdentityRoundTripsWithRenderedContent()
     {
-        OperationResult result = new RenderArtifactResult(
-            ArtifactJobOutcome.Succeeded,
-            new ContentRef($"sha256:{new string('a', 64)}"),
-            "text/plain",
-            [],
-            [],
-            new ArtifactProcessorIdentity(
-                "release-1",
-                "artifacts-default",
-                "ilspy/10.1.0.8386",
-                $"sha256:{new string('b', 64)}"));
+        OperationResult result = new RenderArtifactResult(ArtifactJobOutcome.Succeeded, new ContentRef($"sha256:{new string('a', 64)}"), "text/plain", [], [], new ArtifactProcessorIdentity("release-1", "artifacts-default", "ilspy/10.1.0.8386", $"sha256:{new string('b', 64)}"));
 
         var json = JsonSerializer.Serialize(result, JsonOptions);
         var document = JsonNode.Parse(json)!.AsObject();
 
         Assert.Equal("artifacts-default", document["Identity"]!["ProcessorId"]!.GetValue<string>());
         Assert.Equal("ilspy/10.1.0.8386", document["Identity"]!["ProcessorVersion"]!.GetValue<string>());
-        var roundTrip = Assert.IsType<RenderArtifactResult>(
-            JsonSerializer.Deserialize<OperationResult>(json, JsonOptions));
+        var roundTrip = Assert.IsType<RenderArtifactResult>(JsonSerializer.Deserialize<OperationResult>(json, JsonOptions));
         Assert.Equal("release-1", roundTrip.Identity?.ReleaseId);
     }
 
     [Fact]
     public void GistWorkspaceRoundTripsWithoutOAuthOrTransportSecrets()
     {
-        var request = new CreateGistRequest(
-            "sample",
-            false,
-            new GistWorkspaceState(
-                ContractSchemaVersions.WorkspaceSnapshot,
-                "csharp",
-                "roslyn-stable",
-                "net10-ref",
-                "explain",
-                null,
-                BuildConfiguration.Release,
-                "20260711.1",
-                "Program.cs",
-                ["Program.cs"],
-                [new GistSourceFile("Program.cs", "class Program { }")]));
+        var request = new CreateGistRequest("sample", false, new GistWorkspaceState(ContractSchemaVersions.WorkspaceSnapshot, "csharp", "roslyn-stable", "net10-ref", "explain", null, BuildConfiguration.Release, "20260711.1", "Program.cs", ["Program.cs"], [new GistSourceFile("Program.cs", "class Program { }")]));
 
         var json = JsonSerializer.Serialize(request, JsonOptions);
         var document = JsonNode.Parse(json)!.AsObject();
@@ -376,11 +287,7 @@ public sealed class SerializationContractTests
             "net10-ref",
             "net10.0",
             "dotnet-managed-pe-v1",
-            new ArtifactRuntimeRequirement(
-                "coreclr",
-                [new FrameworkRequirement("Microsoft.NETCore.App", "10.0.9")],
-                "anycpu",
-                []),
+            new ArtifactRuntimeRequirement("coreclr", [new FrameworkRequirement("Microsoft.NETCore.App", "10.0.9")], "anycpu", []),
             [],
             BuildOutputKind.Console,
             "app.dll",
@@ -400,40 +307,15 @@ public sealed class SerializationContractTests
     {
         var references = typeof(WorkspaceSnapshot).Assembly.GetReferencedAssemblies();
 
-        Assert.DoesNotContain(references, reference =>
-            reference.Name is not null &&
-            !reference.Name.Equals("System.Runtime", StringComparison.Ordinal) &&
-            !reference.Name.StartsWith("System.", StringComparison.Ordinal));
+        Assert.DoesNotContain(references, reference => reference.Name is not null && !reference.Name.Equals("System.Runtime", StringComparison.Ordinal) && !reference.Name.StartsWith("System.", StringComparison.Ordinal));
     }
 
     private static BuildRequest CreateBuildRequest()
     {
-        var options = new BuildOptions(
-            BuildConfiguration.Release,
-            true,
-            BuildOutputKind.Console,
-            false,
-            true);
-        var workspace = new WorkspaceSnapshot(
-            ContractSchemaVersions.WorkspaceSnapshot,
-            42,
-            9,
-            "csharp",
-            [new WorkspaceFile("Program.cs", 12, "Console.WriteLine(42);")],
-            "Program.cs",
-            ["Program.cs"],
-            "net11-preview-ref",
-            options);
+        var options = new BuildOptions(BuildConfiguration.Release, true, BuildOutputKind.Console, false, true);
+        var workspace = new WorkspaceSnapshot(ContractSchemaVersions.WorkspaceSnapshot, 42, 9, "csharp", [new WorkspaceFile("Program.cs", 12, "Console.WriteLine(42);")], "Program.cs", ["Program.cs"], "net11-preview-ref", options);
 
-        return new BuildRequest(
-            "req-01",
-            "sha256:key",
-            "pipeline-01",
-            "roslyn-main",
-            "net11-preview-ref",
-            workspace,
-            DateTimeOffset.Parse("2026-07-11T00:00:15Z", CultureInfo.InvariantCulture),
-            options);
+        return new BuildRequest("req-01", "sha256:key", "pipeline-01", "roslyn-main", "net11-preview-ref", workspace, DateTimeOffset.Parse("2026-07-11T00:00:15Z", CultureInfo.InvariantCulture), options);
     }
 
     private sealed record DictionaryEnvelope(IReadOnlyDictionary<string, string> Metadata);

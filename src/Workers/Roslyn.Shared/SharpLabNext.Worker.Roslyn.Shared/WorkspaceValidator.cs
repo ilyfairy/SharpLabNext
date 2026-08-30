@@ -5,23 +5,13 @@ using VisualBasicSyntaxFacts = Microsoft.CodeAnalysis.VisualBasic.SyntaxFacts;
 
 namespace SharpLabNext.Worker.Roslyn;
 
-internal sealed record ValidatedWorkspace(
-    WorkspaceSnapshot Snapshot,
-    IReadOnlyList<ValidatedWorkspaceFile> OrderedFiles,
-    string ActiveFile,
-    BuildOptions Options);
+internal sealed record ValidatedWorkspace(WorkspaceSnapshot Snapshot, IReadOnlyList<ValidatedWorkspaceFile> OrderedFiles, string ActiveFile, BuildOptions Options);
 
-internal sealed record ValidatedWorkspaceFile(
-    string Path,
-    long Version,
-    string Text);
+internal sealed record ValidatedWorkspaceFile(string Path, long Version, string Text);
 
 internal static class WorkspaceValidator
 {
-    public static ValidatedWorkspace Validate(
-        BuildRequest request,
-        CompilationLimits limits,
-        RoslynWorkerIdentity identity)
+    public static ValidatedWorkspace Validate(BuildRequest request, CompilationLimits limits, RoslynWorkerIdentity identity)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(limits);
@@ -38,57 +28,32 @@ internal static class WorkspaceValidator
         if (request.Target is not (BuildTarget.Artifact or BuildTarget.CompileCheck or BuildTarget.Ast))
             throw new BuildRequestValidationException($"Build target '{request.Target}' is not supported by this worker.");
 
-        return ValidateWorkspace(
-            request.Workspace,
-            request.ReferenceSetId,
-            request.EffectiveOptions,
-            limits,
-            supportedLanguageIds: identity.SupportedLanguageIds);
+        return ValidateWorkspace(request.Workspace, request.ReferenceSetId, request.EffectiveOptions, limits, supportedLanguageIds: identity.SupportedLanguageIds);
     }
 
-    public static ValidatedWorkspace Validate(
-        ExplainRequest request,
-        CompilationLimits limits)
+    public static ValidatedWorkspace Validate(ExplainRequest request, CompilationLimits limits)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(limits);
 
-        ValidateRequestIdentity(
-            request.RequestId,
-            request.IdempotencyKey,
-            request.PipelineResolutionId);
-        var workspace = request.Workspace
-            ?? throw new BuildRequestValidationException("Workspace is required.");
-        return ValidateWorkspace(
-            workspace,
-            workspace.ReferenceSetId,
-            workspace.BuildOptions,
-            limits,
-            requiredLanguageId: "csharp");
+        ValidateRequestIdentity(request.RequestId, request.IdempotencyKey, request.PipelineResolutionId);
+        var workspace = request.Workspace ?? throw new BuildRequestValidationException("Workspace is required.");
+        return ValidateWorkspace(workspace, workspace.ReferenceSetId, workspace.BuildOptions, limits, requiredLanguageId: "csharp");
     }
 
-    private static ValidatedWorkspace ValidateWorkspace(
-        WorkspaceSnapshot workspace,
-        string referenceSetId,
-        BuildOptions options,
-        CompilationLimits limits,
-        string? requiredLanguageId = null,
-        IReadOnlyList<string>? supportedLanguageIds = null)
+    private static ValidatedWorkspace ValidateWorkspace(WorkspaceSnapshot workspace, string referenceSetId, BuildOptions options, CompilationLimits limits, string? requiredLanguageId = null, IReadOnlyList<string>? supportedLanguageIds = null)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         if (workspace.SchemaVersion != ContractSchemaVersions.WorkspaceSnapshot)
         {
-            throw new BuildRequestValidationException(
-                $"Workspace schema version {workspace.SchemaVersion} is not supported.");
+            throw new BuildRequestValidationException($"Workspace schema version {workspace.SchemaVersion} is not supported.");
         }
 
         if (workspace.Revision < 0 || workspace.SelectionRevision < 0)
             throw new BuildRequestValidationException("Workspace and selection revisions cannot be negative.");
-        if (supportedLanguageIds is not null &&
-            !supportedLanguageIds.Contains(workspace.LanguageId, StringComparer.Ordinal))
+        if (supportedLanguageIds is not null && !supportedLanguageIds.Contains(workspace.LanguageId, StringComparer.Ordinal))
         {
-            throw new BuildRequestValidationException(
-                $"This Roslyn worker does not support languageId '{workspace.LanguageId}'.");
+            throw new BuildRequestValidationException($"This Roslyn worker does not support languageId '{workspace.LanguageId}'.");
         }
 
         var extension = workspace.LanguageId switch
@@ -97,11 +62,9 @@ internal static class WorkspaceValidator
             "visual-basic" => ".vb",
             _ => throw new BuildRequestValidationException("The Roslyn worker only accepts C# or Visual Basic workspaces.")
         };
-        if (requiredLanguageId is not null &&
-            !StringComparer.Ordinal.Equals(workspace.LanguageId, requiredLanguageId))
+        if (requiredLanguageId is not null && !StringComparer.Ordinal.Equals(workspace.LanguageId, requiredLanguageId))
         {
-            throw new BuildRequestValidationException(
-                $"This operation only accepts languageId '{requiredLanguageId}'.");
+            throw new BuildRequestValidationException($"This operation only accepts languageId '{requiredLanguageId}'.");
         }
         if (!StringComparer.Ordinal.Equals(referenceSetId, workspace.ReferenceSetId))
             throw new BuildRequestValidationException("Request and workspace reference set IDs must match.");
@@ -126,15 +89,13 @@ internal static class WorkspaceValidator
             var fileBytes = Encoding.UTF8.GetByteCount(file.Text);
             if (fileBytes > limits.MaxFileUtf8Bytes)
             {
-                throw new BuildRequestValidationException(
-                    $"Workspace file '{path}' exceeds the {limits.MaxFileUtf8Bytes} byte source limit.");
+                throw new BuildRequestValidationException($"Workspace file '{path}' exceeds the {limits.MaxFileUtf8Bytes} byte source limit.");
             }
 
             totalBytes = checked(totalBytes + fileBytes);
             if (totalBytes > limits.MaxTotalSourceUtf8Bytes)
             {
-                throw new BuildRequestValidationException(
-                    $"Workspace exceeds the {limits.MaxTotalSourceUtf8Bytes} byte total source limit.");
+                throw new BuildRequestValidationException($"Workspace exceeds the {limits.MaxTotalSourceUtf8Bytes} byte total source limit.");
             }
         }
 
@@ -161,10 +122,7 @@ internal static class WorkspaceValidator
         return new ValidatedWorkspace(workspace, orderedFiles, activeFile, options);
     }
 
-    private static void ValidateRequestIdentity(
-        string requestId,
-        string idempotencyKey,
-        string pipelineResolutionId)
+    private static void ValidateRequestIdentity(string requestId, string idempotencyKey, string pipelineResolutionId)
     {
         if (string.IsNullOrWhiteSpace(requestId))
             throw new BuildRequestValidationException("RequestId is required.");
@@ -190,8 +148,7 @@ internal static class WorkspaceValidator
             if (string.IsNullOrWhiteSpace(symbol))
                 throw new BuildRequestValidationException($"Preprocessor symbol '{symbol}' is not a valid {languageId} identifier.");
             var isValid = languageId == "csharp"
-                ? CSharpSyntaxFacts.IsValidIdentifier(symbol)
-                : VisualBasicSyntaxFacts.IsValidIdentifier(symbol);
+                ? CSharpSyntaxFacts.IsValidIdentifier(symbol) : VisualBasicSyntaxFacts.IsValidIdentifier(symbol);
             if (!isValid)
                 throw new BuildRequestValidationException($"Preprocessor symbol '{symbol}' is not a valid {languageId} identifier.");
             if (!seen.Add(symbol))

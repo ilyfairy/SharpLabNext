@@ -53,8 +53,7 @@ internal sealed class BoundedAssemblyResolver : IAssemblyResolver, IDisposable
     private void Index(string root, SearchOption searchOption, bool replaceExisting)
     {
         var normalizedRoot = Path.GetFullPath(root);
-        foreach (var path in Directory.EnumerateFiles(normalizedRoot, "*", searchOption)
-                     .Where(static path => Path.GetExtension(path) is ".dll" or ".exe" or ".winmd"))
+        foreach (var path in Directory.EnumerateFiles(normalizedRoot, "*", searchOption).Where(static path => Path.GetExtension(path) is ".dll" or ".exe" or ".winmd"))
         {
             if (_paths.Count >= MaximumIndexedAssemblies)
                 throw new ProcessorLimitExceededException();

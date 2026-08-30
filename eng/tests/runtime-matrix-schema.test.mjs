@@ -4,37 +4,16 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { isValidJsonSchemaFormat } from './json-schema-formats.mjs'
+import { isValidJsonSchemaFormat } from '../release/json-schema-formats.mjs'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const schema = JSON.parse(fs.readFileSync(
-  path.join(repositoryRoot, 'schemas', 'runtime-matrix.schema.json'),
-  'utf8',
-))
-const matrix = JSON.parse(fs.readFileSync(
-  path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'),
-  'utf8',
-))
-const releaseLock = JSON.parse(fs.readFileSync(
-  path.join(repositoryRoot, 'profiles', 'lock.json'),
-  'utf8',
-))
-const releaseLockSchema = JSON.parse(fs.readFileSync(
-  path.join(repositoryRoot, 'schemas', 'release-lock.schema.json'),
-  'utf8',
-))
-const promotionPlanSchema = JSON.parse(fs.readFileSync(
-  path.join(repositoryRoot, 'schemas', 'runtime-promotion-plan.schema.json'),
-  'utf8',
-))
-const promotionReceiptSchema = JSON.parse(fs.readFileSync(
-  path.join(repositoryRoot, 'schemas', 'runtime-promotion-receipt.schema.json'),
-  'utf8',
-))
-const baseImages = JSON.parse(fs.readFileSync(
-  path.join(repositoryRoot, 'profiles', 'base-images.json'),
-  'utf8',
-))
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const schema = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'schemas', 'runtime-matrix.schema.json'), 'utf8'));
+const matrix = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'), 'utf8'));
+const releaseLock = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'profiles', 'lock.json'), 'utf8'));
+const releaseLockSchema = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'schemas', 'release-lock.schema.json'), 'utf8'));
+const promotionPlanSchema = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'schemas', 'runtime-promotion-plan.schema.json'), 'utf8'));
+const promotionReceiptSchema = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'schemas', 'runtime-promotion-receipt.schema.json'), 'utf8'));
+const baseImages = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'profiles', 'base-images.json'), 'utf8'));
 
 test('release source URIs accept strict HTTPS or immutable Docker identities', () => {
   const sourceUriSchemas = [
@@ -93,9 +72,7 @@ test('release source URIs accept strict HTTPS or immutable Docker identities', (
   }
 })
 
-function sourceUriMatches(schema, value) {
-  return schema.oneOf.filter(branch => sourceUriBranchMatches(branch, value)).length === 1
-}
+function sourceUriMatches(schema, value) { return schema.oneOf.filter(branch => sourceUriBranchMatches(branch, value)).length === 1; }
 
 function sourceUriBranchMatches(branch, value) {
   if (branch.allOf !== undefined) {
@@ -176,9 +153,7 @@ test('Framework rows require one locked reference source and net30 uses the clos
   )
 
   const packageRows = matrix.framework.targets.filter(row => row.referencePackage !== undefined)
-  const compositionRows = matrix.framework.targets.filter(
-    row => row.referenceComposition !== undefined,
-  )
+  const compositionRows = matrix.framework.targets.filter(row => row.referenceComposition !== undefined);
   assert.equal(packageRows.length, 13)
   assert.deepEqual(compositionRows.map(row => row.id), ['netfx30'])
   assert.deepEqual(compositionRows[0].referenceComposition, {
@@ -209,15 +184,9 @@ test('Checked JIT locks close commit, canonical archive, builder, and mapping id
     'skip-by-upstream-flag',
   )
   assert.deepEqual(schema.$defs.checkedJitBootstrapSdk.required, ['version', 'url', 'sha512'])
-  const sourcePattern = new RegExp(
-    schema.$defs.checkedJitSourceArchive.properties.url.pattern,
-  )
-  const bootstrapVersionPattern = new RegExp(
-    schema.$defs.checkedJitBootstrapSdk.properties.version.pattern,
-  )
-  const bootstrapUrlPattern = new RegExp(
-    schema.$defs.checkedJitBootstrapSdk.properties.url.pattern,
-  )
+  const sourcePattern = new RegExp(schema.$defs.checkedJitSourceArchive.properties.url.pattern);
+  const bootstrapVersionPattern = new RegExp(schema.$defs.checkedJitBootstrapSdk.properties.version.pattern);
+  const bootstrapUrlPattern = new RegExp(schema.$defs.checkedJitBootstrapSdk.properties.url.pattern);
   const builderPattern = new RegExp(schema.$defs.digestPinnedImage.pattern)
   const checkedRows = matrix.coreClr.filter(runtime => runtime.checkedJit !== undefined)
   assert.deepEqual(checkedRows.map(runtime => runtime.id), [
@@ -243,9 +212,7 @@ test('Checked JIT locks close commit, canonical archive, builder, and mapping id
     assert.equal(checkedJit.generator, 'make', runtime.id)
   }
 
-  const net6BootstrapSdk = checkedRows
-    .find(runtime => runtime.id === 'dotnet-6')
-    .checkedJit.bootstrapSdk
+  const net6BootstrapSdk = checkedRows.find(runtime => runtime.id === 'dotnet-6').checkedJit.bootstrapSdk;
   assert.deepEqual(net6BootstrapSdk, {
     version: '6.0.135',
     url: 'https://builds.dotnet.microsoft.com/dotnet/Sdk/6.0.135/dotnet-sdk-6.0.135-linux-x64.tar.gz',

@@ -9,10 +9,8 @@ return await JSharpX64ToolchainSmoke.RunAsync(args);
 
 internal static class JSharpX64ToolchainSmoke
 {
-    private const string Usage =
-        "Usage: dotnet run eng/smoke/jsharp-toolchain.cs -- LOCAL_IMAGE_REFERENCE";
-    private const string SuccessLine =
-        "J# x64 toolchain smoke passed: stdout=sharplabnext-jsharp20-x64-ok";
+    private const string Usage = "Usage: dotnet run eng/smoke/jsharp-toolchain.cs -- LOCAL_IMAGE_REFERENCE";
+    private const string SuccessLine = "J# x64 toolchain smoke passed: stdout=sharplabnext-jsharp20-x64-ok";
     private static readonly TimeSpan SmokeTimeout = TimeSpan.FromMinutes(3);
 
     public static async Task<int> RunAsync(string[] args)
@@ -66,16 +64,14 @@ internal static class JSharpX64ToolchainSmoke
             {
                 await RemoveContainerAsync(containerName);
                 ForwardFailureOutput(output, error);
-                Console.Error.WriteLine(
-                    $"The J# x64 toolchain smoke container exited with code {process.ExitCode}.");
+                Console.Error.WriteLine($"The J# x64 toolchain smoke container exited with code {process.ExitCode}.");
                 return 1;
             }
 
             if (!StringComparer.Ordinal.Equals(output, SuccessLine + "\n") || error.Length != 0)
             {
                 ForwardFailureOutput(output, error);
-                Console.Error.WriteLine(
-                    "The J# x64 toolchain smoke did not return its exact success result.");
+                Console.Error.WriteLine("The J# x64 toolchain smoke did not return its exact success result.");
                 return 1;
             }
         }
@@ -84,9 +80,7 @@ internal static class JSharpX64ToolchainSmoke
         return 0;
     }
 
-    private static ProcessStartInfo CreateDockerStartInfo(
-        string imageReference,
-        string containerName)
+    private static ProcessStartInfo CreateDockerStartInfo(string imageReference, string containerName)
     {
         var startInfo = new ProcessStartInfo("docker")
         {
@@ -138,13 +132,7 @@ internal static class JSharpX64ToolchainSmoke
             value.EndsWith(':') ||
             value.EndsWith('/') ||
             value.Contains("://", StringComparison.Ordinal) ||
-            value.Any(static character =>
-                char.IsWhiteSpace(character) ||
-                char.IsControl(character) ||
-                character is not (>= 'a' and <= 'z' or
-                    >= 'A' and <= 'Z' or
-                    >= '0' and <= '9' or
-                    '.' or '_' or '-' or '/' or ':' or '@')))
+            value.Any(static character => char.IsWhiteSpace(character) || char.IsControl(character) || character is not (>= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '.' or '_' or '-' or '/' or ':' or '@')))
         {
             return false;
         }
@@ -159,8 +147,7 @@ internal static class JSharpX64ToolchainSmoke
         var digest = value[(digestSeparator + 1)..];
         return digest.StartsWith(digestPrefix, StringComparison.Ordinal) &&
             digest.Length == digestPrefix.Length + 64 &&
-            digest[digestPrefix.Length..].All(static character =>
-                character is >= '0' and <= '9' or >= 'a' and <= 'f');
+            digest[digestPrefix.Length..].All(static character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
     }
 
     private static async Task RemoveContainerAsync(string containerName)
@@ -191,9 +178,7 @@ internal static class JSharpX64ToolchainSmoke
                 TryKill(process);
             }
         }
-        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
-        {
-        }
+        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception) { }
     }
 
     private static void TryKill(Process process)
@@ -203,12 +188,8 @@ internal static class JSharpX64ToolchainSmoke
             if (!process.HasExited)
                 process.Kill(entireProcessTree: true);
         }
-        catch (InvalidOperationException)
-        {
-        }
-        catch (Win32Exception)
-        {
-        }
+        catch (InvalidOperationException) { }
+        catch (Win32Exception) { }
     }
 
     private static void ForwardFailureOutput(string output, string error)

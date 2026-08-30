@@ -9,16 +9,13 @@ using Iced.Intel;
 using SharpLabNext.RuntimeProtocol;
 
 return args.Length > 0 && string.Equals(args[0], "desktop-jit", StringComparison.Ordinal)
-    ? await DesktopClrJitProgram.RunAsync(args)
-    : await ProcessBridgeProgram.RunAsync(args);
+    ? await DesktopClrJitProgram.RunAsync(args) : await ProcessBridgeProgram.RunAsync(args);
 
 internal static class ProcessBridgeProgram
 {
     public static async Task<int> RunAsync(string[] args)
     {
-        await using var writer = new RuntimeFrameWriter(
-            Console.OpenStandardOutput(),
-            RuntimeFrameTransport.Base64Line);
+        await using var writer = new RuntimeFrameWriter(Console.OpenStandardOutput(), RuntimeFrameTransport.Base64Line);
         var started = Stopwatch.StartNew();
         try
         {
@@ -26,8 +23,7 @@ internal static class ProcessBridgeProgram
             using var process = StartProcess(parsed);
             var stdout = ForwardOutputAsync(process.StandardOutput.BaseStream, writer, RuntimeFrameKind.Stdout);
             var stderr = parsed.FiltersWineNoise
-                ? ForwardWineStderrAsync(process.StandardError.BaseStream, writer)
-                : ForwardOutputAsync(process.StandardError.BaseStream, writer, RuntimeFrameKind.Stderr);
+                ? ForwardWineStderrAsync(process.StandardError.BaseStream, writer) : ForwardOutputAsync(process.StandardError.BaseStream, writer, RuntimeFrameKind.Stderr);
             var stdin = ForwardInputAsync(process.StandardInput.BaseStream);
 
             await process.WaitForExitAsync();
@@ -35,34 +31,16 @@ internal static class ProcessBridgeProgram
             var processExitCode = process.ExitCode;
             if (parsed.FiltersWineNoise && !await StopWineServerAsync(parsed, CancellationToken.None))
             {
-                await WriteJsonAsync(writer, RuntimeFrameKind.ProtocolError, new
-                {
-                    code = "wine-server-cleanup-failed",
-                    message = "The Wine server did not terminate after the bridged process exited."
-                });
+                await WriteJsonAsync(writer, RuntimeFrameKind.ProtocolError, new { code = "wine-server-cleanup-failed", message = "The Wine server did not terminate after the bridged process exited." });
                 processExitCode = processExitCode == 0 ? 1 : processExitCode;
             }
-            await WriteJsonAsync(writer, RuntimeFrameKind.Exit, new
-            {
-                status = processExitCode == 0 ? "completed" : "non-zero-exit",
-                exitCode = processExitCode,
-                elapsedMilliseconds = started.Elapsed.TotalMilliseconds
-            });
+            await WriteJsonAsync(writer, RuntimeFrameKind.Exit, new { status = processExitCode == 0 ? "completed" : "non-zero-exit", exitCode = processExitCode, elapsedMilliseconds = started.Elapsed.TotalMilliseconds });
             return processExitCode;
         }
         catch (Exception exception)
         {
-            await WriteJsonAsync(writer, RuntimeFrameKind.ProtocolError, new
-            {
-                code = "process-bridge-failed",
-                message = exception.Message
-            });
-            await WriteJsonAsync(writer, RuntimeFrameKind.Exit, new
-            {
-                status = "process-crash",
-                exitCode = 1,
-                elapsedMilliseconds = started.Elapsed.TotalMilliseconds
-            });
+            await WriteJsonAsync(writer, RuntimeFrameKind.ProtocolError, new { code = "process-bridge-failed", message = exception.Message });
+            await WriteJsonAsync(writer, RuntimeFrameKind.Exit, new { status = "process-crash", exitCode = 1, elapsedMilliseconds = started.Elapsed.TotalMilliseconds });
             return 1;
         }
     }
@@ -88,13 +66,10 @@ internal static class ProcessBridgeProgram
             startInfo.Environment.TryAdd("XDG_CACHE_HOME", "/tmp/.cache");
         }
 
-        return Process.Start(startInfo)
-            ?? throw new InvalidOperationException("The bridged process could not be started.");
+        return Process.Start(startInfo) ?? throw new InvalidOperationException("The bridged process could not be started.");
     }
 
-    internal static async Task<bool> StopWineServerAsync(
-        ProcessBridgeArguments parsed,
-        CancellationToken cancellationToken)
+    internal static async Task<bool> StopWineServerAsync(ProcessBridgeArguments parsed, CancellationToken cancellationToken)
     {
         // Wine keeps a per-prefix daemon after the client exits.  A measured
         // keeper must be left with exactly one process, so terminate that daemon
@@ -104,25 +79,13 @@ internal static class ProcessBridgeProgram
         if (wineserver is null)
             return false;
 
-        _ = await RunWineServerCommandAsync(
-            wineserver,
-            "-k",
-            TimeSpan.FromSeconds(2),
-            cancellationToken).ConfigureAwait(false);
+        _ = await RunWineServerCommandAsync(wineserver, "-k", TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
         // wineserver -k returns non-zero when the server has already exited.
         // In either case, -w is the authoritative bounded residue check.
-        return await RunWineServerCommandAsync(
-            wineserver,
-            "-w",
-            TimeSpan.FromSeconds(2),
-            cancellationToken).ConfigureAwait(false);
+        return await RunWineServerCommandAsync(wineserver, "-w", TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
     }
 
-    internal static async Task<bool> RunWineServerCommandAsync(
-        string executable,
-        string argument,
-        TimeSpan timeout,
-        CancellationToken cancellationToken)
+    internal static async Task<bool> RunWineServerCommandAsync(string executable, string argument, TimeSpan timeout, CancellationToken cancellationToken)
     {
         using var process = new Process
         {
@@ -173,19 +136,14 @@ internal static class ProcessBridgeProgram
         return completed && process.HasExited && process.ExitCode == 0;
     }
 
-    private static async Task ForwardOutputAsync(
-        Stream stream,
-        RuntimeFrameWriter writer,
-        RuntimeFrameKind kind)
+    private static async Task ForwardOutputAsync(Stream stream, RuntimeFrameWriter writer, RuntimeFrameKind kind)
     {
         var buffer = new byte[16 * 1024];
         while (await stream.ReadAsync(buffer) is var read && read > 0)
             await writer.WriteAsync(kind, buffer.AsMemory(0, read));
     }
 
-    private static async Task ForwardWineStderrAsync(
-        Stream stream,
-        RuntimeFrameWriter writer)
+    private static async Task ForwardWineStderrAsync(Stream stream, RuntimeFrameWriter writer)
     {
         var filter = new WineStderrFilter(writer);
         var buffer = new byte[16 * 1024];
@@ -201,13 +159,7 @@ internal static class ProcessBridgeProgram
             var inputPath = Environment.GetEnvironmentVariable("SHARPLABNEXT_STDIN_PATH");
             if (!string.IsNullOrWhiteSpace(inputPath) && File.Exists(inputPath))
             {
-                await using var input = new FileStream(
-                    inputPath,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.Read,
-                    bufferSize: 16 * 1024,
-                    useAsync: true);
+                await using var input = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 16 * 1024, useAsync: true);
                 await input.CopyToAsync(destination);
             }
         }
@@ -334,20 +286,15 @@ internal sealed class WineStderrFilter(RuntimeFrameWriter writer)
     }
 }
 
-internal sealed record ProcessBridgeArguments(
-    string Executable,
-    string[] FixedArguments,
-    string[] UserArguments)
+internal sealed record ProcessBridgeArguments(string Executable, string[] FixedArguments, string[] UserArguments)
 {
-    private const string Usage =
-        "Usage: SharpLabNext.WineRunner bridge <executable> [fixed arguments...] -- [user arguments...]";
+    private const string Usage = "Usage: SharpLabNext.WineRunner bridge <executable> [fixed arguments...] -- [user arguments...]";
 
     public bool FiltersWineNoise => IsWineExecutable(Executable);
 
     public string? WineserverExecutable =>
         FiltersWineNoise
-            ? ResolveWineserverExecutable(Executable)
-            : null;
+            ? ResolveWineserverExecutable(Executable) : null;
 
     public static ProcessBridgeArguments Parse(string[] args)
     {
@@ -372,8 +319,7 @@ internal sealed record ProcessBridgeArguments(
         var normalized = executable.Replace('\\', '/');
         var fileName = normalized[(normalized.LastIndexOf('/') + 1)..];
         var nameWithoutExtension = fileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
-            ? fileName[..^4]
-            : fileName;
+            ? fileName[..^4] : fileName;
         return nameWithoutExtension.Equals("wine", StringComparison.OrdinalIgnoreCase) ||
                nameWithoutExtension.Equals("wine64", StringComparison.OrdinalIgnoreCase) ||
                nameWithoutExtension.Equals("wine-stable", StringComparison.OrdinalIgnoreCase) ||
@@ -407,8 +353,7 @@ internal sealed record ProcessBridgeArguments(
 
         if (!value.Contains('/') && !value.Contains('\\'))
         {
-            if (value[0] == '-' || value is "." or ".." || value.Any(static character =>
-                    !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '_' or '+' or '-')))
+            if (value[0] == '-' || value is "." or ".." || value.Any(static character => !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '_' or '+' or '-')))
             {
                 throw new ArgumentException("The process bridge executable name is invalid.", nameof(value));
             }
@@ -432,8 +377,7 @@ internal sealed record ProcessBridgeArguments(
     }
 
     private static bool ContainsTraversalSegment(string path) =>
-        path.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries)
-            .Any(static segment => segment is "." or "..");
+        path.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries).Any(static segment => segment is "." or "..");
 }
 
 internal static class DesktopClrJitProgram
@@ -448,9 +392,7 @@ internal static class DesktopClrJitProgram
 
     public static async Task<int> RunAsync(string[] args)
     {
-        await using var writer = new RuntimeFrameWriter(
-            Console.OpenStandardOutput(),
-            RuntimeFrameTransport.Base64Line);
+        await using var writer = new RuntimeFrameWriter(Console.OpenStandardOutput(), RuntimeFrameTransport.Base64Line);
         var started = Stopwatch.StartNew();
         try
         {
@@ -469,26 +411,12 @@ internal static class DesktopClrJitProgram
                 if (capture.ModuleVersionId != ReadModuleVersionId(options.AssemblyPath))
                     throw new InvalidDataException("The Desktop CLR JIT capture does not match the user assembly MVID.");
                 var document = DesktopClrJitDisassembly.Decode(capture);
-                await WriteChunksAsync(
-                    writer,
-                    RuntimeFrameKind.JitAssembly,
-                    Encoding.UTF8.GetBytes(document.Text)).ConfigureAwait(false);
+                await WriteChunksAsync(writer, RuntimeFrameKind.JitAssembly, Encoding.UTF8.GetBytes(document.Text)).ConfigureAwait(false);
                 await writer.WriteAsync(
                     RuntimeFrameKind.JitSummary,
-                    RuntimeStructuredPayloadCodec.Serialize(new
-                    {
-                        runtimeVersion = capture.RuntimeVersion,
-                        assembly = Path.GetFileNameWithoutExtension(options.AssemblyPath),
-                        methodFilter = options.MethodFilter,
-                        methods = document.Methods
-                    })).ConfigureAwait(false);
+                    RuntimeStructuredPayloadCodec.Serialize(new { runtimeVersion = capture.RuntimeVersion, assembly = Path.GetFileNameWithoutExtension(options.AssemblyPath), methodFilter = options.MethodFilter, methods = document.Methods })).ConfigureAwait(false);
                 var completed = document.Methods.Count > 0;
-                await WriteExitAsync(
-                        writer,
-                        completed ? "completed" : "no-matching-methods",
-                        completed ? 0 : 2,
-                        started.Elapsed.TotalMilliseconds)
-                    .ConfigureAwait(false);
+                await WriteExitAsync(writer, completed ? "completed" : "no-matching-methods", completed ? 0 : 2, started.Elapsed.TotalMilliseconds).ConfigureAwait(false);
                 return completed ? 0 : 2;
             }
             finally
@@ -512,13 +440,8 @@ internal static class DesktopClrJitProgram
         {
             await writer.WriteAsync(
                 RuntimeFrameKind.ProtocolError,
-                RuntimeStructuredPayloadCodec.Serialize(new
-                {
-                    code = "desktop-clr-jit-failed",
-                    message = BoundedMessage(exception)
-                })).ConfigureAwait(false);
-            await WriteExitAsync(writer, "inspection-failed", 1, started.Elapsed.TotalMilliseconds)
-                .ConfigureAwait(false);
+                RuntimeStructuredPayloadCodec.Serialize(new { code = "desktop-clr-jit-failed", message = BoundedMessage(exception) })).ConfigureAwait(false);
+            await WriteExitAsync(writer, "inspection-failed", 1, started.Elapsed.TotalMilliseconds).ConfigureAwait(false);
             return 1;
         }
     }
@@ -564,16 +487,8 @@ internal static class DesktopClrJitProgram
 
     private static async Task<bool> StopWineServerAsync()
     {
-        _ = await ProcessBridgeProgram.RunWineServerCommandAsync(
-            WineServerExecutable,
-            "-k",
-            TimeSpan.FromSeconds(2),
-            CancellationToken.None).ConfigureAwait(false);
-        return await ProcessBridgeProgram.RunWineServerCommandAsync(
-            WineServerExecutable,
-            "-w",
-            TimeSpan.FromSeconds(2),
-            CancellationToken.None).ConfigureAwait(false);
+        _ = await ProcessBridgeProgram.RunWineServerCommandAsync(WineServerExecutable, "-k", TimeSpan.FromSeconds(2), CancellationToken.None).ConfigureAwait(false);
+        return await ProcessBridgeProgram.RunWineServerCommandAsync(WineServerExecutable, "-w", TimeSpan.FromSeconds(2), CancellationToken.None).ConfigureAwait(false);
     }
 
     private static async Task DrainHelperOutputAsync(Stream stream, Process process)
@@ -617,13 +532,7 @@ internal static class DesktopClrJitProgram
 
     private static Guid ReadModuleVersionId(string assemblyPath)
     {
-        using var stream = new FileStream(
-            assemblyPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            64 * 1024,
-            FileOptions.SequentialScan);
+        using var stream = new FileStream(assemblyPath, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
         using var pe = new PEReader(stream, PEStreamOptions.PrefetchMetadata);
         if (!pe.HasMetadata)
             throw new BadImageFormatException("The Desktop CLR JIT entry assembly has no managed metadata.");
@@ -631,10 +540,7 @@ internal static class DesktopClrJitProgram
         return metadata.GetGuid(metadata.GetModuleDefinition().Mvid);
     }
 
-    private static async Task WriteChunksAsync(
-        RuntimeFrameWriter writer,
-        RuntimeFrameKind kind,
-        byte[] content)
+    private static async Task WriteChunksAsync(RuntimeFrameWriter writer, RuntimeFrameKind kind, byte[] content)
     {
         for (var offset = 0; offset < content.Length; offset += JitFrameChunkSize)
         {
@@ -643,17 +549,8 @@ internal static class DesktopClrJitProgram
         }
     }
 
-    private static ValueTask WriteExitAsync(
-        RuntimeFrameWriter writer,
-        string status,
-        int exitCode,
-        double elapsedMilliseconds) =>
-        writer.WriteAsync(RuntimeFrameKind.Exit, RuntimeStructuredPayloadCodec.Serialize(new
-        {
-            status,
-            exitCode,
-            elapsedMilliseconds
-        }));
+    private static ValueTask WriteExitAsync(RuntimeFrameWriter writer, string status, int exitCode, double elapsedMilliseconds) =>
+        writer.WriteAsync(RuntimeFrameKind.Exit, RuntimeStructuredPayloadCodec.Serialize(new { status, exitCode, elapsedMilliseconds }));
 
     private static string BoundedMessage(Exception exception)
     {
@@ -677,8 +574,7 @@ internal static class DesktopClrJitProgram
 
 internal sealed record DesktopClrJitArguments(string AssemblyPath, string? MethodFilter)
 {
-    private const string Usage =
-        "Usage: SharpLabNext.WineRunner desktop-jit <absolute-entry-assembly> <method-filter>";
+    private const string Usage = "Usage: SharpLabNext.WineRunner desktop-jit <absolute-entry-assembly> <method-filter>";
 
     public static DesktopClrJitArguments Parse(string[] args)
     {
@@ -696,10 +592,7 @@ internal sealed record DesktopClrJitArguments(string AssemblyPath, string? Metho
     }
 }
 
-internal sealed record DesktopClrJitCapture(
-    string RuntimeVersion,
-    Guid ModuleVersionId,
-    IReadOnlyList<DesktopClrJitMethod> Methods)
+internal sealed record DesktopClrJitCapture(string RuntimeVersion, Guid ModuleVersionId, IReadOnlyList<DesktopClrJitMethod> Methods)
 {
     private static ReadOnlySpan<byte> Magic => "SLNDCJ01"u8;
     private const uint FormatVersion = 1;
@@ -722,13 +615,7 @@ internal sealed record DesktopClrJitCapture(
             throw new InvalidDataException("The Desktop CLR JIT capture size is outside the protocol limit.");
 
         var bytes = new byte[checked((int)info.Length)];
-        await using var stream = new FileStream(
-            capturePath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 64 * 1024,
-            FileOptions.SequentialScan);
+        await using var stream = new FileStream(capturePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 64 * 1024, FileOptions.SequentialScan);
         if (stream.Length != bytes.Length)
             throw new InvalidDataException("The Desktop CLR JIT capture changed while it was read.");
         await stream.ReadExactlyAsync(bytes).ConfigureAwait(false);
@@ -748,8 +635,7 @@ internal sealed record DesktopClrJitCapture(
             throw new InvalidDataException("The Desktop CLR JIT capture version is not supported.");
         var methodCount = checked((int)reader.ReadUInt32());
         var declaredTotalCodeBytes = checked((int)reader.ReadUInt32());
-        if (methodCount is < 0 or > MaximumMethods ||
-            declaredTotalCodeBytes is < 0 or > MaximumNativeCodeBytes)
+        if (methodCount is < 0 or > MaximumMethods || declaredTotalCodeBytes is < 0 or > MaximumNativeCodeBytes)
         {
             throw new InvalidDataException("The Desktop CLR JIT capture header is outside the protocol limit.");
         }
@@ -771,21 +657,12 @@ internal sealed record DesktopClrJitCapture(
             var codeLength = reader.ReadUInt32();
             var displayNameLength = reader.ReadUInt16();
             var displayName = ReadText(ref reader, displayNameLength, MaximumDisplayNameBytes, "method display name");
-            if (codeLength == 0 ||
-                codeLength > MaximumMethodCodeBytes ||
-                codeLength > (uint)reader.Remaining ||
-                nativeAddress == 0 ||
-                nativeAddress > ulong.MaxValue - codeLength ||
-                !ranges.Add((nativeAddress, codeLength)))
+            if (codeLength == 0 || codeLength > MaximumMethodCodeBytes || codeLength > (uint)reader.Remaining || nativeAddress == 0 || nativeAddress > ulong.MaxValue - codeLength || !ranges.Add((nativeAddress, codeLength)))
                 throw new InvalidDataException("The Desktop CLR JIT capture method code length is invalid.");
             totalCodeBytes = checked(totalCodeBytes + checked((int)codeLength));
             if (totalCodeBytes > MaximumNativeCodeBytes)
                 throw new InvalidDataException("The Desktop CLR JIT capture native code exceeds the protocol limit.");
-            methods.Add(new DesktopClrJitMethod(
-                token,
-                displayName,
-                nativeAddress,
-                reader.ReadBytes(checked((int)codeLength)).ToArray()));
+            methods.Add(new DesktopClrJitMethod(token, displayName, nativeAddress, reader.ReadBytes(checked((int)codeLength)).ToArray()));
         }
         if (totalCodeBytes != declaredTotalCodeBytes || reader.Remaining != 0)
             throw new InvalidDataException("The Desktop CLR JIT capture size or trailing bytes are invalid.");
@@ -833,24 +710,11 @@ internal sealed record DesktopClrJitCapture(
     }
 }
 
-internal sealed record DesktopClrJitMethod(
-    uint MetadataToken,
-    string DisplayName,
-    ulong NativeAddress,
-    byte[] NativeCode);
+internal sealed record DesktopClrJitMethod(uint MetadataToken, string DisplayName, ulong NativeAddress, byte[] NativeCode);
 
 internal sealed record DesktopClrJitDocument(string Text, IReadOnlyList<DesktopClrJitMethodResult> Methods);
 
-internal sealed record DesktopClrJitMethodResult(
-    string Method,
-    string DisplayName,
-    string Status,
-    string? Address,
-    string? Error,
-    int NativeCodeSize,
-    int InstructionCount,
-    IReadOnlyList<object> LinkedRanges,
-    string MappingSource);
+internal sealed record DesktopClrJitMethodResult(string Method, string DisplayName, string Status, string? Address, string? Error, int NativeCodeSize, int InstructionCount, IReadOnlyList<object> LinkedRanges, string MappingSource);
 
 internal static class DesktopClrJitDisassembly
 {
@@ -864,23 +728,12 @@ internal static class DesktopClrJitDisassembly
                 text.AppendLine().AppendLine();
             var decoded = DecodeMethod(method, capture.RuntimeVersion);
             text.Append(decoded.Text);
-            methods.Add(new DesktopClrJitMethodResult(
-                $"0x{method.MetadataToken:x8}",
-                method.DisplayName,
-                "prepared",
-                $"0x{method.NativeAddress:x}",
-                null,
-                method.NativeCode.Length,
-                decoded.InstructionCount,
-                [],
-                "none"));
+            methods.Add(new DesktopClrJitMethodResult($"0x{method.MetadataToken:x8}", method.DisplayName, "prepared", $"0x{method.NativeAddress:x}", null, method.NativeCode.Length, decoded.InstructionCount, [], "none"));
         }
         return new DesktopClrJitDocument(text.ToString(), methods);
     }
 
-    private static (string Text, int InstructionCount) DecodeMethod(
-        DesktopClrJitMethod method,
-        string runtimeVersion)
+    private static (string Text, int InstructionCount) DecodeMethod(DesktopClrJitMethod method, string runtimeVersion)
     {
         var decoder = Iced.Intel.Decoder.Create(64, method.NativeCode);
         decoder.IP = method.NativeAddress;
@@ -889,34 +742,26 @@ internal static class DesktopClrJitDisassembly
         var text = new StringBuilder();
         text.Append("; Assembly listing for method ").AppendLine(method.DisplayName);
         text.Append("; Desktop CLR version ").AppendLine(runtimeVersion);
-        text.Append("; Native address 0x")
-            .AppendLine(method.NativeAddress.ToString("x", CultureInfo.InvariantCulture));
+        text.Append("; Native address 0x").AppendLine(method.NativeAddress.ToString("x", CultureInfo.InvariantCulture));
         text.AppendLine("G_M000_IG00:");
         var instructionCount = 0;
         var decodedBytes = 0;
         while (decodedBytes < method.NativeCode.Length)
         {
             var instruction = decoder.Decode();
-            if (decoder.LastError != DecoderError.None ||
-                instruction.Code == Code.INVALID ||
-                instruction.Length == 0 ||
-                instruction.Length > method.NativeCode.Length - decodedBytes)
+            if (decoder.LastError != DecoderError.None || instruction.Code == Code.INVALID || instruction.Length == 0 || instruction.Length > method.NativeCode.Length - decodedBytes)
             {
                 throw new InvalidDataException("The Desktop CLR JIT capture contains an invalid or truncated x64 instruction.");
             }
             output.Clear();
             formatter.Format(instruction, output);
-            text.Append("       L")
-                .Append((instruction.IP - method.NativeAddress).ToString("x4", CultureInfo.InvariantCulture))
-                .Append(": ")
-                .AppendLine(output.Value);
+            text.Append("       L").Append((instruction.IP - method.NativeAddress).ToString("x4", CultureInfo.InvariantCulture)).Append(": ").AppendLine(output.Value);
             instructionCount++;
             decodedBytes += instruction.Length;
         }
         if (instructionCount == 0)
             throw new InvalidDataException("The Desktop CLR JIT capture contains an empty native method.");
-        text.Append("; Total bytes of code ")
-            .Append(method.NativeCode.Length.ToString(CultureInfo.InvariantCulture));
+        text.Append("; Total bytes of code ").Append(method.NativeCode.Length.ToString(CultureInfo.InvariantCulture));
         return (text.ToString(), instructionCount);
     }
 

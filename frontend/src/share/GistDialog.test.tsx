@@ -46,7 +46,12 @@ describe('GistDialog', () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = input.toString()
       if (url === '/api/v1/auth/github/status') {
-        return response({ available: true, authenticated: true, login: 'owner', csrfToken: 'csrf' })
+        return response({
+          available: true,
+          authenticated: true,
+          login: 'owner',
+          csrfToken: 'csrf',
+        })
       }
       if (url === '/api/v1/shares/gists') {
         expect(new Headers(init?.headers).get('X-SharpLabNext-CSRF')).toBe('csrf')
@@ -59,17 +64,11 @@ describe('GistDialog', () => {
     vi.stubGlobal('fetch', fetchMock)
     const onSaved = vi.fn()
 
-    render(
-      <GistDialog
-        open
-        workspace={workspace}
-        currentGist={null}
-        onClose={() => undefined}
-        onSaved={onSaved}
-      />,
-    )
+    render(<GistDialog open workspace={workspace} currentGist={null} onClose={() => undefined} onSaved={onSaved} />)
     await screen.findByText('owner')
-    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'shared' } })
+    fireEvent.change(screen.getByLabelText('Description'), {
+      target: { value: 'shared' },
+    })
     fireEvent.click(screen.getByLabelText('Public Gist'))
     fireEvent.click(screen.getByRole('button', { name: 'New Gist' }))
 
@@ -91,31 +90,22 @@ describe('GistDialog', () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = input.toString()
       if (url === '/api/v1/auth/github/status') {
-        return response({ available: true, authenticated: true, login: 'owner', csrfToken: 'csrf' })
+        return response({
+          available: true,
+          authenticated: true,
+          login: 'owner',
+          csrfToken: 'csrf',
+        })
       }
-      if (url === '/api/v1/shares/gists/abcdef' && init?.method === 'PATCH')
-        return response(current)
+      if (url === '/api/v1/shares/gists/abcdef' && init?.method === 'PATCH') return response(current)
       return response({ message: `Unexpected request ${url}` }, 500)
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(
-      <GistDialog
-        open
-        workspace={workspace}
-        currentGist={current}
-        onClose={() => undefined}
-        onSaved={() => undefined}
-      />,
-    )
+    render(<GistDialog open workspace={workspace} currentGist={current} onClose={() => undefined} onSaved={() => undefined} />)
     const save = await screen.findByRole('button', { name: 'Save changes' })
     fireEvent.click(save)
 
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/v1/shares/gists/abcdef',
-        expect.objectContaining({ method: 'PATCH' }),
-      ),
-    )
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v1/shares/gists/abcdef', expect.objectContaining({ method: 'PATCH' })))
   })
 })

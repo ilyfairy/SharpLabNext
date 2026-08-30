@@ -5,7 +5,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { validateCandidateBuildInputs } from './build-runtime-candidate.mjs'
+import { validateCandidateBuildInputs } from '../build-runtime-candidate.mjs'
 import {
   canonicalFrameworkCandidateInput,
   deriveRuntimeCandidateEnvironment,
@@ -13,9 +13,9 @@ import {
   readFrameworkCandidateInput,
   readRuntimeMatrix,
   runRuntimeCandidateEnvironment,
-} from './runtime-candidate-environment.mjs'
+} from '../runtime-candidate-environment.mjs'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const matrixPath = path.join(repositoryRoot, 'profiles', 'runtime-matrix.json')
 const matrix = readRuntimeMatrix(matrixPath)
 const releaseLock = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'profiles', 'lock.json'), 'utf8'))
@@ -31,9 +31,7 @@ const outerDevelopmentGrantInput = 'SHARPLABNEXT_BAKE_ALLOW_UNCOMMITTED_SOURCE_F
 const outerDevelopmentImageInputsGrant = 'SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS'
 const historicalFrameworkDevelopmentInput = 'RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_DEVELOPMENT_OPT_IN'
 
-function pinnedImage(name, character) {
-  return `registry.example/${name}@sha256:${character.repeat(64)}`
-}
+function pinnedImage(name, character) { return `registry.example/${name}@sha256:${character.repeat(64)}`; }
 
 function commonEnvironment() {
   return {
@@ -51,7 +49,7 @@ function commonEnvironment() {
 }
 
 test('outer Bake launcher sanitizes and emits only its explicit development grants', () => {
-  const source = fs.readFileSync(path.join(repositoryRoot, 'eng', 'run-with-bake-environment.cs'), 'utf8')
+  const source = fs.readFileSync(path.join(repositoryRoot, 'eng', 'tools', 'run-with-bake-environment.cs'), 'utf8')
   assert.ok(source.includes(outerDevelopmentGrantInput))
   assert.ok(source.includes(outerDevelopmentImageInputsGrant))
   assert.match(source, /startInfo\.Environment\.Remove\(developmentGrantEnvironmentVariable\)/)
@@ -131,9 +129,7 @@ test('all 34 formal runtime rows derive complete candidate inputs accepted by th
 })
 
 test('the five Wine CoreCLR 2.x and 3.x profiles are explicitly excluded', () => {
-  const excluded = matrix.coreClr
-    .filter(row => Number.parseInt(row.channel, 10) < 5)
-    .map(row => `wine-${row.id}-linux-x64`)
+  const excluded = matrix.coreClr.filter(row => Number.parseInt(row.channel, 10) < 5).map(row => `wine-${row.id}-linux-x64`);
   assert.equal(excluded.length, 5)
   for (const profileId of excluded) {
     assert.throws(

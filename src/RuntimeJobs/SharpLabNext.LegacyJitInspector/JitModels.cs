@@ -5,13 +5,7 @@ namespace SharpLabNext.LegacyJitInspector
 {
     internal sealed class JitMethodResult
     {
-        public JitMethodResult(
-            string method,
-            int metadataToken,
-            string displayName,
-            string status,
-            string address,
-            string error)
+        public JitMethodResult(string method, int metadataToken, string displayName, string status, string address, string error)
         {
             Method = method;
             MetadataToken = metadataToken;
@@ -46,11 +40,7 @@ namespace SharpLabNext.LegacyJitInspector
 
     internal sealed class JitLinkedRange
     {
-        public JitLinkedRange(
-            string sourceFilePath,
-            JitTextRange sourceRange,
-            JitTextRange outputRange,
-            string precision)
+        public JitLinkedRange(string sourceFilePath, JitTextRange sourceRange, JitTextRange outputRange, string precision)
         {
             SourceFilePath = sourceFilePath;
             SourceRange = sourceRange;

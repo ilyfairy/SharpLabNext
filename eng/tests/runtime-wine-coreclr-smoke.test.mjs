@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { parseWineCoreClrFrameLog, runWineCoreClrSmokes, runRuntimeWineCoreClrSmokeCli } from './runtime-wine-coreclr-smoke.mjs'
+import { parseWineCoreClrFrameLog, runWineCoreClrSmokes, runRuntimeWineCoreClrSmokeCli } from '../smoke/runtime-wine-coreclr-smoke.mjs'
 
 const imageId = `sha256:${'a'.repeat(64)}`
 const method = 'SharpLabNext.RuntimeCapabilityProbe.Program.WindowsAbi'

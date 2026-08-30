@@ -20,12 +20,9 @@ namespace SharpLabNext.LegacyJitInspector
             try
             {
                 using (var stream = new FileStream(pdbPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                using (var provider = MetadataReaderProvider.FromPortablePdbStream(
-                    stream,
-                    MetadataStreamOptions.PrefetchMetadata))
+                using (var provider = MetadataReaderProvider.FromPortablePdbStream(stream, MetadataStreamOptions.PrefetchMetadata))
                 {
-                    MetadataReader reader = provider.GetMetadataReader(
-                        MetadataReaderOptions.ApplyWindowsRuntimeProjections);
+                    MetadataReader reader = provider.GetMetadataReader(MetadataReaderOptions.ApplyWindowsRuntimeProjections);
                     int count = reader.GetTableRowCount(TableIndex.MethodDebugInformation);
                     var result = new Dictionary<int, MethodSourceSpan>();
                     for (int row = 1; row <= count; row++)
@@ -40,12 +37,7 @@ namespace SharpLabNext.LegacyJitInspector
                     return result;
                 }
             }
-            catch (Exception exception) when (
-                exception is IOException ||
-                exception is UnauthorizedAccessException ||
-                exception is BadImageFormatException ||
-                exception is InvalidOperationException ||
-                exception is ArgumentException)
+            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException || exception is BadImageFormatException || exception is InvalidOperationException || exception is ArgumentException)
             {
                 return new Dictionary<int, MethodSourceSpan>();
             }
@@ -53,8 +45,7 @@ namespace SharpLabNext.LegacyJitInspector
 
         private static MethodSourceSpan ReadMethodSpan(MetadataReader reader, int row)
         {
-            MethodDebugInformation information = reader.GetMethodDebugInformation(
-                MetadataTokens.MethodDebugInformationHandle(row));
+            MethodDebugInformation information = reader.GetMethodDebugInformation(MetadataTokens.MethodDebugInformationHandle(row));
             string selectedPath = null;
             int startLine = int.MaxValue;
             int startCharacter = int.MaxValue;
@@ -69,8 +60,7 @@ namespace SharpLabNext.LegacyJitInspector
                 if (point.IsHidden || documentHandle.IsNil)
                     continue;
 
-                string path = SanitizeDocumentPath(
-                    reader.GetString(reader.GetDocument(documentHandle).Name));
+                string path = SanitizeDocumentPath(reader.GetString(reader.GetDocument(documentHandle).Name));
                 if (selectedPath == null)
                     selectedPath = path;
                 if (!string.Equals(path, selectedPath, StringComparison.Ordinal))
@@ -78,8 +68,7 @@ namespace SharpLabNext.LegacyJitInspector
 
                 int pointStartLine = ToZeroBased(point.StartLine);
                 int pointStartCharacter = ToZeroBased(point.StartColumn);
-                if (pointStartLine < startLine ||
-                    (pointStartLine == startLine && pointStartCharacter < startCharacter))
+                if (pointStartLine < startLine || (pointStartLine == startLine && pointStartCharacter < startCharacter))
                 {
                     startLine = pointStartLine;
                     startCharacter = pointStartCharacter;
@@ -87,8 +76,7 @@ namespace SharpLabNext.LegacyJitInspector
 
                 int pointEndLine = ToZeroBased(point.EndLine);
                 int pointEndCharacter = ToZeroBased(point.EndColumn);
-                if (pointEndLine > endLine ||
-                    (pointEndLine == endLine && pointEndCharacter > endCharacter))
+                if (pointEndLine > endLine || (pointEndLine == endLine && pointEndCharacter > endCharacter))
                 {
                     endLine = pointEndLine;
                     endCharacter = pointEndCharacter;
@@ -96,10 +84,7 @@ namespace SharpLabNext.LegacyJitInspector
             }
 
             return selectedPath == null || endLine < 0
-                ? null
-                : new MethodSourceSpan(
-                    selectedPath,
-                    new JitTextRange(startLine, startCharacter, endLine, endCharacter));
+                ? null : new MethodSourceSpan(selectedPath, new JitTextRange(startLine, startCharacter, endLine, endCharacter));
         }
 
         private static int ToZeroBased(int coordinate)
@@ -109,9 +94,7 @@ namespace SharpLabNext.LegacyJitInspector
 
         private static string SanitizeDocumentPath(string path)
         {
-            string[] rawSegments = path.Replace('\\', '/').Split(
-                PathSeparators,
-                StringSplitOptions.RemoveEmptyEntries);
+            string[] rawSegments = path.Replace('\\', '/').Split(PathSeparators, StringSplitOptions.RemoveEmptyEntries);
             var segments = new List<string>(8);
             int start = Math.Max(0, rawSegments.Length - 8);
             for (int index = start; index < rawSegments.Length; index++)
@@ -124,8 +107,7 @@ namespace SharpLabNext.LegacyJitInspector
 
             string sanitized = segments.Count == 0 ? "source" : string.Join("/", segments);
             return sanitized.Length <= 512
-                ? sanitized
-                : sanitized.Substring(sanitized.Length - 512);
+                ? sanitized : sanitized.Substring(sanitized.Length - 512);
         }
     }
 }

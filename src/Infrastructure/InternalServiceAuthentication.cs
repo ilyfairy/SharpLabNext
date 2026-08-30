@@ -32,9 +32,7 @@ public sealed class InternalServiceAuthenticationOptions
 
     public string? Token { get; }
 
-    public static InternalServiceAuthenticationOptions FromConfiguration(
-        IConfiguration configuration,
-        IHostEnvironment environment)
+    public static InternalServiceAuthenticationOptions FromConfiguration(IConfiguration configuration, IHostEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(environment);
@@ -45,25 +43,21 @@ public sealed class InternalServiceAuthenticationOptions
         var inlineToken = NullIfWhiteSpace(section["Token"]);
         if (tokenFile is not null && inlineToken is not null)
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:TokenFile and {SectionName}:Token cannot both be configured.");
+            throw new InvalidOperationException($"{SectionName}:TokenFile and {SectionName}:Token cannot both be configured.");
         }
 
         if (environment.IsProduction() && inlineToken is not null)
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:Token is not allowed in Production; use a read-only secret file.");
+            throw new InvalidOperationException($"{SectionName}:Token is not allowed in Production; use a read-only secret file.");
         }
 
         var token = tokenFile is null
-            ? inlineToken
-            : ReadTokenFile(tokenFile, environment.ContentRootPath);
+            ? inlineToken : ReadTokenFile(tokenFile, environment.ContentRootPath);
         if (token is not null)
             ValidateToken(token);
         if (required && token is null)
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:TokenFile is required when internal service authentication is enabled.");
+            throw new InvalidOperationException($"{SectionName}:TokenFile is required when internal service authentication is enabled.");
         }
 
         return new InternalServiceAuthenticationOptions(required, token);
@@ -80,9 +74,7 @@ public sealed class InternalServiceAuthenticationOptions
     {
         if (!Enabled)
             return !Required;
-        if (!AuthenticationHeaderValue.TryParse(authorization, out var header) ||
-            !string.Equals(header.Scheme, AuthenticationScheme, StringComparison.OrdinalIgnoreCase) ||
-            string.IsNullOrEmpty(header.Parameter))
+        if (!AuthenticationHeaderValue.TryParse(authorization, out var header) || !string.Equals(header.Scheme, AuthenticationScheme, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(header.Parameter))
         {
             return false;
         }
@@ -103,8 +95,7 @@ public sealed class InternalServiceAuthenticationOptions
     private static string ReadTokenFile(string configuredPath, string contentRootPath)
     {
         var path = Path.IsPathFullyQualified(configuredPath)
-            ? configuredPath
-            : Path.Combine(contentRootPath, configuredPath);
+            ? configuredPath : Path.Combine(contentRootPath, configuredPath);
         var fullPath = Path.GetFullPath(path);
         if (!File.Exists(fullPath))
             throw new InvalidOperationException($"The configured internal service token file '{fullPath}' does not exist.");
@@ -116,8 +107,7 @@ public sealed class InternalServiceAuthenticationOptions
     {
         if (token.Length is < MinimumTokenLength or > MaximumTokenLength)
         {
-            throw new InvalidOperationException(
-                $"The internal service token must be between {MinimumTokenLength} and {MaximumTokenLength} characters.");
+            throw new InvalidOperationException($"The internal service token must be between {MinimumTokenLength} and {MaximumTokenLength} characters.");
         }
         if (token.Any(static character => character is <= ' ' or >= '\u007f'))
             throw new InvalidOperationException("The internal service token must contain visible ASCII characters only.");
@@ -129,15 +119,11 @@ public sealed class InternalServiceAuthenticationOptions
 
 public static class InternalServiceAuthenticationExtensions
 {
-    public static IApplicationBuilder UseSharpLabNextInternalServiceAuthentication(
-        this IApplicationBuilder app,
-        InternalServiceAuthenticationOptions options) =>
+    public static IApplicationBuilder UseSharpLabNextInternalServiceAuthentication(this IApplicationBuilder app, InternalServiceAuthenticationOptions options) =>
         app.UseMiddleware<InternalServiceAuthenticationMiddleware>(options);
 }
 
-public sealed class InternalServiceAuthenticationMiddleware(
-    RequestDelegate next,
-    InternalServiceAuthenticationOptions options)
+public sealed class InternalServiceAuthenticationMiddleware(RequestDelegate next, InternalServiceAuthenticationOptions options)
 {
     public async Task InvokeAsync(HttpContext context)
     {
@@ -151,13 +137,7 @@ public sealed class InternalServiceAuthenticationMiddleware(
         context.Response.ContentType = "application/problem+json";
         context.Response.Headers.CacheControl = "no-store";
         context.Response.Headers[HeaderNames.WWWAuthenticate] = InternalServiceAuthenticationOptions.AuthenticationScheme;
-        await context.Response.WriteAsJsonAsync(new
-        {
-            Type = "https://sharplabnext.dev/problems/internal-service-authentication-required",
-            Title = "Internal service authentication is required",
-            Status = StatusCodes.Status401Unauthorized,
-            TraceId = context.TraceIdentifier
-        }, ContractJson.CreateSerializerOptions(), context.RequestAborted).ConfigureAwait(false);
+        await context.Response.WriteAsJsonAsync(new { Type = "https://sharplabnext.dev/problems/internal-service-authentication-required", Title = "Internal service authentication is required", Status = StatusCodes.Status401Unauthorized, TraceId = context.TraceIdentifier }, ContractJson.CreateSerializerOptions(), context.RequestAborted).ConfigureAwait(false);
     }
 
     private bool IsAuthorized(Microsoft.Extensions.Primitives.StringValues values) =>

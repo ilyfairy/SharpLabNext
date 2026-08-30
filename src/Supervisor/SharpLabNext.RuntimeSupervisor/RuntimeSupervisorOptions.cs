@@ -67,21 +67,15 @@ public sealed class RuntimeSupervisorOptions
     public List<RuntimeSecurityPolicyOptions> SecurityPolicies { get; set; } = [];
 
     public RuntimeProfileOptions GetProfile(string id) =>
-        Profiles.SingleOrDefault(profile => string.Equals(profile.Id, id, StringComparison.Ordinal))
-        ?? throw new KeyNotFoundException($"Runtime profile '{id}' is not installed.");
+        Profiles.SingleOrDefault(profile => string.Equals(profile.Id, id, StringComparison.Ordinal)) ?? throw new KeyNotFoundException($"Runtime profile '{id}' is not installed.");
 
     public RuntimeSecurityPolicyOptions GetSecurityPolicy(string id) =>
-        SecurityPolicies.SingleOrDefault(policy => string.Equals(policy.Id, id, StringComparison.Ordinal))
-        ?? throw new KeyNotFoundException($"Runtime security policy '{id}' is not installed.");
+        SecurityPolicies.SingleOrDefault(policy => string.Equals(policy.Id, id, StringComparison.Ordinal)) ?? throw new KeyNotFoundException($"Runtime security policy '{id}' is not installed.");
 }
 
-public sealed class RuntimeProfileOptions : RuntimeProfileDefinition
-{
-}
+public sealed class RuntimeProfileOptions : RuntimeProfileDefinition;
 
-public sealed class RuntimeSecurityPolicyOptions : RuntimeSecurityPolicyDefinition
-{
-}
+public sealed class RuntimeSecurityPolicyOptions : RuntimeSecurityPolicyDefinition;
 
 public sealed class RuntimeSupervisorProfileOverlayOptions
 {
@@ -108,8 +102,7 @@ public sealed class RuntimeSupervisorOptionsValidator : IValidateOptions<Runtime
     public ValidateOptionsResult Validate(string? name, RuntimeSupervisorOptions options)
     {
         var failures = new List<string>();
-        if (string.IsNullOrWhiteSpace(options.DockerSocketPath) ||
-            (options.DockerSocketPath[0] != '/' && !Path.IsPathFullyQualified(options.DockerSocketPath)))
+        if (string.IsNullOrWhiteSpace(options.DockerSocketPath) || (options.DockerSocketPath[0] != '/' && !Path.IsPathFullyQualified(options.DockerSocketPath)))
         {
             failures.Add("RuntimeSupervisor:DockerSocketPath must be an absolute path.");
         }
@@ -119,28 +112,19 @@ public sealed class RuntimeSupervisorOptionsValidator : IValidateOptions<Runtime
             failures.Add("RuntimeSupervisor:DockerApiVersion must use a value such as 'v1.47'.");
         }
 
-        if (!Uri.TryCreate(options.ArtifactStoreBaseAddress, UriKind.Absolute, out var artifactStoreUri) ||
-            artifactStoreUri.Scheme is not ("http" or "https"))
+        if (!Uri.TryCreate(options.ArtifactStoreBaseAddress, UriKind.Absolute, out var artifactStoreUri) || artifactStoreUri.Scheme is not ("http" or "https"))
         {
             failures.Add("RuntimeSupervisor:ArtifactStoreBaseAddress must be an absolute HTTP URI.");
         }
 
-        if (string.IsNullOrWhiteSpace(options.ResourceScope) ||
-            options.ResourceScope.Length > 128 ||
-            options.ResourceScope.Any(static character =>
-                !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.' or ':')))
+        if (string.IsNullOrWhiteSpace(options.ResourceScope) || options.ResourceScope.Length > 128 || options.ResourceScope.Any(static character => !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.' or ':')))
         {
             failures.Add("RuntimeSupervisor:ResourceScope must be a stable label value of at most 128 characters.");
         }
 
-        if (string.IsNullOrWhiteSpace(options.ContainerLabel) ||
-            options.ContainerLabel.Length > 128 ||
-            options.ContainerLabel.Any(static character =>
-                !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '-' or '_' or '/')) ||
-            RuntimeManagedLabelPolicy.IsReservedManagementLabel(options.ContainerLabel))
+        if (string.IsNullOrWhiteSpace(options.ContainerLabel) || options.ContainerLabel.Length > 128 || options.ContainerLabel.Any(static character => !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '-' or '_' or '/')) || RuntimeManagedLabelPolicy.IsReservedManagementLabel(options.ContainerLabel))
         {
-            failures.Add(
-                "RuntimeSupervisor:ContainerLabel must be a valid non-reserved Docker label key.");
+            failures.Add("RuntimeSupervisor:ContainerLabel must be a valid non-reserved Docker label key.");
         }
 
         ValidatePositive(options.ArtifactLeaseSeconds, nameof(options.ArtifactLeaseSeconds), failures);
@@ -157,23 +141,13 @@ public sealed class RuntimeSupervisorOptionsValidator : IValidateOptions<Runtime
             options.MeasurementHelperImage,
             options.MeasurementHelperImageId
         };
-        if (promotionBindings.Any(static value => value is null) &&
-            promotionBindings.Any(static value => value is not null))
+        if (promotionBindings.Any(static value => value is null) && promotionBindings.Any(static value => value is not null))
         {
-            failures.Add(
-                "Runtime promotion preflight plan/profile/helper identities and source revision must be configured together.");
+            failures.Add("Runtime promotion preflight plan/profile/helper identities and source revision must be configured together.");
         }
-        if (options.PromotionPreflightPlanSha256 is not null &&
-            (!RuntimeProfileValidation.IsSha256(options.PromotionPreflightPlanSha256) ||
-             !RuntimeProfileValidation.IsSha256(options.PromotionPreflightProfileSha256) ||
-             !IsGitCommit(options.PromotionPreflightSourceRevision) ||
-             !IsRepositoryDigest(options.MeasurementHelperImage) ||
-             !RuntimeProfileValidation.IsSha256(options.MeasurementHelperImageId) ||
-             options.Profiles.Count != 1 || !options.RequireDigestPinnedImages ||
-             options.SessionReuseEnabled))
+        if (options.PromotionPreflightPlanSha256 is not null && (!RuntimeProfileValidation.IsSha256(options.PromotionPreflightPlanSha256) || !RuntimeProfileValidation.IsSha256(options.PromotionPreflightProfileSha256) || !IsGitCommit(options.PromotionPreflightSourceRevision) || !IsRepositoryDigest(options.MeasurementHelperImage) || !RuntimeProfileValidation.IsSha256(options.MeasurementHelperImageId) || options.Profiles.Count != 1 || !options.RequireDigestPinnedImages || options.SessionReuseEnabled))
         {
-            failures.Add(
-                "Runtime promotion preflight requires canonical digests, one immutable profile, and disabled session reuse.");
+            failures.Add("Runtime promotion preflight requires canonical digests, one immutable profile, and disabled session reuse.");
         }
         failures.AddRange(RuntimeSandboxPolicy.ValidateConfiguration(options.Sandbox));
 
@@ -198,35 +172,25 @@ public sealed class RuntimeSupervisorOptionsValidator : IValidateOptions<Runtime
         }
 
         foreach (var policy in options.SecurityPolicies)
-        {
             failures.AddRange(RuntimeProfileValidation.Validate(policy));
-        }
 
         var maximumJobDuration = options.SecurityPolicies.Count == 0
-            ? 0
-            : options.SecurityPolicies.Max(static policy => policy.MaximumDurationSeconds);
-        if ((long)maximumJobDuration + options.ReaperIntervalSeconds >=
-            options.StaleContainerSeconds)
+            ? 0 : options.SecurityPolicies.Max(static policy => policy.MaximumDurationSeconds);
+        if ((long)maximumJobDuration + options.ReaperIntervalSeconds >= options.StaleContainerSeconds)
         {
-            failures.Add(
-                "RuntimeSupervisor:StaleContainerSeconds must exceed the maximum job duration plus one reaper interval.");
+            failures.Add("RuntimeSupervisor:StaleContainerSeconds must exceed the maximum job duration plus one reaper interval.");
         }
-        else if (options.SessionReuseEnabled &&
-                 (long)options.SessionMaximumAgeSeconds + maximumJobDuration + options.ReaperIntervalSeconds >=
-                 options.StaleContainerSeconds)
+        else if (options.SessionReuseEnabled && (long)options.SessionMaximumAgeSeconds + maximumJobDuration + options.ReaperIntervalSeconds >= options.StaleContainerSeconds)
         {
-            failures.Add(
-                "RuntimeSupervisor:SessionMaximumAgeSeconds must leave enough time for one job and one reaper interval before StaleContainerSeconds.");
+            failures.Add("RuntimeSupervisor:SessionMaximumAgeSeconds must leave enough time for one job and one reaper interval before StaleContainerSeconds.");
         }
 
         return failures.Count == 0
-            ? ValidateOptionsResult.Success
-            : ValidateOptionsResult.Fail(failures);
+            ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }
 
     private static bool IsGitCommit(string? value) => value is { Length: 40 or 64 } &&
-        value.All(static character =>
-            char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
+        value.All(static character => char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
 
     private static bool IsRepositoryDigest(string? value)
     {
@@ -240,11 +204,7 @@ public sealed class RuntimeSupervisorOptionsValidator : IValidateOptions<Runtime
 
     private static void ValidateDistinctIds(IEnumerable<string> ids, string description, List<string> failures)
     {
-        var duplicates = ids
-            .Where(static id => !string.IsNullOrWhiteSpace(id))
-            .GroupBy(static id => id, StringComparer.Ordinal)
-            .Where(static group => group.Count() > 1)
-            .Select(static group => group.Key);
+        var duplicates = ids.Where(static id => !string.IsNullOrWhiteSpace(id)).GroupBy(static id => id, StringComparer.Ordinal).Where(static group => group.Count() > 1).Select(static group => group.Key);
         failures.AddRange(duplicates.Select(id => $"Duplicate {description} ID '{id}'."));
     }
 

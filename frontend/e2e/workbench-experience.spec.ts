@@ -1,5 +1,5 @@
-import { expect, type Locator, type Page, test } from '@playwright/test'
-import { decodeV3 } from '../src/share'
+import { expect, type Locator, type Page, test } from '@playwright/test';
+import { decodeV3 } from '../src/share';
 import {
   editorHost,
   editorSwitch,
@@ -75,11 +75,7 @@ int main(array<String^>^ args)
 }
 `
 
-function expectStableRect(
-  before: { x: number; y: number; width: number; height: number },
-  after: { x: number; y: number; width: number; height: number },
-  label: string,
-) {
+function expectStableRect(before: { x: number; y: number; width: number; height: number }, after: { x: number; y: number; width: number; height: number }, label: string) {
   for (const key of ['x', 'y', 'width', 'height'] as const) {
     expect(Math.abs(after[key] - before[key]), `${label} ${key} changed`).toBeLessThanOrEqual(1)
   }
@@ -100,9 +96,7 @@ async function startTopToolbarProbe(page: Page, isMobile: boolean) {
   await page.evaluate((mobile) => {
     const key = '__sharplabnextTopToolbarProbe'
     const samples: TopToolbarSample[] = []
-    const runSelector = mobile
-      ? '.mobile-command-bar .run-button'
-      : '.selector-group--result > .run-button'
+    const runSelector = mobile ? '.mobile-command-bar .run-button' : '.selector-group--result > .run-button'
     const record = () => {
       const run = document.querySelector<HTMLElement>(runSelector)
       const actions = document.querySelector<HTMLElement>('.app-bar-actions')
@@ -165,19 +159,10 @@ function expectStableTopToolbar(samples: TopToolbarSample[]) {
   const initial = samples[0]
   if (!initial) throw new Error('Top-toolbar probe produced no initial sample.')
   for (const sample of samples) {
-    expect(sample.run.right, 'Run action overlaps the app-bar actions').toBeLessThanOrEqual(
-      sample.actions.x + 0.5,
-    )
-    expect(
-      sample.selectorScrollWidth,
-      'Result selector overflowed horizontally',
-    ).toBeLessThanOrEqual(sample.selectorClientWidth + 1)
-    expect(sample.documentScrollWidth, 'Document overflowed horizontally').toBeLessThanOrEqual(
-      sample.documentClientWidth,
-    )
-    expect(sample.bodyScrollWidth, 'Body overflowed horizontally').toBeLessThanOrEqual(
-      sample.documentClientWidth,
-    )
+    expect(sample.run.right, 'Run action overlaps the app-bar actions').toBeLessThanOrEqual(sample.actions.x + 0.5)
+    expect(sample.selectorScrollWidth, 'Result selector overflowed horizontally').toBeLessThanOrEqual(sample.selectorClientWidth + 1)
+    expect(sample.documentScrollWidth, 'Document overflowed horizontally').toBeLessThanOrEqual(sample.documentClientWidth)
+    expect(sample.bodyScrollWidth, 'Body overflowed horizontally').toBeLessThanOrEqual(sample.documentClientWidth)
     expect(sample.resolvingVisible, 'Routine selection resolution must stay silent').toBe(false)
     expectStableRect(initial.run, sample.run, 'Run action during live resolution')
     expectStableRect(initial.actions, sample.actions, 'App actions during live resolution')
@@ -185,23 +170,19 @@ function expectStableTopToolbar(samples: TopToolbarSample[]) {
 }
 
 test.describe('workbench experience contract', () => {
-  test('keeps live result geometry stable and selects diagnostics without discarding the last output', async ({
-    page,
-    isMobile,
-  }) => {
+  test('keeps live result geometry stable and selects diagnostics without discarding the last output', async ({ page, isMobile }) => {
     await openWorkbench(page)
     await waitForCompletedOperation(page)
-    const stableOutput = page.getByRole('textbox', { name: 'Decompiled C sharp' })
+    const stableOutput = page.getByRole('textbox', {
+      name: 'Decompiled C sharp',
+    })
     await expect(stableOutput).toBeVisible()
     const stableText = await stableOutput.textContent()
     expect(stableText?.trim().length ?? 0).toBeGreaterThan(0)
 
     const sourceBefore = await visibleBox(workbenchPane(page, 'source'), 'source before live edit')
     const resultBefore = await visibleBox(workbenchPane(page, 'result'), 'result before live edit')
-    const toolbarBefore = await visibleBox(
-      page.locator('.result-tabs-toolbar'),
-      'result toolbar before live edit',
-    )
+    const toolbarBefore = await visibleBox(page.locator('.result-tabs-toolbar'), 'result toolbar before live edit')
     const coreTabs = page.getByRole('tablist', { name: 'Result views' }).getByRole('tab')
     await expect(coreTabs).toHaveCount(2)
     await expect(coreTabs.nth(0)).toContainText('Diagnostics')
@@ -219,10 +200,7 @@ test.describe('workbench experience contract', () => {
     await expect(stableOutput).toHaveText(stableText ?? '')
     const sourceStale = await visibleBox(workbenchPane(page, 'source'), 'source after live edit')
     const resultStale = await visibleBox(workbenchPane(page, 'result'), 'result after live edit')
-    const toolbarStale = await visibleBox(
-      page.locator('.result-tabs-toolbar'),
-      'result toolbar after live edit',
-    )
+    const toolbarStale = await visibleBox(page.locator('.result-tabs-toolbar'), 'result toolbar after live edit')
     expectStableRect(sourceBefore, sourceStale, 'source pane after edit')
     expectStableRect(resultBefore, resultStale, 'result pane after edit')
     expectStableRect(toolbarBefore, toolbarStale, 'result toolbar after edit')
@@ -230,19 +208,16 @@ test.describe('workbench experience contract', () => {
     await expect(page.locator('.result-state-spinner')).toBeVisible()
     const sourcePending = await visibleBox(workbenchPane(page, 'source'), 'source while pending')
     const resultPending = await visibleBox(workbenchPane(page, 'result'), 'result while pending')
-    const toolbarPending = await visibleBox(
-      page.locator('.result-tabs-toolbar'),
-      'result toolbar while pending',
-    )
+    const toolbarPending = await visibleBox(page.locator('.result-tabs-toolbar'), 'result toolbar while pending')
     expectStableRect(sourceBefore, sourcePending, 'source pane while pending')
     expectStableRect(resultBefore, resultPending, 'result pane while pending')
     expectStableRect(toolbarBefore, toolbarPending, 'result toolbar while pending')
 
     const diagnosticsTab = page.getByRole('tab', { name: /^Diagnostics/ })
-    await expect(diagnosticsTab).toHaveAttribute('aria-selected', 'true', { timeout: 90_000 })
-    await expect(page.getByRole('tabpanel').getByRole('alert')).toContainText(
-      /Compilation failed|not produced/,
-    )
+    await expect(diagnosticsTab).toHaveAttribute('aria-selected', 'true', {
+      timeout: 90_000,
+    })
+    await expect(page.getByRole('tabpanel').getByRole('alert')).toContainText(/Compilation failed|not produced/)
     await expect(coreTabs).toHaveCount(2)
     await expect(coreTabs.nth(1)).toHaveText('Decompiled C#')
     const tabRectsFailed = await coreTabs.evaluateAll((tabs) =>
@@ -261,34 +236,21 @@ test.describe('workbench experience contract', () => {
 
     const sourceFailed = await visibleBox(workbenchPane(page, 'source'), 'source after failure')
     const resultFailed = await visibleBox(workbenchPane(page, 'result'), 'result after failure')
-    const toolbarFailed = await visibleBox(
-      page.locator('.result-tabs-toolbar'),
-      'result toolbar after failure',
-    )
+    const toolbarFailed = await visibleBox(page.locator('.result-tabs-toolbar'), 'result toolbar after failure')
     expectStableRect(sourceBefore, sourceFailed, 'source pane after failure')
     expectStableRect(resultBefore, resultFailed, 'result pane after failure')
     expectStableRect(toolbarBefore, toolbarFailed, 'result toolbar after failure')
     expectStableTopToolbar(await stopTopToolbarProbe(page))
     await expectNoDocumentOverflow(page)
 
-    await replaceSource(
-      page,
-      'using System;\nConsole.WriteLine(Repaired.Value());\npublic static class Repaired { public static int Value() => 42; }',
-    )
+    await replaceSource(page, 'using System;\nConsole.WriteLine(Repaired.Value());\npublic static class Repaired { public static int Value() => 42; }')
     await expect(page.locator('.result-state-spinner')).toBeVisible()
     await expect(diagnosticsTab).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByRole('tab', { name: 'Decompiled C#' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-      { timeout: 90_000 },
-    )
+    await expect(page.getByRole('tab', { name: 'Decompiled C#' })).toHaveAttribute('aria-selected', 'true', { timeout: 90_000 })
     await expect(stableOutput).toContainText('Repaired')
   })
 
-  test('desktop defaults to Monaco and preserves source and the local-only editor choice', async ({
-    page,
-    isMobile,
-  }) => {
+  test('desktop defaults to Monaco and preserves source and the local-only editor choice', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop layout coverage.')
     await openWorkbench(page)
 
@@ -324,21 +286,11 @@ test.describe('workbench experience contract', () => {
         settingsRight: settingsRect.right,
       }
     })
-    expect(
-      Math.abs(idleStatusLayout.resultBarLeft - idleStatusLayout.resultPaneLeft),
-    ).toBeLessThanOrEqual(1)
-    expect(
-      Math.abs(idleStatusLayout.resultBarRight - idleStatusLayout.resultPaneRight),
-    ).toBeLessThanOrEqual(1)
-    expect(idleStatusLayout.settingsLeft).toBeGreaterThan(
-      (idleStatusLayout.resultPaneLeft + idleStatusLayout.resultPaneRight) / 2,
-    )
-    expect(
-      idleStatusLayout.resultPaneRight - idleStatusLayout.settingsRight,
-    ).toBeGreaterThanOrEqual(8)
-    expect(idleStatusLayout.resultPaneRight - idleStatusLayout.settingsRight).toBeLessThanOrEqual(
-      10,
-    )
+    expect(Math.abs(idleStatusLayout.resultBarLeft - idleStatusLayout.resultPaneLeft)).toBeLessThanOrEqual(1)
+    expect(Math.abs(idleStatusLayout.resultBarRight - idleStatusLayout.resultPaneRight)).toBeLessThanOrEqual(1)
+    expect(idleStatusLayout.settingsLeft).toBeGreaterThan((idleStatusLayout.resultPaneLeft + idleStatusLayout.resultPaneRight) / 2)
+    expect(idleStatusLayout.resultPaneRight - idleStatusLayout.settingsRight).toBeGreaterThanOrEqual(8)
+    expect(idleStatusLayout.resultPaneRight - idleStatusLayout.settingsRight).toBeLessThanOrEqual(10)
 
     await page.getByLabel('Output', { exact: true }).selectOption('run')
     await expect(page.getByLabel('Runtime')).toBeVisible()
@@ -350,20 +302,12 @@ test.describe('workbench experience contract', () => {
 
     await switchEditor(page, 'codemirror')
     await expect(sourceEditor(page)).toContainText('SwitchPreserved')
-    const codeMirrorSourceBox = await visibleBox(
-      workbenchPane(page, 'source'),
-      'desktop CodeMirror source pane',
-    )
-    const codeMirrorResultBox = await visibleBox(
-      workbenchPane(page, 'result'),
-      'desktop CodeMirror result pane',
-    )
+    const codeMirrorSourceBox = await visibleBox(workbenchPane(page, 'source'), 'desktop CodeMirror source pane')
+    const codeMirrorResultBox = await visibleBox(workbenchPane(page, 'result'), 'desktop CodeMirror result pane')
     expectHorizontalSplit(codeMirrorSourceBox, codeMirrorResultBox)
     expect(Math.abs(codeMirrorSourceBox.width - sourceBox.width)).toBeLessThanOrEqual(2)
     expect(Math.abs(codeMirrorResultBox.width - resultBox.width)).toBeLessThanOrEqual(2)
-    await expect
-      .poll(() => page.evaluate((key) => localStorage.getItem(key), editorPreferenceStorageKey))
-      .toBe('codemirror')
+    await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), editorPreferenceStorageKey)).toBe('codemirror')
     await page.waitForTimeout(800)
     expect(new URL(page.url()).hash).toBe(shareHash)
 
@@ -384,10 +328,7 @@ test.describe('workbench experience contract', () => {
     await expectNoDocumentOverflow(page)
   })
 
-  test('keeps a short desktop viewport and short stdout free of false overflow', async ({
-    page,
-    isMobile,
-  }) => {
+  test('keeps a short desktop viewport and short stdout free of false overflow', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Compact-height desktop coverage.')
     await page.setViewportSize({ width: 1106, height: 498 })
     await openWorkbench(page)
@@ -401,10 +342,7 @@ test.describe('workbench experience contract', () => {
     expectHorizontalSplit(sourcePane, resultPane)
 
     await page.getByLabel('Output', { exact: true }).selectOption('run')
-    await replaceSource(
-      page,
-      'using System;\nConsole.Write("\\u001b[1;4;38;2;18;52;86mshort output <script>safe</script>\\u001b[0m");\nConsole.Write("\\u001b[2Jcursor");\n',
-    )
+    await replaceSource(page, 'using System;\nConsole.Write("\\u001b[1;4;38;2;18;52;86mshort output <script>safe</script>\\u001b[0m");\nConsole.Write("\\u001b[2Jcursor");\n')
     await page.getByRole('button', { name: 'Run', exact: true }).click()
     await waitForCompletedOperation(page)
     await expectResultContentFillsPane(page)
@@ -447,10 +385,7 @@ test.describe('workbench experience contract', () => {
       return {
         text: status.textContent ?? '',
         height: statusRect.height,
-        insideBar:
-          barRect !== undefined &&
-          statusRect.top >= barRect.top - 1 &&
-          statusRect.bottom <= barRect.bottom + 1,
+        insideBar: barRect !== undefined && statusRect.top >= barRect.top - 1 && statusRect.bottom <= barRect.bottom + 1,
         resultBarLeft: barRect?.left ?? -1,
         resultBarRight: barRect?.right ?? -1,
         resultPaneLeft: resultRect?.left ?? -1,
@@ -465,12 +400,8 @@ test.describe('workbench experience contract', () => {
     expect(statusMetrics.text).not.toContain('completed')
     expect(statusMetrics.height).toBeLessThanOrEqual(26)
     expect(statusMetrics.insideBar).toBe(true)
-    expect(
-      Math.abs(statusMetrics.resultBarLeft - statusMetrics.resultPaneLeft),
-    ).toBeLessThanOrEqual(1)
-    expect(
-      Math.abs(statusMetrics.resultBarRight - statusMetrics.resultPaneRight),
-    ).toBeLessThanOrEqual(1)
+    expect(Math.abs(statusMetrics.resultBarLeft - statusMetrics.resultPaneLeft)).toBeLessThanOrEqual(1)
+    expect(Math.abs(statusMetrics.resultBarRight - statusMetrics.resultPaneRight)).toBeLessThanOrEqual(1)
     expect(statusMetrics.metricsLeft - statusMetrics.resultPaneLeft).toBeGreaterThanOrEqual(8)
     expect(statusMetrics.metricsLeft - statusMetrics.resultPaneLeft).toBeLessThanOrEqual(10)
     expect(statusMetrics.settingsLeft - statusMetrics.metricsRight).toBeGreaterThanOrEqual(12)
@@ -486,10 +417,7 @@ test.describe('workbench experience contract', () => {
     await expectNoDocumentOverflow(page)
   })
 
-  test('fills a short desktop result pane with unwrapped Decompiled C#', async ({
-    page,
-    isMobile,
-  }) => {
+  test('fills a short desktop result pane with unwrapped Decompiled C#', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Compact-height desktop result coverage.')
     await page.setViewportSize({ width: 1106, height: 498 })
     await openWorkbench(page)
@@ -512,10 +440,7 @@ test.describe('workbench experience contract', () => {
     await expectNoDocumentOverflow(page)
   })
 
-  test('language switches keep independent browser-local workspaces and correct default files', async ({
-    page,
-    isMobile,
-  }) => {
+  test('language switches keep independent browser-local workspaces and correct default files', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop language workspace coverage.')
     await openWorkbench(page)
     await replaceSource(page, 'public static class CachedCSharp {}')
@@ -550,10 +475,7 @@ test.describe('workbench experience contract', () => {
     await expect(sourceEditor(page)).toContainText('Cached PHP')
   })
 
-  test('keeps routine health and identity metadata out of the workbench chrome', async ({
-    page,
-    isMobile,
-  }) => {
+  test('keeps routine health and identity metadata out of the workbench chrome', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop chrome coverage.')
     await openWorkbench(page)
 
@@ -561,17 +483,11 @@ test.describe('workbench experience contract', () => {
     await expect(page.locator('.app-health')).toHaveCount(0)
     await expect(page.locator('.select-field > span:not(.visually-hidden)')).toHaveCount(0)
     await expect(page.locator('.identity-strip')).toBeHidden()
-    await expect(page.locator('.status-bar')).not.toContainText(
-      /Workspace r|Selection r|Catalog|LSP/,
-    )
+    await expect(page.locator('.status-bar')).not.toContainText(/Workspace r|Selection r|Catalog|LSP/)
     await expect(page.getByRole('toolbar', { name: 'Editor' })).toBeVisible()
   })
 
-  test('editor selection stays browser-local across reloads and pages without changing shared state', async ({
-    page,
-    context,
-    isMobile,
-  }) => {
+  test('editor selection stays browser-local across reloads and pages without changing shared state', async ({ page, context, isMobile }) => {
     await openWorkbench(page)
     await replaceSource(page, switchSource)
     await expect(sourceEditor(page)).toContainText('SwitchPreserved')
@@ -581,9 +497,7 @@ test.describe('workbench experience contract', () => {
     const shareUrl = page.url()
     const preferredEditor = isMobile ? 'monaco' : 'codemirror'
     await switchEditor(page, preferredEditor)
-    await expect
-      .poll(() => page.evaluate((key) => localStorage.getItem(key), editorPreferenceStorageKey))
-      .toBe(preferredEditor)
+    await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), editorPreferenceStorageKey)).toBe(preferredEditor)
     await page.waitForTimeout(800)
     expect(page.url()).toBe(shareUrl)
 
@@ -599,30 +513,27 @@ test.describe('workbench experience contract', () => {
     await expectActiveEditor(siblingPage, preferredEditor)
     await expect(siblingPage).toHaveURL(shareUrl)
     await expect(sourceEditor(siblingPage)).toContainText('SwitchPreserved')
-    await expect
-      .poll(() =>
-        siblingPage.evaluate((key) => localStorage.getItem(key), editorPreferenceStorageKey),
-      )
-      .toBe(preferredEditor)
+    await expect.poll(() => siblingPage.evaluate((key) => localStorage.getItem(key), editorPreferenceStorageKey)).toBe(preferredEditor)
     await siblingPage.waitForTimeout(800)
     expect(siblingPage.url()).toBe(shareUrl)
     await siblingPage.close()
   })
 
-  test('mobile defaults to CodeMirror and keeps a stable vertical split when switched to Monaco', async ({
-    page,
-    isMobile,
-  }) => {
+  test('mobile defaults to CodeMirror and keeps a stable vertical split when switched to Monaco', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'Mobile layout coverage.')
     await openWorkbench(page)
     await waitForCompletedOperation(page)
 
     expect(page.viewportSize()).toEqual({ width: 412, height: 915 })
     await expectActiveEditor(page, 'codemirror')
-    const resultCode = page.getByRole('textbox', { name: 'Decompiled C sharp' })
+    const resultCode = page.getByRole('textbox', {
+      name: 'Decompiled C sharp',
+    })
     await expect(resultCode).toBeVisible()
     const resultTab = page.getByRole('tab', { name: 'Decompiled C#' })
-    const editorSettings = page.getByRole('button', { name: 'Editor settings' })
+    const editorSettings = page.getByRole('button', {
+      name: 'Editor settings',
+    })
     await expect(editorSettings).toBeVisible()
     await expect(editorSettings).toHaveAttribute('aria-expanded', 'false')
     await expect(editorSwitch(page)).toBeHidden()
@@ -636,9 +547,7 @@ test.describe('workbench experience contract', () => {
     await expect(page.getByLabel('Current code font size')).toHaveText('14px')
     await page.getByRole('button', { name: 'Increase code font size' }).click()
     await expect(page.getByLabel('Current code font size')).toHaveText('16px')
-    await expect
-      .poll(() => page.evaluate((key) => localStorage.getItem(key), editorFontSizeStorageKey))
-      .toBe('16')
+    await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), editorFontSizeStorageKey)).toBe('16')
     expect(page.url()).toBe(editorSettingsUrl)
     await expect
       .poll(() =>
@@ -648,20 +557,16 @@ test.describe('workbench experience contract', () => {
         }),
       )
       .toBe('16px')
-    await expect
-      .poll(() => resultCode.evaluate((code) => getComputedStyle(code).fontSize))
-      .toBe('16px')
-    expect(await resultTab.evaluate((element) => getComputedStyle(element).fontSize)).toBe(
-      fixedChromeFontSizes.resultTab,
-    )
-    expect(await editorSettings.evaluate((element) => getComputedStyle(element).fontSize)).toBe(
-      fixedChromeFontSizes.settings,
-    )
+    await expect.poll(() => resultCode.evaluate((code) => getComputedStyle(code).fontSize)).toBe('16px')
+    expect(await resultTab.evaluate((element) => getComputedStyle(element).fontSize)).toBe(fixedChromeFontSizes.resultTab)
+    expect(await editorSettings.evaluate((element) => getComputedStyle(element).fontSize)).toBe(fixedChromeFontSizes.settings)
     await editorSettings.click()
     await expect(editorSwitch(page)).toBeHidden()
     await replaceSource(page, 'class C { }')
 
-    const mobileFiles = page.getByRole('button', { name: /^Workspace files, current / })
+    const mobileFiles = page.getByRole('button', {
+      name: /^Workspace files, current /,
+    })
     await expect(mobileFiles).toHaveAttribute('aria-expanded', 'false')
     await expect(page.getByRole('tablist', { name: 'Workspace files' })).toBeHidden()
     const collapsedFileLayout = await page.locator('.source-pane').evaluate((sourcePane) => {
@@ -694,13 +599,11 @@ test.describe('workbench experience contract', () => {
       const editorRect = editor.getBoundingClientRect()
       return { sourceHeight: sourceRect.height, editorTop: editorRect.top }
     })
-    expect(
-      Math.abs(expandedFileLayout.sourceHeight - collapsedFileLayout.sourceHeight),
-    ).toBeLessThanOrEqual(1)
-    expect(
-      Math.abs(expandedFileLayout.editorTop - collapsedFileLayout.editorTop),
-    ).toBeLessThanOrEqual(1)
-    const closeLastFile = page.getByRole('button', { name: 'Close Program.cs' })
+    expect(Math.abs(expandedFileLayout.sourceHeight - collapsedFileLayout.sourceHeight)).toBeLessThanOrEqual(1)
+    expect(Math.abs(expandedFileLayout.editorTop - collapsedFileLayout.editorTop)).toBeLessThanOrEqual(1)
+    const closeLastFile = page.getByRole('button', {
+      name: 'Close Program.cs',
+    })
     await expect(closeLastFile).toBeVisible()
     await closeLastFile.click()
     await expect(mobileFiles).toHaveAttribute('aria-expanded', 'false')
@@ -714,13 +617,7 @@ test.describe('workbench experience contract', () => {
       const lineNumber = host.querySelector('.cm-lineNumbers .cm-gutterElement')
       const content = host.querySelector('.cm-content')
       const line = host.querySelector('.cm-line')
-      if (
-        !(scroller instanceof HTMLElement) ||
-        !(gutter instanceof HTMLElement) ||
-        !(lineNumber instanceof HTMLElement) ||
-        !(content instanceof HTMLElement) ||
-        !(line instanceof HTMLElement)
-      ) {
+      if (!(scroller instanceof HTMLElement) || !(gutter instanceof HTMLElement) || !(lineNumber instanceof HTMLElement) || !(content instanceof HTMLElement) || !(line instanceof HTMLElement)) {
         throw new Error('CodeMirror layout is missing its compact gutter.')
       }
       const gutterRect = gutter.getBoundingClientRect()
@@ -731,22 +628,15 @@ test.describe('workbench experience contract', () => {
         scrollWidth: scroller.scrollWidth,
         scrollbarGutter: getComputedStyle(scroller).scrollbarGutter,
         gutterWidth: gutterRect.width,
-        codeGap:
-          contentRect.left +
-          Number.parseFloat(getComputedStyle(line).paddingLeft) -
-          (lineNumberRect.left + lineNumberRect.width),
-        auxiliaryGuttersHidden: Array.from(
-          host.querySelectorAll('.cm-foldGutter, .cm-gutter-lint'),
-        ).every((element) => getComputedStyle(element).display === 'none'),
+        codeGap: contentRect.left + Number.parseFloat(getComputedStyle(line).paddingLeft) - (lineNumberRect.left + lineNumberRect.width),
+        auxiliaryGuttersHidden: Array.from(host.querySelectorAll('.cm-foldGutter, .cm-gutter-lint')).every((element) => getComputedStyle(element).display === 'none'),
       }
     })
     expect(shortCodeMirrorMetrics.scrollbarGutter).toBe('auto')
     expect(shortCodeMirrorMetrics.gutterWidth).toBeLessThanOrEqual(40)
     expect(shortCodeMirrorMetrics.codeGap).toBeLessThanOrEqual(12)
     expect(shortCodeMirrorMetrics.auxiliaryGuttersHidden).toBe(true)
-    expect(shortCodeMirrorMetrics.scrollWidth).toBeLessThanOrEqual(
-      shortCodeMirrorMetrics.clientWidth + 1,
-    )
+    expect(shortCodeMirrorMetrics.scrollWidth).toBeLessThanOrEqual(shortCodeMirrorMetrics.clientWidth + 1)
 
     const sourceBefore = await visibleBox(workbenchPane(page, 'source'), 'mobile source pane')
     const resultBefore = await visibleBox(workbenchPane(page, 'result'), 'mobile result pane')
@@ -756,10 +646,7 @@ test.describe('workbench experience contract', () => {
     await expectInsideViewport(page, sourceBefore, 'mobile source pane')
     await expectInsideViewport(page, resultBefore, 'mobile result pane')
 
-    await replaceSource(
-      page,
-      `public static class LongLine { public const string Value = "${'x'.repeat(320)}"; }`,
-    )
+    await replaceSource(page, `public static class LongLine { public const string Value = "${'x'.repeat(320)}"; }`)
     const codeMirrorLineMetrics = await editorHost(page, 'codemirror').evaluate((host) => {
       const editor = host.querySelector('.cm-editor')
       const scroller = host.querySelector('.cm-scroller')
@@ -792,11 +679,7 @@ test.describe('workbench experience contract', () => {
       const lineNumber = host.querySelector('.monaco-editor .line-numbers')
       const glyphMargin = host.querySelector('.monaco-editor .glyph-margin')
       const viewLines = host.querySelector('.monaco-editor .view-lines')
-      if (
-        !(margin instanceof HTMLElement) ||
-        !(lineNumber instanceof HTMLElement) ||
-        !(viewLines instanceof HTMLElement)
-      ) {
+      if (!(margin instanceof HTMLElement) || !(lineNumber instanceof HTMLElement) || !(viewLines instanceof HTMLElement)) {
         throw new Error('Monaco layout is missing its source gutter.')
       }
       const marginRect = margin.getBoundingClientRect()
@@ -806,8 +689,7 @@ test.describe('workbench experience contract', () => {
       return {
         gutterWidth: marginRect.width,
         codeGap,
-        glyphMarginWidth:
-          glyphMargin instanceof HTMLElement ? glyphMargin.getBoundingClientRect().width : 0,
+        glyphMarginWidth: glyphMargin instanceof HTMLElement ? glyphMargin.getBoundingClientRect().width : 0,
         foldingLaneWidth: codeGap,
         lineNumber: lineNumber.textContent?.trim() ?? '',
       }
@@ -829,14 +711,8 @@ test.describe('workbench experience contract', () => {
 
     await switchEditor(page, 'codemirror')
     await expect(sourceEditor(page)).toContainText('SwitchPreserved')
-    const sourceRoundTrip = await visibleBox(
-      workbenchPane(page, 'source'),
-      'mobile CodeMirror round-trip source pane',
-    )
-    const resultRoundTrip = await visibleBox(
-      workbenchPane(page, 'result'),
-      'mobile CodeMirror round-trip result pane',
-    )
+    const sourceRoundTrip = await visibleBox(workbenchPane(page, 'source'), 'mobile CodeMirror round-trip source pane')
+    const resultRoundTrip = await visibleBox(workbenchPane(page, 'result'), 'mobile CodeMirror round-trip result pane')
     expectVerticalSplit(sourceRoundTrip, resultRoundTrip)
     expect(Math.abs(sourceRoundTrip.height - sourceBefore.height)).toBeLessThanOrEqual(2)
     expect(Math.abs(resultRoundTrip.height - resultBefore.height)).toBeLessThanOrEqual(2)
@@ -844,10 +720,7 @@ test.describe('workbench experience contract', () => {
     await expectNoDocumentOverflow(page)
   })
 
-  test('runs PHP and displays all JIT methods in the mobile CodeMirror split', async ({
-    page,
-    isMobile,
-  }) => {
+  test('runs PHP and displays all JIT methods in the mobile CodeMirror split', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'Mobile PHP coverage.')
     test.setTimeout(240_000)
     const operations = observeOperationWebSocket(page)
@@ -889,10 +762,7 @@ test.describe('workbench experience contract', () => {
         height: statusRect.height,
         scrollWidth: status.scrollWidth,
         clientWidth: status.clientWidth,
-        insideBar:
-          barRect !== undefined &&
-          statusRect.top >= barRect.top - 1 &&
-          statusRect.bottom <= barRect.bottom + 1,
+        insideBar: barRect !== undefined && statusRect.top >= barRect.top - 1 && statusRect.bottom <= barRect.bottom + 1,
         resultBarLeft: barRect?.left ?? -1,
         resultBarRight: barRect?.right ?? -1,
         metricsLeft: metricsRect?.left ?? -1,
@@ -930,17 +800,13 @@ test.describe('workbench experience contract', () => {
     await expect.poll(() => operations.operationIdForStart(jitStart)).toMatch(/^op_[0-9a-f]{32}$/)
     const jitOperationId = operations.operationIdForStart(jitStart)
     if (!jitOperationId) throw new Error('The PHP JIT response did not contain an operation ID.')
-    await expect
-      .poll(() => operations.hasSubscription(jitOperationId), { timeout: 30_000 })
-      .toBe(true)
+    await expect.poll(() => operations.hasSubscription(jitOperationId), { timeout: 30_000 }).toBe(true)
     await expect.poll(() => operations.hasEvent(jitOperationId), { timeout: 30_000 }).toBe(true)
     await waitForCompletedOperation(page)
     await expect(page.getByLabel('JIT method')).toHaveCount(0)
     await expect(page.getByLabel('JIT assembly')).toContainText('square')
     await expect(page.locator('.jit-view .run-status')).toHaveCount(0)
-    await expect(
-      page.locator('.status-bar').getByRole('status', { name: 'JIT status' }),
-    ).toContainText('JIT ready')
+    await expect(page.locator('.status-bar').getByRole('status', { name: 'JIT status' })).toContainText('JIT ready')
     await expectResultContentFillsPane(page)
 
     const jitSource = await visibleBox(workbenchPane(page, 'source'), 'mobile PHP JIT source pane')
@@ -952,10 +818,7 @@ test.describe('workbench experience contract', () => {
     await expectNoDocumentOverflow(page)
   })
 
-  test('keeps a short mobile code result free of false vertical overflow', async ({
-    page,
-    isMobile,
-  }) => {
+  test('keeps a short mobile code result free of false vertical overflow', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'Mobile result scrolling coverage.')
     await openWorkbench(page)
     await expectActiveEditor(page, 'codemirror')
@@ -975,10 +838,7 @@ test.describe('workbench experience contract', () => {
     await expectNoDocumentOverflow(page)
   })
 
-  test('the mobile settings button reveals the selectors hidden from the command bar', async ({
-    page,
-    isMobile,
-  }) => {
+  test('the mobile settings button reveals the selectors hidden from the command bar', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'Mobile settings coverage.')
     await openWorkbench(page)
 
@@ -997,10 +857,7 @@ test.describe('workbench experience contract', () => {
     await expectNoDocumentOverflow(page)
   })
 
-  test('safe output edits compile automatically and consume operation events over WebSocket', async ({
-    page,
-    isMobile,
-  }) => {
+  test('safe output edits compile automatically and consume operation events over WebSocket', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop live-compilation coverage.')
     const operations = observeOperationWebSocket(page)
     const languageSockets: string[] = []
@@ -1011,18 +868,15 @@ test.describe('workbench experience contract', () => {
       }
     })
     await openWorkbench(page, { waitForLsp: true })
-    await expect
-      .poll(() => languageSockets.some((url) => new URL(url).protocol === 'ws:'))
-      .toBe(true)
+    await expect.poll(() => languageSockets.some((url) => new URL(url).protocol === 'ws:')).toBe(true)
 
     await page.getByLabel('Output', { exact: true }).selectOption('compile-check')
-    await replaceSource(
-      page,
-      'public static class LiveCompile { public static void M() { MissingLiveSymbol(); } }',
-    )
+    await replaceSource(page, 'public static class LiveCompile { public static void M() { MissingLiveSymbol(); } }')
 
     await expect
-      .poll(() => operations.findStart('build', 'MissingLiveSymbol'), { timeout: 30_000 })
+      .poll(() => operations.findStart('build', 'MissingLiveSymbol'), {
+        timeout: 30_000,
+      })
       .toBeDefined()
     const buildStart = operations.findStart('build', 'MissingLiveSymbol')
     if (!buildStart) throw new Error('The live Build start command was not observed.')
@@ -1032,9 +886,7 @@ test.describe('workbench experience contract', () => {
     await expect.poll(() => operations.hasSubscription(operationId), { timeout: 30_000 }).toBe(true)
     await expect.poll(() => operations.hasEvent(operationId), { timeout: 30_000 }).toBe(true)
     expect(operations.socketUrls.length).toBeGreaterThan(0)
-    const diagnosticsTab = page
-      .getByRole('tablist', { name: 'Result views' })
-      .getByRole('tab', { name: /^Diagnostics(?: \(\d+\))?$/ })
+    const diagnosticsTab = page.getByRole('tablist', { name: 'Result views' }).getByRole('tab', { name: /^Diagnostics(?: \(\d+\))?$/ })
     await expect(diagnosticsTab).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByRole('tabpanel')).toContainText('MissingLiveSymbol', {
       timeout: 90_000,
@@ -1042,10 +894,7 @@ test.describe('workbench experience contract', () => {
     await waitForCompletedOperation(page)
   })
 
-  test('typing live-runs Run over operation WebSockets while JIT remains explicit', async ({
-    page,
-    isMobile,
-  }) => {
+  test('typing live-runs Run over operation WebSockets while JIT remains explicit', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop live runtime coverage.')
     test.setTimeout(180_000)
     const operations = observeOperationWebSocket(page)
@@ -1058,7 +907,9 @@ test.describe('workbench experience contract', () => {
     await replaceSource(page, liveSource)
 
     await expect
-      .poll(() => operations.findStart('build', 'LiveRunFromTyping'), { timeout: 90_000 })
+      .poll(() => operations.findStart('build', 'LiveRunFromTyping'), {
+        timeout: 90_000,
+      })
       .toBeDefined()
     const buildStart = operations.findStart('build', 'LiveRunFromTyping')
     if (!buildStart) throw new Error('The live Run Build start command was not observed.')
@@ -1067,9 +918,7 @@ test.describe('workbench experience contract', () => {
     if (!buildOperationId) {
       throw new Error('The live Run Build response did not contain an operation ID.')
     }
-    await expect
-      .poll(() => operations.hasSubscription(buildOperationId), { timeout: 30_000 })
-      .toBe(true)
+    await expect.poll(() => operations.hasSubscription(buildOperationId), { timeout: 30_000 }).toBe(true)
     await expect.poll(() => operations.hasEvent(buildOperationId), { timeout: 30_000 }).toBe(true)
 
     await expect.poll(() => operations.findStart('run'), { timeout: 90_000 }).toBeDefined()
@@ -1078,9 +927,7 @@ test.describe('workbench experience contract', () => {
     await expect.poll(() => operations.operationIdForStart(runStart)).toMatch(/^op_[0-9a-f]{32}$/)
     const runOperationId = operations.operationIdForStart(runStart)
     if (!runOperationId) throw new Error('The live Run response did not contain an operation ID.')
-    await expect
-      .poll(() => operations.hasSubscription(runOperationId), { timeout: 30_000 })
-      .toBe(true)
+    await expect.poll(() => operations.hasSubscription(runOperationId), { timeout: 30_000 }).toBe(true)
     await expect.poll(() => operations.hasEvent(runOperationId), { timeout: 30_000 }).toBe(true)
     await waitForCompletedOperation(page)
     await expect(page.locator('.terminal-view .result-document')).toContainText('LiveRunFromTyping')
@@ -1090,23 +937,15 @@ test.describe('workbench experience contract', () => {
     await page.getByLabel('Output', { exact: true }).selectOption('jit-asm')
     await expect(page.getByRole('group', { name: 'JIT scope' })).toHaveCount(0)
     await page.waitForTimeout(800)
-    const jitStartsBeforeEdit = operations.sent.filter(
-      (frame) => frame.type === 'start' && frame.operation === 'jit',
-    ).length
+    const jitStartsBeforeEdit = operations.sent.filter((frame) => frame.type === 'start' && frame.operation === 'jit').length
     await replaceSource(page, jitSource)
     await moveCursorToLine(page, 10)
     await page.keyboard.insertText(' ')
     await page.waitForTimeout(1_200)
-    expect(
-      operations.sent.filter((frame) => frame.type === 'start' && frame.operation === 'jit'),
-      'JIT must remain an explicit action after source edits',
-    ).toHaveLength(jitStartsBeforeEdit)
+    expect(operations.sent.filter((frame) => frame.type === 'start' && frame.operation === 'jit'), 'JIT must remain an explicit action after source edits').toHaveLength(jitStartsBeforeEdit)
   })
 
-  test('refreshing a JIT workspace runs the restored output exactly once', async ({
-    page,
-    isMobile,
-  }) => {
+  test('refreshing a JIT workspace runs the restored output exactly once', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop refresh and operation WebSocket coverage.')
     test.setTimeout(180_000)
     const operations = observeOperationWebSocket(page)
@@ -1123,41 +962,25 @@ test.describe('workbench experience contract', () => {
       })
       .toBe('jit-asm')
 
-    const startsBeforeRefresh = operations.sent.filter(
-      (frame) => frame.type === 'start' && frame.operation === 'jit',
-    ).length
+    const startsBeforeRefresh = operations.sent.filter((frame) => frame.type === 'start' && frame.operation === 'jit').length
     expect(startsBeforeRefresh).toBe(0)
 
     await page.reload()
     await expect(page.getByLabel('Output', { exact: true })).toHaveValue('jit-asm')
-    await expect
-      .poll(
-        () =>
-          operations.sent.filter((frame) => frame.type === 'start' && frame.operation === 'jit')
-            .length,
-        { timeout: 90_000 },
-      )
-      .toBe(startsBeforeRefresh + 1)
+    await expect.poll(() => operations.sent.filter((frame) => frame.type === 'start' && frame.operation === 'jit').length, { timeout: 90_000 }).toBe(startsBeforeRefresh + 1)
     await waitForCompletedOperation(page)
 
     await page.waitForTimeout(1_200)
-    expect(
-      operations.sent.filter((frame) => frame.type === 'start' && frame.operation === 'jit'),
-    ).toHaveLength(startsBeforeRefresh + 1)
+    expect(operations.sent.filter((frame) => frame.type === 'start' && frame.operation === 'jit')).toHaveLength(startsBeforeRefresh + 1)
   })
 
-  test('JIT always shows all methods without a filtering toolbar', async ({
-    page,
-    isMobile,
-  }, testInfo) => {
+  test('JIT always shows all methods without a filtering toolbar', async ({ page, isMobile }, testInfo) => {
     test.setTimeout(180_000)
     await openWorkbench(page, { waitForLsp: true })
     await waitForCompletedOperation(page)
     await expectActiveEditor(page, isMobile ? 'codemirror' : 'monaco')
 
-    const output = isMobile
-      ? page.getByRole('combobox', { name: 'View', exact: true })
-      : page.getByLabel('Output', { exact: true })
+    const output = isMobile ? page.getByRole('combobox', { name: 'View', exact: true }) : page.getByLabel('Output', { exact: true })
     await output.selectOption('jit-asm')
     await replaceSource(page, jitSource)
 
@@ -1181,14 +1004,10 @@ test.describe('workbench experience contract', () => {
       await expect(monacoJit.locator('.view-lines')).toContainText('Other')
     }
     await expect(page.locator('.jit-view .run-status')).toHaveCount(0)
-    await expect(
-      page.locator('.status-bar').getByRole('status', { name: 'JIT status' }),
-    ).toContainText('JIT ready')
+    await expect(page.locator('.status-bar').getByRole('status', { name: 'JIT status' })).toContainText('JIT ready')
     await expectResultContentFillsPane(page)
     await page.screenshot({
-      path: testInfo.outputPath(
-        `jit-all-methods-${isMobile ? 'mobile-codemirror' : 'desktop-monaco'}.png`,
-      ),
+      path: testInfo.outputPath(`jit-all-methods-${isMobile ? 'mobile-codemirror' : 'desktop-monaco'}.png`),
       fullPage: true,
     })
 
@@ -1207,68 +1026,32 @@ test.describe('workbench experience contract', () => {
     await expectResultContentFillsPane(page)
     await expectNoDocumentOverflow(page)
     await page.screenshot({
-      path: testInfo.outputPath(
-        `jit-all-methods-${isMobile ? 'mobile-monaco' : 'desktop-codemirror'}.png`,
-      ),
+      path: testInfo.outputPath(`jit-all-methods-${isMobile ? 'mobile-monaco' : 'desktop-codemirror'}.png`),
       fullPage: true,
     })
   })
 
-  test('real C# semantic tokens render VS type, method, and variable colors in both editors', async ({
-    page,
-    isMobile,
-  }) => {
+  test('real C# semantic tokens render VS type, method, and variable colors in both editors', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop semantic-color coverage.')
     await openWorkbench(page, { waitForLsp: true })
     await waitForCompletedOperation(page)
     await page.getByLabel('Output', { exact: true }).selectOption('run')
     await replaceSource(page, semanticSource)
 
-    await expectSemanticColor(
-      editorHost(page, 'monaco').locator('.view-lines'),
-      'SemanticWidget',
-      '#2b91af',
-    )
-    await expectSemanticColor(
-      editorHost(page, 'monaco').locator('.view-lines'),
-      'CalculateValue',
-      '#795e26',
-    )
-    await expectSemanticColor(
-      editorHost(page, 'monaco').locator('.view-lines'),
-      'localValue',
-      '#001080',
-    )
+    await expectSemanticColor(editorHost(page, 'monaco').locator('.view-lines'), 'SemanticWidget', '#2b91af')
+    await expectSemanticColor(editorHost(page, 'monaco').locator('.view-lines'), 'CalculateValue', '#795e26')
+    await expectSemanticColor(editorHost(page, 'monaco').locator('.view-lines'), 'localValue', '#001080')
     await expectSemanticColor(editorHost(page, 'monaco').locator('.view-lines'), '\\n', '#ee0000')
 
     await switchEditor(page, 'codemirror')
     await waitForLanguageServiceReady(page)
-    await expectSemanticColor(
-      editorHost(page, 'codemirror').locator('.cm-semantic-type'),
-      'SemanticWidget',
-      '#2b91af',
-    )
-    await expectSemanticColor(
-      editorHost(page, 'codemirror').locator('.cm-semantic-method'),
-      'CalculateValue',
-      '#795e26',
-    )
-    await expectSemanticColor(
-      editorHost(page, 'codemirror').locator('.cm-semantic-variable'),
-      'localValue',
-      '#001080',
-    )
-    await expectSemanticColor(
-      editorHost(page, 'codemirror').locator('.cm-semantic-escape'),
-      '\\n',
-      '#ee0000',
-    )
+    await expectSemanticColor(editorHost(page, 'codemirror').locator('.cm-semantic-type'), 'SemanticWidget', '#2b91af')
+    await expectSemanticColor(editorHost(page, 'codemirror').locator('.cm-semantic-method'), 'CalculateValue', '#795e26')
+    await expectSemanticColor(editorHost(page, 'codemirror').locator('.cm-semantic-variable'), 'localValue', '#001080')
+    await expectSemanticColor(editorHost(page, 'codemirror').locator('.cm-semantic-escape'), '\\n', '#ee0000')
   })
 
-  test('Monaco retains C++/CLI lexical colors across language, editor, and reload transitions', async ({
-    page,
-    isMobile,
-  }) => {
+  test('Monaco retains C++/CLI lexical colors across language, editor, and reload transitions', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop Monaco lexical-color coverage.')
     await openWorkbench(page)
     await page.getByLabel('Language').selectOption('cppcli')
@@ -1317,14 +1100,8 @@ async function expectSemanticColor(root: Locator, tokenText: string, expectedCol
       async () =>
         colorToHex(
           await root.evaluateAll((elements, text) => {
-            const candidates = elements.flatMap((element) => [
-              element,
-              ...element.querySelectorAll<HTMLElement>('span'),
-            ])
-            const token = candidates.find(
-              (candidate) =>
-                candidate.children.length === 0 && candidate.textContent?.trim() === text,
-            )
+            const candidates = elements.flatMap((element) => [element, ...element.querySelectorAll<HTMLElement>('span')])
+            const token = candidates.find((candidate) => candidate.children.length === 0 && candidate.textContent?.trim() === text)
             return token ? getComputedStyle(token).color : null
           }, tokenText),
         ),
@@ -1339,14 +1116,8 @@ async function expectTokenContainingColor(root: Locator, tokenText: string, expe
       async () =>
         colorToHex(
           await root.evaluateAll((elements, text) => {
-            const candidates = elements.flatMap((element) => [
-              element,
-              ...element.querySelectorAll<HTMLElement>('span'),
-            ])
-            const token = candidates.find(
-              (candidate) =>
-                candidate.children.length === 0 && candidate.textContent?.includes(text),
-            )
+            const candidates = elements.flatMap((element) => [element, ...element.querySelectorAll<HTMLElement>('span')])
+            const token = candidates.find((candidate) => candidate.children.length === 0 && candidate.textContent?.includes(text))
             return token ? getComputedStyle(token).color : null
           }, tokenText),
         ),

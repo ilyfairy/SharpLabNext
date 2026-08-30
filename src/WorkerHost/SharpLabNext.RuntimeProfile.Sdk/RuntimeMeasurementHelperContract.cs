@@ -11,6 +11,5 @@ public static class RuntimeMeasurementHelperContract
 
     public const string Entrypoint = "/usr/local/bin/sharplabnext-runtime-measurement";
 
-    public const string ContentSha256 =
-        "sha256:f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c";
+    public const string ContentSha256 = "sha256:f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c";
 }

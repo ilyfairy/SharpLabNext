@@ -25,9 +25,7 @@ namespace SharpLabNext.TargetRuntimeRunner
             {
                 assembly = Assembly.LoadFrom(assemblyPath);
             }
-            catch (System.IO.FileLoadException exception) when (
-                Environment.OSVersion.Platform == PlatformID.Win32NT &&
-                System.Runtime.InteropServices.Marshal.GetHRForException(exception) == CorFixupsInExecutable)
+            catch (System.IO.FileLoadException exception) when (Environment.OSVersion.Platform == PlatformID.Win32NT && System.Runtime.InteropServices.Marshal.GetHRForException(exception) == CorFixupsInExecutable)
             {
                 return RunNativeEntryPoint(assemblyPath, arguments);
             }
@@ -53,15 +51,13 @@ namespace SharpLabNext.TargetRuntimeRunner
             }
             else
             {
-                throw new InvalidOperationException(
-                    "The user entry point must take no parameters or a string[] parameter.");
+                throw new InvalidOperationException("The user entry point must take no parameters or a string[] parameter.");
             }
 
             Type returnType = entryPoint.ReturnType;
             if (returnType != typeof(void) && returnType != typeof(int) && !IsTask(returnType))
             {
-                throw new InvalidOperationException(
-                    "Unsupported entry point return type '" + returnType.FullName + "'.");
+                throw new InvalidOperationException("Unsupported entry point return type '" + returnType.FullName + "'.");
             }
 
             object result = CreateEntryPointInvoker(entryPoint)(invocationArguments);
@@ -77,8 +73,7 @@ namespace SharpLabNext.TargetRuntimeRunner
                 typeof(UserAssemblyRunner),
                 true);
             ILGenerator il = method.GetILGenerator();
-            if (entryPoint.GetParameters().Length == 1)
-                il.Emit(OpCodes.Ldarg_0);
+            if (entryPoint.GetParameters().Length == 1) il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Call, entryPoint);
             EmitObjectReturn(il, entryPoint.ReturnType);
             return (EntryPointInvoker)method.CreateDelegate(typeof(EntryPointInvoker));
@@ -120,11 +115,7 @@ namespace SharpLabNext.TargetRuntimeRunner
             }
         }
 
-        private static Thread StartOutputPump(
-            string name,
-            StreamReader reader,
-            TextWriter writer,
-            Action<Exception> reportFailure)
+        private static Thread StartOutputPump(string name, StreamReader reader, TextWriter writer, Action<Exception> reportFailure)
         {
             var thread = new Thread(delegate()
             {
@@ -201,60 +192,38 @@ namespace SharpLabNext.TargetRuntimeRunner
 
         private static int CompleteResult(object result)
         {
-            if (result == null)
-                return 0;
-            if (result is int)
-                return (int)result;
+            if (result == null) return 0;
+            if (result is int) return (int)result;
             if (!IsTask(result.GetType()))
             {
-                throw new InvalidOperationException(
-                    "Unsupported entry point return type '" + result.GetType().FullName + "'.");
+                throw new InvalidOperationException("Unsupported entry point return type '" + result.GetType().FullName + "'.");
             }
 
-            MethodInfo getAwaiter = result.GetType().GetMethod(
-                "GetAwaiter",
-                BindingFlags.Instance | BindingFlags.Public,
-                null,
-                Type.EmptyTypes,
-                null);
+            MethodInfo getAwaiter = result.GetType().GetMethod("GetAwaiter", BindingFlags.Instance | BindingFlags.Public, null, Type.EmptyTypes, null);
             object completedResult;
             if (getAwaiter != null)
             {
                 object awaiter = InvokeInstanceMethod(result, getAwaiter);
                 if (awaiter == null)
                     throw new InvalidOperationException("The Task returned a null awaiter.");
-                MethodInfo getResult = awaiter.GetType().GetMethod(
-                    "GetResult",
-                    BindingFlags.Instance | BindingFlags.Public,
-                    null,
-                    Type.EmptyTypes,
-                    null);
+                MethodInfo getResult = awaiter.GetType().GetMethod("GetResult", BindingFlags.Instance | BindingFlags.Public, null, Type.EmptyTypes, null);
                 if (getResult == null)
                     throw new InvalidOperationException("The Task awaiter does not expose GetResult().");
                 completedResult = InvokeInstanceMethod(awaiter, getResult);
             }
             else
             {
-                MethodInfo wait = result.GetType().GetMethod(
-                    "Wait",
-                    BindingFlags.Instance | BindingFlags.Public,
-                    null,
-                    Type.EmptyTypes,
-                    null);
+                MethodInfo wait = result.GetType().GetMethod("Wait", BindingFlags.Instance | BindingFlags.Public, null, Type.EmptyTypes, null);
                 if (wait == null)
                     throw new InvalidOperationException("The Task does not expose Wait().");
                 InvokeInstanceMethod(result, wait);
-                PropertyInfo resultProperty = result.GetType().GetProperty(
-                    "Result",
-                    BindingFlags.Instance | BindingFlags.Public);
+                PropertyInfo resultProperty = result.GetType().GetProperty("Result", BindingFlags.Instance | BindingFlags.Public);
                 MethodInfo resultGetter = resultProperty == null ? null : resultProperty.GetGetMethod();
                 completedResult = resultGetter == null ? null : InvokeInstanceMethod(result, resultGetter);
             }
 
-            if (completedResult == null)
-                return 0;
-            if (completedResult is int)
-                return (int)completedResult;
+            if (completedResult == null) return 0;
+            if (completedResult is int) return (int)completedResult;
             throw new InvalidOperationException("The Task entry point result must be Int32.");
         }
 
@@ -298,9 +267,7 @@ namespace SharpLabNext.TargetRuntimeRunner
 
         internal static void RunSelfTest()
         {
-            MethodInfo entryPoint = typeof(UserAssemblyRunner).GetMethod(
-                "SelfTestEntryPoint",
-                BindingFlags.Static | BindingFlags.NonPublic);
+            MethodInfo entryPoint = typeof(UserAssemblyRunner).GetMethod("SelfTestEntryPoint", BindingFlags.Static | BindingFlags.NonPublic);
             EntryPointInvoker invoker = CreateEntryPointInvoker(entryPoint);
             if (!object.Equals(invoker(SelfTestArguments), 2))
                 throw new InvalidOperationException("Direct entry point invocation self-test failed.");
@@ -312,25 +279,16 @@ namespace SharpLabNext.TargetRuntimeRunner
             }
             catch (InvalidOperationException exception)
             {
-                if (!string.Equals(exception.Message, "outer entry point self-test", StringComparison.Ordinal) ||
-                    exception.InnerException == null ||
-                    !string.Equals(
-                        exception.InnerException.Message,
-                        "inner entry point self-test",
-                        StringComparison.Ordinal))
+                if (!string.Equals(exception.Message, "outer entry point self-test", StringComparison.Ordinal) || exception.InnerException == null || !string.Equals(exception.InnerException.Message, "inner entry point self-test", StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException("Entry point exception identity self-test failed.");
                 }
             }
 
-            MethodInfo noArgumentEntryPoint = typeof(UserAssemblyRunner).GetMethod(
-                "SelfTestNoArgumentEntryPoint",
-                BindingFlags.Static | BindingFlags.NonPublic);
+            MethodInfo noArgumentEntryPoint = typeof(UserAssemblyRunner).GetMethod("SelfTestNoArgumentEntryPoint", BindingFlags.Static | BindingFlags.NonPublic);
             if (!object.Equals(CreateEntryPointInvoker(noArgumentEntryPoint)(null), 5))
                 throw new InvalidOperationException("No-argument entry point self-test failed.");
-            MethodInfo voidEntryPoint = typeof(UserAssemblyRunner).GetMethod(
-                "SelfTestVoidEntryPoint",
-                BindingFlags.Static | BindingFlags.NonPublic);
+            MethodInfo voidEntryPoint = typeof(UserAssemblyRunner).GetMethod("SelfTestVoidEntryPoint", BindingFlags.Static | BindingFlags.NonPublic);
             if (CreateEntryPointInvoker(voidEntryPoint)(null) != null || !_selfTestVoidCalled)
                 throw new InvalidOperationException("Void entry point self-test failed.");
 
@@ -341,9 +299,7 @@ namespace SharpLabNext.TargetRuntimeRunner
 
             var waitable = new SelfTestWaitable();
             InvokeInstanceMethod(waitable, typeof(SelfTestWaitable).GetMethod("Wait"));
-            object waitedResult = InvokeInstanceMethod(
-                waitable,
-                typeof(SelfTestWaitable).GetProperty("Result").GetGetMethod());
+            object waitedResult = InvokeInstanceMethod(waitable, typeof(SelfTestWaitable).GetProperty("Result").GetGetMethod());
             if (!waitable.Waited || !object.Equals(waitedResult, 11))
                 throw new InvalidOperationException("Wait/Result invocation self-test failed.");
         }
@@ -408,18 +364,12 @@ namespace SharpLabNext.TargetRuntimeRunner
         {
             for (Type current = type; current != null; current = current.BaseType)
             {
-                if (string.Equals(
-                    current.FullName,
-                    "System.Threading.Tasks.Task",
-                    StringComparison.Ordinal))
+                if (string.Equals(current.FullName, "System.Threading.Tasks.Task", StringComparison.Ordinal))
                 {
                     return true;
                 }
             }
-            return type.IsGenericType && string.Equals(
-                type.GetGenericTypeDefinition().FullName,
-                "System.Threading.Tasks.Task`1",
-                StringComparison.Ordinal);
+            return type.IsGenericType && string.Equals(type.GetGenericTypeDefinition().FullName, "System.Threading.Tasks.Task`1", StringComparison.Ordinal);
         }
     }
 
@@ -429,8 +379,7 @@ namespace SharpLabNext.TargetRuntimeRunner
         {
             for (int depth = 0; depth < 32 && exception.InnerException != null; depth++)
             {
-                if (exception is TargetInvocationException ||
-                    string.Equals(exception.GetType().FullName, "System.AggregateException", StringComparison.Ordinal))
+                if (exception is TargetInvocationException || string.Equals(exception.GetType().FullName, "System.AggregateException", StringComparison.Ordinal))
                 {
                     exception = exception.InnerException;
                     continue;

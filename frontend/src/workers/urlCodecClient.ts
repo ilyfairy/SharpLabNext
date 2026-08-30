@@ -1,17 +1,5 @@
-import {
-  type DecodedShare,
-  defaultUrlCodecLimits,
-  type EncodedV3Share,
-  type EncodeV3Options,
-  ShareUrlError,
-  type ShareWorkspaceState,
-  type UrlCodecLimits,
-} from '../share'
-import type {
-  UrlCodecWorkerRequest,
-  UrlCodecWorkerResponse,
-  UrlCodecWorkerValue,
-} from './urlCodecProtocol'
+import { type DecodedShare, defaultUrlCodecLimits, type EncodedV3Share, type EncodeV3Options, ShareUrlError, type ShareWorkspaceState, type UrlCodecLimits } from '../share'
+import type { UrlCodecWorkerRequest, UrlCodecWorkerResponse, UrlCodecWorkerValue } from './urlCodecProtocol'
 
 interface PendingRequest {
   resolve(value: UrlCodecWorkerValue): void
@@ -45,17 +33,11 @@ export class UrlCodecWorkerClient {
 
   constructor(options: UrlCodecWorkerClientOptions = {}) {
     this.limits = options.limits ?? { ...defaultUrlCodecLimits }
-    this.startupTimeoutMs = Math.max(
-      this.limits.workerTimeoutMs,
-      options.startupTimeoutMs ?? defaultWorkerStartupTimeoutMs,
-    )
+    this.startupTimeoutMs = Math.max(this.limits.workerTimeoutMs, options.startupTimeoutMs ?? defaultWorkerStartupTimeoutMs)
     this.workerFactory = options.workerFactory ?? defaultWorkerFactory
   }
 
-  encodeV3(
-    state: ShareWorkspaceState,
-    options: Omit<EncodeV3Options, 'limits'> = {},
-  ): Promise<EncodedV3Share> {
+  encodeV3(state: ShareWorkspaceState, options: Omit<EncodeV3Options, 'limits'> = {}): Promise<EncodedV3Share> {
     return this.request({
       id: this.allocateId(),
       operation: 'encode-v3',
@@ -106,12 +88,7 @@ export class UrlCodecWorkerClient {
       const timeoutMs = this.workerReady ? this.limits.workerTimeoutMs : this.startupTimeoutMs
       const timeout = setTimeout(() => {
         if (!this.pending.has(request.id)) return
-        this.restart(
-          new ShareUrlError(
-            'worker-timeout',
-            `The URL codec worker exceeded its ${timeoutMs} ms limit.`,
-          ),
-        )
+        this.restart(new ShareUrlError('worker-timeout', `The URL codec worker exceeded its ${timeoutMs} ms limit.`))
       }, timeoutMs)
       this.pending.set(request.id, { resolve, reject, timeout })
       try {
@@ -144,9 +121,7 @@ export class UrlCodecWorkerClient {
       this.restart(new ShareUrlError('worker-failed', 'The URL codec worker crashed.'))
     }
     worker.onmessageerror = () => {
-      this.restart(
-        new ShareUrlError('worker-failed', 'The URL codec worker returned invalid data.'),
-      )
+      this.restart(new ShareUrlError('worker-failed', 'The URL codec worker returned invalid data.'))
     }
     this.worker = worker
     return worker

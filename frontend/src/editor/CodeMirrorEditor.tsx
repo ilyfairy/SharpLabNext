@@ -15,26 +15,10 @@ import {
   startCompletion,
 } from '@codemirror/autocomplete'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
-import {
-  bracketMatching,
-  foldGutter,
-  foldKeymap,
-  indentOnInput,
-  indentUnit,
-  syntaxHighlighting,
-} from '@codemirror/language'
+import { bracketMatching, foldGutter, foldKeymap, indentOnInput, indentUnit, syntaxHighlighting } from '@codemirror/language'
 import { type Action, type Diagnostic, lintGutter, setDiagnostics } from '@codemirror/lint'
 import { searchKeymap } from '@codemirror/search'
-import {
-  Annotation,
-  type ChangeSpec,
-  Compartment,
-  EditorState,
-  type Extension,
-  type Text,
-  Transaction,
-  type TransactionSpec,
-} from '@codemirror/state'
+import { Annotation, type ChangeSpec, Compartment, EditorState, type Extension, type Text, Transaction, type TransactionSpec } from '@codemirror/state'
 import {
   drawSelection,
   dropCursor,
@@ -69,30 +53,10 @@ import {
 } from '../lsp/codeMirrorLanguageClient'
 import { ilSenseCompletionTriggerCharacters } from '../lsp/completionTriggerCharacters'
 import { createLanguageWorkspaceUri } from '../lsp/languageDocumentUri'
-import {
-  createLanguageSessionKey,
-  LanguageSessionLifecycle,
-  type LanguageSessionStatusChange,
-} from '../lsp/languageSessionLifecycle'
-import {
-  type ExecutionFlowNavigationRequest,
-  type ExecutionFlowSourceHit,
-  type ExecutionFlowSourceModel,
-  validateSourceRange,
-} from '../results/executionFlowModel'
-import {
-  isLinkedLineSourceAssociation,
-  type SourceAssociation,
-  sourceAssociationClass,
-  sourceAssociationForSelection,
-  sourceAssociationLines,
-} from '../results/sourceAssociationModel'
-import {
-  buildOutputKindForResolvedPipeline,
-  createWorkbenchBuildOptions,
-  type RememberedWorkbenchOutputKind,
-  retainResolvedWorkbenchOutputKind,
-} from '../workbench/buildOptions'
+import { createLanguageSessionKey, LanguageSessionLifecycle, type LanguageSessionStatusChange } from '../lsp/languageSessionLifecycle'
+import { type ExecutionFlowNavigationRequest, type ExecutionFlowSourceHit, type ExecutionFlowSourceModel, validateSourceRange } from '../results/executionFlowModel'
+import { isLinkedLineSourceAssociation, type SourceAssociation, sourceAssociationClass, sourceAssociationForSelection, sourceAssociationLines } from '../results/sourceAssociationModel'
+import { buildOutputKindForResolvedPipeline, createWorkbenchBuildOptions, type RememberedWorkbenchOutputKind, retainResolvedWorkbenchOutputKind } from '../workbench/buildOptions'
 import {
   type CodeMirrorDecorationRange,
   type CodeMirrorFoldingRange,
@@ -109,12 +73,7 @@ import {
   signatureHelpField,
   sourceAssociationDecorationField,
 } from './codeMirrorDecorations'
-import {
-  codeMirrorLanguageExtension,
-  semanticTokenCssClass,
-  visualStudioLightEditorTheme,
-  visualStudioLightHighlightStyle,
-} from './codeMirrorLanguage'
+import { codeMirrorLanguageExtension, semanticTokenCssClass, visualStudioLightEditorTheme, visualStudioLightHighlightStyle } from './codeMirrorLanguage'
 import type { EditorFontSize } from './editorPreference'
 import { ilStandaloneAssemblyIdentityNameRange } from './ilLanguageTokens'
 import { sourceMethodFromDocumentSymbols } from './lspDocumentSymbols'
@@ -157,9 +116,7 @@ export interface CodeMirrorEditorProps {
 export const codeMirrorCompletionKeymap: readonly KeyBinding[] = [
   { key: 'Ctrl-Space', run: startCompletion },
   { key: 'Tab', run: acceptCompletion },
-  ...defaultCompletionKeymap.filter(
-    (binding) => binding.key !== 'Ctrl-Space' && binding.key !== 'Tab',
-  ),
+  ...defaultCompletionKeymap.filter((binding) => binding.key !== 'Ctrl-Space' && binding.key !== 'Tab'),
 ]
 
 export function advanceSnippetWithEnter(view: EditorView): boolean {
@@ -224,18 +181,12 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
     const container = containerRef.current
     if (!container) return
 
-    const initial = latestRef.current.files.find(
-      (file) => file.path === latestRef.current.activeFile,
-    ) ??
-      latestRef.current.files[0] ?? { path: latestRef.current.activeFile, text: '' }
-    const model = createFileModel(
-      initial.path,
-      initial.text,
-      latestRef.current.languageSession.languageId,
-      bridgeRef.current,
-      handleViewUpdate,
-      () => latestRef.current.languageSession.languageId,
-    )
+    const initial = latestRef.current.files.find((file) => file.path === latestRef.current.activeFile) ??
+      latestRef.current.files[0] ?? {
+        path: latestRef.current.activeFile,
+        text: '',
+      }
+    const model = createFileModel(initial.path, initial.text, latestRef.current.languageSession.languageId, bridgeRef.current, handleViewUpdate, () => latestRef.current.languageSession.languageId)
     modelsRef.current.set(initial.path, model)
     activePathRef.current = initial.path
 
@@ -251,10 +202,17 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
       window.clearTimeout(sourceAssociationMouseUpTimerRef.current)
       sourceAssociationMouseUpTimerRef.current = null
     }
-    let sourceAssociationPointerDown: { position: number; from: number; to: number } | null = null
+    let sourceAssociationPointerDown: {
+      position: number
+      from: number
+      to: number
+    } | null = null
     const positionAtMouseEvent = (event: MouseEvent): number | null => {
       try {
-        const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
+        const position = view.posAtCoords({
+          x: event.clientX,
+          y: event.clientY,
+        })
         if (position !== null) return position
       } catch {
         // DOM coordinates are unavailable in some synthetic editor environments.
@@ -269,21 +227,18 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
     }
     const sourceAssociationMouseDown = (event: MouseEvent) => {
       sourceAssociationPointerDown = null
-      if (
-        event.button !== 0 ||
-        event.detail > 1 ||
-        event.shiftKey ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.altKey
-      ) {
+      if (event.button !== 0 || event.detail > 1 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
         return
       }
       const selection = view.state.selection.main
       if (selection.empty) return
       const position = positionAtMouseEvent(event)
       if (position === null || position < selection.from || position > selection.to) return
-      sourceAssociationPointerDown = { position, from: selection.from, to: selection.to }
+      sourceAssociationPointerDown = {
+        position,
+        from: selection.from,
+        to: selection.to,
+      }
     }
     const sourceAssociationMouseUp = (event: MouseEvent) => {
       if (event.button !== 0) return
@@ -303,18 +258,9 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
 
         const state = latestRef.current
         const associations = state.sourceAssociations ?? []
-        const hasActiveRangeAssociations = associations.some(
-          (association) => association.presentation === 'active-range',
-        )
+        const hasActiveRangeAssociations = associations.some((association) => association.presentation === 'active-range')
         let selection = view.state.selection.main
-        if (
-          detail <= 1 &&
-          pointerDown &&
-          pointerUpPosition === pointerDown.position &&
-          !selection.empty &&
-          selection.from === pointerDown.from &&
-          selection.to === pointerDown.to
-        ) {
+        if (detail <= 1 && pointerDown && pointerUpPosition === pointerDown.position && !selection.empty && selection.from === pointerDown.from && selection.to === pointerDown.to) {
           view.dispatch({
             selection: { anchor: pointerDown.position },
             userEvent: 'select.pointer',
@@ -349,16 +295,8 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
         const position = selection.head
         const association = associations.find((candidate) => {
           if (candidate.documentPath !== eventPath) return false
-          const from = oneBasedOffset(
-            view.state.doc,
-            candidate.range.startLine,
-            candidate.range.startColumn,
-          )
-          const to = oneBasedOffset(
-            view.state.doc,
-            candidate.range.endLine,
-            candidate.range.endColumn,
-          )
+          const from = oneBasedOffset(view.state.doc, candidate.range.startLine, candidate.range.startColumn)
+          const to = oneBasedOffset(view.state.doc, candidate.range.endLine, candidate.range.endColumn)
           return from !== null && to !== null && position >= from && position < to
         })
         if (!association) return
@@ -379,7 +317,9 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
       current.scrollTop = view.scrollDOM.scrollTop
       current.scrollLeft = view.scrollDOM.scrollLeft
     }
-    view.scrollDOM.addEventListener('scroll', scrollListener, { passive: true })
+    view.scrollDOM.addEventListener('scroll', scrollListener, {
+      passive: true,
+    })
 
     const sink: CodeMirrorLanguageSink = {
       publishDiagnostics: applyDiagnostics,
@@ -388,16 +328,10 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
       publishFoldingRanges: applyFoldingRanges,
       clearDocument: clearLanguageDocument,
     }
-    const controller = new LanguageSessionLifecycle(
-      handleLanguageStatus,
-      createCodeMirrorLanguageSessionDependencies(bridgeRef.current, sink),
-    )
+    const controller = new LanguageSessionLifecycle(handleLanguageStatus, createCodeMirrorLanguageSessionDependencies(bridgeRef.current, sink))
     controllerRef.current = controller
 
-    const resizeObserver =
-      typeof ResizeObserver === 'undefined'
-        ? null
-        : new ResizeObserver(() => editorRef.current?.requestMeasure())
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => editorRef.current?.requestMeasure())
     resizeObserver?.observe(container)
     emitCursorMethod(model.state)
 
@@ -429,21 +363,12 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
     for (const file of props.files) {
       let model = modelsRef.current.get(file.path)
       if (!model) {
-        model = createFileModel(
-          file.path,
-          file.text,
-          props.languageSession.languageId,
-          bridgeRef.current,
-          handleViewUpdate,
-          () => latestRef.current.languageSession.languageId,
-        )
+        model = createFileModel(file.path, file.text, props.languageSession.languageId, bridgeRef.current, handleViewUpdate, () => latestRef.current.languageSession.languageId)
         modelsRef.current.set(file.path, model)
       }
       if (model.languageId !== props.languageSession.languageId) {
         applyModelTransaction(model, {
-          effects: model.language.reconfigure(
-            codeMirrorLanguageExtension(props.languageSession.languageId),
-          ),
+          effects: model.language.reconfigure(codeMirrorLanguageExtension(props.languageSession.languageId)),
         })
         model.languageId = props.languageSession.languageId
       }
@@ -464,12 +389,16 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
     if (activePathRef.current !== props.activeFile || view.state !== next.state) {
       const previous = modelsRef.current.get(activePathRef.current)
       if (previous) {
-        previous.state = view.state.update({ effects: setSignatureHelp.of(null) }).state
+        previous.state = view.state.update({
+          effects: setSignatureHelp.of(null),
+        }).state
         previous.scrollTop = view.scrollDOM.scrollTop
         previous.scrollLeft = view.scrollDOM.scrollLeft
       }
       activePathRef.current = props.activeFile
-      next.state = next.state.update({ effects: setSignatureHelp.of(null) }).state
+      next.state = next.state.update({
+        effects: setSignatureHelp.of(null),
+      }).state
       view.setState(next.state)
       view.scrollDOM.scrollTop = next.scrollTop
       view.scrollDOM.scrollLeft = next.scrollLeft
@@ -497,15 +426,15 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
         const range = executionFlowRange(model.state.doc, hit)
         return range ? [range] : []
       })
-      applyModelTransaction(model, { effects: setExecutionFlowDecorations.of(decorations) })
+      applyModelTransaction(model, {
+        effects: setExecutionFlowDecorations.of(decorations),
+      })
     }
   }, [props.executionFlow])
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: transaction helper reads current editor models through refs.
   useEffect(() => {
-    const linkedAssociations = (props.sourceAssociations ?? []).filter(
-      isLinkedLineSourceAssociation,
-    )
+    const linkedAssociations = (props.sourceAssociations ?? []).filter(isLinkedLineSourceAssociation)
     if (linkedAssociations.length === 0 && !sourceAssociationDecorationsPresentRef.current) return
 
     const associationsByPath = new Map<string, SourceAssociation[]>()
@@ -516,14 +445,9 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
     }
     let hasDecorations = false
     for (const model of modelsRef.current.values()) {
-      const associations = (associationsByPath.get(model.path) ?? []).filter(
-        (association) => sourceAssociationOffsets(model.state.doc, association) !== null,
-      )
+      const associations = (associationsByPath.get(model.path) ?? []).filter((association) => sourceAssociationOffsets(model.state.doc, association) !== null)
       const decorations = [
-        ...sourceAssociationLines(associations, props.activeSourceAssociationKey).map(
-          ({ lineNumber, association, active }) =>
-            sourceAssociationLineRange(model.state.doc, lineNumber, association, active),
-        ),
+        ...sourceAssociationLines(associations, props.activeSourceAssociationKey).map(({ lineNumber, association, active }) => sourceAssociationLineRange(model.state.doc, lineNumber, association, active)),
         ...associations.flatMap((association) => {
           const range = sourceAssociationOffsets(model.state.doc, association)
           const active = association.key === props.activeSourceAssociationKey
@@ -531,20 +455,16 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
             ? [
                 {
                   ...range,
-                  className: [
-                    'cm-source-association-range',
-                    active ? 'cm-source-association-exact-active' : '',
-                    active ? sourceAssociationClass(association.colorIndex) : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' '),
+                  className: ['cm-source-association-range', active ? 'cm-source-association-exact-active' : '', active ? sourceAssociationClass(association.colorIndex) : ''].filter(Boolean).join(' '),
                 },
               ]
             : []
         }),
       ]
       if (decorations.length > 0) hasDecorations = true
-      applyModelTransaction(model, { effects: setSourceAssociationDecorations.of(decorations) })
+      applyModelTransaction(model, {
+        effects: setSourceAssociationDecorations.of(decorations),
+      })
     }
     sourceAssociationDecorationsPresentRef.current = hasDecorations
   }, [props.activeSourceAssociationKey, props.sourceAssociations])
@@ -562,11 +482,7 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
     if (!navigation || !view || props.activeFile !== navigation.documentPath) return
     const model = modelsRef.current.get(navigation.documentPath)
     if (!model || validateSourceRange(model.state.doc.toString(), navigation.range)) return
-    const from = oneBasedOffset(
-      model.state.doc,
-      navigation.range.startLine,
-      navigation.range.startColumn,
-    )
+    const from = oneBasedOffset(model.state.doc, navigation.range.startLine, navigation.range.startColumn)
     const to = oneBasedOffset(model.state.doc, navigation.range.endLine, navigation.range.endColumn)
     if (from === null || to === null || to < from) return
     view.dispatch({
@@ -590,14 +506,8 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
     }
 
     const resolution = session.resolution
-    const resolutionMatches =
-      resolution?.effectiveSelection.languageId === session.languageId &&
-      resolution.effectiveSelection.toolchainId === session.toolchainId &&
-      resolution.effectiveSelection.referenceSetId === session.referenceSetId
-    const resolvedOutputKind =
-      resolution && resolutionMatches
-        ? buildOutputKindForResolvedPipeline(session.languageId, resolution.pipelinePlan.stages)
-        : null
+    const resolutionMatches = resolution?.effectiveSelection.languageId === session.languageId && resolution.effectiveSelection.toolchainId === session.toolchainId && resolution.effectiveSelection.referenceSetId === session.referenceSetId
+    const resolvedOutputKind = resolution && resolutionMatches ? buildOutputKindForResolvedPipeline(session.languageId, resolution.pipelinePlan.stages) : null
     const retainedOutputKind = retainResolvedWorkbenchOutputKind(
       {
         languageId: session.languageId,
@@ -634,8 +544,7 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
               modelLanguageId: session.languageId,
               workspaceUri: createLanguageWorkspaceUri(session.languageId, workspaceIdRef.current),
               selectionRevision: session.selectionRevision,
-              createRequest: () =>
-                createLanguageSessionRequest(latestRef.current, modelsRef.current),
+              createRequest: () => createLanguageSessionRequest(latestRef.current, modelsRef.current),
             }
           : null,
     })
@@ -652,14 +561,7 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
     />
   )
 
-  function createFileModel(
-    path: string,
-    text: string,
-    languageId: string,
-    bridge: CodeMirrorLanguageBridge,
-    onUpdate: (path: string, update: ViewUpdate) => void,
-    currentLanguageId: () => string,
-  ): CodeMirrorFileModel {
+  function createFileModel(path: string, text: string, languageId: string, bridge: CodeMirrorLanguageBridge, onUpdate: (path: string, update: ViewUpdate) => void, currentLanguageId: () => string): CodeMirrorFileModel {
     const language = new Compartment()
     return {
       path,
@@ -671,18 +573,7 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
       documentSymbols: undefined,
       state: EditorState.create({
         doc: text,
-        extensions: codeMirrorExtensions(
-          path,
-          language,
-          languageId,
-          currentLanguageId,
-          bridge,
-          onUpdate,
-          (candidatePath) =>
-            activePathRef.current === candidatePath
-              ? (modelsRef.current.get(candidatePath)?.version ?? null)
-              : null,
-        ),
+        extensions: codeMirrorExtensions(path, language, languageId, currentLanguageId, bridge, onUpdate, (candidatePath) => (activePathRef.current === candidatePath ? (modelsRef.current.get(candidatePath)?.version ?? null) : null)),
       }),
     }
   }
@@ -691,9 +582,7 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
     const model = modelsRef.current.get(path)
     if (!model) return
     model.state = update.state
-    const external = update.transactions.some(
-      (transaction) => transaction.annotation(externalDocumentUpdate) === true,
-    )
+    const external = update.transactions.some((transaction) => transaction.annotation(externalDocumentUpdate) === true)
     if (update.docChanged && !external) {
       model.version += 1
       if (model.documentSymbols !== undefined) model.documentSymbols = null
@@ -705,17 +594,10 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
         void requestSignatureHelp(model, update.state, trigger)
       }
     }
-    if (
-      path === activePathRef.current &&
-      (update.docChanged || update.selectionSet || update.focusChanged)
-    ) {
+    if (path === activePathRef.current && (update.docChanged || update.selectionSet || update.focusChanged)) {
       emitCursorMethod(update.state)
     }
-    if (
-      path === activePathRef.current &&
-      update.selectionSet &&
-      update.transactions.some((transaction) => transaction.isUserEvent('select'))
-    ) {
+    if (path === activePathRef.current && update.selectionSet && update.transactions.some((transaction) => transaction.isUserEvent('select'))) {
       previewSourceAssociation(update.state)
     }
   }
@@ -753,27 +635,13 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
     model.state = model.state.update(spec).state
   }
 
-  function applyDiagnostics(
-    path: string,
-    version: number | undefined,
-    diagnostics: readonly CodeMirrorLspDiagnostic[],
-  ): void {
+  function applyDiagnostics(path: string, version: number | undefined, diagnostics: readonly CodeMirrorLspDiagnostic[]): void {
     const model = modelsRef.current.get(path)
     if (!model || (version !== undefined && version !== model.version)) return
-    applyModelTransaction(
-      model,
-      setDiagnostics(
-        model.state,
-        codeMirrorDiagnostics(model.state.doc, diagnostics, (action) => applyCodeAction(action)),
-      ),
-    )
+    applyModelTransaction(model, setDiagnostics(model.state, codeMirrorDiagnostics(model.state.doc, diagnostics, (action) => applyCodeAction(action))))
   }
 
-  function applySemanticTokens(
-    path: string,
-    version: number,
-    tokens: readonly CodeMirrorSemanticToken[],
-  ): void {
+  function applySemanticTokens(path: string, version: number, tokens: readonly CodeMirrorSemanticToken[]): void {
     const model = modelsRef.current.get(path)
     if (!model || version !== model.version) return
     applyModelTransaction(model, {
@@ -781,22 +649,14 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
     })
   }
 
-  function applyDocumentSymbols(
-    path: string,
-    version: number,
-    symbols: readonly CodeMirrorDocumentSymbol[] | null,
-  ): void {
+  function applyDocumentSymbols(path: string, version: number, symbols: readonly CodeMirrorDocumentSymbol[] | null): void {
     const model = modelsRef.current.get(path)
     if (!model || version !== model.version) return
     model.documentSymbols = symbols ?? undefined
     if (path === activePathRef.current) emitCursorMethod(model.state)
   }
 
-  function applyFoldingRanges(
-    path: string,
-    version: number,
-    ranges: readonly CodeMirrorLspFoldingRange[] | null,
-  ): void {
+  function applyFoldingRanges(path: string, version: number, ranges: readonly CodeMirrorLspFoldingRange[] | null): void {
     const model = modelsRef.current.get(path)
     if (!model || version !== model.version) return
     applyModelTransaction(model, {
@@ -804,26 +664,23 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
     })
   }
 
-  async function requestSignatureHelp(
-    model: CodeMirrorFileModel,
-    state: EditorState,
-    trigger: '(' | ',',
-  ): Promise<void> {
+  async function requestSignatureHelp(model: CodeMirrorFileModel, state: EditorState, trigger: '(' | ','): Promise<void> {
     const version = model.version
     const position = state.selection.main.head
-    const help = await bridgeRef.current.signatureHelp(
-      model.path,
-      lspPositionAt(state.doc, position),
-      trigger,
-    )
+    const help = await bridgeRef.current.signatureHelp(model.path, lspPositionAt(state.doc, position), trigger)
     if (!help || model.version !== version || activePathRef.current !== model.path) return
     const presentation = signaturePresentation(help, position)
     if (!presentation) return
-    applyModelTransaction(model, { effects: setSignatureHelp.of(presentation) })
+    applyModelTransaction(model, {
+      effects: setSignatureHelp.of(presentation),
+    })
   }
 
   function applyCodeAction(action: CodeMirrorLspCodeAction): void {
-    const planned: Array<{ model: CodeMirrorFileModel; changes: readonly ChangeSpec[] }> = []
+    const planned: Array<{
+      model: CodeMirrorFileModel
+      changes: readonly ChangeSpec[]
+    }> = []
     for (const documentEdit of action.documentEdits) {
       const model = modelsRef.current.get(documentEdit.documentPath)
       if (!model || model.version !== documentEdit.documentVersion) return
@@ -853,12 +710,7 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
     if (containerRef.current) {
       containerRef.current.dataset.languageServiceStatus = change.status
     }
-    if (
-      change.status === 'connecting' ||
-      change.status === 'reconnecting' ||
-      change.status === 'disabled' ||
-      change.status === 'error'
-    ) {
+    if (change.status === 'connecting' || change.status === 'reconnecting' || change.status === 'disabled' || change.status === 'error') {
       const pending = change.status === 'connecting' || change.status === 'reconnecting'
       for (const model of modelsRef.current.values()) {
         model.documentSymbols = pending ? null : undefined
@@ -890,19 +742,10 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
   function emitCursorMethod(state: EditorState): void {
     const model = modelsRef.current.get(activePathRef.current)
     const position = lspPositionAt(state.doc, state.selection.main.head)
-    const syntaxSelection = findSourceMethodAtLine(
-      state.doc.toString(),
-      latestRef.current.languageSession.languageId,
-      position.line + 1,
-      activePathRef.current,
-    )
+    const syntaxSelection = findSourceMethodAtLine(state.doc.toString(), latestRef.current.languageSession.languageId, position.line + 1, activePathRef.current)
     const topLevelSelection = syntaxSelection?.name === '<Main>$' ? syntaxSelection : null
     const selection = Array.isArray(model?.documentSymbols)
-      ? (sourceMethodFromDocumentSymbols(
-          model.documentSymbols,
-          position,
-          latestRef.current.languageSession.languageId,
-        ) ?? topLevelSelection)
+      ? (sourceMethodFromDocumentSymbols(model.documentSymbols, position, latestRef.current.languageSession.languageId) ?? topLevelSelection)
       : model?.documentSymbols === null || languageStatusRef.current === 'ready'
         ? topLevelSelection
         : syntaxSelection
@@ -910,15 +753,7 @@ export function CodeMirrorEditor(props: CodeMirrorEditorProps) {
   }
 }
 
-function codeMirrorExtensions(
-  path: string,
-  language: Compartment,
-  languageId: string,
-  currentLanguageId: () => string,
-  bridge: CodeMirrorLanguageBridge,
-  onUpdate: (path: string, update: ViewUpdate) => void,
-  activeDocumentVersion: (path: string) => number | null,
-): Extension[] {
+function codeMirrorExtensions(path: string, language: Compartment, languageId: string, currentLanguageId: () => string, bridge: CodeMirrorLanguageBridge, onUpdate: (path: string, update: ViewUpdate) => void, activeDocumentVersion: (path: string) => number | null): Extension[] {
   return [
     lineNumbers(),
     highlightActiveLineGutter(),
@@ -927,10 +762,7 @@ function codeMirrorExtensions(
     foldGutter({
       openText: 'v',
       closedText: '>',
-      foldingChanged: (update) =>
-        update.transactions.some((transaction) =>
-          transaction.effects.some((effect) => effect.is(setFoldingRanges)),
-        ),
+      foldingChanged: (update) => update.transactions.some((transaction) => transaction.effects.some((effect) => effect.is(setFoldingRanges))),
     }),
     drawSelection(),
     selectionLineDecorationExtension,
@@ -955,7 +787,10 @@ function codeMirrorExtensions(
     signatureHelpField,
     lspFoldingExtension,
     language.of(codeMirrorLanguageExtension(languageId)),
-    hoverTooltip(hoverSource(path, bridge), { hideOnChange: true, hoverTime: 300 }),
+    hoverTooltip(hoverSource(path, bridge), {
+      hideOnChange: true,
+      hoverTime: 300,
+    }),
     EditorView.contentAttributes.of({
       'aria-label': 'Source editor',
       autocapitalize: 'off',
@@ -970,12 +805,7 @@ function codeMirrorExtensions(
   ]
 }
 
-export function completionSource(
-  path: string,
-  currentLanguageId: () => string,
-  bridge: CodeMirrorLanguageBridge,
-  activeDocumentVersion: (path: string) => number | null,
-) {
+export function completionSource(path: string, currentLanguageId: () => string, bridge: CodeMirrorLanguageBridge, activeDocumentVersion: (path: string) => number | null) {
   // CodeMirror re-runs a source after typing when the server marks its list
   // incomplete. Keep that bit of protocol state local to this source so the
   // follow-up request uses LSP TriggerForIncompleteCompletions (3).
@@ -989,20 +819,14 @@ export function completionSource(
       previousLanguageId = languageId
     }
     const word = context.matchBefore(/[A-Za-z_][\w']*$/)
-    const previous =
-      context.pos > 0 ? context.state.doc.sliceString(context.pos - 1, context.pos) : ''
+    const previous = context.pos > 0 ? context.state.doc.sliceString(context.pos - 1, context.pos) : ''
     const triggerCharacter = codeMirrorCompletionTriggerCharacter(languageId, previous)
     if (!context.explicit && !word && !triggerCharacter) {
       previousCompletionIncomplete = false
       return null
     }
     const position = lspPositionAt(context.state.doc, context.pos)
-    const triggerKind = codeMirrorCompletionTriggerKind(
-      languageId,
-      previous,
-      context.explicit,
-      previousCompletionIncomplete,
-    )
+    const triggerKind = codeMirrorCompletionTriggerKind(languageId, previous, context.explicit, previousCompletionIncomplete)
     previousCompletionIncomplete = false
     const completionList = await bridge.completion(path, {
       ...position,
@@ -1011,56 +835,32 @@ export function completionSource(
     })
     if (!completionList || context.aborted) return null
     previousCompletionIncomplete = completionList.isIncomplete
-    const validFor = codeMirrorCompletionValidFor(
-      completionList.isIncomplete,
-      completionList.items.length,
-    )
+    const validFor = codeMirrorCompletionValidFor(completionList.isIncomplete, completionList.items.length)
     return {
       from: word?.from ?? context.pos,
-      options: completionList.items.map((item) =>
-        codeMirrorCompletion(item, path, bridge, activeDocumentVersion),
-      ),
+      options: completionList.items.map((item) => codeMirrorCompletion(item, path, bridge, activeDocumentVersion)),
       ...(validFor ? { validFor } : {}),
     }
   }
 }
 
-export function codeMirrorCompletionTriggerCharacter(
-  languageId: string,
-  previousCharacter: string,
-): string | undefined {
-  const triggerCharacters =
-    languageId === 'il' ? ilSenseCompletionTriggerCharacters : ['.', ':', '<']
-  return triggerCharacters.some((candidate) => candidate === previousCharacter)
-    ? previousCharacter
-    : undefined
+export function codeMirrorCompletionTriggerCharacter(languageId: string, previousCharacter: string): string | undefined {
+  const triggerCharacters = languageId === 'il' ? ilSenseCompletionTriggerCharacters : ['.', ':', '<']
+  return triggerCharacters.some((candidate) => candidate === previousCharacter) ? previousCharacter : undefined
 }
 
-export function codeMirrorCompletionTriggerKind(
-  languageId: string,
-  previousCharacter: string,
-  explicit: boolean,
-  previousResultIncomplete: boolean,
-): 1 | 2 | 3 {
+export function codeMirrorCompletionTriggerKind(languageId: string, previousCharacter: string, explicit: boolean, previousResultIncomplete: boolean): 1 | 2 | 3 {
   if (explicit) return 1
   if (codeMirrorCompletionTriggerCharacter(languageId, previousCharacter)) return 2
   if (!explicit && previousResultIncomplete) return 3
   return 1
 }
 
-export function codeMirrorCompletionValidFor(
-  isIncomplete: boolean,
-  itemCount = 1,
-): RegExp | undefined {
+export function codeMirrorCompletionValidFor(isIncomplete: boolean, itemCount = 1): RegExp | undefined {
   return isIncomplete || itemCount === 0 ? undefined : /^[\w']*$/
 }
 
-export function codeMirrorCompletion(
-  item: CodeMirrorLspCompletionItem,
-  path: string,
-  bridge: CodeMirrorLanguageBridge,
-  activeDocumentVersion: (path: string) => number | null = () => item.documentVersion,
-): Completion {
+export function codeMirrorCompletion(item: CodeMirrorLspCompletionItem, path: string, bridge: CodeMirrorLanguageBridge, activeDocumentVersion: (path: string) => number | null = () => item.documentVersion): Completion {
   const inserted = completionText(item)
   const info = documentationText(item.documentation)
   const type = completionType(item.kind)
@@ -1080,13 +880,8 @@ export function codeMirrorCompletion(
       const canResolve = documentVersion === item.documentVersion
       closeCompletion(view)
       if (documentVersion === null) return
-      const hasInitialEdits =
-        item.textEdit !== undefined || (item.additionalTextEdits?.length ?? 0) > 0
-      if (
-        canResolve &&
-        (item.insertTextFormat === 2 || hasInitialEdits) &&
-        applyResolvedCompletion(view, selected, item, document, from, to)
-      ) {
+      const hasInitialEdits = item.textEdit !== undefined || (item.additionalTextEdits?.length ?? 0) > 0
+      if (canResolve && (item.insertTextFormat === 2 || hasInitialEdits) && applyResolvedCompletion(view, selected, item, document, from, to)) {
         return
       }
 
@@ -1100,20 +895,11 @@ export function codeMirrorCompletion(
           }
         }
 
-        if (
-          activeDocumentVersion(path) !== documentVersion ||
-          !view.state.doc.eq(document) ||
-          !view.state.selection.eq(selection)
-        ) {
+        if (activeDocumentVersion(path) !== documentVersion || !view.state.doc.eq(document) || !view.state.selection.eq(selection)) {
           return
         }
 
-        if (
-          canResolve &&
-          resolved &&
-          resolved !== item &&
-          applyResolvedCompletion(view, selected, resolved, document, from, to)
-        ) {
+        if (canResolve && resolved && resolved !== item && applyResolvedCompletion(view, selected, resolved, document, from, to)) {
           return
         }
 
@@ -1133,14 +919,7 @@ interface CompletionTextChange {
   primary: boolean
 }
 
-function applyResolvedCompletion(
-  view: EditorView,
-  completion: Completion,
-  item: CodeMirrorLspCompletionItem,
-  document: Text,
-  from: number,
-  to: number,
-): boolean {
+function applyResolvedCompletion(view: EditorView, completion: Completion, item: CodeMirrorLspCompletionItem, document: Text, from: number, to: number): boolean {
   const primaryRange = item.textEdit ? offsetsForRange(document, item.textEdit.range) : { from, to }
   if (!primaryRange || primaryRange.from < 0 || primaryRange.to > document.length) return false
 
@@ -1155,7 +934,12 @@ function applyResolvedCompletion(
   for (const edit of item.additionalTextEdits ?? []) {
     const range = offsetsForRange(document, edit.range)
     if (!range) return false
-    changes.push({ from: range.from, to: range.to, insert: edit.newText, primary: false })
+    changes.push({
+      from: range.from,
+      to: range.to,
+      insert: edit.newText,
+      primary: false,
+    })
   }
   changes.sort((left, right) => left.from - right.from || left.to - right.to)
   for (let index = 1; index < changes.length; index += 1) {
@@ -1206,14 +990,7 @@ function applyResolvedCompletion(
   return true
 }
 
-function applyCompletionText(
-  view: EditorView,
-  completion: Completion,
-  inserted: string,
-  insertTextFormat: number | undefined,
-  from: number,
-  to: number,
-): void {
+function applyCompletionText(view: EditorView, completion: Completion, inserted: string, insertTextFormat: number | undefined, from: number, to: number): void {
   if (insertTextFormat === 2) {
     applySnippet(inserted)(view, completion, from, to)
     return
@@ -1224,10 +1001,7 @@ function applyCompletionText(
   })
 }
 
-function completionChangesOverlap(
-  left: CompletionTextChange,
-  right: CompletionTextChange,
-): boolean {
+function completionChangesOverlap(left: CompletionTextChange, right: CompletionTextChange): boolean {
   if (left.from === left.to && right.from === right.to) return left.from === right.from
   if (left.from === left.to) return left.from > right.from && left.from < right.to
   if (right.from === right.to) return right.from > left.from && right.from < left.to
@@ -1260,11 +1034,7 @@ function hoverSource(path: string, bridge: CodeMirrorLanguageBridge) {
   }
 }
 
-export function codeMirrorDiagnostics(
-  document: Text,
-  diagnostics: readonly CodeMirrorLspDiagnostic[],
-  applyAction?: (action: CodeMirrorLspCodeAction) => void,
-): Diagnostic[] {
+export function codeMirrorDiagnostics(document: Text, diagnostics: readonly CodeMirrorLspDiagnostic[], applyAction?: (action: CodeMirrorLspCodeAction) => void): Diagnostic[] {
   return diagnostics.flatMap((diagnostic) => {
     const range = offsetsForRange(document, diagnostic.range)
     if (!range) return []
@@ -1278,17 +1048,16 @@ export function codeMirrorDiagnostics(
         message: `${prefix}${diagnostic.message}`,
         ...(diagnostic.source ? { source: diagnostic.source } : {}),
         ...(applyAction && diagnostic.actions && diagnostic.actions.length > 0
-          ? { actions: diagnostic.actions.map((action) => diagnosticAction(action, applyAction)) }
+          ? {
+              actions: diagnostic.actions.map((action) => diagnosticAction(action, applyAction)),
+            }
           : {}),
       } satisfies Diagnostic,
     ]
   })
 }
 
-function diagnosticAction(
-  action: CodeMirrorLspCodeAction,
-  applyAction: (action: CodeMirrorLspCodeAction) => void,
-): Action {
+function diagnosticAction(action: CodeMirrorLspCodeAction, applyAction: (action: CodeMirrorLspCodeAction) => void): Action {
   return {
     name: action.title,
     ...(action.isPreferred ? { markClass: 'cm-lint-action-preferred' } : {}),
@@ -1296,12 +1065,12 @@ function diagnosticAction(
   }
 }
 
-export function semanticDecorationRanges(
-  document: Text,
-  tokens: readonly CodeMirrorSemanticToken[],
-): CodeMirrorDecorationRange[] {
+export function semanticDecorationRanges(document: Text, tokens: readonly CodeMirrorSemanticToken[]): CodeMirrorDecorationRange[] {
   return tokens.flatMap((token) => {
-    const from = offsetForPosition(document, { line: token.line, character: token.character })
+    const from = offsetForPosition(document, {
+      line: token.line,
+      character: token.character,
+    })
     if (from === null) return []
     const line = document.line(token.line + 1)
     const to = from + token.length
@@ -1314,11 +1083,7 @@ export function semanticDecorationRanges(
       {
         from,
         to,
-        className: [
-          'cm-semantic-token',
-          `cm-semantic-${semanticTokenCssClass(token.tokenType)}`,
-          ...modifierClasses,
-        ].join(' '),
+        className: ['cm-semantic-token', `cm-semantic-${semanticTokenCssClass(token.tokenType)}`, ...modifierClasses].join(' '),
       },
     ]
   })
@@ -1331,13 +1096,7 @@ function offsetsForRange(document: Text, range: LspRange): { from: number; to: n
 }
 
 function offsetForPosition(document: Text, position: LspPosition): number | null {
-  if (
-    !Number.isSafeInteger(position.line) ||
-    !Number.isSafeInteger(position.character) ||
-    position.line < 0 ||
-    position.character < 0 ||
-    position.line >= document.lines
-  ) {
+  if (!Number.isSafeInteger(position.line) || !Number.isSafeInteger(position.character) || position.line < 0 || position.character < 0 || position.line >= document.lines) {
     return null
   }
   const line = document.line(position.line + 1)
@@ -1350,13 +1109,13 @@ function lspPositionAt(document: Text, offset: number): LspPosition {
 }
 
 function oneBasedOffset(document: Text, lineNumber: number, column: number): number | null {
-  return offsetForPosition(document, { line: lineNumber - 1, character: column - 1 })
+  return offsetForPosition(document, {
+    line: lineNumber - 1,
+    character: column - 1,
+  })
 }
 
-function executionFlowRange(
-  document: Text,
-  hit: ExecutionFlowSourceHit,
-): CodeMirrorDecorationRange | null {
+function executionFlowRange(document: Text, hit: ExecutionFlowSourceHit): CodeMirrorDecorationRange | null {
   if (validateSourceRange(document.toString(), hit.range)) return null
   const from = oneBasedOffset(document, hit.range.startLine, hit.range.startColumn)
   const to = oneBasedOffset(document, hit.range.endLine, hit.range.endColumn)
@@ -1370,10 +1129,7 @@ function executionFlowRange(
   }
 }
 
-function sourceAssociationOffsets(
-  document: Text,
-  association: SourceAssociation,
-): Pick<CodeMirrorDecorationRange, 'from' | 'to'> | null {
+function sourceAssociationOffsets(document: Text, association: SourceAssociation): Pick<CodeMirrorDecorationRange, 'from' | 'to'> | null {
   if (validateSourceRange(document.toString(), association.range)) return null
   const from = oneBasedOffset(document, association.range.startLine, association.range.startColumn)
   const to = oneBasedOffset(document, association.range.endLine, association.range.endColumn)
@@ -1381,24 +1137,13 @@ function sourceAssociationOffsets(
   return { from, to }
 }
 
-function sourceAssociationLineRange(
-  document: Text,
-  lineNumber: number,
-  association: SourceAssociation,
-  active: boolean,
-): CodeMirrorDecorationRange {
+function sourceAssociationLineRange(document: Text, lineNumber: number, association: SourceAssociation, active: boolean): CodeMirrorDecorationRange {
   const line = document.line(lineNumber)
   return {
     from: line.from,
     to: line.to,
     isLine: true,
-    className: [
-      'cm-source-association-line',
-      active ? 'cm-source-association-line-active' : '',
-      sourceAssociationClass(association.colorIndex),
-    ]
-      .filter(Boolean)
-      .join(' '),
+    className: ['cm-source-association-line', active ? 'cm-source-association-line-active' : '', sourceAssociationClass(association.colorIndex)].filter(Boolean).join(' '),
   }
 }
 
@@ -1414,18 +1159,11 @@ function signatureTrigger(update: ViewUpdate): '(' | ',' | ')' | null {
   return trigger
 }
 
-export function signaturePresentation(
-  help: CodeMirrorLspSignatureHelp,
-  position: number,
-): CodeMirrorSignaturePresentation | null {
+export function signaturePresentation(help: CodeMirrorLspSignatureHelp, position: number): CodeMirrorSignaturePresentation | null {
   const signature = help.signatures[help.activeSignature]
   if (!signature) return null
   const parameter = signature.parameters[help.activeParameter]
-  const activeParameterLabel = parameter
-    ? typeof parameter.label === 'string'
-      ? parameter.label
-      : signature.label.slice(parameter.label[0], parameter.label[1])
-    : undefined
+  const activeParameterLabel = parameter ? (typeof parameter.label === 'string' ? parameter.label : signature.label.slice(parameter.label[0], parameter.label[1])) : undefined
   const documentation = documentationText(parameter?.documentation ?? signature.documentation)
   return {
     position,
@@ -1437,10 +1175,7 @@ export function signaturePresentation(
   }
 }
 
-export function codeMirrorFoldingRanges(
-  document: Text,
-  ranges: readonly CodeMirrorLspFoldingRange[],
-): CodeMirrorFoldingRange[] {
+export function codeMirrorFoldingRanges(document: Text, ranges: readonly CodeMirrorLspFoldingRange[]): CodeMirrorFoldingRange[] {
   return ranges.flatMap((range) => {
     if (range.startLine >= document.lines || range.endLine >= document.lines) return []
     const startLine = document.line(range.startLine + 1)
@@ -1463,10 +1198,7 @@ export function codeMirrorFoldingRanges(
   })
 }
 
-export function codeMirrorTextChanges(
-  document: Text,
-  edits: readonly { range: LspRange; newText: string }[],
-): ChangeSpec[] | null {
+export function codeMirrorTextChanges(document: Text, edits: readonly { range: LspRange; newText: string }[]): ChangeSpec[] | null {
   const changes = edits.flatMap((edit) => {
     const range = offsetsForRange(document, edit.range)
     return range ? [{ from: range.from, to: range.to, insert: edit.newText }] : []
@@ -1554,9 +1286,7 @@ export interface CodeMirrorHoverSection {
   language?: string
 }
 
-export function codeMirrorHoverSections(
-  hover: CodeMirrorLspHover | null,
-): CodeMirrorHoverSection[] {
+export function codeMirrorHoverSections(hover: CodeMirrorLspHover | null): CodeMirrorHoverSection[] {
   return hover ? markedContentSections(hover.contents) : []
 }
 
@@ -1570,9 +1300,7 @@ function markedContentSections(value: unknown): CodeMirrorHoverSection[] {
     const text = value.value.trim()
     return text ? [{ kind: 'code', text, language: value.language.trim() }] : []
   }
-  return value.kind === 'markdown'
-    ? markdownHoverSections(value.value)
-    : documentationHoverSection(value.value)
+  return value.kind === 'markdown' ? markdownHoverSections(value.value) : documentationHoverSection(value.value)
 }
 
 function markdownHoverSections(value: string): CodeMirrorHoverSection[] {
@@ -1609,17 +1337,11 @@ function cleanMarkdownDocumentation(value: string): string {
     .trim()
 }
 
-export function appendCodeMirrorHoverSections(
-  parent: HTMLElement,
-  sections: readonly CodeMirrorHoverSection[],
-): void {
+export function appendCodeMirrorHoverSections(parent: HTMLElement, sections: readonly CodeMirrorHoverSection[]): void {
   for (const section of sections) {
     if (section.kind === 'code') {
       const code = document.createElement('code')
-      const assemblyNameRange =
-        section.language?.toLowerCase() === 'il'
-          ? ilStandaloneAssemblyIdentityNameRange(section.text)
-          : null
+      const assemblyNameRange = section.language?.toLowerCase() === 'il' ? ilStandaloneAssemblyIdentityNameRange(section.text) : null
       if (assemblyNameRange) {
         code.append(section.text.slice(0, assemblyNameRange.from))
         const assemblyName = document.createElement('span')
@@ -1649,21 +1371,14 @@ function executionFlowAriaLabel(model: ExecutionFlowSourceModel | null): string 
   return `Source editor. Execution flow shows ${count} events across ${model.hits.length} source ranges.`
 }
 
-function createLanguageSessionRequest(
-  state: LatestEditorState,
-  models: ReadonlyMap<string, CodeMirrorFileModel>,
-) {
+function createLanguageSessionRequest(state: LatestEditorState, models: ReadonlyMap<string, CodeMirrorFileModel>) {
   const resolution = state.languageSession.resolution
   const toolchainId = state.languageSession.toolchainId
   const referenceSetId = state.languageSession.referenceSetId
   if (!resolution || !toolchainId || !referenceSetId) {
     throw new Error('Language session selection is no longer resolved.')
   }
-  const buildOptions = createWorkbenchBuildOptions(
-    state.languageSession.languageId,
-    state.languageSession.buildMode,
-    resolution.pipelinePlan.stages,
-  )
+  const buildOptions = createWorkbenchBuildOptions(state.languageSession.languageId, state.languageSession.buildMode, resolution.pipelinePlan.stages)
   return {
     requestId: `lsp_${globalThis.crypto?.randomUUID?.() ?? Date.now().toString(36)}`,
     pipelineResolutionId: resolution.pipelineResolutionId,

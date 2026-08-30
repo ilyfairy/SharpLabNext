@@ -65,21 +65,9 @@ import type {
  * use PascalCase. `encodeWire`/`decodeWire` are the runtime adapters for the
  * same boundary. External LSP, Docker, and GitHub payloads are not included.
  */
-export type PascalCaseKey<K extends PropertyKey> = K extends string
-  ? string extends K
-    ? string
-    : K extends `${infer First}${infer Rest}`
-      ? `${Uppercase<First>}${Rest}`
-      : K
-  : K
+export type PascalCaseKey<K extends PropertyKey> = K extends string ? (string extends K ? string : K extends `${infer First}${infer Rest}` ? `${Uppercase<First>}${Rest}` : K) : K;
 
-export type PascalCaseWire<T> = T extends readonly (infer Item)[]
-  ? PascalCaseWire<Item>[]
-  : T extends object
-    ? T extends (...args: never[]) => unknown
-      ? T
-      : { [K in keyof T as PascalCaseKey<K>]: PascalCaseWire<T[K]> }
-    : T
+export type PascalCaseWire<T> = T extends readonly (infer Item)[] ? PascalCaseWire<Item>[] : T extends object ? (T extends (...args: never[]) => unknown ? T : { [K in keyof T as PascalCaseKey<K>]: PascalCaseWire<T[K]> }) : T;
 
 export type WireApiProblem = PascalCaseWire<ApiProblem>
 export type WireArtifactProcessorIdentity = PascalCaseWire<ArtifactProcessorIdentity>

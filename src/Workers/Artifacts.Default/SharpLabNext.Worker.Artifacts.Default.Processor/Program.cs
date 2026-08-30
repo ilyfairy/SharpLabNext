@@ -6,17 +6,8 @@ var parsed = ProcessorArguments.Parse(args);
 ProcessorResponse response;
 try
 {
-    await using var requestStream = new FileStream(
-        parsed.RequestPath,
-        FileMode.Open,
-        FileAccess.Read,
-        FileShare.Read,
-        bufferSize: 16 * 1024,
-        FileOptions.Asynchronous | FileOptions.SequentialScan);
-    var request = await JsonSerializer.DeserializeAsync<ProcessorRequest>(
-        requestStream,
-        ProcessorProtocol.JsonOptions)
-        ?? throw new InvalidDataException("The processor request was empty.");
+    await using var requestStream = new FileStream(parsed.RequestPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 16 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+    var request = await JsonSerializer.DeserializeAsync<ProcessorRequest>(requestStream, ProcessorProtocol.JsonOptions) ?? throw new InvalidDataException("The processor request was empty.");
     response = await ProcessorEngine.ExecuteAsync(request, CancellationToken.None);
 }
 catch (Exception exception)
@@ -28,13 +19,7 @@ var responseDirectory = Path.GetDirectoryName(parsed.ResponsePath);
 if (!string.IsNullOrEmpty(responseDirectory))
     Directory.CreateDirectory(responseDirectory);
 var temporaryResponse = parsed.ResponsePath + ".tmp";
-await using (var responseStream = new FileStream(
-    temporaryResponse,
-    FileMode.Create,
-    FileAccess.Write,
-    FileShare.None,
-    bufferSize: 16 * 1024,
-    FileOptions.Asynchronous | FileOptions.WriteThrough))
+await using (var responseStream = new FileStream(temporaryResponse, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 16 * 1024, FileOptions.Asynchronous | FileOptions.WriteThrough))
 {
     await JsonSerializer.SerializeAsync(responseStream, response, ProcessorProtocol.JsonOptions);
     await responseStream.FlushAsync();
@@ -42,8 +27,7 @@ await using (var responseStream = new FileStream(
 File.Move(temporaryResponse, parsed.ResponsePath, overwrite: true);
 return response.Outcome is ProcessorOutcome.Succeeded or ProcessorOutcome.Findings or ProcessorOutcome.InvalidArtifact
     or ProcessorOutcome.LimitExceeded
-    ? 0
-    : 1;
+    ? 0 : 1;
 
 internal sealed record ProcessorArguments(string RequestPath, string ResponsePath)
 {

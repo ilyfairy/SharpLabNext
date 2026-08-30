@@ -24,15 +24,12 @@ public static partial class ArtifactWorkerCapabilityManifestSerializer
     public static ArtifactWorkerCapabilityManifest Load(Stream content)
     {
         ArgumentNullException.ThrowIfNull(content);
-        var manifest = JsonSerializer.Deserialize<ArtifactWorkerCapabilityManifest>(content, JsonOptions)
-            ?? throw new InvalidDataException("The artifact worker capability manifest is empty.");
+        var manifest = JsonSerializer.Deserialize<ArtifactWorkerCapabilityManifest>(content, JsonOptions) ?? throw new InvalidDataException("The artifact worker capability manifest is empty.");
         Validate(manifest);
         return manifest;
     }
 
-    public static void Validate(
-        ArtifactWorkerCapabilityManifest manifest,
-        ServiceIdentity? serviceIdentity = null)
+    public static void Validate(ArtifactWorkerCapabilityManifest manifest, ServiceIdentity? serviceIdentity = null)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         if (manifest.SchemaVersion != 1)
@@ -88,12 +85,7 @@ public static partial class ArtifactWorkerCapabilityManifestSerializer
     private static void ValidateLimits(ArtifactWorkerLimits limits)
     {
         ArgumentNullException.ThrowIfNull(limits);
-        if (limits.MaximumInputArtifactBytes <= 0 ||
-            limits.MaximumOutputArtifactBytes <= 0 ||
-            limits.MaximumConcurrentOperations <= 0 ||
-            limits.MaximumOperationMilliseconds <= 0 ||
-            limits.MaximumRetainedOperations <= 0 ||
-            limits.MaximumEventsPerOperation < 8)
+        if (limits.MaximumInputArtifactBytes <= 0 || limits.MaximumOutputArtifactBytes <= 0 || limits.MaximumConcurrentOperations <= 0 || limits.MaximumOperationMilliseconds <= 0 || limits.MaximumRetainedOperations <= 0 || limits.MaximumEventsPerOperation < 8)
         {
             throw new ArgumentException("Artifact worker limits are invalid.", nameof(limits));
         }

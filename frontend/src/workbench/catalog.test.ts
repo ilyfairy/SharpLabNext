@@ -3,27 +3,12 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { CatalogDocument } from '../api/types'
 import { createCatalogFixture } from '../test/catalogFixture'
-import {
-  fallbackLanguage,
-  languageById,
-  normalizeSelectionIntent,
-  outputOptionsFor,
-  referenceSetById,
-  referenceSetDisplayName,
-  referenceSetOptionsFor,
-  runtimeById,
-  runtimeOptionsFor,
-  toolchainOptionsFor,
-} from './catalog'
+import { fallbackLanguage, languageById, normalizeSelectionIntent, outputOptionsFor, referenceSetById, referenceSetDisplayName, referenceSetOptionsFor, runtimeById, runtimeOptionsFor, toolchainOptionsFor } from './catalog'
 
 describe('catalog selector filtering', () => {
   it('keeps the repository C# defaults aligned on the latest compiler, reference set, and runtime', () => {
-    const catalog = JSON.parse(
-      readFileSync(resolve(process.cwd(), '..', 'profiles/catalog/catalog.json'), 'utf8'),
-    ) as CatalogDocument
-    const runtimeMatrix = JSON.parse(
-      readFileSync(resolve(process.cwd(), '..', 'profiles/runtime-matrix.json'), 'utf8'),
-    ) as { coreClr: Array<{ id: string; version: string }> }
+    const catalog = JSON.parse(readFileSync(resolve(process.cwd(), '..', 'profiles/catalog/catalog.json'), 'utf8')) as CatalogDocument
+    const runtimeMatrix = JSON.parse(readFileSync(resolve(process.cwd(), '..', 'profiles/runtime-matrix.json'), 'utf8')) as { coreClr: Array<{ id: string; version: string }> }
     const csharp = languageById(catalog, 'csharp')
     const roslynMain = catalog.toolchains.find((toolchain) => toolchain.id === 'roslyn-main')
     const mainPreset = catalog.presets.find((preset) => preset.id === 'csharp-main-net11-preview')
@@ -38,24 +23,12 @@ describe('catalog selector filtering', () => {
     expect(fallbackLanguage.defaultToolchainId).toBe('roslyn-main')
     expect(csharp?.defaultToolchainId).toBe('roslyn-main')
     expect(roslynMain?.defaultReferenceSetId).toBe('net11-preview-ref')
-    expect(catalog.referenceSets.find((item) => item.id === 'net10-ref')?.displayName).toBe(
-      net10.version,
-    )
-    expect(catalog.referenceSets.find((item) => item.id === 'net11-preview-ref')?.displayName).toBe(
-      net11Preview.version,
-    )
-    expect(
-      catalog.referenceSets.find((item) => item.id === 'const-generics-ref')?.displayName,
-    ).toBe('Const Generics')
-    expect(catalog.referenceSets.find((item) => item.id === 'netfx48-ref')?.displayName).toBe(
-      '.NET Framework 4.8',
-    )
-    expect(catalog.runtimes.find((item) => item.id === 'dotnet-10-linux-x64')?.displayName).toBe(
-      `.NET ${net10.version} / Linux x64`,
-    )
-    expect(
-      catalog.runtimes.find((item) => item.id === 'dotnet-11-preview-linux-x64')?.displayName,
-    ).toBe(`.NET ${net11Preview.version} / Linux x64`)
+    expect(catalog.referenceSets.find((item) => item.id === 'net10-ref')?.displayName).toBe(net10.version)
+    expect(catalog.referenceSets.find((item) => item.id === 'net11-preview-ref')?.displayName).toBe(net11Preview.version)
+    expect(catalog.referenceSets.find((item) => item.id === 'const-generics-ref')?.displayName).toBe('Const Generics')
+    expect(catalog.referenceSets.find((item) => item.id === 'netfx48-ref')?.displayName).toBe('.NET Framework 4.8')
+    expect(catalog.runtimes.find((item) => item.id === 'dotnet-10-linux-x64')?.displayName).toBe(`.NET ${net10.version} / Linux x64`)
+    expect(catalog.runtimes.find((item) => item.id === 'dotnet-11-preview-linux-x64')?.displayName).toBe(`.NET ${net11Preview.version} / Linux x64`)
     expect(mainPreset).toMatchObject({
       languageId: 'csharp',
       toolchainId: 'roslyn-main',
@@ -66,9 +39,7 @@ describe('catalog selector filtering', () => {
   })
 
   it('offers the complete runtime matrix in descending version order', () => {
-    const catalog = JSON.parse(
-      readFileSync(resolve(process.cwd(), '..', 'profiles/catalog/catalog.json'), 'utf8'),
-    ) as CatalogDocument
+    const catalog = JSON.parse(readFileSync(resolve(process.cwd(), '..', 'profiles/catalog/catalog.json'), 'utf8')) as CatalogDocument
 
     expect(referenceSetOptionsFor(catalog, 'roslyn-stable').map((item) => item.id)).toEqual([
       'net11-preview-ref',
@@ -84,49 +55,32 @@ describe('catalog selector filtering', () => {
       'netcoreapp2.1-ref',
       'netcoreapp2.0-ref',
     ])
-    expect(referenceSetOptionsFor(catalog, 'roslyn-stable-netfx48').map((item) => item.id)).toEqual(
-      [
-        'netfx48-managed-ref',
-        'netfx472-managed-ref',
-        'netfx471-managed-ref',
-        'netfx47-managed-ref',
-        'netfx462-managed-ref',
-        'netfx461-managed-ref',
-        'netfx46-managed-ref',
-        'netfx452-managed-ref',
-        'netfx451-managed-ref',
-        'netfx45-managed-ref',
-        'netfx40-managed-ref',
-        'netfx35-managed-ref',
-        'netfx30-managed-ref',
-        'netfx20-managed-ref',
-      ],
-    )
-    expect(referenceSetOptionsFor(catalog, 'fsharp-stable').map((item) => item.id)).toEqual([
-      'net11-preview-ref',
-      'net10-ref',
+    expect(referenceSetOptionsFor(catalog, 'roslyn-stable-netfx48').map((item) => item.id)).toEqual([
+      'netfx48-managed-ref',
+      'netfx472-managed-ref',
+      'netfx471-managed-ref',
+      'netfx47-managed-ref',
+      'netfx462-managed-ref',
+      'netfx461-managed-ref',
+      'netfx46-managed-ref',
+      'netfx452-managed-ref',
+      'netfx451-managed-ref',
+      'netfx45-managed-ref',
+      'netfx40-managed-ref',
+      'netfx35-managed-ref',
+      'netfx30-managed-ref',
+      'netfx20-managed-ref',
     ])
-    expect(referenceSetOptionsFor(catalog, 'gsharp-stable').map((item) => item.id)).toEqual([
-      'net10-ref',
-    ])
-    expect(referenceSetOptionsFor(catalog, 'gsharp-legacy-0.3.8').map((item) => item.id)).toEqual([
-      'net10-ref',
-    ])
-    expect(
-      catalog.toolchains.find((item) => item.id === 'roslyn-stable-netfx48')?.displayName,
-    ).toBe('Roslyn Stable 5.6.0 / .NET Framework')
-    expect(catalog.toolchains.find((item) => item.id === 'gsharp-stable')?.displayName).toBe(
-      '0.3.33',
-    )
-    expect(catalog.toolchains.find((item) => item.id === 'gsharp-legacy-0.3.8')?.displayName).toBe(
-      '0.3.8',
-    )
+    expect(referenceSetOptionsFor(catalog, 'fsharp-stable').map((item) => item.id)).toEqual(['net11-preview-ref', 'net10-ref'])
+    expect(referenceSetOptionsFor(catalog, 'gsharp-stable').map((item) => item.id)).toEqual(['net10-ref'])
+    expect(referenceSetOptionsFor(catalog, 'gsharp-legacy-0.3.8').map((item) => item.id)).toEqual(['net10-ref'])
+    expect(catalog.toolchains.find((item) => item.id === 'roslyn-stable-netfx48')?.displayName).toBe('Roslyn Stable 5.6.0 / .NET Framework')
+    expect(catalog.toolchains.find((item) => item.id === 'gsharp-stable')?.displayName).toBe('0.3.33')
+    expect(catalog.toolchains.find((item) => item.id === 'gsharp-legacy-0.3.8')?.displayName).toBe('0.3.8')
   })
 
   it('presents reference-set versions with their complete framework names', () => {
-    const catalog = JSON.parse(
-      readFileSync(resolve(process.cwd(), '..', 'profiles/catalog/catalog.json'), 'utf8'),
-    ) as CatalogDocument
+    const catalog = JSON.parse(readFileSync(resolve(process.cwd(), '..', 'profiles/catalog/catalog.json'), 'utf8')) as CatalogDocument
     const label = (id: string) => {
       const referenceSet = catalog.referenceSets.find((item) => item.id === id)
       if (!referenceSet) throw new Error(`Reference set '${id}' is missing.`)
@@ -142,27 +96,12 @@ describe('catalog selector filtering', () => {
   })
 
   it('offers only runtimes whose framework contract accepts the selected reference set', () => {
-    const catalog = JSON.parse(
-      readFileSync(resolve(process.cwd(), '..', 'profiles/catalog/catalog.json'), 'utf8'),
-    ) as CatalogDocument
-    const ids = (toolchainId: string, referenceSetId: string, outputId: string) =>
-      runtimeOptionsFor(catalog, toolchainId, referenceSetId, outputId).map((item) => item.id)
+    const catalog = JSON.parse(readFileSync(resolve(process.cwd(), '..', 'profiles/catalog/catalog.json'), 'utf8')) as CatalogDocument
+    const ids = (toolchainId: string, referenceSetId: string, outputId: string) => runtimeOptionsFor(catalog, toolchainId, referenceSetId, outputId).map((item) => item.id)
 
-    expect(ids('roslyn-stable-netfx48', 'netfx47-managed-ref', 'run')).toEqual([
-      'wine-netfx47-linux-x64',
-      'wine-netfx472-linux-x64',
-      'wine-netfx471-linux-x64',
-    ])
-    expect(ids('roslyn-stable-netfx48', 'netfx48-managed-ref', 'run')).toEqual([
-      'wine-netfx48-linux-x64',
-      'mono-6.12-linux-x64',
-    ])
-    expect(ids('roslyn-stable', 'net10-ref', 'jit-asm')).toEqual([
-      'dotnet-10-linux-x64',
-      'wine-dotnet-10-linux-x64',
-      'dotnet-11-preview-linux-x64',
-      'wine-dotnet-11-preview-linux-x64',
-    ])
+    expect(ids('roslyn-stable-netfx48', 'netfx47-managed-ref', 'run')).toEqual(['wine-netfx47-linux-x64', 'wine-netfx472-linux-x64', 'wine-netfx471-linux-x64'])
+    expect(ids('roslyn-stable-netfx48', 'netfx48-managed-ref', 'run')).toEqual(['wine-netfx48-linux-x64', 'mono-6.12-linux-x64'])
+    expect(ids('roslyn-stable', 'net10-ref', 'jit-asm')).toEqual(['dotnet-10-linux-x64', 'wine-dotnet-10-linux-x64', 'dotnet-11-preview-linux-x64', 'wine-dotnet-11-preview-linux-x64'])
     expect(ids('roslyn-stable', 'net5-ref', 'run')).toEqual([
       'dotnet-5-linux-x64',
       'wine-dotnet-5-linux-x64',
@@ -185,29 +124,15 @@ describe('catalog selector filtering', () => {
     const catalog = createCatalogFixture()
 
     expect(toolchainOptionsFor(catalog, 'fsharp').map((item) => item.id)).toEqual(['fsharp-stable'])
-    expect(outputOptionsFor(catalog, 'csharp', 'roslyn-stable').map((item) => item.id)).toEqual([
-      'compile-check',
-      'ast',
-      'il',
-      'decompiled-csharp',
-      'run',
-      'explain',
-    ])
-    expect(
-      outputOptionsFor(catalog, 'fsharp', 'fsharp-stable').map((item) => item.id),
-    ).not.toContain('explain')
+    expect(outputOptionsFor(catalog, 'csharp', 'roslyn-stable').map((item) => item.id)).toEqual(['compile-check', 'ast', 'il', 'decompiled-csharp', 'run', 'explain'])
+    expect(outputOptionsFor(catalog, 'fsharp', 'fsharp-stable').map((item) => item.id)).not.toContain('explain')
   })
 
   it('uses compatibility edges for reference sets and runtimes, including numeric enum values', () => {
     const catalog = createCatalogFixture()
 
-    expect(referenceSetOptionsFor(catalog, 'roslyn-stable').map((item) => item.id)).toEqual([
-      'net10-ref',
-      'net11-ref',
-    ])
-    expect(runtimeOptionsFor(catalog, 'roslyn-stable', 'net11-ref').map((item) => item.id)).toEqual(
-      ['dotnet-11-linux-x64'],
-    )
+    expect(referenceSetOptionsFor(catalog, 'roslyn-stable').map((item) => item.id)).toEqual(['net10-ref', 'net11-ref'])
+    expect(runtimeOptionsFor(catalog, 'roslyn-stable', 'net11-ref').map((item) => item.id)).toEqual(['dotnet-11-linux-x64'])
   })
 
   it('sorts compatible runtimes by numeric version descending instead of catalog insertion order', () => {
@@ -263,14 +188,7 @@ describe('catalog selector filtering', () => {
     if (!existingEdge) throw new Error('Fixture is missing the .NET 11 runtime edge.')
     existingEdge.toId = net11Runtime.id
 
-    expect(runtimeOptionsFor(catalog, 'roslyn-stable', 'net11-ref').map((item) => item.id)).toEqual(
-      [
-        'wine-netfx48-linux-x64',
-        'wine-netfx472-linux-x64',
-        'wine-netfx47-linux-x64',
-        'wine-netfx20-linux-x64',
-      ],
-    )
+    expect(runtimeOptionsFor(catalog, 'roslyn-stable', 'net11-ref').map((item) => item.id)).toEqual(['wine-netfx48-linux-x64', 'wine-netfx472-linux-x64', 'wine-netfx47-linux-x64', 'wine-netfx20-linux-x64'])
   })
 
   it('does not expose hidden reference sets, runtimes, or presets to normal selection', () => {
@@ -287,12 +205,8 @@ describe('catalog selector filtering', () => {
 
     expect(referenceSetById(catalog, hiddenReferenceSet.id)).toBeUndefined()
     expect(runtimeById(catalog, hiddenRuntime.id)).toBeUndefined()
-    expect(referenceSetOptionsFor(catalog, 'roslyn-stable').map((item) => item.id)).toEqual([
-      'net10-ref',
-    ])
-    expect(runtimeOptionsFor(catalog, 'roslyn-stable', 'net11-ref').map((item) => item.id)).toEqual(
-      [],
-    )
+    expect(referenceSetOptionsFor(catalog, 'roslyn-stable').map((item) => item.id)).toEqual(['net10-ref'])
+    expect(runtimeOptionsFor(catalog, 'roslyn-stable', 'net11-ref').map((item) => item.id)).toEqual([])
   })
 
   it('normalizes incompatible dimensions without hiding the requested language', () => {
@@ -387,12 +301,8 @@ describe('catalog selector filtering', () => {
       },
     )
 
-    expect(
-      outputOptionsFor(catalog, 'minilang', 'minilang-stable', 'net10-ref').map((item) => item.id),
-    ).toEqual(['compile-check', 'il', 'decompiled-csharp', 'run', 'generated-il'])
-    expect(
-      runtimeOptionsFor(catalog, 'minilang-stable', 'net10-ref', 'run').map((item) => item.id),
-    ).toEqual(['dotnet-10-linux-x64', 'dotnet-11-linux-x64'])
+    expect(outputOptionsFor(catalog, 'minilang', 'minilang-stable', 'net10-ref').map((item) => item.id)).toEqual(['compile-check', 'il', 'decompiled-csharp', 'run', 'generated-il'])
+    expect(runtimeOptionsFor(catalog, 'minilang-stable', 'net10-ref', 'run').map((item) => item.id)).toEqual(['dotnet-10-linux-x64', 'dotnet-11-linux-x64'])
   })
 
   it('offers a catalog-declared artifact output without a frontend output allowlist', () => {
@@ -427,9 +337,7 @@ describe('catalog selector filtering', () => {
       requiredMetadataFeatureTags: [],
     })
 
-    expect(outputOptionsFor(catalog, 'csharp', 'roslyn-stable', 'net10-ref')).toContainEqual(
-      expect.objectContaining({ id: 'javascript' }),
-    )
+    expect(outputOptionsFor(catalog, 'csharp', 'roslyn-stable', 'net10-ref')).toContainEqual(expect.objectContaining({ id: 'javascript' }))
   })
 
   it('uses the matching preset output when a language cannot keep the current output', () => {
@@ -518,9 +426,7 @@ describe('catalog selector filtering', () => {
       outputId: 'decompiled-csharp',
       runtimeId: null,
     })
-    expect(
-      outputOptionsFor(catalog, 'php', 'peachpie-stable', 'net10-ref').map((output) => output.id),
-    ).not.toContain('execution-flow')
+    expect(outputOptionsFor(catalog, 'php', 'peachpie-stable', 'net10-ref').map((output) => output.id)).not.toContain('execution-flow')
   })
 
   it('uses the catalog-gated J# workspace and defaults to Decompiled C#', () => {
@@ -744,25 +650,10 @@ describe('catalog selector filtering', () => {
       },
     )
 
-    expect(
-      outputOptionsFor(catalog, 'cppcli', 'msvc-cppcli-netfx48', 'netfx48-ref').map(
-        (output) => output.id,
-      ),
-    ).toEqual(['compile-check', 'il', 'decompiled-csharp', 'run'])
-    expect(
-      runtimeOptionsFor(catalog, 'msvc-cppcli-netfx48', 'netfx48-ref', 'run').map(
-        (runtime) => runtime.id,
-      ),
-    ).toEqual(['wine-netfx48-linux-x64'])
-    expect(
-      catalog.runtimes.find((runtime) => runtime.id === 'wine-netfx48-linux-x64')
-        ?.acceptedArtifactFormats,
-    ).toEqual(['dotnet-framework-managed-pe-v1', 'dotnet-framework-mixed-pe-v1'])
-    expect(
-      catalog.toolchains.some((toolchain) =>
-        toolchain.producesArtifactFormats.includes('dotnet-framework-managed-pe-v1'),
-      ),
-    ).toBe(false)
+    expect(outputOptionsFor(catalog, 'cppcli', 'msvc-cppcli-netfx48', 'netfx48-ref').map((output) => output.id)).toEqual(['compile-check', 'il', 'decompiled-csharp', 'run'])
+    expect(runtimeOptionsFor(catalog, 'msvc-cppcli-netfx48', 'netfx48-ref', 'run').map((runtime) => runtime.id)).toEqual(['wine-netfx48-linux-x64'])
+    expect(catalog.runtimes.find((runtime) => runtime.id === 'wine-netfx48-linux-x64')?.acceptedArtifactFormats).toEqual(['dotnet-framework-managed-pe-v1', 'dotnet-framework-mixed-pe-v1'])
+    expect(catalog.toolchains.some((toolchain) => toolchain.producesArtifactFormats.includes('dotnet-framework-managed-pe-v1'))).toBe(false)
     expect(catalog.languages.some((language) => ['jsharp', 'j#'].includes(language.id))).toBe(false)
   })
 })

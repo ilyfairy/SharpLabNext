@@ -8,7 +8,7 @@ import test from 'node:test'
 import {
   parseRuntimeFrameLog,
   runFunctionalSmokes,
-} from './runtime-functional-smoke.mjs'
+} from '../smoke/runtime-functional-smoke.mjs'
 
 function frame(kind, sequence, payload) {
   const content = Buffer.from(payload)

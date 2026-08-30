@@ -1,26 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, openLanguageSessionWithResolution, resolveSelectionHttp } from '../api/client'
-import type {
-  BuildConfiguration,
-  ResolveSelectionRequest,
-  ResolveSelectionResponse,
-} from '../api/types'
-import {
-  CodeMirrorLanguageBridge,
-  type CodeMirrorLspHover,
-  type CodeMirrorSemanticToken,
-  createCodeMirrorLanguageSessionDependencies,
-  type LspPosition,
-  readOnlyIlOutputLanguageClientFeatureProfile,
-} from '../lsp/codeMirrorLanguageClient'
+import type { BuildConfiguration, ResolveSelectionRequest, ResolveSelectionResponse } from '../api/types'
+import { CodeMirrorLanguageBridge, type CodeMirrorLspHover, type CodeMirrorSemanticToken, createCodeMirrorLanguageSessionDependencies, type LspPosition, readOnlyIlOutputLanguageClientFeatureProfile } from '../lsp/codeMirrorLanguageClient'
 import { createLanguageWorkspaceUri } from '../lsp/languageDocumentUri'
-import {
-  type LanguageSessionInitialRetryContext,
-  type LanguageSessionInitialRetryPolicy,
-  LanguageSessionLifecycle,
-  type LanguageSessionStatus,
-  LanguageSessionTransportError,
-} from '../lsp/languageSessionLifecycle'
+import { type LanguageSessionInitialRetryContext, type LanguageSessionInitialRetryPolicy, LanguageSessionLifecycle, type LanguageSessionStatus, LanguageSessionTransportError } from '../lsp/languageSessionLifecycle'
 import { createWorkbenchBuildOptions } from '../workbench/buildOptions'
 
 const outputPath = 'Output.il'
@@ -53,11 +36,7 @@ export interface IlOutputLanguageSession {
  * session cannot be used to analyze its generated IL, and changing the shared
  * selection while recovering this session would invalidate source LSP state.
  */
-export function useIlOutputLanguageSession(
-  text: string,
-  generationKey: string | null,
-  options: IlOutputLanguageSessionOptions | null | undefined,
-): IlOutputLanguageSession {
+export function useIlOutputLanguageSession(text: string, generationKey: string | null, options: IlOutputLanguageSessionOptions | null | undefined): IlOutputLanguageSession {
   const bridgeRef = useRef<CodeMirrorLanguageBridge | null>(null)
   const lifecycleRef = useRef<LanguageSessionLifecycle | null>(null)
   const workspaceIdRef = useRef<string | null>(null)
@@ -137,15 +116,7 @@ export function useIlOutputLanguageSession(
     setSemanticTokens([])
     resolutionRequestRef.current = null
 
-    if (
-      !enabled ||
-      catalogRevision === null ||
-      referenceSetId === null ||
-      buildMode === null ||
-      workspaceRevision === null ||
-      selectionRevision === null ||
-      text.length === 0
-    ) {
+    if (!enabled || catalogRevision === null || referenceSetId === null || buildMode === null || workspaceRevision === null || selectionRevision === null || text.length === 0) {
       lifecycle.update(null)
       setStatus('disabled')
       return () => abort.abort()
@@ -168,12 +139,7 @@ export function useIlOutputLanguageSession(
       .then((resolution) => {
         if (abort.signal.aborted || epoch !== epochRef.current) return
         const selection = resolution.effectiveSelection
-        if (
-          selection.languageId !== 'il' ||
-          selection.toolchainId !== 'mobius-ilasm-stable' ||
-          selection.referenceSetId !== referenceSetId ||
-          resolution.pipelinePlan.referenceSetId !== referenceSetId
-        ) {
+        if (selection.languageId !== 'il' || selection.toolchainId !== 'mobius-ilasm-stable' || selection.referenceSetId !== referenceSetId || resolution.pipelinePlan.referenceSetId !== referenceSetId) {
           throw new Error('The selected reference set does not support IL language services.')
         }
         const key = JSON.stringify([epoch, generationKey, resolution.pipelineResolutionId])
@@ -200,11 +166,7 @@ export function useIlOutputLanguageSession(
                 activeFile: outputPath,
                 sourceOrder: [outputPath],
                 referenceSetId: selection.referenceSetId,
-                buildOptions: createWorkbenchBuildOptions(
-                  'il',
-                  buildMode,
-                  resolution.pipelinePlan.stages,
-                ),
+                buildOptions: createWorkbenchBuildOptions('il', buildMode, resolution.pipelinePlan.stages),
               },
               lspVersion: '3.17' as const,
             }),
@@ -224,48 +186,25 @@ export function useIlOutputLanguageSession(
       abort.abort()
       lifecycle.update(null)
     }
-  }, [
-    buildMode,
-    catalogRevision,
-    enabled,
-    generationKey,
-    referenceSetId,
-    selectionRevision,
-    text,
-    workspaceId,
-    workspaceRevision,
-  ])
+  }, [buildMode, catalogRevision, enabled, generationKey, referenceSetId, selectionRevision, text, workspaceId, workspaceRevision])
 
-  const hover = useCallback(
-    (position: LspPosition) =>
-      bridgeRef.current?.hover(outputPath, position) ?? Promise.resolve(null),
-    [],
-  )
+  const hover = useCallback((position: LspPosition) => bridgeRef.current?.hover(outputPath, position) ?? Promise.resolve(null), [])
 
   return { semanticTokens, status, hover }
 }
 
-async function resolveSelectionWithRetry(
-  request: ResolveSelectionRequest,
-  signal: AbortSignal,
-): Promise<ResolveSelectionResponse> {
+async function resolveSelectionWithRetry(request: ResolveSelectionRequest, signal: AbortSignal): Promise<ResolveSelectionResponse> {
   let retryAttempt = 0
   while (true) {
     if (signal.aborted) {
-      throw (
-        signal.reason ??
-        new DOMException('IL output selection resolution was aborted.', 'AbortError')
-      )
+      throw signal.reason ?? new DOMException('IL output selection resolution was aborted.', 'AbortError')
     }
     try {
       return await resolveSelectionHttp(request, signal)
     } catch (error) {
       if (signal.aborted || !isTransientSelectionResolutionError(error)) throw error
 
-      const delay = Math.min(
-        selectionResolutionRetryInitialDelayMs * 2 ** Math.min(retryAttempt, 4),
-        selectionResolutionRetryMaximumDelayMs,
-      )
+      const delay = Math.min(selectionResolutionRetryInitialDelayMs * 2 ** Math.min(retryAttempt, 4), selectionResolutionRetryMaximumDelayMs)
       retryAttempt += 1
       await waitForSelectionResolutionRetry(delay, signal)
     }
@@ -273,17 +212,10 @@ async function resolveSelectionWithRetry(
 }
 
 function isTransientSelectionResolutionError(error: unknown): boolean {
-  return (
-    error instanceof TypeError ||
-    (error instanceof ApiError &&
-      (error.status === 408 || error.status === 429 || (error.status >= 500 && error.status < 600)))
-  )
+  return error instanceof TypeError || (error instanceof ApiError && (error.status === 408 || error.status === 429 || (error.status >= 500 && error.status < 600)))
 }
 
-function isTransientIlOutputLanguageSessionFailure(
-  error: unknown,
-  context: LanguageSessionInitialRetryContext,
-): boolean {
+function isTransientIlOutputLanguageSessionFailure(error: unknown, context: LanguageSessionInitialRetryContext): boolean {
   if (error instanceof LanguageSessionTransportError) return true
   if (context.phase !== 'open') return false
   return isTransientSelectionResolutionError(error)
@@ -291,10 +223,7 @@ function isTransientIlOutputLanguageSessionFailure(
 
 function waitForSelectionResolutionRetry(delay: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) {
-    return Promise.reject(
-      signal.reason ??
-        new DOMException('IL output selection resolution was aborted.', 'AbortError'),
-    )
+    return Promise.reject(signal.reason ?? new DOMException('IL output selection resolution was aborted.', 'AbortError'))
   }
 
   return new Promise<void>((resolve, reject) => {
@@ -305,10 +234,7 @@ function waitForSelectionResolutionRetry(delay: number, signal: AbortSignal): Pr
     const abort = () => {
       globalThis.clearTimeout(timeout)
       signal.removeEventListener('abort', abort)
-      reject(
-        signal.reason ??
-          new DOMException('IL output selection resolution was aborted.', 'AbortError'),
-      )
+      reject(signal.reason ?? new DOMException('IL output selection resolution was aborted.', 'AbortError'))
     }
     signal.addEventListener('abort', abort, { once: true })
     if (signal.aborted) abort()

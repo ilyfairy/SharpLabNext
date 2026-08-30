@@ -16,31 +16,14 @@ public sealed class PipelineResolverTests
         {
             Runtimes =
             [
-                .. catalog.Runtimes.Where(item => item.Id != runtime.Id),
-                runtime with
-                {
-                    Availability = new ComponentAvailability
-                    {
-                        Installed = false,
-                        Health = "not-installed",
-                        Reason = "candidate image is not installed"
-                    }
-                }
+..catalog.Runtimes.Where(item => item.Id != runtime.Id),
+                runtime with { Availability = new ComponentAvailability { Installed = false, Health = "not-installed", Reason = "candidate image is not installed" } }
             ]
         };
 
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-main",
-            "net11-preview-ref",
-            "run",
-            runtime.Id,
-            BuildConfiguration.Release,
-            catalog.Revision,
-            0);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-main", "net11-preview-ref", "run", runtime.Id, BuildConfiguration.Release, catalog.Revision, 0);
 
-        var exception = Assert.Throws<SelectionResolutionException>(() =>
-            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+        var exception = Assert.Throws<SelectionResolutionException>(() => Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
 
         Assert.Equal(SelectionField.Runtime, exception.Field);
     }
@@ -49,15 +32,7 @@ public sealed class PipelineResolverTests
     public async Task FreshCSharpRunUsesRoslynMainAndTheLatestPreviewRuntime()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            null,
-            null,
-            "run",
-            null,
-            BuildConfiguration.Release,
-            catalog.Revision,
-            1);
+        var request = new ResolveSelectionRequest("csharp", null, null, "run", null, BuildConfiguration.Release, catalog.Revision, 1);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -66,30 +41,16 @@ public sealed class PipelineResolverTests
         Assert.Equal("dotnet-11-preview-linux-x64", result.EffectiveSelection.RuntimeId);
         Assert.Equal("roslyn-main", result.PipelinePlan.CompilerWorkerId);
         Assert.Equal("dotnet-11-preview-linux-x64", result.PipelinePlan.RuntimeId);
-        Assert.Contains(result.SelectionChanges, static change =>
-            change.Field == SelectionField.Toolchain &&
-            change.Reason == SelectionChangeReason.DefaultApplied);
-        Assert.Contains(result.SelectionChanges, static change =>
-            change.Field == SelectionField.ReferenceSet &&
-            change.Reason == SelectionChangeReason.DefaultApplied);
-        Assert.Contains(result.SelectionChanges, static change =>
-            change.Field == SelectionField.Runtime &&
-            change.Reason == SelectionChangeReason.DefaultApplied);
+        Assert.Contains(result.SelectionChanges, static change => change.Field == SelectionField.Toolchain && change.Reason == SelectionChangeReason.DefaultApplied);
+        Assert.Contains(result.SelectionChanges, static change => change.Field == SelectionField.ReferenceSet && change.Reason == SelectionChangeReason.DefaultApplied);
+        Assert.Contains(result.SelectionChanges, static change => change.Field == SelectionField.Runtime && change.Reason == SelectionChangeReason.DefaultApplied);
     }
 
     [Fact]
     public async Task ChangingConstGenericsSelectionToVisualBasicNormalizesToolchainAndReferenceSet()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "visual-basic",
-            "roslyn-const-generics",
-            "const-generics-ref",
-            "ast",
-            null,
-            BuildConfiguration.Release,
-            catalog.Revision,
-            7);
+        var request = new ResolveSelectionRequest("visual-basic", "roslyn-const-generics", "const-generics-ref", "ast", null, BuildConfiguration.Release, catalog.Revision, 7);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -103,15 +64,7 @@ public sealed class PipelineResolverTests
     public async Task Net10ReferenceSetCanRunOnNet11Runtime()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-stable",
-            "net10-ref",
-            "jit-asm",
-            "dotnet-11-preview-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            8);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-stable", "net10-ref", "jit-asm", "dotnet-11-preview-linux-x64", BuildConfiguration.Release, catalog.Revision, 8);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -122,18 +75,9 @@ public sealed class PipelineResolverTests
     public async Task Net11ReferenceSetCannotRunOnNet10Runtime()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-stable",
-            "net11-preview-ref",
-            "run",
-            "dotnet-10-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            9);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-stable", "net11-preview-ref", "run", "dotnet-10-linux-x64", BuildConfiguration.Release, catalog.Revision, 9);
 
-        var exception = Assert.Throws<SelectionResolutionException>(() =>
-            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+        var exception = Assert.Throws<SelectionResolutionException>(() => Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
 
         Assert.Equal("unsupported-capability", exception.Code);
         Assert.Equal(SelectionField.Runtime, exception.Field);
@@ -162,15 +106,7 @@ public sealed class PipelineResolverTests
         for (var index = 0; index < rows.Length; index++)
         {
             var row = rows[index];
-            var matchingRequest = new ResolveSelectionRequest(
-                "csharp",
-                "roslyn-stable",
-                row.ReferenceSetId,
-                "run",
-                row.RuntimeId,
-                BuildConfiguration.Release,
-                catalog.Revision,
-                index);
+            var matchingRequest = new ResolveSelectionRequest("csharp", "roslyn-stable", row.ReferenceSetId, "run", row.RuntimeId, BuildConfiguration.Release, catalog.Revision, index);
             var matching = Resolver.Resolve(catalog, matchingRequest, DateTimeOffset.UnixEpoch);
             Assert.Equal(row.RuntimeId, matching.EffectiveSelection.RuntimeId);
 
@@ -207,18 +143,9 @@ public sealed class PipelineResolverTests
     public async Task ConstGenericsArtifactCannotUseOrdinaryRuntime()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-const-generics",
-            "const-generics-ref",
-            "run",
-            "dotnet-10-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            10);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-const-generics", "const-generics-ref", "run", "dotnet-10-linux-x64", BuildConfiguration.Release, catalog.Revision, 10);
 
-        var exception = Assert.Throws<SelectionResolutionException>(() =>
-            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+        var exception = Assert.Throws<SelectionResolutionException>(() => Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
 
         Assert.Equal(SelectionField.Runtime, exception.Field);
     }
@@ -227,18 +154,9 @@ public sealed class PipelineResolverTests
     public async Task OrdinaryArtifactCannotUseConstGenericsRuntime()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-stable",
-            "net10-ref",
-            "run",
-            "const-generics-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            10);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-stable", "net10-ref", "run", "const-generics-linux-x64", BuildConfiguration.Release, catalog.Revision, 10);
 
-        var exception = Assert.Throws<SelectionResolutionException>(() =>
-            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+        var exception = Assert.Throws<SelectionResolutionException>(() => Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
 
         Assert.Equal(SelectionField.Runtime, exception.Field);
     }
@@ -247,15 +165,7 @@ public sealed class PipelineResolverTests
     public async Task ConstGenericsReferenceSetRunsOnItsMatchingRuntime()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-const-generics",
-            "const-generics-ref",
-            "run",
-            "const-generics-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            10);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-const-generics", "const-generics-ref", "run", "const-generics-linux-x64", BuildConfiguration.Release, catalog.Revision, 10);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -271,32 +181,19 @@ public sealed class PipelineResolverTests
         {
             Runtimes =
             [
-                .. catalog.Runtimes.Where(item => item.Id != runtime.Id),
+..catalog.Runtimes.Where(item => item.Id != runtime.Id),
                 runtime with
                 {
                     AcceptedFrameworks =
                     [
-                        new RuntimeFrameworkManifest
-                        {
-                            Name = ".NETFramework",
-                            ExactVersion = "4.7"
-                        }
+                        new RuntimeFrameworkManifest { Name = ".NETFramework", ExactVersion = "4.7" }
                     ]
                 }
             ]
         };
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-stable-netfx48",
-            "netfx48-managed-ref",
-            "run",
-            runtime.Id,
-            BuildConfiguration.Release,
-            catalog.Revision,
-            10);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-stable-netfx48", "netfx48-managed-ref", "run", runtime.Id, BuildConfiguration.Release, catalog.Revision, 10);
 
-        var exception = Assert.Throws<SelectionResolutionException>(() =>
-            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+        var exception = Assert.Throws<SelectionResolutionException>(() => Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
 
         Assert.Equal(SelectionField.Runtime, exception.Field);
     }
@@ -309,29 +206,13 @@ public sealed class PipelineResolverTests
         {
             Compatibility =
             [
-                .. catalog.Compatibility,
-                new CompatibilityRule
-                {
-                    Id = "test-managed-pe-mono",
-                    Kind = CompatibilityRuleKind.ArtifactRuntime,
-                    FromId = "dotnet-managed-pe-v1",
-                    ToId = "mono-6.12-linux-x64",
-                    Allowed = true
-                }
+..catalog.Compatibility,
+                new CompatibilityRule { Id = "test-managed-pe-mono", Kind = CompatibilityRuleKind.ArtifactRuntime, FromId = "dotnet-managed-pe-v1", ToId = "mono-6.12-linux-x64", Allowed = true }
             ]
         };
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-stable",
-            "net10-ref",
-            "run",
-            "mono-6.12-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            10);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-stable", "net10-ref", "run", "mono-6.12-linux-x64", BuildConfiguration.Release, catalog.Revision, 10);
 
-        var exception = Assert.Throws<SelectionResolutionException>(() =>
-            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+        var exception = Assert.Throws<SelectionResolutionException>(() => Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
 
         Assert.Equal(SelectionField.Runtime, exception.Field);
     }
@@ -340,15 +221,7 @@ public sealed class PipelineResolverTests
     public async Task RuntimeIsRemovedFromSourceOnlyOutput()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-stable",
-            "net10-ref",
-            "ast",
-            "dotnet-10-linux-x64",
-            BuildConfiguration.Debug,
-            catalog.Revision,
-            11);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-stable", "net10-ref", "ast", "dotnet-10-linux-x64", BuildConfiguration.Debug, catalog.Revision, 11);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -360,15 +233,7 @@ public sealed class PipelineResolverTests
     public async Task ExplainIsACSharpOnlySingleStageToolchainOperation()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-stable",
-            "net10-ref",
-            "explain",
-            null,
-            BuildConfiguration.Release,
-            catalog.Revision,
-            12);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-stable", "net10-ref", "explain", null, BuildConfiguration.Release, catalog.Revision, 12);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -378,8 +243,7 @@ public sealed class PipelineResolverTests
         Assert.Contains("explain", result.EffectiveCapabilities.OutputCapabilities);
 
         var visualBasic = request with { LanguageId = "visual-basic", WorkspaceRevision = 13 };
-        var exception = Assert.Throws<SelectionResolutionException>(() =>
-            Resolver.Resolve(catalog, visualBasic, DateTimeOffset.UnixEpoch));
+        var exception = Assert.Throws<SelectionResolutionException>(() => Resolver.Resolve(catalog, visualBasic, DateTimeOffset.UnixEpoch));
         Assert.Equal(SelectionField.Output, exception.Field);
     }
 
@@ -387,15 +251,7 @@ public sealed class PipelineResolverTests
     public async Task ExecutionFlowBuildsTransformsAndRunsTheDerivedArtifact()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-stable",
-            "net10-ref",
-            "execution-flow",
-            "dotnet-10-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            14);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-stable", "net10-ref", "execution-flow", "dotnet-10-linux-x64", BuildConfiguration.Release, catalog.Revision, 14);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -420,15 +276,7 @@ public sealed class PipelineResolverTests
     public async Task RunIlBuildsTransformsAndRendersWithoutSelectingARuntime()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-stable",
-            "net10-ref",
-            "run-il",
-            "dotnet-10-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            15);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-stable", "net10-ref", "run-il", "dotnet-10-linux-x64", BuildConfiguration.Release, catalog.Revision, 15);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -451,20 +299,10 @@ public sealed class PipelineResolverTests
     [Theory]
     [InlineData("run", PipelineStageKind.Run)]
     [InlineData("jit-asm", PipelineStageKind.Jit)]
-    public async Task ThirdPartyCilLanguageUsesApprovedAssemblerBeforeRuntime(
-        string outputId,
-        PipelineStageKind terminalKind)
+    public async Task ThirdPartyCilLanguageUsesApprovedAssemblerBeforeRuntime(string outputId, PipelineStageKind terminalKind)
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "minilang",
-            "minilang-stable",
-            "net10-ref",
-            outputId,
-            "dotnet-10-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            16);
+        var request = new ResolveSelectionRequest("minilang", "minilang-stable", "net10-ref", outputId, "dotnet-10-linux-x64", BuildConfiguration.Release, catalog.Revision, 16);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -496,15 +334,7 @@ public sealed class PipelineResolverTests
     public async Task ThirdPartyGeneratedIlUsesTextRendererWithoutUnneededAssembly()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "minilang",
-            "minilang-stable",
-            "net10-ref",
-            "generated-il",
-            "dotnet-10-linux-x64",
-            BuildConfiguration.Debug,
-            catalog.Revision,
-            17);
+        var request = new ResolveSelectionRequest("minilang", "minilang-stable", "net10-ref", "generated-il", "dotnet-10-linux-x64", BuildConfiguration.Debug, catalog.Revision, 17);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -526,20 +356,10 @@ public sealed class PipelineResolverTests
     [InlineData("csharp", "decompiled-csharp")]
     [InlineData("visual-basic", "il")]
     [InlineData("visual-basic", "decompiled-csharp")]
-    public async Task ManagedNetFxUsesTheDefaultArtifactProcessor(
-        string languageId,
-        string outputId)
+    public async Task ManagedNetFxUsesTheDefaultArtifactProcessor(string languageId, string outputId)
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            languageId,
-            "roslyn-stable-netfx48",
-            "netfx48-managed-ref",
-            outputId,
-            null,
-            BuildConfiguration.Release,
-            catalog.Revision,
-            18);
+        var request = new ResolveSelectionRequest(languageId, "roslyn-stable-netfx48", "netfx48-managed-ref", outputId, null, BuildConfiguration.Release, catalog.Revision, 18);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -567,15 +387,7 @@ public sealed class PipelineResolverTests
     public async Task ManagedNetFxRunUsesWineRuntimeWhenSelected(string languageId)
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            languageId,
-            "roslyn-stable-netfx48",
-            "netfx48-managed-ref",
-            "run",
-            "wine-netfx48-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            19);
+        var request = new ResolveSelectionRequest(languageId, "roslyn-stable-netfx48", "netfx48-managed-ref", "run", "wine-netfx48-linux-x64", BuildConfiguration.Release, catalog.Revision, 19);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -601,15 +413,7 @@ public sealed class PipelineResolverTests
     public async Task ManagedNetFx48CanRunOnMonoWhenTheMonoCandidateIsSelectable(string languageId)
     {
         var catalog = EnableMono(await LoadCatalogAsync());
-        var request = new ResolveSelectionRequest(
-            languageId,
-            "roslyn-stable-netfx48",
-            "netfx48-managed-ref",
-            "run",
-            "mono-6.12-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            19);
+        var request = new ResolveSelectionRequest(languageId, "roslyn-stable-netfx48", "netfx48-managed-ref", "run", "mono-6.12-linux-x64", BuildConfiguration.Release, catalog.Revision, 19);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -629,18 +433,9 @@ public sealed class PipelineResolverTests
     public async Task CppCliMixedPeCannotRunOnMonoWhenTheMonoCandidateIsSelectable()
     {
         var catalog = EnableMono(await LoadCatalogAsync());
-        var request = new ResolveSelectionRequest(
-            "cppcli",
-            "msvc-cppcli-netfx48",
-            "netfx48-ref",
-            "run",
-            "mono-6.12-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            19);
+        var request = new ResolveSelectionRequest("cppcli", "msvc-cppcli-netfx48", "netfx48-ref", "run", "mono-6.12-linux-x64", BuildConfiguration.Release, catalog.Revision, 19);
 
-        var exception = Assert.Throws<SelectionResolutionException>(() =>
-            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+        var exception = Assert.Throws<SelectionResolutionException>(() => Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
 
         Assert.Equal(SelectionField.Runtime, exception.Field);
     }
@@ -648,26 +443,14 @@ public sealed class PipelineResolverTests
     [Theory]
     [InlineData("csharp", "compile-check,ast,il,decompiled-csharp,jit-asm,run,explain")]
     [InlineData("visual-basic", "compile-check,ast,il,decompiled-csharp,jit-asm,run")]
-    public async Task ManagedNetFxOffersOnlyTruthfulOutputs(
-        string languageId,
-        string expectedOutputIds)
+    public async Task ManagedNetFxOffersOnlyTruthfulOutputs(string languageId, string expectedOutputIds)
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            languageId,
-            "roslyn-stable-netfx48",
-            "netfx48-managed-ref",
-            "decompiled-csharp",
-            null,
-            BuildConfiguration.Release,
-            catalog.Revision,
-            20);
+        var request = new ResolveSelectionRequest(languageId, "roslyn-stable-netfx48", "netfx48-managed-ref", "decompiled-csharp", null, BuildConfiguration.Release, catalog.Revision, 20);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
-        Assert.Equal(
-            expectedOutputIds.Split(','),
-            result.EffectiveCapabilities.OutputCapabilities);
+        Assert.Equal(expectedOutputIds.Split(','), result.EffectiveCapabilities.OutputCapabilities);
     }
 
     [Theory]
@@ -677,33 +460,16 @@ public sealed class PipelineResolverTests
     public async Task ManagedNetFxRejectsCoreClrOnlyOutputs(string outputId)
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-stable-netfx48",
-            "netfx48-managed-ref",
-            outputId,
-            outputId == "execution-flow" ? "wine-netfx48-linux-x64" : null,
-            BuildConfiguration.Release,
-            catalog.Revision,
-            21);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-stable-netfx48", "netfx48-managed-ref", outputId, outputId == "execution-flow" ? "wine-netfx48-linux-x64" : null, BuildConfiguration.Release, catalog.Revision, 21);
 
-        Assert.Throws<SelectionResolutionException>(() =>
-            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+        Assert.Throws<SelectionResolutionException>(() => Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
     }
 
     [Fact]
     public async Task ManagedNetFxJitUsesTheMatchingDesktopClrRuntime()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-stable-netfx48",
-            "netfx48-managed-ref",
-            "jit-asm",
-            "wine-netfx48-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            21);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-stable-netfx48", "netfx48-managed-ref", "jit-asm", "wine-netfx48-linux-x64", BuildConfiguration.Release, catalog.Revision, 21);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -723,18 +489,9 @@ public sealed class PipelineResolverTests
     public async Task ManagedNetFxCannotRunOnCoreClr()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-stable-netfx48",
-            "netfx48-managed-ref",
-            "run",
-            "dotnet-10-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            22);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-stable-netfx48", "netfx48-managed-ref", "run", "dotnet-10-linux-x64", BuildConfiguration.Release, catalog.Revision, 22);
 
-        var exception = Assert.Throws<SelectionResolutionException>(() =>
-            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+        var exception = Assert.Throws<SelectionResolutionException>(() => Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
 
         Assert.Equal(SelectionField.Runtime, exception.Field);
     }
@@ -742,19 +499,10 @@ public sealed class PipelineResolverTests
     [Theory]
     [InlineData("il")]
     [InlineData("decompiled-csharp")]
-    public async Task CppCliMixedPeUsesDefaultIlSpyWithoutCoreClr(
-        string outputId)
+    public async Task CppCliMixedPeUsesDefaultIlSpyWithoutCoreClr(string outputId)
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "cppcli",
-            "msvc-cppcli-netfx48",
-            "netfx48-ref",
-            outputId,
-            null,
-            BuildConfiguration.Release,
-            catalog.Revision,
-            18);
+        var request = new ResolveSelectionRequest("cppcli", "msvc-cppcli-netfx48", "netfx48-ref", outputId, null, BuildConfiguration.Release, catalog.Revision, 18);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -784,57 +532,21 @@ public sealed class PipelineResolverTests
         {
             ArtifactProcessors =
             [
-                .. catalog.ArtifactProcessors,
-                new ArtifactProcessorManifest
-                {
-                    Id = "artifacts-test-ecmascript",
-                    DisplayName = "Test ECMAScript translator",
-                    ResolvedVersion = "1.0.0",
-                    WorkerId = "artifacts-test-ecmascript",
-                    AcceptsArtifactFormats = ["dotnet-managed-pe-v1"],
-                    ProducesArtifactFormats = ["ecmascript-test-v1"],
-                    Capabilities = ["ecmascript-test"],
-                    AcceptedMetadataFeatureTags = [],
-                    Availability = new ComponentAvailability { Installed = true, Health = "healthy" }
-                }
+..catalog.ArtifactProcessors,
+                new ArtifactProcessorManifest { Id = "artifacts-test-ecmascript", DisplayName = "Test ECMAScript translator", ResolvedVersion = "1.0.0", WorkerId = "artifacts-test-ecmascript", AcceptsArtifactFormats = ["dotnet-managed-pe-v1"], ProducesArtifactFormats = ["ecmascript-test-v1"], Capabilities = ["ecmascript-test"], AcceptedMetadataFeatureTags = [], Availability = new ComponentAvailability { Installed = true, Health = "healthy" } }
             ],
             Outputs =
             [
-                .. catalog.Outputs,
-                new OutputManifest
-                {
-                    Id = "ecmascript-test",
-                    DisplayName = "Test ECMAScript",
-                    Renderer = "javascript",
-                    RequiresRuntime = false,
-                    RequiredCapabilities = ["managed-pe", "ecmascript-test"],
-                    AcceptedArtifactFormats = ["dotnet-managed-pe-v1"],
-                    OutputArtifactFormat = "ecmascript-test-v1"
-                }
+..catalog.Outputs,
+                new OutputManifest { Id = "ecmascript-test", DisplayName = "Test ECMAScript", Renderer = "javascript", RequiresRuntime = false, RequiredCapabilities = ["managed-pe", "ecmascript-test"], AcceptedArtifactFormats = ["dotnet-managed-pe-v1"], OutputArtifactFormat = "ecmascript-test-v1" }
             ],
             Compatibility =
             [
-                .. catalog.Compatibility,
-                new CompatibilityRule
-                {
-                    Id = "managed-pe-test-ecmascript",
-                    Kind = CompatibilityRuleKind.ArtifactProcessor,
-                    FromId = "dotnet-managed-pe-v1",
-                    ToId = "artifacts-test-ecmascript",
-                    Allowed = true,
-                    RequiredMetadataFeatureTags = []
-                }
+..catalog.Compatibility,
+                new CompatibilityRule { Id = "managed-pe-test-ecmascript", Kind = CompatibilityRuleKind.ArtifactProcessor, FromId = "dotnet-managed-pe-v1", ToId = "artifacts-test-ecmascript", Allowed = true, RequiredMetadataFeatureTags = [] }
             ]
         };
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-main",
-            "net11-preview-ref",
-            "ecmascript-test",
-            null,
-            BuildConfiguration.Release,
-            catalog.Revision,
-            25);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-main", "net11-preview-ref", "ecmascript-test", null, BuildConfiguration.Release, catalog.Revision, 25);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -856,15 +568,7 @@ public sealed class PipelineResolverTests
     public async Task CppCliRunUsesOnlyTheWineNetFxRuntime()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "cppcli",
-            "msvc-cppcli-netfx48",
-            "netfx48-ref",
-            "run",
-            "wine-netfx48-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            19);
+        var request = new ResolveSelectionRequest("cppcli", "msvc-cppcli-netfx48", "netfx48-ref", "run", "wine-netfx48-linux-x64", BuildConfiguration.Release, catalog.Revision, 19);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -889,42 +593,20 @@ public sealed class PipelineResolverTests
     public async Task CppCliRejectsUnsupportedMixedPeOperations(string outputId)
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "cppcli",
-            "msvc-cppcli-netfx48",
-            "netfx48-ref",
-            outputId,
-            outputId is "jit-asm" or "execution-flow" ? "wine-netfx48-linux-x64" : null,
-            BuildConfiguration.Release,
-            catalog.Revision,
-            20);
+        var request = new ResolveSelectionRequest("cppcli", "msvc-cppcli-netfx48", "netfx48-ref", outputId, outputId is "jit-asm" or "execution-flow" ? "wine-netfx48-linux-x64" : null, BuildConfiguration.Release, catalog.Revision, 20);
 
-        var exception = Assert.Throws<SelectionResolutionException>(() =>
-            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+        var exception = Assert.Throws<SelectionResolutionException>(() => Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
 
-        Assert.Equal(
-            outputId is "jit-asm" or "execution-flow"
-                ? SelectionField.Runtime
-                : SelectionField.Output,
-            exception.Field);
+        Assert.Equal(outputId is "jit-asm" or "execution-flow" ? SelectionField.Runtime : SelectionField.Output, exception.Field);
     }
 
     [Fact]
     public async Task CppCliMixedPeCannotRunOnCoreClr()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "cppcli",
-            "msvc-cppcli-netfx48",
-            "netfx48-ref",
-            "run",
-            "dotnet-10-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            21);
+        var request = new ResolveSelectionRequest("cppcli", "msvc-cppcli-netfx48", "netfx48-ref", "run", "dotnet-10-linux-x64", BuildConfiguration.Release, catalog.Revision, 21);
 
-        var exception = Assert.Throws<SelectionResolutionException>(() =>
-            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+        var exception = Assert.Throws<SelectionResolutionException>(() => Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
 
         Assert.Equal(SelectionField.Runtime, exception.Field);
     }
@@ -933,20 +615,10 @@ public sealed class PipelineResolverTests
     [InlineData("compile-check", PipelineStageKind.Build)]
     [InlineData("il", PipelineStageKind.Render)]
     [InlineData("decompiled-csharp", PipelineStageKind.Render)]
-    public async Task JSharpUsesTheExactNet20BuildAndInspectionRoute(
-        string outputId,
-        PipelineStageKind terminalKind)
+    public async Task JSharpUsesTheExactNet20BuildAndInspectionRoute(string outputId, PipelineStageKind terminalKind)
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "jsharp",
-            "vjc-jsharp20",
-            "jsharp20-ref",
-            outputId,
-            null,
-            BuildConfiguration.Release,
-            catalog.Revision,
-            22);
+        var request = new ResolveSelectionRequest("jsharp", "vjc-jsharp20", "jsharp20-ref", outputId, null, BuildConfiguration.Release, catalog.Revision, 22);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
@@ -962,23 +634,13 @@ public sealed class PipelineResolverTests
     public async Task JSharpRunUsesOnlyTheDedicatedClr2WineRuntime()
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "jsharp",
-            "vjc-jsharp20",
-            "jsharp20-ref",
-            "run",
-            "wine-jsharp20-linux-x64",
-            BuildConfiguration.Release,
-            catalog.Revision,
-            23);
+        var request = new ResolveSelectionRequest("jsharp", "vjc-jsharp20", "jsharp20-ref", "run", "wine-jsharp20-linux-x64", BuildConfiguration.Release, catalog.Revision, 23);
 
         var result = Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch);
 
         Assert.Equal("wine-jsharp20-linux-x64", result.EffectiveSelection.RuntimeId);
         Assert.Equal("runtime-job-wine-jsharp20", result.PipelinePlan.SecurityPolicyId);
-        Assert.Equal(
-            ["compile-check", "il", "decompiled-csharp", "run"],
-            result.EffectiveCapabilities.OutputCapabilities);
+        Assert.Equal(["compile-check", "il", "decompiled-csharp", "run"], result.EffectiveCapabilities.OutputCapabilities);
         Assert.Collection(
             result.PipelinePlan.Stages,
             stage =>
@@ -1001,18 +663,9 @@ public sealed class PipelineResolverTests
     public async Task JSharpCannotRunOnAnotherFrameworkOrCoreClrRuntime(string runtimeId)
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "jsharp",
-            "vjc-jsharp20",
-            "jsharp20-ref",
-            "run",
-            runtimeId,
-            BuildConfiguration.Release,
-            catalog.Revision,
-            24);
+        var request = new ResolveSelectionRequest("jsharp", "vjc-jsharp20", "jsharp20-ref", "run", runtimeId, BuildConfiguration.Release, catalog.Revision, 24);
 
-        var exception = Assert.Throws<SelectionResolutionException>(() =>
-            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+        var exception = Assert.Throws<SelectionResolutionException>(() => Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
 
         Assert.Equal(SelectionField.Runtime, exception.Field);
     }
@@ -1026,18 +679,9 @@ public sealed class PipelineResolverTests
     public async Task JSharpRejectsUnsupportedOutputs(string outputId)
     {
         var catalog = await LoadCatalogAsync();
-        var request = new ResolveSelectionRequest(
-            "jsharp",
-            "vjc-jsharp20",
-            "jsharp20-ref",
-            outputId,
-            outputId is "jit-asm" or "execution-flow" ? "wine-jsharp20-linux-x64" : null,
-            BuildConfiguration.Release,
-            catalog.Revision,
-            25);
+        var request = new ResolveSelectionRequest("jsharp", "vjc-jsharp20", "jsharp20-ref", outputId, outputId is "jit-asm" or "execution-flow" ? "wine-jsharp20-linux-x64" : null, BuildConfiguration.Release, catalog.Revision, 25);
 
-        Assert.Throws<SelectionResolutionException>(() =>
-            Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
+        Assert.Throws<SelectionResolutionException>(() => Resolver.Resolve(catalog, request, DateTimeOffset.UnixEpoch));
     }
 
     private static Task<CatalogDocument> LoadCatalogAsync()
@@ -1049,11 +693,7 @@ public sealed class PipelineResolverTests
     private static CatalogDocument EnableMono(CatalogDocument catalog) => catalog with
     {
         Runtimes = catalog.Runtimes.Select(runtime => runtime.Id == "mono-6.12-linux-x64"
-            ? runtime with
-            {
-                Capabilities = ["run"],
-                Availability = new ComponentAvailability { Installed = true, Health = "healthy" }
-            }
+            ? runtime with { Capabilities = ["run"], Availability = new ComponentAvailability { Installed = true, Health = "healthy" } }
             : runtime).ToArray(),
         Compatibility = catalog.Compatibility.Select(rule =>
             rule.Kind == CompatibilityRuleKind.ArtifactRuntime &&

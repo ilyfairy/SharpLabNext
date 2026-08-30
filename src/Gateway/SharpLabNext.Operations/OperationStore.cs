@@ -20,34 +20,27 @@ public sealed class OperationStoreOptions
     {
         if (MaximumEventsPerOperation is < 2 or > 1_000_000)
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:{nameof(MaximumEventsPerOperation)} is outside the supported range.");
+            throw new InvalidOperationException($"{SectionName}:{nameof(MaximumEventsPerOperation)} is outside the supported range.");
         }
 
         if (MaximumOperations is < 1 or > 1_000_000)
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:{nameof(MaximumOperations)} is outside the supported range.");
+            throw new InvalidOperationException($"{SectionName}:{nameof(MaximumOperations)} is outside the supported range.");
         }
 
-        if (TerminalOperationTimeToLive <= TimeSpan.Zero ||
-            TerminalOperationTimeToLive > TimeSpan.FromDays(30))
+        if (TerminalOperationTimeToLive <= TimeSpan.Zero || TerminalOperationTimeToLive > TimeSpan.FromDays(30))
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:{nameof(TerminalOperationTimeToLive)} is outside the supported range.");
+            throw new InvalidOperationException($"{SectionName}:{nameof(TerminalOperationTimeToLive)} is outside the supported range.");
         }
 
-        if (OverloadOperationTimeToLive <= TimeSpan.Zero ||
-            OverloadOperationTimeToLive > TerminalOperationTimeToLive)
+        if (OverloadOperationTimeToLive <= TimeSpan.Zero || OverloadOperationTimeToLive > TerminalOperationTimeToLive)
         {
-            throw new InvalidOperationException(
-                $"{SectionName}:{nameof(OverloadOperationTimeToLive)} must be positive and no greater than the terminal operation TTL.");
+            throw new InvalidOperationException($"{SectionName}:{nameof(OverloadOperationTimeToLive)} must be positive and no greater than the terminal operation TTL.");
         }
     }
 }
 
-public sealed class OperationCapacityExceededException(int maximumOperations)
-    : InvalidOperationException($"The operation store limit of {maximumOperations} operations was reached.")
+public sealed class OperationCapacityExceededException(int maximumOperations) : InvalidOperationException($"The operation store limit of {maximumOperations} operations was reached.")
 {
     public int MaximumOperations { get; } = maximumOperations;
 }
@@ -67,12 +60,7 @@ public sealed class OperationStore
         _options.Validate();
     }
 
-    public OperationStart Start(
-        string requestId,
-        string idempotencyKey,
-        OperationKind kind,
-        string traceId,
-        DateTimeOffset now)
+    public OperationStart Start(string requestId, string idempotencyKey, OperationKind kind, string traceId, DateTimeOffset now)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(requestId);
         ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
@@ -81,12 +69,9 @@ public sealed class OperationStore
         lock (_startGate)
         {
             RemoveExpiredTerminalOperationsCore(now);
-            if (_idempotency.TryGetValue(idempotencyKey, out var existingId) &&
-                _operations.TryGetValue(existingId, out var existing))
+            if (_idempotency.TryGetValue(idempotencyKey, out var existingId) && _operations.TryGetValue(existingId, out var existing))
             {
-                return new OperationStart(
-                    new OperationHandle(existingId, existing.RequestId, existing.CreatedAtUtc, true),
-                    existing.Cancellation.Token);
+                return new OperationStart(new OperationHandle(existingId, existing.RequestId, existing.CreatedAtUtc, true), existing.Cancellation.Token);
             }
 
             _idempotency.Remove(idempotencyKey);
@@ -104,9 +89,7 @@ public sealed class OperationStore
 
             _idempotency.Add(idempotencyKey, operationId);
             AppendCore(entry, new AcceptedOperationEventPayload(requestId, kind), now);
-            return new OperationStart(
-                new OperationHandle(operationId, requestId, now, false),
-                entry.Cancellation.Token);
+            return new OperationStart(new OperationHandle(operationId, requestId, now, false), entry.Cancellation.Token);
         }
     }
 
@@ -179,10 +162,7 @@ public sealed class OperationStore
         }
     }
 
-    public async IAsyncEnumerable<OperationEvent> WatchAsync(
-        string operationId,
-        long fromSequence,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<OperationEvent> WatchAsync(string operationId, long fromSequence, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(fromSequence);
 
@@ -218,8 +198,7 @@ public sealed class OperationStore
     private OperationEntry GetRequired(string operationId)
     {
         return _operations.TryGetValue(operationId, out var entry)
-            ? entry
-            : throw new KeyNotFoundException($"Operation '{operationId}' was not found.");
+            ? entry : throw new KeyNotFoundException($"Operation '{operationId}' was not found.");
     }
 
     private int RemoveExpiredTerminalOperationsCore(DateTimeOffset now)
@@ -236,8 +215,7 @@ public sealed class OperationStore
                 }
 
                 var timeToLive = entry.Error?.Code == "operation-queue-full"
-                    ? _options.OverloadOperationTimeToLive
-                    : _options.TerminalOperationTimeToLive;
+                    ? _options.OverloadOperationTimeToLive : _options.TerminalOperationTimeToLive;
                 if (entry.CompletedAtUtc > now - timeToLive)
                 {
                     continue;
@@ -248,8 +226,7 @@ public sealed class OperationStore
                     continue;
                 }
 
-                if (_idempotency.TryGetValue(entry.IdempotencyKey, out var mappedOperationId) &&
-                    StringComparer.Ordinal.Equals(mappedOperationId, entry.OperationId))
+                if (_idempotency.TryGetValue(entry.IdempotencyKey, out var mappedOperationId) && StringComparer.Ordinal.Equals(mappedOperationId, entry.OperationId))
                 {
                     _idempotency.Remove(entry.IdempotencyKey);
                 }
@@ -276,23 +253,10 @@ public sealed class OperationStore
 
         if (!payload.IsTerminal && entry.Events.Count == _options.MaximumEventsPerOperation - 1)
         {
-            payload = new FailedOperationEventPayload(new WorkerError(
-                "operation-event-limit-exceeded",
-                WorkerErrorCategory.ResourceExhausted,
-                "The operation emitted too many events.",
-                false,
-                false,
-                entry.TraceId,
-                "operation-store",
-                "unknown"));
+            payload = new FailedOperationEventPayload(new WorkerError("operation-event-limit-exceeded", WorkerErrorCategory.ResourceExhausted, "The operation emitted too many events.", false, false, entry.TraceId, "operation-store", "unknown"));
         }
 
-        var operationEvent = new OperationEvent(
-            entry.OperationId,
-            checked(entry.LastSequence + 1),
-            now,
-            entry.TraceId,
-            payload);
+        var operationEvent = new OperationEvent(entry.OperationId, checked(entry.LastSequence + 1), now, entry.TraceId, payload);
         entry.Events.Add(operationEvent);
         entry.LastSequence = operationEvent.Sequence;
         entry.UpdatedAtUtc = now;
@@ -303,8 +267,7 @@ public sealed class OperationStore
                 break;
             case CompletedOperationEventPayload completed:
                 entry.Status = completed.Status == OperationCompletionStatus.Cancelled
-                    ? OperationStatus.Cancelled
-                    : OperationStatus.Completed;
+                    ? OperationStatus.Cancelled : OperationStatus.Completed;
                 entry.CompletedAtUtc = now;
                 break;
             case FailedOperationEventPayload failed:
@@ -328,13 +291,7 @@ public sealed class OperationStore
     private static bool IsTerminal(OperationStatus status) =>
         status is OperationStatus.Completed or OperationStatus.Failed or OperationStatus.Cancelled;
 
-    private sealed class OperationEntry(
-        string operationId,
-        string requestId,
-        string idempotencyKey,
-        OperationKind kind,
-        string traceId,
-        DateTimeOffset createdAtUtc)
+    private sealed class OperationEntry(string operationId, string requestId, string idempotencyKey, OperationKind kind, string traceId, DateTimeOffset createdAtUtc)
     {
         public Lock Gate { get; } = new();
         public string OperationId { get; } = operationId;
@@ -352,17 +309,7 @@ public sealed class OperationStore
         public CancellationTokenSource Cancellation { get; } = new();
         public TaskCompletionSource Signal { get; private set; } = NewSignal();
 
-        public OperationState ToState() => new(
-            OperationId,
-            RequestId,
-            Kind,
-            Status,
-            LastSequence,
-            CreatedAtUtc,
-            UpdatedAtUtc,
-            CompletedAtUtc,
-            TraceId,
-            Error);
+        public OperationState ToState() => new(OperationId, RequestId, Kind, Status, LastSequence, CreatedAtUtc, UpdatedAtUtc, CompletedAtUtc, TraceId, Error);
 
         public void Pulse()
         {

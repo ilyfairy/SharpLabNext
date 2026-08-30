@@ -1,33 +1,10 @@
-import {
-  conf as cppConfiguration,
-  language as cppTokens,
-} from 'monaco-editor/esm/vs/basic-languages/cpp/cpp.js'
-import {
-  conf as csharpConfiguration,
-  language as csharpTokens,
-} from 'monaco-editor/esm/vs/basic-languages/csharp/csharp.js'
-import {
-  conf as fsharpConfiguration,
-  language as fsharpTokens,
-} from 'monaco-editor/esm/vs/basic-languages/fsharp/fsharp.js'
-import {
-  conf as javaConfiguration,
-  language as javaTokens,
-} from 'monaco-editor/esm/vs/basic-languages/java/java.js'
-import {
-  conf as phpConfiguration,
-  language as phpTokens,
-} from 'monaco-editor/esm/vs/basic-languages/php/php.js'
-import {
-  conf as visualBasicConfiguration,
-  language as visualBasicTokens,
-} from 'monaco-editor/esm/vs/basic-languages/vb/vb.js'
-import {
-  ilKeywords,
-  ilOpcodes,
-  ilPrimitiveTypes,
-  ilStandaloneAssemblyIdentityPattern,
-} from '../editor/ilLanguageTokens'
+import { conf as cppConfiguration, language as cppTokens } from 'monaco-editor/esm/vs/basic-languages/cpp/cpp.js'
+import { conf as csharpConfiguration, language as csharpTokens } from 'monaco-editor/esm/vs/basic-languages/csharp/csharp.js'
+import { conf as fsharpConfiguration, language as fsharpTokens } from 'monaco-editor/esm/vs/basic-languages/fsharp/fsharp.js'
+import { conf as javaConfiguration, language as javaTokens } from 'monaco-editor/esm/vs/basic-languages/java/java.js'
+import { conf as phpConfiguration, language as phpTokens } from 'monaco-editor/esm/vs/basic-languages/php/php.js'
+import { conf as visualBasicConfiguration, language as visualBasicTokens } from 'monaco-editor/esm/vs/basic-languages/vb/vb.js'
+import { ilKeywords, ilOpcodes, ilPrimitiveTypes, ilStandaloneAssemblyIdentityPattern } from '../editor/ilLanguageTokens'
 import * as monaco from '../editor/monacoCore'
 
 let registered = false
@@ -79,10 +56,8 @@ const modernCsharpKeywords = [
 ] as const
 
 const csharpAttributeTargets = /(?:assembly|module|return|method|field|property|event|type|param)/
-const csharpAttributeStart =
-  /^(\s*)(\[)(?=\s*(?:(?:assembly|module|return|method|field|property|event|type|param)\s*:\s*)?(?:(?:global\s*::\s*)?@?[A-Za-z_]\w*))/
-const csharpNextAttribute =
-  /(\])(\s*)(\[)(?=\s*(?:(?:assembly|module|return|method|field|property|event|type|param)\s*:\s*)?(?:(?:global\s*::\s*)?@?[A-Za-z_]\w*))/
+const csharpAttributeStart = /^(\s*)(\[)(?=\s*(?:(?:assembly|module|return|method|field|property|event|type|param)\s*:\s*)?(?:(?:global\s*::\s*)?@?[A-Za-z_]\w*))/
+const csharpNextAttribute = /(\])(\s*)(\[)(?=\s*(?:(?:assembly|module|return|method|field|property|event|type|param)\s*:\s*)?(?:(?:global\s*::\s*)?@?[A-Za-z_]\w*))/
 
 export const csharpVsTokens: monaco.languages.IMonarchLanguage = {
   ...csharpTokens,
@@ -92,10 +67,7 @@ export const csharpVsTokens: monaco.languages.IMonarchLanguage = {
     ...csharpTokens.tokenizer,
     root: [
       [csharpAttributeStart, ['', { token: 'delimiter.square', next: '@attribute' }]],
-      [
-        /(class|struct|interface|enum|record)(\s+)([A-Za-z_]\w*)/,
-        ['keyword', 'white', 'type.identifier'],
-      ],
+      [/(class|struct|interface|enum|record)(\s+)([A-Za-z_]\w*)/, ['keyword', 'white', 'type.identifier']],
       [
         /@?[A-Za-z_]\w*(?=\s*\()/,
         {
@@ -114,33 +86,19 @@ export const csharpVsTokens: monaco.languages.IMonarchLanguage = {
       [/(global)(\s*)(::)/, ['keyword', '', 'delimiter']],
       [/@?[A-Za-z_]\w*(?=\s*(?:\.|::))/, 'namespace'],
       [/@?[A-Za-z_]\w*/, { token: 'type.identifier', switchTo: '@attributeAfterName' }],
-      [
-        csharpNextAttribute,
-        ['delimiter.square', '', { token: 'delimiter.square', switchTo: '@attribute' }],
-      ],
+      [csharpNextAttribute, ['delimiter.square', '', { token: 'delimiter.square', switchTo: '@attribute' }]],
       [/\]/, 'delimiter.square', '@pop'],
     ],
     attributeAfterName: [
       { include: '@whitespace' },
-      [
-        csharpNextAttribute,
-        ['delimiter.square', '', { token: 'delimiter.square', switchTo: '@attribute' }],
-      ],
+      [csharpNextAttribute, ['delimiter.square', '', { token: 'delimiter.square', switchTo: '@attribute' }]],
       [/\]/, 'delimiter.square', '@pop'],
       [/\(/, { token: 'delimiter.parenthesis', switchTo: '@attributeArguments' }],
       [/,/, { token: 'delimiter', switchTo: '@attribute' }],
       { include: '@root' },
     ],
-    attributeArguments: [
-      [/\[/, 'delimiter.square', '@attributeArray'],
-      [/\]/, 'delimiter.square', '@pop'],
-      { include: '@root' },
-    ],
-    attributeArray: [
-      [/\[/, 'delimiter.square', '@push'],
-      [/\]/, 'delimiter.square', '@pop'],
-      { include: '@root' },
-    ],
+    attributeArguments: [[/\[/, 'delimiter.square', '@attributeArray'], [/\]/, 'delimiter.square', '@pop'], { include: '@root' }],
+    attributeArray: [[/\[/, 'delimiter.square', '@push'], [/\]/, 'delimiter.square', '@pop'], { include: '@root' }],
   },
 }
 
@@ -149,43 +107,19 @@ export function registerSourceLanguages(): void {
   registered = true
 
   registerLanguage('csharp', ['.cs'], ['C#', 'csharp'], csharpConfiguration, csharpVsTokens)
-  registerLanguage(
-    'cpp',
-    ['.cpp', '.cc', '.cxx'],
-    ['C++/CLI', 'cpp'],
-    cppConfiguration,
-    cppCliTokens,
-  )
+  registerLanguage('cpp', ['.cpp', '.cc', '.cxx'], ['C++/CLI', 'cpp'], cppConfiguration, cppCliTokens)
   registerLanguage('fsharp', ['.fs', '.fsx'], ['F#', 'fsharp'], fsharpConfiguration, fsharpTokens)
   registerLanguage('jsharp', ['.jsl'], ['J#', 'jsharp'], javaConfiguration, {
     ...javaTokens,
     tokenPostfix: '.jsharp',
   })
-  registerLanguage(
-    'javascript',
-    ['.js'],
-    ['JavaScript', 'javascript'],
-    javascriptConfiguration,
-    javascriptTokens,
-  )
-  registerLanguage(
-    'visual-basic',
-    ['.vb'],
-    ['Visual Basic', 'visual-basic'],
-    visualBasicConfiguration,
-    visualBasicTokens,
-  )
+  registerLanguage('javascript', ['.js'], ['JavaScript', 'javascript'], javascriptConfiguration, javascriptTokens)
+  registerLanguage('visual-basic', ['.vb'], ['Visual Basic', 'visual-basic'], visualBasicConfiguration, visualBasicTokens)
   registerLanguage('gsharp', ['.gs'], ['G#', 'gsharp'], gsharpConfiguration, gsharpTokens)
   registerLanguage('php', ['.php'], ['PHP', 'php'], phpConfiguration, phpTokens)
   registerLanguage('il', ['.il'], ['IL', 'il'], ilConfiguration, ilTokens)
   registerLanguage('asm', [], ['Assembly', 'asm'], assemblyConfiguration, assemblyTokens)
-  registerLanguage(
-    'minilang',
-    ['.mini'],
-    ['MiniLang', 'minilang'],
-    minilangConfiguration,
-    minilangTokens,
-  )
+  registerLanguage('minilang', ['.mini'], ['MiniLang', 'minilang'], minilangConfiguration, minilangTokens)
 
   monaco.editor.defineTheme(sourceEditorTheme, {
     base: 'vs',
@@ -255,13 +189,7 @@ export function registerSourceLanguages(): void {
   })
 }
 
-function registerLanguage(
-  id: string,
-  extensions: string[],
-  aliases: string[],
-  configuration: monaco.languages.LanguageConfiguration,
-  tokens: monaco.languages.IMonarchLanguage,
-): void {
+function registerLanguage(id: string, extensions: string[], aliases: string[], configuration: monaco.languages.LanguageConfiguration, tokens: monaco.languages.IMonarchLanguage): void {
   if (!monaco.languages.getLanguages().some((language) => language.id === id)) {
     monaco.languages.register({ id, extensions, aliases })
   }
@@ -273,21 +201,7 @@ export function editorLanguageId(languageId: string, monacoLanguageId: string): 
   return registeredLanguageIds[languageId] ?? monacoLanguageId
 }
 
-const cppCliTypeKeywords = [
-  'bool',
-  'char',
-  'char16_t',
-  'char32_t',
-  'double',
-  'float',
-  'int',
-  'long',
-  'short',
-  'signed',
-  'unsigned',
-  'void',
-  'wchar_t',
-]
+const cppCliTypeKeywords = ['bool', 'char', 'char16_t', 'char32_t', 'double', 'float', 'int', 'long', 'short', 'signed', 'unsigned', 'void', 'wchar_t']
 
 const cppRootRules = cppTokens.tokenizer.root ?? []
 const [cppRawStringRule, , ...cppRulesAfterIdentifier] = cppRootRules
@@ -301,10 +215,7 @@ export const cppCliTokens: monaco.languages.IMonarchLanguage = {
       // The upstream raw-string rule must run before any identifier rule so R/u8R/LR prefixes
       // enter the delimiter-aware raw-string state instead of being consumed as identifiers.
       ...(cppRawStringRule ? [cppRawStringRule] : []),
-      [
-        /(using)(\s+)(namespace)(\s+)([A-Za-z_]\w*(?:(?:::|\.)[A-Za-z_]\w*)*)/,
-        ['keyword', 'white', 'keyword', 'white', 'namespace'],
-      ],
+      [/(using)(\s+)(namespace)(\s+)([A-Za-z_]\w*(?:(?:::|\.)[A-Za-z_]\w*)*)/, ['keyword', 'white', 'keyword', 'white', 'namespace']],
       [/[A-Za-z_]\w*(?:::[A-Za-z_]\w*)+(?=\s*\()/, 'function'],
       [/([A-Z][A-Za-z0-9_]*)(\^)/, ['type.identifier', 'variable']],
       [/(>)(\^)/, ['delimiter.angle', 'variable']],
@@ -353,10 +264,7 @@ export const assemblyTokens: monaco.languages.IMonarchLanguage = {
       [/^(\s*)([A-Za-z][\w.]*)/, ['white', 'keyword']],
       [/[;#].*$/, 'comment'],
       [/\b(?:byte|word|dword|qword|xmmword|ymmword|zmmword|ptr|short|near|far)\b/i, 'keyword'],
-      [
-        /%?(?:r(?:1[0-5]|[0-9])(?:[dwb])?|[re]?(?:ax|bx|cx|dx|si|di|sp|bp)|[abcd][lh]|rip|eip|xmm\d+|ymm\d+|zmm\d+|k\d+)\b/i,
-        'variable',
-      ],
+      [/%?(?:r(?:1[0-5]|[0-9])(?:[dwb])?|[re]?(?:ax|bx|cx|dx|si|di|sp|bp)|[abcd][lh]|rip|eip|xmm\d+|ymm\d+|zmm\d+|k\d+)\b/i, 'variable'],
       [/\b(?:0x[0-9a-f]+|\d+)\b/i, 'number'],
       [/\bG_M\w+\b/i, 'label'],
       [/\b[A-Za-z_.$?][\w.$?]*(?=\s*(?:\(|$))/, 'function'],
@@ -567,10 +475,7 @@ const gsharpTokens: monaco.languages.IMonarchLanguage = {
   tokenizer: {
     root: [
       [/(func)(\s+)([A-Za-z_]\w*)/, ['keyword', 'white', 'function']],
-      [
-        /(class|struct|interface|data|object|enum|extension)(\s+)([A-Za-z_]\w*)/,
-        ['keyword', 'white', 'type.identifier'],
-      ],
+      [/(class|struct|interface|data|object|enum|extension)(\s+)([A-Za-z_]\w*)/, ['keyword', 'white', 'type.identifier']],
       [/[A-Za-z_]\w*(?=\s*\()/, 'function'],
       [/[A-Z][A-Za-z0-9_]*/, 'type.identifier'],
       [/[A-Za-z_]\w*/, { cases: { '@keywords': 'keyword', '@default': 'identifier' } }],
@@ -686,27 +591,7 @@ export const ilTokens: monaco.languages.IMonarchLanguage = {
     'valuetype',
     'virtual',
   ],
-  primitiveTypes: [
-    ...ilPrimitiveTypes,
-    'bool',
-    'char',
-    'float32',
-    'float64',
-    'int8',
-    'int16',
-    'int32',
-    'int64',
-    'native int',
-    'native uint',
-    'object',
-    'string',
-    'typedref',
-    'uint8',
-    'uint16',
-    'uint32',
-    'uint64',
-    'void',
-  ],
+  primitiveTypes: [...ilPrimitiveTypes, 'bool', 'char', 'float32', 'float64', 'int8', 'int16', 'int32', 'int64', 'native int', 'native uint', 'object', 'string', 'typedref', 'uint8', 'uint16', 'uint32', 'uint64', 'void'],
   opcodes: [
     ...ilOpcodes,
     'add',
@@ -933,24 +818,12 @@ export const ilTokens: monaco.languages.IMonarchLanguage = {
     root: [
       [/^(\s*)([A-Za-z_][\w.$]*)(:(?!:))/, ['white', 'label', 'delimiter']],
       { include: '@whitespace' },
-      [
-        /^(\s*)(\.assembly)(\s+)(extern)(\s+)([^\s{]+)/,
-        ['white', 'keyword', 'white', 'keyword', 'white', 'macro'],
-      ],
+      [/^(\s*)(\.assembly)(\s+)(extern)(\s+)([^\s{]+)/, ['white', 'keyword', 'white', 'keyword', 'white', 'macro']],
       [/^(\s*)(\.assembly)(\s+)([^\s{]+)/, ['white', 'keyword', 'white', 'macro']],
-      [
-        /(\[)((?!(?:in|out|opt|retval)\])[^\]\r\n]+)(\])(?=[A-Za-z_'<])/,
-        ['delimiter', 'macro', 'delimiter'],
-      ],
+      [/(\[)((?!(?:in|out|opt|retval)\])[^\]\r\n]+)(\])(?=[A-Za-z_'<])/, ['delimiter', 'macro', 'delimiter']],
       [ilStandaloneAssemblyIdentityPattern, ['white', 'delimiter', 'macro']],
-      [
-        /([A-Za-z_][\w.`]*(?:\.[A-Za-z_][\w.`]*)*)(::)(\.[A-Za-z_][\w.]*)/,
-        ['type.identifier', 'delimiter', 'keyword'],
-      ],
-      [
-        /([A-Za-z_][\w.`]*(?:\.[A-Za-z_][\w.`]*)*)(::)([A-Za-z_.$<>][\w.$<>`]*)/,
-        ['type.identifier', 'delimiter', 'function'],
-      ],
+      [/([A-Za-z_][\w.`]*(?:\.[A-Za-z_][\w.`]*)*)(::)(\.[A-Za-z_][\w.]*)/, ['type.identifier', 'delimiter', 'keyword']],
+      [/([A-Za-z_][\w.`]*(?:\.[A-Za-z_][\w.`]*)*)(::)([A-Za-z_.$<>][\w.$<>`]*)/, ['type.identifier', 'delimiter', 'function']],
       [/\.[A-Za-z_][\w.]*/, 'keyword'],
       [/"/, { token: 'string.quote', next: '@string' }],
       [/'/, { token: 'string.quote', next: '@quotedIdentifier' }],

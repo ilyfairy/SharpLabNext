@@ -2,11 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace SharpLabNext.Contracts;
 
-public sealed record TextRange(
-    int StartLine,
-    int StartCharacter,
-    int EndLine,
-    int EndCharacter);
+public sealed record TextRange(int StartLine, int StartCharacter, int EndLine, int EndCharacter);
 
 public sealed record Diagnostic(
     string Source,
@@ -20,10 +16,7 @@ public sealed record Diagnostic(
     long WorkspaceRevision,
     long SelectionRevision);
 
-public sealed record DiagnosticRelatedInformation(
-    string Message,
-    string? FilePath,
-    TextRange Range);
+public sealed record DiagnosticRelatedInformation(string Message, string? FilePath, TextRange Range);
 
 [JsonConverter(typeof(KebabCaseJsonStringEnumConverter<DiagnosticSeverity>))]
 public enum DiagnosticSeverity

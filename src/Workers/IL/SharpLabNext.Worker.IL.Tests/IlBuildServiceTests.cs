@@ -12,10 +12,7 @@ public sealed class IlBuildServiceTests
     [Theory]
     [InlineData("net10-ref", "net10.0", "10.0.9")]
     [InlineData("net11-preview-ref", "net11.0", "11.0.0-preview.5.26302.115")]
-    public async Task ArtifactBuildRecordsTheExplicitReferenceSelection(
-        string referenceSetId,
-        string targetFramework,
-        string frameworkVersion)
+    public async Task ArtifactBuildRecordsTheExplicitReferenceSelection(string referenceSetId, string targetFramework, string frameworkVersion)
     {
         var root = IlTestSettings.CreateRoot();
         try
@@ -23,13 +20,7 @@ public sealed class IlBuildServiceTests
             var settings = IlTestSettings.Create(root);
             using var assembler = new IlAssemblerProcess(settings, NullLogger<IlAssemblerProcess>.Instance);
             var service = CreateService(settings, assembler);
-            var execution = await service.ExecuteAsync(
-                IlTestSettings.CreateRequest(
-                    BuildTarget.Artifact,
-                    IlTestSettings.ValidMultiFileWorkspace(),
-                    ["Program.il", "Helper.il"],
-                    referenceSetId: referenceSetId),
-                TestContext.Current.CancellationToken);
+            var execution = await service.ExecuteAsync(IlTestSettings.CreateRequest(BuildTarget.Artifact, IlTestSettings.ValidMultiFileWorkspace(), ["Program.il", "Helper.il"], referenceSetId: referenceSetId), TestContext.Current.CancellationToken);
 
             var artifact = Assert.IsType<IlCompiledArtifact>(execution.Artifact);
             ArtifactIdentity.Validate(artifact.Manifest);
@@ -60,9 +51,7 @@ public sealed class IlBuildServiceTests
             using var assembler = new IlAssemblerProcess(settings, NullLogger<IlAssemblerProcess>.Instance);
             var service = CreateService(settings, assembler);
             var files = IlTestSettings.ValidMultiFileWorkspace();
-            var execution = await service.ExecuteAsync(
-                IlTestSettings.CreateRequest(BuildTarget.Artifact, files, ["Program.il", "Helper.il"]),
-                TestContext.Current.CancellationToken);
+            var execution = await service.ExecuteAsync(IlTestSettings.CreateRequest(BuildTarget.Artifact, files, ["Program.il", "Helper.il"]), TestContext.Current.CancellationToken);
 
             var result = Assert.IsType<BuildResult>(execution.Result);
             Assert.Equal(BuildOutcome.Succeeded, result.Outcome);
@@ -109,13 +98,7 @@ public sealed class IlBuildServiceTests
                 }
                 """;
 
-            var execution = await service.ExecuteAsync(
-                IlTestSettings.CreateRequest(
-                    BuildTarget.Artifact,
-                    [new WorkspaceFile("Library.il", 1, source)],
-                    ["Library.il"],
-                    BuildOutputKind.Library),
-                TestContext.Current.CancellationToken);
+            var execution = await service.ExecuteAsync(IlTestSettings.CreateRequest(BuildTarget.Artifact, [new WorkspaceFile("Library.il", 1, source)], ["Library.il"], BuildOutputKind.Library), TestContext.Current.CancellationToken);
 
             var result = Assert.IsType<BuildResult>(execution.Result);
             Assert.Equal(BuildOutcome.Succeeded, result.Outcome);
@@ -151,20 +134,12 @@ public sealed class IlBuildServiceTests
                 }
                 """;
 
-            var execution = await service.ExecuteAsync(
-                IlTestSettings.CreateRequest(
-                    BuildTarget.Artifact,
-                    [new WorkspaceFile("Program.il", 1, source)],
-                    ["Program.il"],
-                    BuildOutputKind.Console),
-                TestContext.Current.CancellationToken);
+            var execution = await service.ExecuteAsync(IlTestSettings.CreateRequest(BuildTarget.Artifact, [new WorkspaceFile("Program.il", 1, source)], ["Program.il"], BuildOutputKind.Console), TestContext.Current.CancellationToken);
 
             var result = Assert.IsType<BuildResult>(execution.Result);
             Assert.Equal(BuildOutcome.CompilationFailed, result.Outcome);
             Assert.Null(execution.Artifact);
-            Assert.Contains(result.Diagnostics, static diagnostic =>
-                diagnostic.Severity == DiagnosticSeverity.Error &&
-                diagnostic.Message.Contains("entry point", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Diagnostics, static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error && diagnostic.Message.Contains("entry point", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -182,15 +157,12 @@ public sealed class IlBuildServiceTests
             using var assembler = new IlAssemblerProcess(settings, NullLogger<IlAssemblerProcess>.Instance);
             var service = CreateService(settings, assembler);
             var files = new[] { new WorkspaceFile("Broken.il", 1, ".assembly Broken {}\n.class public Broken {\n.method public static void Main() cil managed { definitely.not.an.opcode ret }\n") };
-            var execution = await service.ExecuteAsync(
-                IlTestSettings.CreateRequest(BuildTarget.CompileCheck, files, ["Broken.il"]),
-                TestContext.Current.CancellationToken);
+            var execution = await service.ExecuteAsync(IlTestSettings.CreateRequest(BuildTarget.CompileCheck, files, ["Broken.il"]), TestContext.Current.CancellationToken);
 
             var result = Assert.IsType<CompilationCheckResult>(execution.Result);
             Assert.False(result.CompilationSucceeded);
             Assert.Null(execution.Artifact);
-            Assert.Contains(result.Diagnostics, static diagnostic =>
-                diagnostic.Source == "mobius-ilasm" && diagnostic.Severity == DiagnosticSeverity.Error);
+            Assert.Contains(result.Diagnostics, static diagnostic => diagnostic.Source == "mobius-ilasm" && diagnostic.Severity == DiagnosticSeverity.Error);
         }
         finally
         {
@@ -207,12 +179,7 @@ public sealed class IlBuildServiceTests
             var settings = IlTestSettings.Create(root);
             using var assembler = new IlAssemblerProcess(settings, NullLogger<IlAssemblerProcess>.Instance);
             var service = CreateService(settings, assembler);
-            var execution = await service.ExecuteAsync(
-                IlTestSettings.CreateRequest(
-                    BuildTarget.CompileCheck,
-                    IlTestSettings.ValidMultiFileWorkspace(),
-                    ["Program.il", "Helper.il"]),
-                TestContext.Current.CancellationToken);
+            var execution = await service.ExecuteAsync(IlTestSettings.CreateRequest(BuildTarget.CompileCheck, IlTestSettings.ValidMultiFileWorkspace(), ["Program.il", "Helper.il"]), TestContext.Current.CancellationToken);
 
             var result = Assert.IsType<CompilationCheckResult>(execution.Result);
             Assert.True(result.CompilationSucceeded);
@@ -235,12 +202,8 @@ public sealed class IlBuildServiceTests
             using var assembler = new IlAssemblerProcess(settings, NullLogger<IlAssemblerProcess>.Instance);
             var service = CreateService(settings, assembler);
             var files = IlTestSettings.ValidMultiFileWorkspace();
-            await service.ExecuteAsync(
-                IlTestSettings.CreateRequest(BuildTarget.CompileCheck, files, ["Program.il", "Helper.il"]),
-                TestContext.Current.CancellationToken);
-            await service.ExecuteAsync(
-                IlTestSettings.CreateRequest(BuildTarget.CompileCheck, files, ["Program.il", "Helper.il"]),
-                TestContext.Current.CancellationToken);
+            await service.ExecuteAsync(IlTestSettings.CreateRequest(BuildTarget.CompileCheck, files, ["Program.il", "Helper.il"]), TestContext.Current.CancellationToken);
+            await service.ExecuteAsync(IlTestSettings.CreateRequest(BuildTarget.CompileCheck, files, ["Program.il", "Helper.il"]), TestContext.Current.CancellationToken);
 
             Assert.Equal(2, assembler.StartedProcessCount);
             Assert.False(Directory.Exists(settings.WorkRoot) && Directory.EnumerateFileSystemEntries(settings.WorkRoot).Any());
@@ -265,9 +228,7 @@ public sealed class IlBuildServiceTests
                 new("Assembly.il", 1, ".assembly MappingTest {}\n.module MappingTest.dll\n"),
                 new("Broken.il", 1, ".class public Broken {\n.method public static void Main() cil managed {\n  definitely.not.an.opcode\n  ret\n}\n}\n")
             ];
-            var execution = await service.ExecuteAsync(
-                IlTestSettings.CreateRequest(BuildTarget.CompileCheck, files, ["Assembly.il", "Broken.il"]),
-                TestContext.Current.CancellationToken);
+            var execution = await service.ExecuteAsync(IlTestSettings.CreateRequest(BuildTarget.CompileCheck, files, ["Assembly.il", "Broken.il"]), TestContext.Current.CancellationToken);
 
             var result = Assert.IsType<CompilationCheckResult>(execution.Result);
             Assert.False(result.CompilationSucceeded);
@@ -292,18 +253,11 @@ public sealed class IlBuildServiceTests
             using var assembler = new IlAssemblerProcess(settings, NullLogger<IlAssemblerProcess>.Instance);
             var service = CreateService(settings, assembler);
             var source = ".assembly ResourceProbe {}\n.mresource public Probe from 'appsettings.json'\n.class public Probe {}\n";
-            var execution = await service.ExecuteAsync(
-                IlTestSettings.CreateRequest(
-                    BuildTarget.Artifact,
-                    [new WorkspaceFile("Probe.il", 1, source)],
-                    ["Probe.il"],
-                    BuildOutputKind.Library),
-                TestContext.Current.CancellationToken);
+            var execution = await service.ExecuteAsync(IlTestSettings.CreateRequest(BuildTarget.Artifact, [new WorkspaceFile("Probe.il", 1, source)], ["Probe.il"], BuildOutputKind.Library), TestContext.Current.CancellationToken);
 
             var result = Assert.IsType<BuildResult>(execution.Result);
             Assert.Equal(BuildOutcome.CompilationFailed, result.Outcome);
-            Assert.Contains(result.Diagnostics, static diagnostic =>
-                diagnostic.Message.Contains("Manifest resource", StringComparison.Ordinal));
+            Assert.Contains(result.Diagnostics, static diagnostic => diagnostic.Message.Contains("Manifest resource", StringComparison.Ordinal));
         }
         finally
         {
@@ -320,13 +274,7 @@ public sealed class IlBuildServiceTests
             var settings = IlTestSettings.Create(root);
             using var assembler = new IlAssemblerProcess(settings, NullLogger<IlAssemblerProcess>.Instance);
             var service = CreateService(settings, assembler);
-            await Assert.ThrowsAsync<IlBuildRequestValidationException>(() => service.ExecuteAsync(
-                IlTestSettings.CreateRequest(
-                    BuildTarget.Artifact,
-                    IlTestSettings.ValidMultiFileWorkspace(),
-                    ["Program.il", "Helper.il"],
-                    BuildOutputKind.WindowsApplication),
-                TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<IlBuildRequestValidationException>(() => service.ExecuteAsync(IlTestSettings.CreateRequest(BuildTarget.Artifact, IlTestSettings.ValidMultiFileWorkspace(), ["Program.il", "Helper.il"], BuildOutputKind.WindowsApplication), TestContext.Current.CancellationToken));
             Assert.Equal(0, assembler.StartedProcessCount);
         }
         finally
@@ -347,13 +295,7 @@ public sealed class IlBuildServiceTests
             using var assembler = new IlAssemblerProcess(settings, NullLogger<IlAssemblerProcess>.Instance);
             var service = CreateService(settings, assembler);
 
-            await Assert.ThrowsAsync<IlBuildRequestValidationException>(() => service.ExecuteAsync(
-                IlTestSettings.CreateRequest(
-                    BuildTarget.Artifact,
-                    IlTestSettings.ValidMultiFileWorkspace(),
-                    ["Program.il", "Helper.il"],
-                    outputKind),
-                TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<IlBuildRequestValidationException>(() => service.ExecuteAsync(IlTestSettings.CreateRequest(BuildTarget.Artifact, IlTestSettings.ValidMultiFileWorkspace(), ["Program.il", "Helper.il"], outputKind), TestContext.Current.CancellationToken));
 
             Assert.Equal(0, assembler.StartedProcessCount);
         }
@@ -374,8 +316,7 @@ public sealed class IlBuildServiceTests
             var service = CreateService(settings, assembler);
             var files = IlTestSettings.ValidMultiFileWorkspace();
             var request = IlTestSettings.CreateRequest(BuildTarget.Artifact, files, ["Program.il", "Program.il"]);
-            await Assert.ThrowsAsync<IlBuildRequestValidationException>(() =>
-                service.ExecuteAsync(request, TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<IlBuildRequestValidationException>(() => service.ExecuteAsync(request, TestContext.Current.CancellationToken));
             Assert.False(Directory.Exists(settings.WorkRoot));
         }
         finally
@@ -395,8 +336,7 @@ public sealed class IlBuildServiceTests
             ],
             ["Program.il", "program.il"]);
 
-        Assert.Throws<IlBuildRequestValidationException>(() =>
-            IlWorkspaceValidator.Validate(request, IlCompilationLimits.Default));
+        Assert.Throws<IlBuildRequestValidationException>(() => IlWorkspaceValidator.Validate(request, IlCompilationLimits.Default));
     }
 
     [Fact]
@@ -408,21 +348,12 @@ public sealed class IlBuildServiceTests
             var settings = IlTestSettings.Create(root);
             using var assembler = new IlAssemblerProcess(settings, NullLogger<IlAssemblerProcess>.Instance);
             var service = CreateService(settings, assembler);
-            var request = IlTestSettings.CreateRequest(
-                BuildTarget.CompileCheck,
-                [new WorkspaceFile("Program.il", 1, ".assembly A {}")],
-                ["Program.il"]);
+            var request = IlTestSettings.CreateRequest(BuildTarget.CompileCheck, [new WorkspaceFile("Program.il", 1, ".assembly A {}")], ["Program.il"]);
             await Assert.ThrowsAsync<IlBuildDeadlineExceededException>(() =>
                 service.ExecuteAsync(request with { DeadlineUtc = DateTimeOffset.UtcNow.AddSeconds(-1) }, TestContext.Current.CancellationToken));
 
             var oversized = new string(' ', settings.CompilationLimits.MaxFileUtf8Bytes + 1);
-            await Assert.ThrowsAsync<IlBuildRequestValidationException>(() =>
-                service.ExecuteAsync(
-                    IlTestSettings.CreateRequest(
-                        BuildTarget.CompileCheck,
-                        [new WorkspaceFile("Program.il", 1, oversized)],
-                        ["Program.il"]),
-                    TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<IlBuildRequestValidationException>(() => service.ExecuteAsync(IlTestSettings.CreateRequest(BuildTarget.CompileCheck, [new WorkspaceFile("Program.il", 1, oversized)], ["Program.il"]), TestContext.Current.CancellationToken));
             Assert.Equal(0, assembler.StartedProcessCount);
         }
         finally
@@ -445,13 +376,7 @@ public sealed class IlBuildServiceTests
                 source.Append("nop\n");
             source.Append("ret\n}\n}\n");
             using var cancellation = new CancellationTokenSource();
-            var execution = service.ExecuteAsync(
-                IlTestSettings.CreateRequest(
-                    BuildTarget.CompileCheck,
-                    [new WorkspaceFile("Cancellation.il", 1, source.ToString())],
-                    ["Cancellation.il"],
-                    BuildOutputKind.Library),
-                cancellation.Token);
+            var execution = service.ExecuteAsync(IlTestSettings.CreateRequest(BuildTarget.CompileCheck, [new WorkspaceFile("Cancellation.il", 1, source.ToString())], ["Cancellation.il"], BuildOutputKind.Library), cancellation.Token);
             for (var attempt = 0; assembler.StartedProcessCount == 0 && !execution.IsCompleted && attempt < 1_000; attempt++)
                 await Task.Delay(1, TestContext.Current.CancellationToken);
             Assert.Equal(1, assembler.StartedProcessCount);
@@ -472,10 +397,7 @@ public sealed class IlBuildServiceTests
         try
         {
             var original = IlTestSettings.Create(root);
-            var settings = original with
-            {
-                CompilationLimits = original.CompilationLimits with { MaxProcessOutputBytes = 8 }
-            };
+            var settings = original with { CompilationLimits = original.CompilationLimits with { MaxProcessOutputBytes = 8 } };
             using var assembler = new IlAssemblerProcess(settings, NullLogger<IlAssemblerProcess>.Instance);
             var health = await assembler.CheckHealthAsync(TestContext.Current.CancellationToken);
             Assert.False(health.IsHealthy);
@@ -488,9 +410,5 @@ public sealed class IlBuildServiceTests
     }
 
     private static IlBuildService CreateService(IlWorkerSettings settings, IlAssemblerProcess assembler) =>
-        new(
-            new IlReferenceSetProvider(settings.ReferenceSets),
-            assembler,
-            settings.Identity,
-            settings.CompilationLimits);
+        new(new IlReferenceSetProvider(settings.ReferenceSets), assembler, settings.Identity, settings.CompilationLimits);
 }

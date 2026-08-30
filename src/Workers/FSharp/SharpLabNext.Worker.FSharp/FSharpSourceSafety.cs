@@ -4,22 +4,11 @@ namespace SharpLabNext.Worker.FSharp;
 
 internal static class FSharpSourceSafety
 {
-    private static readonly HashSet<string> RejectedDirectives = new(
-        ["r", "load", "i", "cd", "time", "help", "quit"],
-        StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> RejectedDirectives = new(["r", "load", "i", "cd", "time", "help", "quit"], StringComparer.OrdinalIgnoreCase);
 
-    public static async Task<string?> FindRejectedDirectiveAsync(
-        FSharpCompilerFacade compiler,
-        FSharpProjectInput projectInput,
-        string fileName,
-        string sourceText,
-        CancellationToken cancellationToken)
+    public static async Task<string?> FindRejectedDirectiveAsync(FSharpCompilerFacade compiler, FSharpProjectInput projectInput, string fileName, string sourceText, CancellationToken cancellationToken)
     {
-        var directives = await compiler.GetHashDirectivesAsync(
-            projectInput,
-            fileName,
-            sourceText,
-            cancellationToken).ConfigureAwait(false);
+        var directives = await compiler.GetHashDirectivesAsync(projectInput, fileName, sourceText, cancellationToken).ConfigureAwait(false);
         return directives.FirstOrDefault(RejectedDirectives.Contains);
     }
 }

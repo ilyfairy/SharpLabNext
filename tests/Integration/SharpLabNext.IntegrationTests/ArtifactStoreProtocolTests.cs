@@ -31,12 +31,8 @@ public sealed class ArtifactStoreProtocolTests
     {
         var firstBytes = Encoding.UTF8.GetBytes("first");
         var secondBytes = Encoding.UTF8.GetBytes("second");
-        var first = ArtifactStoreTestData.CreateManifest(
-            ("app.dll", firstBytes, "primary-assembly"),
-            ("app.pdb", secondBytes, "portable-pdb"));
-        var second = ArtifactStoreTestData.CreateManifest(
-            ("app.dll", firstBytes, "primary-assembly"),
-            ("app.pdb", secondBytes, "portable-pdb"));
+        var first = ArtifactStoreTestData.CreateManifest(("app.dll", firstBytes, "primary-assembly"), ("app.pdb", secondBytes, "portable-pdb"));
+        var second = ArtifactStoreTestData.CreateManifest(("app.dll", firstBytes, "primary-assembly"), ("app.pdb", secondBytes, "portable-pdb"));
 
         Assert.Equal(ContentIdentity.Compute(firstBytes), ContentIdentity.Compute(firstBytes));
         Assert.Equal(first.ArtifactId, second.ArtifactId);
@@ -48,12 +44,8 @@ public sealed class ArtifactStoreProtocolTests
     {
         var firstBytes = Encoding.UTF8.GetBytes("first");
         var secondBytes = Encoding.UTF8.GetBytes("second");
-        var first = ArtifactStoreTestData.CreateManifest(
-            ("app.dll", firstBytes, "primary-assembly"),
-            ("app.pdb", secondBytes, "portable-pdb"));
-        var reordered = ArtifactStoreTestData.CreateManifest(
-            ("app.pdb", secondBytes, "portable-pdb"),
-            ("app.dll", firstBytes, "primary-assembly"));
+        var first = ArtifactStoreTestData.CreateManifest(("app.dll", firstBytes, "primary-assembly"), ("app.pdb", secondBytes, "portable-pdb"));
+        var reordered = ArtifactStoreTestData.CreateManifest(("app.pdb", secondBytes, "portable-pdb"), ("app.dll", firstBytes, "primary-assembly"));
 
         Assert.NotEqual(first.ArtifactId, reordered.ArtifactId);
     }
@@ -63,11 +55,7 @@ public sealed class ArtifactStoreProtocolTests
     [InlineData((BuildOutputKind)999)]
     public void ArtifactIdentityRejectsNonConcreteOutputKinds(BuildOutputKind outputKind)
     {
-        var manifest = ArtifactStoreTestData.CreateManifest(
-            ("app.dll", Encoding.UTF8.GetBytes("assembly"), "primary-assembly")) with
-        {
-            OutputKind = outputKind
-        };
+        var manifest = ArtifactStoreTestData.CreateManifest(("app.dll", Encoding.UTF8.GetBytes("assembly"), "primary-assembly")) with { OutputKind = outputKind };
 
         var exception = Assert.Throws<ArgumentException>(() => ArtifactIdentity.Compute(manifest));
 

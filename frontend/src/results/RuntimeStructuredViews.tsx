@@ -1,12 +1,6 @@
 import type { OperationEvent, OutputChannel } from '../api/types'
 import type { ExecutionFlowSourceModel, ExecutionFlowSourceTarget } from './executionFlowModel'
-import {
-  parseRuntimeGraphPayload,
-  parseRuntimeInspectionPayload,
-  type RuntimeGraphDocument,
-  type RuntimeGraphNode,
-  type RuntimeInspectionPayload,
-} from './runtimePayloadWire'
+import { parseRuntimeGraphPayload, parseRuntimeInspectionPayload, type RuntimeGraphDocument, type RuntimeGraphNode, type RuntimeInspectionPayload } from './runtimePayloadWire'
 
 export type {
   RuntimeGraphDocument,
@@ -27,10 +21,7 @@ function decode(data: string): string {
   return new TextDecoder().decode(bytes)
 }
 
-export function parseRuntimePayloads<T>(
-  events: readonly OperationEvent[],
-  channel: OutputChannel,
-): ParsedRuntimePayload<T>[] {
+export function parseRuntimePayloads<T>(events: readonly OperationEvent[], channel: OutputChannel): ParsedRuntimePayload<T>[] {
   const payloads: ParsedRuntimePayload<T>[] = []
   for (const event of events) {
     if (event.payload.kind !== 'output-chunk' || event.payload.chunk.channel !== channel) continue
@@ -53,15 +44,7 @@ export function parseRuntimePayloads<T>(
   return payloads
 }
 
-function GraphNode({
-  nodeId,
-  nodes,
-  ancestors,
-}: {
-  nodeId: number
-  nodes: ReadonlyMap<number, RuntimeGraphNode>
-  ancestors: ReadonlySet<number>
-}) {
+function GraphNode({ nodeId, nodes, ancestors }: { nodeId: number; nodes: ReadonlyMap<number, RuntimeGraphNode>; ancestors: ReadonlySet<number> }) {
   const node = nodes.get(nodeId)
   if (!node) return <span className="runtime-graph-missing">Missing node {nodeId}</span>
   const cyclic = ancestors.has(nodeId)
@@ -107,18 +90,15 @@ export function RuntimeGraphView({ graph }: { graph: RuntimeGraphDocument }) {
       )}
       {graph.truncated && (
         <p className="runtime-structured-warning">
-          Graph truncated{graph.truncationReason ? `: ${graph.truncationReason}` : '.'}
+          Graph truncated
+          {graph.truncationReason ? `: ${graph.truncationReason}` : '.'}
         </p>
       )}
     </div>
   )
 }
 
-export function RuntimeInspectionView({
-  payloads,
-}: {
-  payloads: readonly ParsedRuntimePayload<RuntimeInspectionPayload>[]
-}) {
+export function RuntimeInspectionView({ payloads }: { payloads: readonly ParsedRuntimePayload<RuntimeInspectionPayload>[] }) {
   if (payloads.length === 0) return <div className="result-tab-empty">No inspection output.</div>
   return (
     <ol className="runtime-structured-list">
@@ -141,15 +121,8 @@ export function RuntimeInspectionView({
   )
 }
 
-export function RuntimeFlowView({
-  model,
-  onNavigate,
-}: {
-  model: ExecutionFlowSourceModel
-  onNavigate?: ((target: ExecutionFlowSourceTarget) => void) | undefined
-}) {
-  if (model.timeline.length === 0)
-    return <div className="result-tab-empty">No execution-flow output.</div>
+export function RuntimeFlowView({ model, onNavigate }: { model: ExecutionFlowSourceModel; onNavigate?: ((target: ExecutionFlowSourceTarget) => void) | undefined }) {
+  if (model.timeline.length === 0) return <div className="result-tab-empty">No execution-flow output.</div>
   return (
     <ol className="runtime-flow-list">
       {model.timeline.map((entry) => {
@@ -172,25 +145,15 @@ export function RuntimeFlowView({
                 <span>Thread {payload.managedThreadId}</span>
               </header>
               {entry.locationLabel && entry.target && onNavigate ? (
-                <button
-                  className="runtime-flow-location"
-                  type="button"
-                  title={`Open ${entry.locationLabel}`}
-                  aria-label={`Open ${entry.locationLabel}`}
-                  onClick={() => onNavigate(entry.target as ExecutionFlowSourceTarget)}
-                >
+                <button className="runtime-flow-location" type="button" title={`Open ${entry.locationLabel}`} aria-label={`Open ${entry.locationLabel}`} onClick={() => onNavigate(entry.target as ExecutionFlowSourceTarget)}>
                   {entry.locationLabel}
                 </button>
               ) : (
                 entry.locationLabel && <p>{entry.locationLabel}</p>
               )}
-              {entry.sourceError && (
-                <p className="runtime-structured-warning">{entry.sourceError}</p>
-              )}
+              {entry.sourceError && <p className="runtime-structured-warning">{entry.sourceError}</p>}
               {graph && <RuntimeGraphView graph={graph} />}
-              {payload.truncated && (
-                <p className="runtime-structured-warning">Execution-flow output was truncated.</p>
-              )}
+              {payload.truncated && <p className="runtime-structured-warning">Execution-flow output was truncated.</p>}
             </div>
           </li>
         )

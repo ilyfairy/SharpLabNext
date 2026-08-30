@@ -1,12 +1,6 @@
 import { ExternalLink, GitFork, LoaderCircle, LogIn, LogOut, Plus, Save, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import {
-  createGist,
-  getGitHubAuthStatus,
-  logoutGitHub,
-  startGitHubOAuth,
-  updateGist,
-} from '../api/client'
+import { createGist, getGitHubAuthStatus, logoutGitHub, startGitHubOAuth, updateGist } from '../api/client'
 import type { GistDocument, GistWorkspaceState, GitHubAuthStatus } from '../api/types'
 
 interface GistDialogProps {
@@ -71,9 +65,7 @@ export function GistDialog({ open, workspace, currentGist, onClose, onSaved }: G
     setBusy('create')
     setError(null)
     try {
-      onSaved(
-        await createGist({ description: description.trim(), isPublic, workspace }, auth.csrfToken),
-      )
+      onSaved(await createGist({ description: description.trim(), isPublic, workspace }, auth.csrfToken))
     } catch (reason) {
       setError(reason instanceof Error ? reason : new Error('The Gist could not be created.'))
     } finally {
@@ -86,13 +78,7 @@ export function GistDialog({ open, workspace, currentGist, onClose, onSaved }: G
     setBusy('update')
     setError(null)
     try {
-      onSaved(
-        await updateGist(
-          currentGist.id,
-          { description: description.trim(), workspace },
-          auth.csrfToken,
-        ),
-      )
+      onSaved(await updateGist(currentGist.id, { description: description.trim(), workspace }, auth.csrfToken))
     } catch (reason) {
       setError(reason instanceof Error ? reason : new Error('The Gist could not be updated.'))
     } finally {
@@ -106,7 +92,12 @@ export function GistDialog({ open, workspace, currentGist, onClose, onSaved }: G
     setError(null)
     try {
       await logoutGitHub(auth.csrfToken)
-      setAuth({ available: auth.available, authenticated: false, login: null, csrfToken: null })
+      setAuth({
+        available: auth.available,
+        authenticated: false,
+        login: null,
+        csrfToken: null,
+      })
     } catch (reason) {
       setError(reason instanceof Error ? reason : new Error('GitHub sign-out failed.'))
     } finally {
@@ -117,27 +108,13 @@ export function GistDialog({ open, workspace, currentGist, onClose, onSaved }: G
   const authenticated = auth?.authenticated === true
   return (
     <div className="modal-backdrop" role="presentation">
-      <section
-        className="gist-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="gist-dialog-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
+      <section className="gist-dialog" role="dialog" aria-modal="true" aria-labelledby="gist-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
         <header>
           <div>
             <GitFork aria-hidden="true" size={17} />
             <h2 id="gist-dialog-title">GitHub Gist</h2>
           </div>
-          <button
-            ref={closeButton}
-            className="icon-button"
-            type="button"
-            title="Close"
-            aria-label="Close Gist dialog"
-            disabled={busy !== null}
-            onClick={onClose}
-          >
+          <button ref={closeButton} className="icon-button" type="button" title="Close" aria-label="Close Gist dialog" disabled={busy !== null} onClick={onClose}>
             <X aria-hidden="true" size={15} />
           </button>
         </header>
@@ -154,21 +131,11 @@ export function GistDialog({ open, workspace, currentGist, onClose, onSaved }: G
 
         <label className="gist-field">
           <span>Description</span>
-          <input
-            value={description}
-            maxLength={256}
-            disabled={busy !== null}
-            onChange={(event) => setDescription(event.target.value)}
-          />
+          <input value={description} maxLength={256} disabled={busy !== null} onChange={(event) => setDescription(event.target.value)} />
         </label>
 
         <label className="gist-visibility">
-          <input
-            type="checkbox"
-            checked={isPublic}
-            disabled={busy !== null}
-            onChange={(event) => setIsPublic(event.target.checked)}
-          />
+          <input type="checkbox" checked={isPublic} disabled={busy !== null} onChange={(event) => setIsPublic(event.target.checked)} />
           <span>Public Gist</span>
         </label>
 
@@ -185,24 +152,12 @@ export function GistDialog({ open, workspace, currentGist, onClose, onSaved }: G
             ) : authenticated ? (
               <>
                 <span>{auth.login}</span>
-                <button
-                  className="icon-button"
-                  type="button"
-                  title="Sign out of GitHub"
-                  aria-label="Sign out of GitHub"
-                  disabled={busy !== null}
-                  onClick={() => void logout()}
-                >
+                <button className="icon-button" type="button" title="Sign out of GitHub" aria-label="Sign out of GitHub" disabled={busy !== null} onClick={() => void logout()}>
                   <LogOut aria-hidden="true" size={14} />
                 </button>
               </>
             ) : (
-              <button
-                className="secondary-command"
-                type="button"
-                disabled={!auth.available || busy !== null}
-                onClick={() => void signIn()}
-              >
+              <button className="secondary-command" type="button" disabled={!auth.available || busy !== null} onClick={() => void signIn()}>
                 <LogIn aria-hidden="true" size={14} />
                 Sign in
               </button>
@@ -210,31 +165,13 @@ export function GistDialog({ open, workspace, currentGist, onClose, onSaved }: G
           </div>
           <div className="gist-commands">
             {currentGist?.canUpdate && (
-              <button
-                className="secondary-command"
-                type="button"
-                disabled={!workspace || !authenticated || busy !== null}
-                onClick={() => void update()}
-              >
-                {busy === 'update' ? (
-                  <LoaderCircle className="spin" aria-hidden="true" size={14} />
-                ) : (
-                  <Save aria-hidden="true" size={14} />
-                )}
+              <button className="secondary-command" type="button" disabled={!workspace || !authenticated || busy !== null} onClick={() => void update()}>
+                {busy === 'update' ? <LoaderCircle className="spin" aria-hidden="true" size={14} /> : <Save aria-hidden="true" size={14} />}
                 Save changes
               </button>
             )}
-            <button
-              className="primary-command"
-              type="button"
-              disabled={!workspace || !authenticated || busy !== null}
-              onClick={() => void create()}
-            >
-              {busy === 'create' ? (
-                <LoaderCircle className="spin" aria-hidden="true" size={14} />
-              ) : (
-                <Plus aria-hidden="true" size={14} />
-              )}
+            <button className="primary-command" type="button" disabled={!workspace || !authenticated || busy !== null} onClick={() => void create()}>
+              {busy === 'create' ? <LoaderCircle className="spin" aria-hidden="true" size={14} /> : <Plus aria-hidden="true" size={14} />}
               New Gist
             </button>
           </div>

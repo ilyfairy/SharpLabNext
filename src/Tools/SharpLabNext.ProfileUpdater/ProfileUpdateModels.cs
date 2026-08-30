@@ -76,28 +76,13 @@ public sealed record ProfileUpdaterState
     public required ProfileUpdateStageReceipt LastStage { get; init; }
 }
 
-public sealed record ProfileUpdateCheckResult(
-    string SourceDigest,
-    string ReleaseId,
-    bool Changed,
-    IReadOnlyList<ReleaseLockChange> Changes,
-    ProfileUpdateStageReceipt Stage);
+public sealed record ProfileUpdateCheckResult(string SourceDigest, string ReleaseId, bool Changed, IReadOnlyList<ReleaseLockChange> Changes, ProfileUpdateStageReceipt Stage);
 
-public sealed record ProfileUpdateCandidateResult(
-    string CandidateDigest,
-    string CandidatePath,
-    ProfileUpdateReceipt Receipt);
+public sealed record ProfileUpdateCandidateResult(string CandidateDigest, string CandidatePath, ProfileUpdateReceipt Receipt);
 
-public sealed record ProfileUpdateStageResult(
-    string CandidateDigest,
-    string CandidatePath,
-    ProfileUpdateReceipt Receipt,
-    ProfileUpdateStageReceipt Stage);
+public sealed record ProfileUpdateStageResult(string CandidateDigest, string CandidatePath, ProfileUpdateReceipt Receipt, ProfileUpdateStageReceipt Stage);
 
-public sealed class ProfileUpdateCommandFailedException(
-    ProfileUpdateExternalCommand command,
-    int exitCode)
-    : Exception($"External command '{command.FileName}' failed with exit code {exitCode}.")
+public sealed class ProfileUpdateCommandFailedException(ProfileUpdateExternalCommand command, int exitCode) : Exception($"External command '{command.FileName}' failed with exit code {exitCode}.")
 {
     public ProfileUpdateExternalCommand Command { get; } = command;
     public int ExitCode { get; } = exitCode;

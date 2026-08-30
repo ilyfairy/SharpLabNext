@@ -16,26 +16,19 @@ public static class RoslynWorkerHost
         "document-symbols", "code-actions", "explain"
     ];
 
-    public static WebApplication Build(
-        WebApplicationBuilder builder,
-        bool configureObservability = true)
+    public static WebApplication Build(WebApplicationBuilder builder, bool configureObservability = true)
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        var internalServiceAuthentication = InternalServiceAuthenticationOptions.FromConfiguration(
-            builder.Configuration,
-            builder.Environment);
+        var internalServiceAuthentication = InternalServiceAuthenticationOptions.FromConfiguration(builder.Configuration, builder.Environment);
         var settings = RoslynWorkerSettings.FromConfiguration(builder.Configuration);
         if (!settings.BuildProcess.Enabled && !builder.Environment.IsDevelopment())
         {
-            throw new InvalidOperationException(
-                "RoslynWorker:BuildProcess:Enabled can only be false in Development.");
+            throw new InvalidOperationException("RoslynWorker:BuildProcess:Enabled can only be false in Development.");
         }
         if (configureObservability)
         {
-            builder.AddSharpLabNextObservability(
-                settings.Identity.ToolchainId,
-                settings.Identity.ReleaseId);
+            builder.AddSharpLabNextObservability(settings.Identity.ToolchainId, settings.Identity.ReleaseId);
         }
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton(settings.Identity);
@@ -51,16 +44,12 @@ public static class RoslynWorkerHost
             client.Timeout = Timeout.InfiniteTimeSpan;
             internalServiceAuthentication.ConfigureClient(client);
         });
-        builder.Services.AddSingleton(new ReferenceSetProvider(
-            settings.ReferenceSets,
-            builder.Environment.IsProduction() ||
-            builder.Configuration.GetValue("ReferenceSetAttestation:Required", false)));
+        builder.Services.AddSingleton(new ReferenceSetProvider(settings.ReferenceSets, builder.Environment.IsProduction() || builder.Configuration.GetValue("ReferenceSetAttestation:Required", false)));
         builder.Services.AddSingleton(WorkerProcessIdentity.Create(settings.Identity.ToolchainId));
         builder.Services.AddSingleton<CSharpBuildService>();
         builder.Services.AddSingleton<VisualBasicBuildService>();
         builder.Services.AddSingleton<RoslynBuildService>();
-        builder.Services.AddSingleton<ICompilerProcessRunner>(
-            new CompilerProcessRunner(settings.BuildProcess));
+        builder.Services.AddSingleton<ICompilerProcessRunner>(new CompilerProcessRunner(settings.BuildProcess));
         builder.Services.AddSingleton<IRoslynBuildExecutor, RoslynBuildProcessExecutor>();
         builder.Services.AddSingleton<RoslynArtifactPublisher>();
         builder.Services.AddSingleton<CSharpExplainService>();
@@ -68,37 +57,19 @@ public static class RoslynWorkerHost
         builder.Services.AddSingleton<RoslynWorkerHealthService>();
         builder.Services.AddHostedService<ReferenceSetWarmupService>();
 
-        builder.Services.AddSharpLabNextWorker(new ServiceIdentity(
-            settings.Identity.ToolchainId,
-            ServiceKind.ToolchainWorker,
-            settings.Identity.ReleaseId,
-            ProtocolVersion.WorkerV1,
-            Capabilities,
-            "starting"));
+        builder.Services.AddSharpLabNextWorker(new ServiceIdentity(settings.Identity.ToolchainId, ServiceKind.ToolchainWorker, settings.Identity.ReleaseId, ProtocolVersion.WorkerV1, Capabilities, "starting"));
 
         var app = builder.Build();
         app.UseSharpLabNextInternalServiceAuthentication(internalServiceAuthentication);
-        app.UseWebSockets(new WebSocketOptions
-        {
-            KeepAliveInterval = TimeSpan.FromSeconds(30)
-        });
+        app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
         app.MapGet("/health/live", () => Results.Ok(new { Status = "live" }));
-        app.MapGet("/health/ready", async (
-            RoslynWorkerHealthService healthService,
-            CancellationToken cancellationToken) =>
+        app.MapGet("/health/ready", async (RoslynWorkerHealthService healthService, CancellationToken cancellationToken) =>
         {
             var health = await healthService.CheckAsync(cancellationToken);
             return health.Status == HealthStatus.Healthy
-                ? Results.Ok(health)
-                : Results.Json(
-                    health,
-                    ContractJson.CreateSerializerOptions(),
-                    statusCode: StatusCodes.Status503ServiceUnavailable);
+                ? Results.Ok(health) : Results.Json(health, ContractJson.CreateSerializerOptions(), statusCode: StatusCodes.Status503ServiceUnavailable);
         });
-        app.MapGet("/api/v1/worker/describe", async (
-            RoslynWorkerHealthService healthService,
-            CancellationToken cancellationToken) =>
-            await healthService.DescribeAsync(cancellationToken));
+        app.MapGet("/api/v1/worker/describe", async (RoslynWorkerHealthService healthService, CancellationToken cancellationToken) => await healthService.DescribeAsync(cancellationToken));
         app.MapPost("/api/v1/build", HandleBuildAsync);
         app.MapPost("/api/v1/explain", HandleExplainAsync);
         app.MapPost("/api/v1/language-sessions", HandleOpenLanguageSessionAsync);
@@ -107,10 +78,7 @@ public static class RoslynWorkerHost
         return app;
     }
 
-    private static async Task<IResult> HandleOpenLanguageSessionAsync(
-        OpenLanguageSessionRequest request,
-        RoslynLanguageSessionManager sessions,
-        HttpContext httpContext)
+    private static async Task<IResult> HandleOpenLanguageSessionAsync(OpenLanguageSessionRequest request, RoslynLanguageSessionManager sessions, HttpContext httpContext)
     {
         try
         {
@@ -139,22 +107,14 @@ public static class RoslynWorkerHost
         }
     }
 
-    private static async Task<IResult> HandleCloseLanguageSessionAsync(
-        string sessionId,
-        RoslynLanguageSessionManager sessions,
-        HttpContext httpContext)
+    private static async Task<IResult> HandleCloseLanguageSessionAsync(string sessionId, RoslynLanguageSessionManager sessions, HttpContext httpContext)
     {
         var removed = await sessions.CloseAsync(sessionId);
         return removed
-            ? Results.NoContent()
-            : Problem(httpContext, "not-found", "The language session does not exist.", StatusCodes.Status404NotFound);
+            ? Results.NoContent() : Problem(httpContext, "not-found", "The language session does not exist.", StatusCodes.Status404NotFound);
     }
 
-    private static async Task HandleLanguageWebSocketAsync(
-        string sessionId,
-        RoslynLanguageSessionManager sessions,
-        LspLimits limits,
-        HttpContext httpContext)
+    private static async Task HandleLanguageWebSocketAsync(string sessionId, RoslynLanguageSessionManager sessions, LspLimits limits, HttpContext httpContext)
     {
         if (!httpContext.WebSockets.IsWebSocketRequest)
         {
@@ -169,37 +129,22 @@ public static class RoslynWorkerHost
         }
 
         using var socket = await httpContext.WebSockets.AcceptWebSocketAsync();
-        await using var connection = new LspJsonRpcWebSocketConnection(
-            socket,
-            session,
-            limits,
-            httpContext.RequestAborted);
+        await using var connection = new LspJsonRpcWebSocketConnection(socket, session, limits, httpContext.RequestAborted);
         try
         {
             await connection.RunAsync();
         }
-        catch (OperationCanceledException) when (httpContext.RequestAborted.IsCancellationRequested)
-        {
-        }
+        catch (OperationCanceledException) when (httpContext.RequestAborted.IsCancellationRequested) { }
         catch (LspSessionUnavailableException)
         {
             if (socket.State == System.Net.WebSockets.WebSocketState.Open)
             {
-                await socket.CloseAsync(
-                    System.Net.WebSockets.WebSocketCloseStatus.PolicyViolation,
-                    "Language session unavailable.",
-                    CancellationToken.None);
+                await socket.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.PolicyViolation, "Language session unavailable.", CancellationToken.None);
             }
         }
     }
 
-    private static async Task<IResult> HandleBuildAsync(
-        BuildRequest request,
-        IRoslynBuildExecutor buildService,
-        RoslynArtifactPublisher artifactPublisher,
-        DevelopmentArtifactEnvelopeOptions envelopeOptions,
-        HttpContext httpContext,
-        ILoggerFactory loggerFactory)
+    private static async Task<IResult> HandleBuildAsync(BuildRequest request, IRoslynBuildExecutor buildService, RoslynArtifactPublisher artifactPublisher, DevelopmentArtifactEnvelopeOptions envelopeOptions, HttpContext httpContext, ILoggerFactory loggerFactory)
     {
         try
         {
@@ -209,30 +154,20 @@ public static class RoslynWorkerHost
             {
                 if (envelopeOptions.Enabled)
                 {
-                    artifactEnvelope = DevelopmentArtifactEnvelope.FromArtifact(
-                        execution.Artifact,
-                        envelopeOptions);
+                    artifactEnvelope = DevelopmentArtifactEnvelope.FromArtifact(execution.Artifact, envelopeOptions);
                 }
                 else
                 {
-                    var publishedRef = await PublishArtifactAsync(
-                        request,
-                        execution.Artifact,
-                        artifactPublisher,
-                        httpContext.RequestAborted);
+                    var publishedRef = await PublishArtifactAsync(request, execution.Artifact, artifactPublisher, httpContext.RequestAborted);
                     if (execution.Result is not BuildResult { ArtifactRef: { } resultRef } ||
                         resultRef != publishedRef)
                     {
-                        throw new InvalidOperationException(
-                            "The published artifact identity does not match the build result.");
+                        throw new InvalidOperationException("The published artifact identity does not match the build result.");
                     }
                 }
             }
 
-            return Results.Ok(new WorkerBuildHttpResponse(
-                request.RequestId,
-                execution.Result,
-                artifactEnvelope));
+            return Results.Ok(new WorkerBuildHttpResponse(request.RequestId, execution.Result, artifactEnvelope));
         }
         catch (BuildRequestValidationException exception)
         {
@@ -258,21 +193,9 @@ public static class RoslynWorkerHost
         {
             return exception.Failure switch
             {
-                ArtifactBundlePublicationFailure.ResourceExhausted => Problem(
-                    httpContext,
-                    "resource-exhausted",
-                    exception.Message,
-                    StatusCodes.Status413PayloadTooLarge),
-                ArtifactBundlePublicationFailure.Unavailable => Problem(
-                    httpContext,
-                    "artifact-store-unavailable",
-                    exception.Message,
-                    StatusCodes.Status503ServiceUnavailable),
-                _ => Problem(
-                    httpContext,
-                    "artifact-store-rejected-artifact",
-                    exception.Message,
-                    StatusCodes.Status502BadGateway)
+                ArtifactBundlePublicationFailure.ResourceExhausted => Problem(httpContext, "resource-exhausted", exception.Message, StatusCodes.Status413PayloadTooLarge),
+                ArtifactBundlePublicationFailure.Unavailable => Problem(httpContext, "artifact-store-unavailable", exception.Message, StatusCodes.Status503ServiceUnavailable),
+                _ => Problem(httpContext, "artifact-store-rejected-artifact", exception.Message, StatusCodes.Status502BadGateway)
             };
         }
         catch (BuildDeadlineExceededException exception)
@@ -289,16 +212,8 @@ public static class RoslynWorkerHost
         }
         catch (CompilerProcessException exception)
         {
-            WorkerLog.InternalBuildFailure(
-                loggerFactory.CreateLogger("SharpLabNext.Worker.Roslyn"),
-                exception,
-                request.RequestId,
-                Activity.Current?.TraceId.ToString() ?? httpContext.TraceIdentifier);
-            return Problem(
-                httpContext,
-                "compiler-process-unavailable",
-                "The isolated Roslyn compiler process failed.",
-                StatusCodes.Status503ServiceUnavailable);
+            WorkerLog.InternalBuildFailure(loggerFactory.CreateLogger("SharpLabNext.Worker.Roslyn"), exception, request.RequestId, Activity.Current?.TraceId.ToString() ?? httpContext.TraceIdentifier);
+            return Problem(httpContext, "compiler-process-unavailable", "The isolated Roslyn compiler process failed.", StatusCodes.Status503ServiceUnavailable);
         }
         catch (OperationCanceledException) when (httpContext.RequestAborted.IsCancellationRequested)
         {
@@ -306,24 +221,12 @@ public static class RoslynWorkerHost
         }
         catch (Exception exception)
         {
-            WorkerLog.InternalBuildFailure(
-                loggerFactory.CreateLogger("SharpLabNext.Worker.Roslyn"),
-                exception,
-                request.RequestId,
-                Activity.Current?.TraceId.ToString() ?? httpContext.TraceIdentifier);
-            return Problem(
-                httpContext,
-                "internal",
-                "The Roslyn worker failed to process the build.",
-                StatusCodes.Status500InternalServerError);
+            WorkerLog.InternalBuildFailure(loggerFactory.CreateLogger("SharpLabNext.Worker.Roslyn"), exception, request.RequestId, Activity.Current?.TraceId.ToString() ?? httpContext.TraceIdentifier);
+            return Problem(httpContext, "internal", "The Roslyn worker failed to process the build.", StatusCodes.Status500InternalServerError);
         }
     }
 
-    private static async Task<ArtifactRef> PublishArtifactAsync(
-        BuildRequest request,
-        CompiledArtifact artifact,
-        RoslynArtifactPublisher publisher,
-        CancellationToken cancellationToken)
+    private static async Task<ArtifactRef> PublishArtifactAsync(BuildRequest request, CompiledArtifact artifact, RoslynArtifactPublisher publisher, CancellationToken cancellationToken)
     {
         var remaining = request.DeadlineUtc - DateTimeOffset.UtcNow;
         if (remaining <= TimeSpan.Zero)
@@ -335,21 +238,13 @@ public static class RoslynWorkerHost
         {
             return await publisher.PublishAsync(artifact, linked.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (
-            deadline.IsCancellationRequested &&
-            !cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            throw new BuildDeadlineExceededException(
-                "The build deadline elapsed while publishing the artifact.",
-                deadline.Token);
+            throw new BuildDeadlineExceededException("The build deadline elapsed while publishing the artifact.", deadline.Token);
         }
     }
 
-    private static async Task<IResult> HandleExplainAsync(
-        ExplainRequest request,
-        CSharpExplainService explainService,
-        HttpContext httpContext,
-        ILoggerFactory loggerFactory)
+    private static async Task<IResult> HandleExplainAsync(ExplainRequest request, CSharpExplainService explainService, HttpContext httpContext, ILoggerFactory loggerFactory)
     {
         try
         {
@@ -374,24 +269,14 @@ public static class RoslynWorkerHost
         }
         catch (Exception exception)
         {
-            WorkerLog.InternalBuildFailure(
-                loggerFactory.CreateLogger("SharpLabNext.Worker.Roslyn"),
-                exception,
-                request.RequestId,
-                Activity.Current?.TraceId.ToString() ?? httpContext.TraceIdentifier);
-            return Problem(
-                httpContext,
-                "internal",
-                "The Roslyn worker failed to explain the workspace.",
-                StatusCodes.Status500InternalServerError);
+            WorkerLog.InternalBuildFailure(loggerFactory.CreateLogger("SharpLabNext.Worker.Roslyn"), exception, request.RequestId, Activity.Current?.TraceId.ToString() ?? httpContext.TraceIdentifier);
+            return Problem(httpContext, "internal", "The Roslyn worker failed to explain the workspace.", StatusCodes.Status500InternalServerError);
         }
     }
 
     private static IResult Problem(HttpContext context, string code, string message, int statusCode)
     {
-        var workerId = context.RequestServices
-            .GetRequiredService<RoslynWorkerIdentity>()
-            .ToolchainId;
+        var workerId = context.RequestServices.GetRequiredService<RoslynWorkerIdentity>().ToolchainId;
         return Results.Problem(
             statusCode: statusCode,
             title: code,

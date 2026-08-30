@@ -39,18 +39,14 @@ internal static class RuntimePromotionTrust
     private const string MeasurementHelperContentSha256 =
         RuntimeMeasurementHelperContract.ContentSha256;
     private const string SourceContextLabel = "io.sharplabnext.source.context";
-    private const string PromotionEligibleLabel =
-        "com.sharplabnext.runtime-candidate.promotion-eligible";
+    private const string PromotionEligibleLabel = "com.sharplabnext.runtime-candidate.promotion-eligible";
     private const string CommittedSourceContext = "committed";
-    private const string HttpsSourceUriPattern =
-        "^https://(?![^/?#\\s]*@)[^/?#\\s]+(?:[/?][^#\\s]*)?$";
+    private const string HttpsSourceUriPattern = "^https://(?![^/?#\\s]*@)[^/?#\\s]+(?:[/?][^#\\s]*)?$";
     private const string DockerSourceUriPattern =
         "^docker://(?:(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]+)?)/)?" +
         "[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*" +
         "(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?@sha256:[0-9a-f]{64}$";
-    private static readonly UTF8Encoding StrictUtf8 = new(
-        encoderShouldEmitUTF8Identifier: false,
-        throwOnInvalidBytes: true);
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
     private static readonly JsonSerializerOptions ReceiptJsonOptions = new(JsonSerializerDefaults.Web)
     {
         AllowTrailingCommas = false,
@@ -59,17 +55,7 @@ internal static class RuntimePromotionTrust
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
 
-    public static async Task<IReadOnlyList<RuntimePromotionTrustSnapshot>> CaptureAsync(
-        string repositoryRoot,
-        RepositorySourceProvenance source,
-        CatalogDocument catalog,
-        ReleaseLockDocument releaseLock,
-        DeploymentImageManifest deployment,
-        IReadOnlyList<RuntimeProfileDefinition> profiles,
-        IReadOnlyList<InspectedImage> inspectedImages,
-        IDockerCli docker,
-        CancellationToken cancellationToken,
-        RuntimePromotionPlanSignatureVerifier? planSignatureVerifier = null)
+    public static async Task<IReadOnlyList<RuntimePromotionTrustSnapshot>> CaptureAsync(string repositoryRoot, RepositorySourceProvenance source, CatalogDocument catalog, ReleaseLockDocument releaseLock, DeploymentImageManifest deployment, IReadOnlyList<RuntimeProfileDefinition> profiles, IReadOnlyList<InspectedImage> inspectedImages, IDockerCli docker, CancellationToken cancellationToken, RuntimePromotionPlanSignatureVerifier? planSignatureVerifier = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
         ArgumentNullException.ThrowIfNull(source);
@@ -80,71 +66,39 @@ internal static class RuntimePromotionTrust
         ArgumentNullException.ThrowIfNull(inspectedImages);
         ArgumentNullException.ThrowIfNull(docker);
 
-        var promotionProfiles = profiles.Where(static profile => profile.PromotionReceipt is not null)
-            .OrderBy(static profile => profile.Id, StringComparer.Ordinal)
-            .ToArray();
-        var promotionIds = promotionProfiles.Select(static profile => profile.Id)
-            .ToHashSet(StringComparer.Ordinal);
-        var runtimeIndex = IndexUnique(
-            catalog.Runtimes.Where(runtime => promotionIds.Contains(runtime.Id)),
-            static runtime => runtime.Id,
-            "Catalog runtime");
-        var definitionIndex = IndexUnique(
-            deployment.Images.Where(definition =>
-                definition.RuntimeId is not null && promotionIds.Contains(definition.RuntimeId)),
-            static definition => definition.RuntimeId!,
-            "runtime deployment definition");
-        var imageIndex = IndexUnique(
-            inspectedImages.Where(image =>
-                image.RuntimeId is not null && promotionIds.Contains(image.RuntimeId)),
-            static image => image.RuntimeId!,
-            "inspected runtime image");
+        var promotionProfiles = profiles.Where(static profile => profile.PromotionReceipt is not null).OrderBy(static profile => profile.Id, StringComparer.Ordinal).ToArray();
+        var promotionIds = promotionProfiles.Select(static profile => profile.Id).ToHashSet(StringComparer.Ordinal);
+        var runtimeIndex = IndexUnique(catalog.Runtimes.Where(runtime => promotionIds.Contains(runtime.Id)), static runtime => runtime.Id, "Catalog runtime");
+        var definitionIndex = IndexUnique(deployment.Images.Where(definition => definition.RuntimeId is not null && promotionIds.Contains(definition.RuntimeId)), static definition => definition.RuntimeId!, "runtime deployment definition");
+        var imageIndex = IndexUnique(inspectedImages.Where(image => image.RuntimeId is not null && promotionIds.Contains(image.RuntimeId)), static image => image.RuntimeId!, "inspected runtime image");
         var result = new List<RuntimePromotionTrustSnapshot>();
         foreach (var profile in promotionProfiles)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!runtimeIndex.TryGetValue(profile.Id, out var runtime) || !runtime.Availability.IsSelectable)
             {
-                throw new BundleValidationException(
-                    $"Promotion-bound runtime profile '{profile.Id}' is not selectable in the Catalog.");
+                throw new BundleValidationException($"Promotion-bound runtime profile '{profile.Id}' is not selectable in the Catalog.");
             }
             if (!releaseLock.Components.TryGetValue(profile.Id, out var component))
             {
-                throw new BundleValidationException(
-                    $"Promotion-bound runtime profile '{profile.Id}' has no release-lock component.");
+                throw new BundleValidationException($"Promotion-bound runtime profile '{profile.Id}' has no release-lock component.");
             }
-            if (!definitionIndex.TryGetValue(profile.Id, out var definition) ||
-                definition.ImmutableReference is null)
+            if (!definitionIndex.TryGetValue(profile.Id, out var definition) || definition.ImmutableReference is null)
             {
-                throw new BundleValidationException(
-                    $"Promotion-bound runtime profile '{profile.Id}' has no immutable deployment reference.");
+                throw new BundleValidationException($"Promotion-bound runtime profile '{profile.Id}' has no immutable deployment reference.");
             }
             if (!imageIndex.TryGetValue(profile.Id, out var image))
             {
-                throw new BundleValidationException(
-                    $"Promotion-bound runtime profile '{profile.Id}' has no inspected image.");
+                throw new BundleValidationException($"Promotion-bound runtime profile '{profile.Id}' has no inspected image.");
             }
 
-            result.Add(await CaptureProfileAsync(
-                repositoryRoot,
-                source,
-                runtime,
-                component,
-                definition,
-                profile,
-                image,
-                docker,
-                planSignatureVerifier ?? RuntimePromotionPlanSignatureTrust.ProductionVerifier,
-                cancellationToken));
+            result.Add(await CaptureProfileAsync(repositoryRoot, source, runtime, component, definition, profile, image, docker, planSignatureVerifier ?? RuntimePromotionPlanSignatureTrust.ProductionVerifier, cancellationToken));
         }
 
         return result;
     }
 
-    private static Dictionary<string, T> IndexUnique<T>(
-        IEnumerable<T> values,
-        Func<T, string> keySelector,
-        string kind)
+    private static Dictionary<string, T> IndexUnique<T>(IEnumerable<T> values, Func<T, string> keySelector, string kind)
     {
         var result = new Dictionary<string, T>(StringComparer.Ordinal);
         foreach (var value in values)
@@ -156,11 +110,7 @@ internal static class RuntimePromotionTrust
         return result;
     }
 
-    public static async Task RevalidateAsync(
-        string repositoryRoot,
-        IReadOnlyList<RuntimePromotionTrustSnapshot> snapshots,
-        IDockerCli docker,
-        CancellationToken cancellationToken)
+    public static async Task RevalidateAsync(string repositoryRoot, IReadOnlyList<RuntimePromotionTrustSnapshot> snapshots, IDockerCli docker, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
         ArgumentNullException.ThrowIfNull(snapshots);
@@ -169,92 +119,40 @@ internal static class RuntimePromotionTrust
         foreach (var snapshot in snapshots)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var receipt = await ReadTrustedFileAsync(
-                repositoryRoot,
-                snapshot.Receipt.RelativePath,
-                [ReceiptDirectory],
-                MaximumReceiptBytes,
-                cancellationToken);
-            RequireDigestEqual(
-                snapshot.Receipt.Sha256,
-                receipt.Sha256,
-                $"Runtime '{snapshot.RuntimeId}' promotion receipt changed before release finalization");
-            await RuntimePromotionPlanSignatureTrust.RevalidateAsync(
-                repositoryRoot,
-                snapshot.RuntimeId,
-                snapshot.BuildSourceRevision,
-                snapshot.SignedPlan,
-                cancellationToken);
+            var receipt = await ReadTrustedFileAsync(repositoryRoot, snapshot.Receipt.RelativePath, [ReceiptDirectory], MaximumReceiptBytes, cancellationToken);
+            RequireDigestEqual(snapshot.Receipt.Sha256, receipt.Sha256, $"Runtime '{snapshot.RuntimeId}' promotion receipt changed before release finalization");
+            await RuntimePromotionPlanSignatureTrust.RevalidateAsync(repositoryRoot, snapshot.RuntimeId, snapshot.BuildSourceRevision, snapshot.SignedPlan, cancellationToken);
 
-            await WineCoreClrOperatorReceiptTrust.RevalidateAsync(
-                repositoryRoot,
-                snapshot.RuntimeId,
-                snapshot.BuildSourceRevision,
-                snapshot.WineOperatorReceipt,
-                docker,
-                cancellationToken);
+            await WineCoreClrOperatorReceiptTrust.RevalidateAsync(repositoryRoot, snapshot.RuntimeId, snapshot.BuildSourceRevision, snapshot.WineOperatorReceipt, docker, cancellationToken);
 
             foreach (var expectedEvidence in snapshot.Evidence)
             {
-                var evidence = await ReadTrustedFileAsync(
-                    repositoryRoot,
-                    expectedEvidence.RelativePath,
-                    [EvidenceDirectory, $"{EvidenceDirectory}/{snapshot.RuntimeId}"],
-                    MaximumEvidenceBytes,
-                    cancellationToken);
-                RequireDigestEqual(
-                    expectedEvidence.Sha256,
-                    evidence.Sha256,
-                    $"Runtime '{snapshot.RuntimeId}' promotion evidence '{expectedEvidence.RelativePath}' changed before release finalization");
+                var evidence = await ReadTrustedFileAsync(repositoryRoot, expectedEvidence.RelativePath, [EvidenceDirectory, $"{EvidenceDirectory}/{snapshot.RuntimeId}"], MaximumEvidenceBytes, cancellationToken);
+                RequireDigestEqual(expectedEvidence.Sha256, evidence.Sha256, $"Runtime '{snapshot.RuntimeId}' promotion evidence '{expectedEvidence.RelativePath}' changed before release finalization");
             }
 
-            var performancePolicy = await ReadTrustedFileAsync(
-                repositoryRoot,
-                snapshot.PerformancePolicy.RelativePath,
-                [PerformancePolicyDirectory],
-                MaximumPerformancePolicyBytes,
-                cancellationToken);
-            RequireDigestEqual(
-                snapshot.PerformancePolicy.Sha256,
-                performancePolicy.Sha256,
-                $"Runtime '{snapshot.RuntimeId}' performance policy changed before release finalization");
+            var performancePolicy = await ReadTrustedFileAsync(repositoryRoot, snapshot.PerformancePolicy.RelativePath, [PerformancePolicyDirectory], MaximumPerformancePolicyBytes, cancellationToken);
+            RequireDigestEqual(snapshot.PerformancePolicy.Sha256, performancePolicy.Sha256, $"Runtime '{snapshot.RuntimeId}' performance policy changed before release finalization");
 
             var currentImage = await docker.InspectImageAsync(snapshot.ImmutableReference, cancellationToken);
-            if (!string.Equals(currentImage.ImageId, snapshot.ImageId, StringComparison.Ordinal) ||
-                !currentImage.RepoDigests.Contains(snapshot.ImmutableReference, StringComparer.Ordinal))
+            if (!string.Equals(currentImage.ImageId, snapshot.ImageId, StringComparison.Ordinal) || !currentImage.RepoDigests.Contains(snapshot.ImmutableReference, StringComparer.Ordinal))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{snapshot.RuntimeId}' immutable reference no longer resolves to captured image ID '{snapshot.ImageId}'.");
+                throw new BundleValidationException($"Runtime '{snapshot.RuntimeId}' immutable reference no longer resolves to captured image ID '{snapshot.ImageId}'.");
             }
-            if (!string.Equals(currentImage.OperatingSystem, "linux", StringComparison.Ordinal) ||
-                !string.Equals(currentImage.Architecture, "amd64", StringComparison.Ordinal))
+            if (!string.Equals(currentImage.OperatingSystem, "linux", StringComparison.Ordinal) || !string.Equals(currentImage.Architecture, "amd64", StringComparison.Ordinal))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{snapshot.RuntimeId}' immutable image changed platform before release finalization.");
+                throw new BundleValidationException($"Runtime '{snapshot.RuntimeId}' immutable image changed platform before release finalization.");
             }
             if (currentImage.SizeBytes != snapshot.ImageSizeBytes)
             {
-                throw new BundleValidationException(
-                    $"Runtime '{snapshot.RuntimeId}' immutable image size changed before release finalization.");
+                throw new BundleValidationException($"Runtime '{snapshot.RuntimeId}' immutable image size changed before release finalization.");
             }
-            if (!currentImage.Labels.TryGetValue(
-                    RepositorySourceProvenanceResolver.ImageLabel,
-                    out var buildRevision) ||
-                !StringComparer.Ordinal.Equals(buildRevision, snapshot.BuildSourceRevision) ||
-                !currentImage.Labels.TryGetValue("org.opencontainers.image.revision", out var ociRevision) ||
-                !StringComparer.Ordinal.Equals(ociRevision, snapshot.BuildSourceRevision))
+            if (!currentImage.Labels.TryGetValue(RepositorySourceProvenanceResolver.ImageLabel, out var buildRevision) || !StringComparer.Ordinal.Equals(buildRevision, snapshot.BuildSourceRevision) || !currentImage.Labels.TryGetValue("org.opencontainers.image.revision", out var ociRevision) || !StringComparer.Ordinal.Equals(ociRevision, snapshot.BuildSourceRevision))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{snapshot.RuntimeId}' immutable image build revision labels changed before release finalization.");
+                throw new BundleValidationException($"Runtime '{snapshot.RuntimeId}' immutable image build revision labels changed before release finalization.");
             }
-            RequireCommittedPromotionEligibleImage(
-                snapshot.RuntimeId,
-                currentImage.Labels,
-                "changed before release finalization");
-            WineCoreClrOperatorReceiptTrust.ValidateCandidateImage(
-                snapshot.RuntimeId,
-                currentImage,
-                snapshot.WineOperatorReceipt);
+            RequireCommittedPromotionEligibleImage(snapshot.RuntimeId, currentImage.Labels, "changed before release finalization");
+            WineCoreClrOperatorReceiptTrust.ValidateCandidateImage(snapshot.RuntimeId, currentImage, snapshot.WineOperatorReceipt);
 
             var helper = snapshot.MeasurementHelper;
             var currentHelper = await docker.InspectImageAsync(helper.Reference, cancellationToken);
@@ -263,132 +161,58 @@ internal static class RuntimePromotionTrust
                 !string.Equals(currentHelper.OperatingSystem, "linux", StringComparison.Ordinal) ||
                 !string.Equals(currentHelper.Architecture, "amd64", StringComparison.Ordinal) ||
                 currentHelper.SizeBytes != helper.SizeBytes ||
-                !currentHelper.Labels.TryGetValue(
-                    RepositorySourceProvenanceResolver.ImageLabel,
-                    out var helperBuildRevision) ||
+                !currentHelper.Labels.TryGetValue(RepositorySourceProvenanceResolver.ImageLabel, out var helperBuildRevision) ||
                 !StringComparer.Ordinal.Equals(helperBuildRevision, helper.SourceRevision) ||
-                !currentHelper.Labels.TryGetValue(
-                    "org.opencontainers.image.revision",
-                    out var helperOciRevision) ||
+                !currentHelper.Labels.TryGetValue("org.opencontainers.image.revision", out var helperOciRevision) ||
                 !StringComparer.Ordinal.Equals(helperOciRevision, helper.SourceRevision))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{snapshot.RuntimeId}' measurement helper image changed before release finalization.");
+                throw new BundleValidationException($"Runtime '{snapshot.RuntimeId}' measurement helper image changed before release finalization.");
             }
 
-            var helperFile = await docker.InspectImageFileAsync(
-                helper.ImageId,
-                helper.Entrypoint,
-                MaximumImageArtifactBytes,
-                cancellationToken);
-            RequireDigestEqual(
-                helper.ContentSha256,
-                helperFile.Sha256,
-                $"Runtime '{snapshot.RuntimeId}' measurement helper file changed before release finalization");
+            var helperFile = await docker.InspectImageFileAsync(helper.ImageId, helper.Entrypoint, MaximumImageArtifactBytes, cancellationToken);
+            RequireDigestEqual(helper.ContentSha256, helperFile.Sha256, $"Runtime '{snapshot.RuntimeId}' measurement helper file changed before release finalization");
 
             var retainedImagePaths = new HashSet<string>(StringComparer.Ordinal);
             foreach (var artifact in snapshot.ImageFiles)
             {
                 if (!retainedImagePaths.Add(artifact.Path) || !HasCanonicalRetainedMetadata(artifact))
                 {
-                    throw new BundleValidationException(
-                        $"Runtime '{snapshot.RuntimeId}' retained image file metadata changed before release finalization.");
+                    throw new BundleValidationException($"Runtime '{snapshot.RuntimeId}' retained image file metadata changed before release finalization.");
                 }
-                var observed = await docker.InspectImageFileAsync(
-                    snapshot.ImageId,
-                    artifact.Path,
-                    MaximumImageArtifactBytes,
-                    cancellationToken);
-                RequireDigestEqual(
-                    artifact.Sha256,
-                    observed.Sha256,
-                    $"Runtime '{snapshot.RuntimeId}' image file '{artifact.Path}' changed before release finalization");
+                var observed = await docker.InspectImageFileAsync(snapshot.ImageId, artifact.Path, MaximumImageArtifactBytes, cancellationToken);
+                RequireDigestEqual(artifact.Sha256, observed.Sha256, $"Runtime '{snapshot.RuntimeId}' image file '{artifact.Path}' changed before release finalization");
                 if (observed.Length != artifact.SizeBytes)
                 {
-                    throw new BundleValidationException(
-                        $"Runtime '{snapshot.RuntimeId}' image file '{artifact.Path}' size changed before release finalization.");
+                    throw new BundleValidationException($"Runtime '{snapshot.RuntimeId}' image file '{artifact.Path}' size changed before release finalization.");
                 }
             }
         }
     }
 
-    private static async Task<RuntimePromotionTrustSnapshot> CaptureProfileAsync(
-        string repositoryRoot,
-        RepositorySourceProvenance source,
-        RuntimeManifest runtime,
-        LockedComponent component,
-        DeploymentImageDefinition definition,
-        RuntimeProfileDefinition profile,
-        InspectedImage image,
-        IDockerCli docker,
-        RuntimePromotionPlanSignatureVerifier planSignatureVerifier,
-        CancellationToken cancellationToken)
+    private static async Task<RuntimePromotionTrustSnapshot> CaptureProfileAsync(string repositoryRoot, RepositorySourceProvenance source, RuntimeManifest runtime, LockedComponent component, DeploymentImageDefinition definition, RuntimeProfileDefinition profile, InspectedImage image, IDockerCli docker, RuntimePromotionPlanSignatureVerifier planSignatureVerifier, CancellationToken cancellationToken)
     {
-        var reference = profile.PromotionReceipt
-            ?? throw new BundleValidationException(
-                $"Runtime profile '{profile.Id}' has no promotion receipt reference.");
+        var reference = profile.PromotionReceipt ?? throw new BundleValidationException($"Runtime profile '{profile.Id}' has no promotion receipt reference.");
         var expectedReceiptPath = $"{ReceiptDirectory}/{profile.Id}.json";
         if (!string.Equals(reference.Path, expectedReceiptPath, StringComparison.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' promotion receipt path must be '{expectedReceiptPath}'.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' promotion receipt path must be '{expectedReceiptPath}'.");
         }
         RequireSha256(reference.Sha256, $"Runtime '{profile.Id}' promotion receipt digest");
 
-        var receiptFile = await ReadTrustedFileAsync(
-            repositoryRoot,
-            reference.Path,
-            [ReceiptDirectory],
-            MaximumReceiptBytes,
-            cancellationToken);
-        RequireDigestEqual(
-            reference.Sha256,
-            receiptFile.Sha256,
-            $"Runtime '{profile.Id}' promotion receipt digest mismatch");
+        var receiptFile = await ReadTrustedFileAsync(repositoryRoot, reference.Path, [ReceiptDirectory], MaximumReceiptBytes, cancellationToken);
+        RequireDigestEqual(reference.Sha256, receiptFile.Sha256, $"Runtime '{profile.Id}' promotion receipt digest mismatch");
 
-        var receipt = RuntimePromotionJson.Deserialize<RuntimePromotionReceiptDocument>(
-            receiptFile.Bytes,
-            ReceiptJsonOptions,
-            $"Runtime '{profile.Id}' promotion receipt");
+        var receipt = RuntimePromotionJson.Deserialize<RuntimePromotionReceiptDocument>(receiptFile.Bytes, ReceiptJsonOptions, $"Runtime '{profile.Id}' promotion receipt");
 
         ValidateReceiptIdentity(source, runtime, component, definition, profile, image, receipt);
-        var signedPlan = await RuntimePromotionPlanSignatureTrust.CaptureAsync(
-            repositoryRoot,
-            profile,
-            receipt,
-            planSignatureVerifier,
-            cancellationToken);
-        var operatorReceipt = await WineCoreClrOperatorReceiptTrust.CaptureAsync(
-            repositoryRoot,
-            source,
-            profile,
-            receipt,
-            image,
-            docker,
-            cancellationToken);
+        var signedPlan = await RuntimePromotionPlanSignatureTrust.CaptureAsync(repositoryRoot, profile, receipt, planSignatureVerifier, cancellationToken);
+        var operatorReceipt = await WineCoreClrOperatorReceiptTrust.CaptureAsync(repositoryRoot, source, profile, receipt, image, docker, cancellationToken);
         var operationFiles = ValidateOperationBindings(profile, receipt);
-        var checks = await ValidateChecksAsync(
-            repositoryRoot,
-            profile,
-            receipt,
-            operationFiles,
-            cancellationToken);
-        var performance = await ValidatePerformanceAsync(
-            repositoryRoot,
-            profile,
-            image,
-            receipt,
-            cancellationToken);
-        var helperFile = await docker.InspectImageFileAsync(
-            performance.MeasurementHelper.ImageId,
-            performance.MeasurementHelper.Entrypoint,
-            MaximumImageArtifactBytes,
-            cancellationToken);
-        RequireDigestEqual(
-            performance.MeasurementHelper.ContentSha256,
-            helperFile.Sha256,
-            $"Runtime '{profile.Id}' measurement helper file does not match its pinned content digest");
-        RuntimePromotionFileSnapshot[] evidence = [.. checks.Evidence, performance.Evidence];
+        var checks = await ValidateChecksAsync(repositoryRoot, profile, receipt, operationFiles, cancellationToken);
+        var performance = await ValidatePerformanceAsync(repositoryRoot, profile, image, receipt, cancellationToken);
+        var helperFile = await docker.InspectImageFileAsync(performance.MeasurementHelper.ImageId, performance.MeasurementHelper.Entrypoint, MaximumImageArtifactBytes, cancellationToken);
+        RequireDigestEqual(performance.MeasurementHelper.ContentSha256, helperFile.Sha256, $"Runtime '{profile.Id}' measurement helper file does not match its pinned content digest");
+        RuntimePromotionFileSnapshot[] evidence = [..checks.Evidence, performance.Evidence];
         return new RuntimePromotionTrustSnapshot(
             profile.Id,
             receipt.SourceRevision,
@@ -406,14 +230,7 @@ internal static class RuntimePromotionTrust
             signedPlan);
     }
 
-    private static void ValidateReceiptIdentity(
-        RepositorySourceProvenance source,
-        RuntimeManifest runtime,
-        LockedComponent component,
-        DeploymentImageDefinition definition,
-        RuntimeProfileDefinition profile,
-        InspectedImage image,
-        RuntimePromotionReceiptDocument receipt)
+    private static void ValidateReceiptIdentity(RepositorySourceProvenance source, RuntimeManifest runtime, LockedComponent component, DeploymentImageDefinition definition, RuntimeProfileDefinition profile, InspectedImage image, RuntimePromotionReceiptDocument receipt)
     {
         if (receipt.SchemaVersion != 2)
             throw new BundleValidationException($"Runtime '{profile.Id}' promotion receipt must use schema version 2.");
@@ -426,25 +243,16 @@ internal static class RuntimePromotionTrust
 
         if (!source.IsVerified || source.HeadRevision is null)
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' promotion receipt requires a clean, verified Git source revision.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' promotion receipt requires a clean, verified Git source revision.");
         }
         RequireCommit(receipt.SourceRevision, $"Runtime '{profile.Id}' promotion receipt source revision");
         if (StringComparer.Ordinal.Equals(receipt.SourceRevision, source.Revision))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' promotion receipt implementation revision must be distinct " +
-                "from the material release revision.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' promotion receipt implementation revision must be distinct " + "from the material release revision.");
         }
-        if (!image.Labels.TryGetValue(
-                RepositorySourceProvenanceResolver.ImageLabel,
-                out var buildRevision) ||
-            !StringComparer.Ordinal.Equals(buildRevision, receipt.SourceRevision) ||
-            !image.Labels.TryGetValue("org.opencontainers.image.revision", out var ociRevision) ||
-            !StringComparer.Ordinal.Equals(ociRevision, receipt.SourceRevision))
+        if (!image.Labels.TryGetValue(RepositorySourceProvenanceResolver.ImageLabel, out var buildRevision) || !StringComparer.Ordinal.Equals(buildRevision, receipt.SourceRevision) || !image.Labels.TryGetValue("org.opencontainers.image.revision", out var ociRevision) || !StringComparer.Ordinal.Equals(ociRevision, receipt.SourceRevision))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' immutable image does not carry its receipt build source revision.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' immutable image does not carry its receipt build source revision.");
         }
         RequireCommittedPromotionEligibleImage(profile.Id, image.Labels, "is not eligible for promotion");
 
@@ -460,13 +268,11 @@ internal static class RuntimePromotionTrust
         RequireEqual(receipt.Image.ImageId, image.ImageId, profile.Id, "inspected image ID");
         if (receipt.Image.SizeBytes != image.SizeBytes)
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' promotion receipt image size does not match the inspected image.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' promotion receipt image size does not match the inspected image.");
         }
         if (!image.RepoDigests.Contains(receipt.Image.Reference, StringComparer.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' promotion receipt reference is absent from the inspected image RepoDigests.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' promotion receipt reference is absent from the inspected image RepoDigests.");
         }
 
         if (receipt.ComponentIdentity is null)
@@ -481,38 +287,26 @@ internal static class RuntimePromotionTrust
         RequireEqual(runtime.ResolvedVersion, profile.RuntimeVersion, profile.Id, "Catalog runtime version");
     }
 
-    private static void RequireCommittedPromotionEligibleImage(
-        string runtimeId,
-        IReadOnlyDictionary<string, string> labels,
-        string state)
+    private static void RequireCommittedPromotionEligibleImage(string runtimeId, IReadOnlyDictionary<string, string> labels, string state)
     {
-        if (!labels.TryGetValue(SourceContextLabel, out var sourceContext) ||
-            !StringComparer.Ordinal.Equals(sourceContext, CommittedSourceContext) ||
-            !labels.TryGetValue(PromotionEligibleLabel, out var promotionEligible) ||
-            !StringComparer.Ordinal.Equals(promotionEligible, "true"))
+        if (!labels.TryGetValue(SourceContextLabel, out var sourceContext) || !StringComparer.Ordinal.Equals(sourceContext, CommittedSourceContext) || !labels.TryGetValue(PromotionEligibleLabel, out var promotionEligible) || !StringComparer.Ordinal.Equals(promotionEligible, "true"))
         {
-            throw new BundleValidationException(
-                $"Runtime '{runtimeId}' immutable image is not a committed promotion-eligible candidate ({state}).");
+            throw new BundleValidationException($"Runtime '{runtimeId}' immutable image is not a committed promotion-eligible candidate ({state}).");
         }
     }
 
-    private static void ValidateComponentIdentity(
-        RuntimeProfileDefinition profile,
-        LockedComponent component,
-        RuntimePromotionComponentIdentity identity)
+    private static void ValidateComponentIdentity(RuntimeProfileDefinition profile, LockedComponent component, RuntimePromotionComponentIdentity identity)
     {
         if (!IsImmutableSourceUri(identity.SourceUri))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' promotion receipt component source URI is not immutable HTTPS or docker content.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' promotion receipt component source URI is not immutable HTTPS or docker content.");
         }
 
         if (profile.Family is "coreclr" or "coreclr-wine")
         {
             if (component.SourceUri is null || component.Sha512 is null || !IsLowerHex(component.Sha512, 128))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profile.Id}' release-lock component has no immutable CoreCLR payload identity.");
+                throw new BundleValidationException($"Runtime '{profile.Id}' release-lock component has no immutable CoreCLR payload identity.");
             }
             RequireEqual(identity.SourceUri, component.SourceUri, profile.Id, "component source URI");
             RequireEqual(identity.SourceDigest, $"sha512:{component.Sha512}", profile.Id, "component source digest");
@@ -521,96 +315,53 @@ internal static class RuntimePromotionTrust
 
         if (component.SourceUri is null || component.Digest is null)
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' release-lock component has no immutable operator identity.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' release-lock component has no immutable operator identity.");
         }
         RequireSha256(component.Digest, $"Runtime '{profile.Id}' operator component digest");
         RequireEqual(identity.SourceUri, component.SourceUri, profile.Id, "component source URI");
         RequireEqual(identity.SourceDigest, component.Digest, profile.Id, "component source digest");
-        if (identity.SourceUri.StartsWith("docker://", StringComparison.Ordinal) &&
-            !identity.SourceUri.EndsWith("@" + identity.SourceDigest, StringComparison.Ordinal))
+        if (identity.SourceUri.StartsWith("docker://", StringComparison.Ordinal) && !identity.SourceUri.EndsWith("@" + identity.SourceDigest, StringComparison.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' operator source URI and digest disagree.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' operator source URI and digest disagree.");
         }
     }
 
-    internal static RuntimePromotionOperationFileIdentity[] ValidateOperationBindings(
-        RuntimeProfileDefinition profile,
-        RuntimePromotionReceiptDocument receipt)
+    internal static RuntimePromotionOperationFileIdentity[] ValidateOperationBindings(RuntimeProfileDefinition profile, RuntimePromotionReceiptDocument receipt)
     {
-        var profileOperations = profile.Operations
-            ?? throw new BundleValidationException(
-                $"Runtime '{profile.Id}' has no explicit operation definitions.");
-        var receiptOperations = receipt.Operations
-            ?? throw new BundleValidationException(
-                $"Runtime '{profile.Id}' promotion receipt has no operation bindings.");
+        var profileOperations = profile.Operations ?? throw new BundleValidationException($"Runtime '{profile.Id}' has no explicit operation definitions.");
+        var receiptOperations = receipt.Operations ?? throw new BundleValidationException($"Runtime '{profile.Id}' promotion receipt has no operation bindings.");
         if (profileOperations.Run is null)
             throw new BundleValidationException($"Runtime '{profile.Id}' has no Run operation.");
         if (receiptOperations.Run is null)
             throw new BundleValidationException($"Runtime '{profile.Id}' promotion receipt has no Run helper.");
 
         var helpers = new Dictionary<string, string>(StringComparer.Ordinal);
-        ValidateOperation(
-            profile.Id,
-            "run",
-            profileOperations.Run,
-            profile.Layout.RunnerAssemblyPath,
-            expectedProfilerPath: null,
-            receiptOperations.Run,
-            helpers);
+        ValidateOperation(profile.Id, "run", profileOperations.Run, profile.Layout.RunnerAssemblyPath, expectedProfilerPath: null, receiptOperations.Run, helpers);
 
         if ((profileOperations.Jit is null) != (receiptOperations.Jit is null))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' profile and promotion receipt disagree about the JIT operation.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' profile and promotion receipt disagree about the JIT operation.");
         }
         if (profileOperations.Jit is { } jit && receiptOperations.Jit is { } jitHelper)
         {
             _ = RequirePermittedJitOperation(profile);
-            ValidateOperation(
-                profile.Id,
-                "jit",
-                jit,
-                profile.Layout.JitInspectorAssemblyPath ?? profile.Layout.RunnerAssemblyPath,
-                jit.ProfilerPath,
-                jitHelper,
-                helpers);
+            ValidateOperation(profile.Id, "jit", jit, profile.Layout.JitInspectorAssemblyPath ?? profile.Layout.RunnerAssemblyPath, jit.ProfilerPath, jitHelper, helpers);
         }
 
-        return helpers
-            .OrderBy(static pair => pair.Key, StringComparer.Ordinal)
-            .Select(static pair => new RuntimePromotionOperationFileIdentity(pair.Key, pair.Value))
-            .ToArray();
+        return helpers.OrderBy(static pair => pair.Key, StringComparer.Ordinal).Select(static pair => new RuntimePromotionOperationFileIdentity(pair.Key, pair.Value)).ToArray();
     }
 
-    private static void ValidateOperation(
-        string profileId,
-        string name,
-        RuntimeOperationDefinition operation,
-        string expectedAssemblyPath,
-        string? expectedProfilerPath,
-        RuntimePromotionOperationHelper helper,
-        IDictionary<string, string> helpers)
+    private static void ValidateOperation(string profileId, string name, RuntimeOperationDefinition operation, string expectedAssemblyPath, string? expectedProfilerPath, RuntimePromotionOperationHelper helper, IDictionary<string, string> helpers)
     {
         RequireEqual(helper.Implementation, operation.ImplementationId, profileId, $"{name} implementation");
         RequireEqual(helper.AssemblyPath, expectedAssemblyPath, profileId, $"{name} assembly path");
-        RequireCanonicalHelperPath(
-            helper.AssemblyPath,
-            StringComparer.Ordinal.Equals(
-                operation.ImplementationId,
-                RuntimeOperationImplementationIds.TargetRuntimeRunner)
-                ? ".exe"
-                : ".dll",
-            profileId,
-            name);
+        RequireCanonicalHelperPath(helper.AssemblyPath, StringComparer.Ordinal.Equals(operation.ImplementationId, RuntimeOperationImplementationIds.TargetRuntimeRunner) ? ".exe" : ".dll", profileId, name);
         RequireSha256(helper.AssemblySha256, $"Runtime '{profileId}' {name} assembly digest");
         AddHelper(helpers, profileId, helper.AssemblyPath, helper.AssemblySha256);
 
         if ((helper.ProfilerPath is null) != (helper.ProfilerSha256 is null))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' {name} profiler path and digest must be declared together.");
+            throw new BundleValidationException($"Runtime '{profileId}' {name} profiler path and digest must be declared together.");
         }
         RequireEqual(helper.ProfilerPath, expectedProfilerPath, profileId, $"{name} profiler path");
         if (helper.ProfilerPath is not null)
@@ -621,15 +372,9 @@ internal static class RuntimePromotionTrust
         }
     }
 
-    private static async Task<RuntimePromotionChecksSnapshot> ValidateChecksAsync(
-        string repositoryRoot,
-        RuntimeProfileDefinition profile,
-        RuntimePromotionReceiptDocument receipt,
-        IReadOnlyList<RuntimePromotionOperationFileIdentity> operationFiles,
-        CancellationToken cancellationToken)
+    private static async Task<RuntimePromotionChecksSnapshot> ValidateChecksAsync(string repositoryRoot, RuntimeProfileDefinition profile, RuntimePromotionReceiptDocument receipt, IReadOnlyList<RuntimePromotionOperationFileIdentity> operationFiles, CancellationToken cancellationToken)
     {
-        if (receipt.Checks is null || receipt.Checks.Count is < 1 or > 4 ||
-            receipt.Checks.Any(static check => check is null))
+        if (receipt.Checks is null || receipt.Checks.Count is < 1 or > 4 || receipt.Checks.Any(static check => check is null))
             throw new BundleValidationException($"Runtime '{profile.Id}' promotion receipt has no bounded capability checks.");
         var expected = profile.Capabilities.Order(StringComparer.Ordinal).ToArray();
         if (expected.Length != expected.Distinct(StringComparer.Ordinal).Count())
@@ -637,62 +382,35 @@ internal static class RuntimePromotionTrust
         var observed = receipt.Checks.Select(static check => check!.Capability).Order(StringComparer.Ordinal).ToArray();
         if (!expected.SequenceEqual(observed, StringComparer.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' promotion checks do not exactly cover its declared capabilities.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' promotion checks do not exactly cover its declared capabilities.");
         }
 
         var evidenceSnapshots = new List<RuntimePromotionFileSnapshot>(receipt.Checks.Count);
         var imageFiles = new Dictionary<string, RuntimePromotionImageFileSnapshot>(StringComparer.Ordinal);
         var probeArtifacts = new Dictionary<string, RuntimeCapabilityProbeArtifactSnapshot>(StringComparer.Ordinal);
-        foreach (var check in receipt.Checks.Select(static check => check!)
-                     .OrderBy(static check => check.Capability, StringComparer.Ordinal))
+        foreach (var check in receipt.Checks.Select(static check => check!).OrderBy(static check => check.Capability, StringComparer.Ordinal))
         {
-            if (!IsCapability(check.Capability) ||
-                !string.Equals(check.Result, "passed", StringComparison.Ordinal) ||
-                !check.NetworkDisabled ||
-                !check.SupervisorSandbox ||
-                !check.OutputLimitValidated)
+            if (!IsCapability(check.Capability) || !string.Equals(check.Result, "passed", StringComparison.Ordinal) || !check.NetworkDisabled || !check.SupervisorSandbox || !check.OutputLimitValidated)
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profile.Id}' promotion check '{check.Capability}' is not complete and passing.");
+                throw new BundleValidationException($"Runtime '{profile.Id}' promotion check '{check.Capability}' is not complete and passing.");
             }
             ValidateMapping(profile, receipt, check);
             var expectedPath = $"{EvidenceDirectory}/{profile.Id}/{check.Capability}.json";
             if (!string.Equals(check.EvidencePath, expectedPath, StringComparison.Ordinal))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profile.Id}' promotion evidence path must be '{expectedPath}'.");
+                throw new BundleValidationException($"Runtime '{profile.Id}' promotion evidence path must be '{expectedPath}'.");
             }
             RequireSha256(check.EvidenceSha256, $"Runtime '{profile.Id}' {check.Capability} evidence digest");
-            var evidence = await ReadTrustedFileAsync(
-                repositoryRoot,
-                check.EvidencePath,
-                [EvidenceDirectory, $"{EvidenceDirectory}/{profile.Id}"],
-                MaximumEvidenceBytes,
-                cancellationToken);
-            RequireDigestEqual(
-                check.EvidenceSha256,
-                evidence.Sha256,
-                $"Runtime '{profile.Id}' {check.Capability} evidence digest mismatch");
+            var evidence = await ReadTrustedFileAsync(repositoryRoot, check.EvidencePath, [EvidenceDirectory, $"{EvidenceDirectory}/{profile.Id}"], MaximumEvidenceBytes, cancellationToken);
+            RequireDigestEqual(check.EvidenceSha256, evidence.Sha256, $"Runtime '{profile.Id}' {check.Capability} evidence digest mismatch");
             evidenceSnapshots.Add(new RuntimePromotionFileSnapshot(evidence.RelativePath, evidence.Sha256));
-            var validatedArtifacts = RuntimeCapabilityEvidenceValidation.Validate(
-                evidence.Bytes,
-                profile,
-                receipt,
-                check,
-                out var probeArtifact);
+            var validatedArtifacts = RuntimeCapabilityEvidenceValidation.Validate(evidence.Bytes, profile, receipt, check, out var probeArtifact);
             probeArtifacts.Add(check.Capability, probeArtifact);
             foreach (var artifact in validatedArtifacts)
             {
-                if (imageFiles.TryGetValue(artifact.Path, out var existing) &&
-                    (!string.Equals(existing.Sha256, artifact.Sha256, StringComparison.Ordinal) ||
-                     existing.SizeBytes != artifact.SizeBytes ||
-                     !string.Equals(existing.Role, artifact.Role, StringComparison.Ordinal) ||
-                     !string.Equals(existing.Format, artifact.Format, StringComparison.Ordinal) ||
-                     !string.Equals(existing.Architecture, artifact.Architecture, StringComparison.Ordinal)))
+                if (imageFiles.TryGetValue(artifact.Path, out var existing) && (!string.Equals(existing.Sha256, artifact.Sha256, StringComparison.Ordinal) || existing.SizeBytes != artifact.SizeBytes || !string.Equals(existing.Role, artifact.Role, StringComparison.Ordinal) || !string.Equals(existing.Format, artifact.Format, StringComparison.Ordinal) || !string.Equals(existing.Architecture, artifact.Architecture, StringComparison.Ordinal)))
                 {
-                    throw new BundleValidationException(
-                        $"Runtime '{profile.Id}' capability evidence assigns conflicting path, byte, role, format, or architecture identities to image file '{artifact.Path}'.");
+                    throw new BundleValidationException($"Runtime '{profile.Id}' capability evidence assigns conflicting path, byte, role, format, or architecture identities to image file '{artifact.Path}'.");
                 }
                 imageFiles[artifact.Path] = artifact;
             }
@@ -703,172 +421,96 @@ internal static class RuntimePromotionTrust
         {
             if (!imageFiles.TryGetValue(operationFile.Path, out var artifact))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profile.Id}' capability evidence does not retain operation file '{operationFile.Path}'.");
+                throw new BundleValidationException($"Runtime '{profile.Id}' capability evidence does not retain operation file '{operationFile.Path}'.");
             }
-            RequireDigestEqual(
-                operationFile.Sha256,
-                artifact.Sha256,
-                $"Runtime '{profile.Id}' operation file '{operationFile.Path}' does not match capability evidence");
+            RequireDigestEqual(operationFile.Sha256, artifact.Sha256, $"Runtime '{profile.Id}' operation file '{operationFile.Path}' does not match capability evidence");
         }
 
-        return new RuntimePromotionChecksSnapshot(
-            evidenceSnapshots,
-            imageFiles.Values.OrderBy(static file => file.Path, StringComparer.Ordinal).ToArray(),
-            probeArtifacts["run"].PreflightProfileSha256);
+        return new RuntimePromotionChecksSnapshot(evidenceSnapshots, imageFiles.Values.OrderBy(static file => file.Path, StringComparer.Ordinal).ToArray(), probeArtifacts["run"].PreflightProfileSha256);
     }
 
-    private static async Task<RuntimePromotionPerformanceSnapshot> ValidatePerformanceAsync(
-        string repositoryRoot,
-        RuntimeProfileDefinition profile,
-        InspectedImage image,
-        RuntimePromotionReceiptDocument receipt,
-        CancellationToken cancellationToken)
+    private static async Task<RuntimePromotionPerformanceSnapshot> ValidatePerformanceAsync(string repositoryRoot, RuntimeProfileDefinition profile, InspectedImage image, RuntimePromotionReceiptDocument receipt, CancellationToken cancellationToken)
     {
-        var binding = receipt.Performance
-            ?? throw new BundleValidationException(
-                $"Runtime '{profile.Id}' promotion receipt has no performance evidence binding.");
+        var binding = receipt.Performance ?? throw new BundleValidationException($"Runtime '{profile.Id}' promotion receipt has no performance evidence binding.");
         if (!string.Equals(binding.Result, "passed", StringComparison.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' performance evidence is not passing.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' performance evidence is not passing.");
         }
         RequireCanonicalId(binding.PolicyId, $"Runtime '{profile.Id}' performance policy ID");
         var expectedPolicyPath = $"{PerformancePolicyDirectory}/{binding.PolicyId}.json";
         if (!string.Equals(binding.PolicyPath, expectedPolicyPath, StringComparison.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' performance policy path must be '{expectedPolicyPath}'.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' performance policy path must be '{expectedPolicyPath}'.");
         }
         var expectedEvidencePath = $"{EvidenceDirectory}/{profile.Id}/performance.json";
         if (!string.Equals(binding.EvidencePath, expectedEvidencePath, StringComparison.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' performance evidence path must be '{expectedEvidencePath}'.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' performance evidence path must be '{expectedEvidencePath}'.");
         }
         RequireSha256(binding.PolicySha256, $"Runtime '{profile.Id}' performance policy digest");
         RequireSha256(binding.EvidenceSha256, $"Runtime '{profile.Id}' performance evidence digest");
 
-        var policyFile = await ReadTrustedFileAsync(
-            repositoryRoot,
-            binding.PolicyPath,
-            [PerformancePolicyDirectory],
-            MaximumPerformancePolicyBytes,
-            cancellationToken);
-        RequireDigestEqual(
-            binding.PolicySha256,
-            policyFile.Sha256,
-            $"Runtime '{profile.Id}' performance policy digest mismatch");
-        var evidenceFile = await ReadTrustedFileAsync(
-            repositoryRoot,
-            binding.EvidencePath,
-            [EvidenceDirectory, $"{EvidenceDirectory}/{profile.Id}"],
-            MaximumEvidenceBytes,
-            cancellationToken);
-        RequireDigestEqual(
-            binding.EvidenceSha256,
-            evidenceFile.Sha256,
-            $"Runtime '{profile.Id}' performance evidence digest mismatch");
+        var policyFile = await ReadTrustedFileAsync(repositoryRoot, binding.PolicyPath, [PerformancePolicyDirectory], MaximumPerformancePolicyBytes, cancellationToken);
+        RequireDigestEqual(binding.PolicySha256, policyFile.Sha256, $"Runtime '{profile.Id}' performance policy digest mismatch");
+        var evidenceFile = await ReadTrustedFileAsync(repositoryRoot, binding.EvidencePath, [EvidenceDirectory, $"{EvidenceDirectory}/{profile.Id}"], MaximumEvidenceBytes, cancellationToken);
+        RequireDigestEqual(binding.EvidenceSha256, evidenceFile.Sha256, $"Runtime '{profile.Id}' performance evidence digest mismatch");
 
-        var policy = DeserializePerformanceDocument<RuntimePerformancePolicyDocument>(
-            policyFile.Bytes,
-            profile.Id,
-            "policy");
-        var evidence = DeserializePerformanceDocument<RuntimePerformanceEvidenceDocument>(
-            evidenceFile.Bytes,
-            profile.Id,
-            "evidence");
+        var policy = DeserializePerformanceDocument<RuntimePerformancePolicyDocument>(policyFile.Bytes, profile.Id, "policy");
+        var evidence = DeserializePerformanceDocument<RuntimePerformanceEvidenceDocument>(evidenceFile.Bytes, profile.Id, "evidence");
         ValidatePerformancePolicy(profile.Id, binding, policy);
-        var measurementHelper = ValidatePerformanceEvidence(
-            profile,
-            image,
-            receipt,
-            binding,
-            policy,
-            evidence);
-        return new RuntimePromotionPerformanceSnapshot(
-            new RuntimePromotionFileSnapshot(policyFile.RelativePath, policyFile.Sha256),
-            new RuntimePromotionFileSnapshot(evidenceFile.RelativePath, evidenceFile.Sha256),
-            measurementHelper);
+        var measurementHelper = ValidatePerformanceEvidence(profile, image, receipt, binding, policy, evidence);
+        return new RuntimePromotionPerformanceSnapshot(new RuntimePromotionFileSnapshot(policyFile.RelativePath, policyFile.Sha256), new RuntimePromotionFileSnapshot(evidenceFile.RelativePath, evidenceFile.Sha256), measurementHelper);
     }
 
     private static T DeserializePerformanceDocument<T>(byte[] bytes, string profileId, string kind)
     {
-        return RuntimePromotionJson.Deserialize<T>(
-            bytes,
-            ReceiptJsonOptions,
-            $"Runtime '{profileId}' performance {kind}");
+        return RuntimePromotionJson.Deserialize<T>(bytes, ReceiptJsonOptions, $"Runtime '{profileId}' performance {kind}");
     }
 
-    internal static void ValidatePerformancePolicy(
-        string profileId,
-        RuntimePromotionPerformanceBinding binding,
-        RuntimePerformancePolicyDocument policy)
+    internal static void ValidatePerformancePolicy(string profileId, RuntimePromotionPerformanceBinding binding, RuntimePerformancePolicyDocument policy)
     {
-        if (policy.SchemaVersion != 1 ||
-            !string.Equals(policy.Id, binding.PolicyId, StringComparison.Ordinal))
+        if (policy.SchemaVersion != 1 || !string.Equals(policy.Id, binding.PolicyId, StringComparison.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' performance policy identity is invalid.");
+            throw new BundleValidationException($"Runtime '{profileId}' performance policy identity is invalid.");
         }
-        if (policy.SampleCounts is null ||
-            policy.SampleCounts.Cold is < MinimumColdPerformanceSamples or > MaximumColdPerformanceSamples ||
-            policy.SampleCounts.Warm is < MinimumWarmPerformanceSamples or > MaximumWarmPerformanceSamples)
+        if (policy.SampleCounts is null || policy.SampleCounts.Cold is < MinimumColdPerformanceSamples or > MaximumColdPerformanceSamples || policy.SampleCounts.Warm is < MinimumWarmPerformanceSamples or > MaximumWarmPerformanceSamples)
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' performance policy has unsafe sample counts.");
+            throw new BundleValidationException($"Runtime '{profileId}' performance policy has unsafe sample counts.");
         }
         if (policy.ResourceLimits is null ||
             policy.ResourceLimits.NanoCpus is < MinimumPerformanceNanoCpus or > MaximumPerformanceNanoCpus ||
             policy.ResourceLimits.AllowedMemoryBytes is null or { Count: < 1 or > 8 } ||
-            policy.ResourceLimits.AllowedMemoryBytes.Any(static value =>
-                value is < MinimumPerformanceMemoryBytes or > MaximumPerformanceMemoryBytes) ||
+            policy.ResourceLimits.AllowedMemoryBytes.Any(static value => value is < MinimumPerformanceMemoryBytes or > MaximumPerformanceMemoryBytes) ||
             policy.ResourceLimits.AllowedMemoryBytes.Distinct().Count() !=
             policy.ResourceLimits.AllowedMemoryBytes.Count ||
-            !policy.ResourceLimits.AllowedMemoryBytes.SequenceEqual(
-                policy.ResourceLimits.AllowedMemoryBytes.Order()))
+            !policy.ResourceLimits.AllowedMemoryBytes.SequenceEqual(policy.ResourceLimits.AllowedMemoryBytes.Order()))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' performance policy has unsafe resource limits.");
+            throw new BundleValidationException($"Runtime '{profileId}' performance policy has unsafe resource limits.");
         }
-        if (policy.Image is null ||
-            policy.Image.MaximumSizeBytes is < 1 or > MaximumPerformanceImageBytes)
+        if (policy.Image is null || policy.Image.MaximumSizeBytes is < 1 or > MaximumPerformanceImageBytes)
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' performance policy has an unsafe image-size limit.");
+            throw new BundleValidationException($"Runtime '{profileId}' performance policy has an unsafe image-size limit.");
         }
-        if (policy.Scenarios is null ||
-            policy.Scenarios.Run is null ||
-            policy.Scenarios.Jit is null ||
-            policy.Scenarios.Mapping is null)
+        if (policy.Scenarios is null || policy.Scenarios.Run is null || policy.Scenarios.Jit is null || policy.Scenarios.Mapping is null)
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' performance policy does not define every scenario.");
+            throw new BundleValidationException($"Runtime '{profileId}' performance policy does not define every scenario.");
         }
         ValidatePerformanceScenarioBudget(profileId, "run", policy.Scenarios.Run);
         ValidatePerformanceScenarioBudget(profileId, "jit", policy.Scenarios.Jit);
         ValidatePerformanceScenarioBudget(profileId, "mapping", policy.Scenarios.Mapping);
     }
 
-    private static void ValidatePerformanceScenarioBudget(
-        string profileId,
-        string scenario,
-        RuntimePerformanceScenarioBudget budget)
+    private static void ValidatePerformanceScenarioBudget(string profileId, string scenario, RuntimePerformanceScenarioBudget budget)
     {
         if (budget.Cold is null || budget.Warm is null)
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' performance policy scenario '{scenario}' is incomplete.");
+            throw new BundleValidationException($"Runtime '{profileId}' performance policy scenario '{scenario}' is incomplete.");
         }
         ValidatePerformanceModeBudget(profileId, scenario, "cold", budget.Cold);
         ValidatePerformanceModeBudget(profileId, scenario, "warm", budget.Warm);
     }
 
-    private static void ValidatePerformanceModeBudget(
-        string profileId,
-        string scenario,
-        string mode,
-        RuntimePerformanceModeBudget budget)
+    private static void ValidatePerformanceModeBudget(string profileId, string scenario, string mode, RuntimePerformanceModeBudget budget)
     {
         if (!double.IsFinite(budget.MaximumP95LatencyMilliseconds) ||
             budget.MaximumP95LatencyMilliseconds <= 0 ||
@@ -879,85 +521,49 @@ internal static class RuntimePromotionTrust
             budget.MaximumP95LatencyMilliseconds > budget.MaximumSampleLatencyMilliseconds ||
             budget.MaximumPeakMemoryBytes is < 1 or > MaximumPerformanceMemoryBytes)
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' performance policy budget '{scenario}.{mode}' is unsafe.");
+            throw new BundleValidationException($"Runtime '{profileId}' performance policy budget '{scenario}.{mode}' is unsafe.");
         }
     }
 
-    internal static RuntimePromotionMeasurementHelperSnapshot ValidatePerformanceEvidence(
-        RuntimeProfileDefinition profile,
-        InspectedImage image,
-        RuntimePromotionReceiptDocument receipt,
-        RuntimePromotionPerformanceBinding binding,
-        RuntimePerformancePolicyDocument policy,
-        RuntimePerformanceEvidenceDocument evidence)
+    internal static RuntimePromotionMeasurementHelperSnapshot ValidatePerformanceEvidence(RuntimeProfileDefinition profile, InspectedImage image, RuntimePromotionReceiptDocument receipt, RuntimePromotionPerformanceBinding binding, RuntimePerformancePolicyDocument policy, RuntimePerformanceEvidenceDocument evidence)
     {
-        if (evidence.SchemaVersion != 1 ||
-            !string.Equals(evidence.PlanSha256, receipt.PlanSha256, StringComparison.Ordinal) ||
-            !string.Equals(evidence.ProfileId, profile.Id, StringComparison.Ordinal) ||
-            !string.Equals(evidence.SourceRevision, receipt.SourceRevision, StringComparison.Ordinal) ||
-            !string.Equals(evidence.Result, "passed", StringComparison.Ordinal))
+        if (evidence.SchemaVersion != 1 || !string.Equals(evidence.PlanSha256, receipt.PlanSha256, StringComparison.Ordinal) || !string.Equals(evidence.ProfileId, profile.Id, StringComparison.Ordinal) || !string.Equals(evidence.SourceRevision, receipt.SourceRevision, StringComparison.Ordinal) || !string.Equals(evidence.Result, "passed", StringComparison.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' performance evidence identity is invalid.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' performance evidence identity is invalid.");
         }
         if (!IsCanonicalUtcTimestamp(evidence.CompletedAtUtc))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' performance evidence timestamp is not canonical UTC.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' performance evidence timestamp is not canonical UTC.");
         }
-        if (evidence.Image is null ||
-            !string.Equals(evidence.Image.Reference, receipt.Image.Reference, StringComparison.Ordinal) ||
-            !string.Equals(evidence.Image.ImageId, receipt.Image.ImageId, StringComparison.Ordinal) ||
-            evidence.Image.SizeBytes != receipt.Image.SizeBytes ||
-            evidence.Image.SizeBytes != image.SizeBytes ||
-            evidence.Image.SizeBytes <= 0 ||
-            evidence.Image.SizeBytes > policy.Image.MaximumSizeBytes)
+        if (evidence.Image is null || !string.Equals(evidence.Image.Reference, receipt.Image.Reference, StringComparison.Ordinal) || !string.Equals(evidence.Image.ImageId, receipt.Image.ImageId, StringComparison.Ordinal) || evidence.Image.SizeBytes != receipt.Image.SizeBytes || evidence.Image.SizeBytes != image.SizeBytes || evidence.Image.SizeBytes <= 0 || evidence.Image.SizeBytes > policy.Image.MaximumSizeBytes)
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' performance evidence image identity or size is invalid.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' performance evidence image identity or size is invalid.");
         }
-        if (evidence.Policy is null ||
-            !string.Equals(evidence.Policy.Id, binding.PolicyId, StringComparison.Ordinal) ||
-            !string.Equals(evidence.Policy.Sha256, binding.PolicySha256, StringComparison.Ordinal))
+        if (evidence.Policy is null || !string.Equals(evidence.Policy.Id, binding.PolicyId, StringComparison.Ordinal) || !string.Equals(evidence.Policy.Sha256, binding.PolicySha256, StringComparison.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' performance evidence policy identity is invalid.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' performance evidence policy identity is invalid.");
         }
 
         var measurementHelper = ValidateMeasurementHelper(profile.Id, receipt, evidence);
 
         var expectedCapabilities = profile.Capabilities.Order(StringComparer.Ordinal).ToArray();
-        if (evidence.Capabilities is null ||
-            !expectedCapabilities.SequenceEqual(evidence.Capabilities, StringComparer.Ordinal))
+        if (evidence.Capabilities is null || !expectedCapabilities.SequenceEqual(evidence.Capabilities, StringComparer.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' performance evidence does not cover its exact capabilities.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' performance evidence does not cover its exact capabilities.");
         }
         var jitCheck = receipt.Checks.SingleOrDefault(static check => check?.Capability == "jit-asm");
         var expectedMappingKind = jitCheck?.SourceMappingKind ?? "not-applicable";
         if (!string.Equals(evidence.SourceMappingKind, expectedMappingKind, StringComparison.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' performance evidence mapping kind is invalid.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' performance evidence mapping kind is invalid.");
         }
-        if (evidence.Environment is null ||
-            !string.Equals(
-                evidence.Environment.RunnerId,
-                "runtime-preflight-linux-x64-v2",
-                StringComparison.Ordinal) ||
-            !string.Equals(evidence.Environment.OperatingSystem, "linux", StringComparison.Ordinal) ||
-            !string.Equals(evidence.Environment.Architecture, "x64", StringComparison.Ordinal) ||
-            evidence.Environment.NanoCpus != policy.ResourceLimits.NanoCpus ||
-            !policy.ResourceLimits.AllowedMemoryBytes.Contains(evidence.Environment.MemoryLimitBytes))
+        if (evidence.Environment is null || !string.Equals(evidence.Environment.RunnerId, "runtime-preflight-linux-x64-v2", StringComparison.Ordinal) || !string.Equals(evidence.Environment.OperatingSystem, "linux", StringComparison.Ordinal) || !string.Equals(evidence.Environment.Architecture, "x64", StringComparison.Ordinal) || evidence.Environment.NanoCpus != policy.ResourceLimits.NanoCpus || !policy.ResourceLimits.AllowedMemoryBytes.Contains(evidence.Environment.MemoryLimitBytes))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' performance evidence environment is invalid.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' performance evidence environment is invalid.");
         }
         if (evidence.Scenarios?.Run is null)
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' performance evidence has no Run scenario.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' performance evidence has no Run scenario.");
         }
 
         // Operation IDs identify the individual Supervisor measurements. They must be
@@ -967,136 +573,50 @@ internal static class RuntimePromotionTrust
 
         var requiresJit = expectedCapabilities.Contains("jit-asm", StringComparer.Ordinal);
         var requiresMapping = expectedMappingKind is not ("none" or "not-applicable");
-        if ((evidence.Scenarios.Jit is not null) != requiresJit ||
-            (evidence.Scenarios.Mapping is not null) != requiresMapping)
+        if ((evidence.Scenarios.Jit is not null) != requiresJit || (evidence.Scenarios.Mapping is not null) != requiresMapping)
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' performance evidence has an invalid scenario set.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' performance evidence has an invalid scenario set.");
         }
-        ValidatePerformanceScenario(
-            profile.Id,
-            "run",
-            evidence.Scenarios.Run,
-            policy.Scenarios.Run,
-            policy.SampleCounts,
-            evidence.Environment.MemoryLimitBytes,
-            operationIds);
+        ValidatePerformanceScenario(profile.Id, "run", evidence.Scenarios.Run, policy.Scenarios.Run, policy.SampleCounts, evidence.Environment.MemoryLimitBytes, operationIds);
         if (evidence.Scenarios.Jit is { } jit)
         {
-            ValidatePerformanceScenario(
-                profile.Id,
-                "jit",
-                jit,
-                policy.Scenarios.Jit,
-                policy.SampleCounts,
-                evidence.Environment.MemoryLimitBytes,
-                operationIds);
+            ValidatePerformanceScenario(profile.Id, "jit", jit, policy.Scenarios.Jit, policy.SampleCounts, evidence.Environment.MemoryLimitBytes, operationIds);
         }
         if (evidence.Scenarios.Mapping is { } mapping)
         {
-            ValidatePerformanceScenario(
-                profile.Id,
-                "mapping",
-                mapping,
-                policy.Scenarios.Mapping,
-                policy.SampleCounts,
-                evidence.Environment.MemoryLimitBytes,
-                operationIds);
+            ValidatePerformanceScenario(profile.Id, "mapping", mapping, policy.Scenarios.Mapping, policy.SampleCounts, evidence.Environment.MemoryLimitBytes, operationIds);
         }
         return measurementHelper;
     }
 
-    private static RuntimePromotionMeasurementHelperSnapshot ValidateMeasurementHelper(
-        string profileId,
-        RuntimePromotionReceiptDocument receipt,
-        RuntimePerformanceEvidenceDocument evidence)
+    private static RuntimePromotionMeasurementHelperSnapshot ValidateMeasurementHelper(string profileId, RuntimePromotionReceiptDocument receipt, RuntimePerformanceEvidenceDocument evidence)
     {
         var helper = evidence.MeasurementHelper;
-        if (helper is null ||
-            !string.Equals(
-                helper.Implementation,
-                MeasurementHelperImplementation,
-                StringComparison.Ordinal) ||
-            !string.Equals(helper.Entrypoint, MeasurementHelperEntrypoint, StringComparison.Ordinal) ||
-            !string.Equals(helper.ContentSha256, MeasurementHelperContentSha256, StringComparison.Ordinal) ||
-            !string.Equals(helper.SourceRevision, evidence.SourceRevision, StringComparison.Ordinal) ||
-            !string.Equals(helper.SourceRevision, receipt.SourceRevision, StringComparison.Ordinal) ||
-            helper.Image is null)
+        if (helper is null || !string.Equals(helper.Implementation, MeasurementHelperImplementation, StringComparison.Ordinal) || !string.Equals(helper.Entrypoint, MeasurementHelperEntrypoint, StringComparison.Ordinal) || !string.Equals(helper.ContentSha256, MeasurementHelperContentSha256, StringComparison.Ordinal) || !string.Equals(helper.SourceRevision, evidence.SourceRevision, StringComparison.Ordinal) || !string.Equals(helper.SourceRevision, receipt.SourceRevision, StringComparison.Ordinal) || helper.Image is null)
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' performance measurement helper identity is invalid.");
+            throw new BundleValidationException($"Runtime '{profileId}' performance measurement helper identity is invalid.");
         }
-        RequireCommit(
-            helper.SourceRevision,
-            $"Runtime '{profileId}' performance measurement helper source revision");
-        RequireImmutableReference(
-            helper.Image.Reference,
-            $"Runtime '{profileId}' performance measurement helper image reference");
-        RequireSha256(
-            helper.Image.ImageId,
-            $"Runtime '{profileId}' performance measurement helper image ID");
-        if (!IsRuntimeSupervisorReference(helper.Image.Reference) ||
-            helper.Image.SizeBytes is < 1 or > MaximumPerformanceImageBytes ||
-            string.Equals(helper.Image.Reference, evidence.Image.Reference, StringComparison.Ordinal) ||
-            string.Equals(helper.Image.ImageId, evidence.Image.ImageId, StringComparison.Ordinal))
+        RequireCommit(helper.SourceRevision, $"Runtime '{profileId}' performance measurement helper source revision");
+        RequireImmutableReference(helper.Image.Reference, $"Runtime '{profileId}' performance measurement helper image reference");
+        RequireSha256(helper.Image.ImageId, $"Runtime '{profileId}' performance measurement helper image ID");
+        if (!IsRuntimeSupervisorReference(helper.Image.Reference) || helper.Image.SizeBytes is < 1 or > MaximumPerformanceImageBytes || string.Equals(helper.Image.Reference, evidence.Image.Reference, StringComparison.Ordinal) || string.Equals(helper.Image.ImageId, evidence.Image.ImageId, StringComparison.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' performance measurement helper image is invalid or not independent.");
+            throw new BundleValidationException($"Runtime '{profileId}' performance measurement helper image is invalid or not independent.");
         }
-        return new RuntimePromotionMeasurementHelperSnapshot(
-            helper.Implementation,
-            helper.Image.Reference,
-            helper.Image.ImageId,
-            helper.Image.SizeBytes,
-            helper.Entrypoint,
-            helper.SourceRevision,
-            helper.ContentSha256);
+        return new RuntimePromotionMeasurementHelperSnapshot(helper.Implementation, helper.Image.Reference, helper.Image.ImageId, helper.Image.SizeBytes, helper.Entrypoint, helper.SourceRevision, helper.ContentSha256);
     }
 
-    private static void ValidatePerformanceScenario(
-        string profileId,
-        string name,
-        RuntimePerformanceScenarioMeasurement scenario,
-        RuntimePerformanceScenarioBudget budget,
-        RuntimePerformanceSampleCounts counts,
-        long memoryLimitBytes,
-        HashSet<string> operationIds)
+    private static void ValidatePerformanceScenario(string profileId, string name, RuntimePerformanceScenarioMeasurement scenario, RuntimePerformanceScenarioBudget budget, RuntimePerformanceSampleCounts counts, long memoryLimitBytes, HashSet<string> operationIds)
     {
-        ValidatePerformanceSamples(
-            profileId,
-            name,
-            "cold",
-            scenario.Cold,
-            counts.Cold,
-            budget.Cold,
-            memoryLimitBytes,
-            operationIds);
-        ValidatePerformanceSamples(
-            profileId,
-            name,
-            "warm",
-            scenario.Warm,
-            counts.Warm,
-            budget.Warm,
-            memoryLimitBytes,
-            operationIds);
+        ValidatePerformanceSamples(profileId, name, "cold", scenario.Cold, counts.Cold, budget.Cold, memoryLimitBytes, operationIds);
+        ValidatePerformanceSamples(profileId, name, "warm", scenario.Warm, counts.Warm, budget.Warm, memoryLimitBytes, operationIds);
     }
 
-    private static void ValidatePerformanceSamples(
-        string profileId,
-        string scenario,
-        string mode,
-        List<RuntimePerformanceSample?>? samples,
-        int expectedCount,
-        RuntimePerformanceModeBudget budget,
-        long memoryLimitBytes,
-        HashSet<string> operationIds)
+    private static void ValidatePerformanceSamples(string profileId, string scenario, string mode, List<RuntimePerformanceSample?>? samples, int expectedCount, RuntimePerformanceModeBudget budget, long memoryLimitBytes, HashSet<string> operationIds)
     {
         if (samples is null || samples.Count != expectedCount || samples.Any(static sample => sample is null))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' performance evidence '{scenario}.{mode}' must contain " +
-                $"exactly {expectedCount} samples.");
+            throw new BundleValidationException($"Runtime '{profileId}' performance evidence '{scenario}.{mode}' must contain " + $"exactly {expectedCount} samples.");
         }
         var latencies = new double[samples.Count];
         for (var index = 0; index < samples.Count; index++)
@@ -1116,38 +636,29 @@ internal static class RuntimePromotionTrust
                 sample.PeakMemoryBytes > budget.MaximumPeakMemoryBytes ||
                 sample.PeakMemoryBytes > memoryLimitBytes)
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profileId}' performance sample '{scenario}.{mode}[{index}]' " +
-                    "has invalid latency, resource-sample, or memory evidence.");
+                throw new BundleValidationException($"Runtime '{profileId}' performance sample '{scenario}.{mode}[{index}]' " + "has invalid latency, resource-sample, or memory evidence.");
             }
             latencies[index] = sample.LatencyMilliseconds;
             if (!operationIds.Add(sample.OperationId))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profileId}' performance evidence '{scenario}.{mode}' reuses an operation ID.");
+                throw new BundleValidationException($"Runtime '{profileId}' performance evidence '{scenario}.{mode}' reuses an operation ID.");
             }
         }
         Array.Sort(latencies);
         var p95 = latencies[Math.Max(0, (int)Math.Ceiling(latencies.Length * 0.95) - 1)];
         if (p95 > budget.MaximumP95LatencyMilliseconds)
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' performance evidence '{scenario}.{mode}' exceeds its P95 budget.");
+            throw new BundleValidationException($"Runtime '{profileId}' performance evidence '{scenario}.{mode}' exceeds its P95 budget.");
         }
     }
 
-    private static void ValidateMapping(
-        RuntimeProfileDefinition profile,
-        RuntimePromotionReceiptDocument receipt,
-        RuntimePromotionCapabilityCheck check)
+    private static void ValidateMapping(RuntimeProfileDefinition profile, RuntimePromotionReceiptDocument receipt, RuntimePromotionCapabilityCheck check)
     {
         if (!string.Equals(check.Capability, "jit-asm", StringComparison.Ordinal))
         {
-            if (!string.Equals(check.SourceMappingKind, "not-applicable", StringComparison.Ordinal) ||
-                !string.Equals(check.MappingSource, "not-applicable", StringComparison.Ordinal))
+            if (!string.Equals(check.SourceMappingKind, "not-applicable", StringComparison.Ordinal) || !string.Equals(check.MappingSource, "not-applicable", StringComparison.Ordinal))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profile.Id}' non-JIT promotion check cannot claim source mapping.");
+                throw new BundleValidationException($"Runtime '{profile.Id}' non-JIT promotion check cannot claim source mapping.");
             }
             return;
         }
@@ -1155,131 +666,85 @@ internal static class RuntimePromotionTrust
         var jit = RequirePermittedJitOperation(profile);
         if (!string.Equals(check.SourceMappingKind, jit.SourceMappingKind, StringComparison.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' JIT mapping kind disagrees with its promotion receipt.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' JIT mapping kind disagrees with its promotion receipt.");
         }
         if (string.Equals(check.SourceMappingKind, "linux-profiler", StringComparison.Ordinal))
         {
-            if (profile.Family != "coreclr" ||
-                check.MappingSource is not ("ordinary" or "rich") ||
-                receipt.Operations?.Jit?.ProfilerPath is null)
+            if (profile.Family != "coreclr" || check.MappingSource is not ("ordinary" or "rich") || receipt.Operations?.Jit?.ProfilerPath is null)
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profile.Id}' linux-profiler promotion lacks profiler-backed mapping evidence.");
+                throw new BundleValidationException($"Runtime '{profile.Id}' linux-profiler promotion lacks profiler-backed mapping evidence.");
             }
         }
-        else if (string.Equals(
-                     check.SourceMappingKind,
-                     RuntimeJitSourceMappingKinds.CheckedJitDebugInfo,
-                     StringComparison.Ordinal))
+        else if (string.Equals(check.SourceMappingKind, RuntimeJitSourceMappingKinds.CheckedJitDebugInfo, StringComparison.Ordinal))
         {
-            if (profile.Family != "coreclr" ||
-                !string.Equals(
-                    check.MappingSource,
-                    RuntimeJitSourceMappingKinds.CheckedJitDebugInfo,
-                    StringComparison.Ordinal) ||
-                receipt.Operations?.Jit?.ProfilerPath is not null)
+            if (profile.Family != "coreclr" || !string.Equals(check.MappingSource, RuntimeJitSourceMappingKinds.CheckedJitDebugInfo, StringComparison.Ordinal) || receipt.Operations?.Jit?.ProfilerPath is not null)
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profile.Id}' checked-JIT promotion lacks debug-info mapping evidence.");
+                throw new BundleValidationException($"Runtime '{profile.Id}' checked-JIT promotion lacks debug-info mapping evidence.");
             }
         }
-        else if (!string.Equals(check.SourceMappingKind, "none", StringComparison.Ordinal) ||
-                 check.MappingSource is not ("none" or "method"))
+        else if (!string.Equals(check.SourceMappingKind, "none", StringComparison.Ordinal) || check.MappingSource is not ("none" or "method"))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' mapping-free or method-level JIT promotion has invalid mapping evidence.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' mapping-free or method-level JIT promotion has invalid mapping evidence.");
         }
     }
 
-    internal static RuntimeJitOperationDefinition RequirePermittedJitOperation(
-        RuntimeProfileDefinition profile)
+    internal static RuntimeJitOperationDefinition RequirePermittedJitOperation(RuntimeProfileDefinition profile)
     {
-        var jit = profile.Operations?.Jit
-            ?? throw new BundleValidationException(
-                $"Runtime '{profile.Id}' promotes jit-asm without a JIT operation.");
+        var jit = profile.Operations?.Jit ?? throw new BundleValidationException($"Runtime '{profile.Id}' promotes jit-asm without a JIT operation.");
         if (profile.Family != "netfx-clr-wine")
             return jit;
-        if (!StringComparer.Ordinal.Equals(
-                jit.ImplementationId,
-                RuntimeOperationImplementationIds.DesktopClrJitInspector))
+        if (!StringComparer.Ordinal.Equals(jit.ImplementationId, RuntimeOperationImplementationIds.DesktopClrJitInspector))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' Framework jit-asm requires implementation '{RuntimeOperationImplementationIds.DesktopClrJitInspector}'.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' Framework jit-asm requires implementation '{RuntimeOperationImplementationIds.DesktopClrJitInspector}'.");
         }
-        if (!StringComparer.Ordinal.Equals(jit.SourceMappingKind, RuntimeJitSourceMappingKinds.None) ||
-            jit.ProfilerPath is not null)
+        if (!StringComparer.Ordinal.Equals(jit.SourceMappingKind, RuntimeJitSourceMappingKinds.None) || jit.ProfilerPath is not null)
         {
-            throw new BundleValidationException(
-                $"Runtime '{profile.Id}' Framework jit-asm requires source mapping kind '{RuntimeJitSourceMappingKinds.None}' without a profiler.");
+            throw new BundleValidationException($"Runtime '{profile.Id}' Framework jit-asm requires source mapping kind '{RuntimeJitSourceMappingKinds.None}' without a profiler.");
         }
         return jit;
     }
 
-    private static async Task<TrustedFile> ReadTrustedFileAsync(
-        string repositoryRoot,
-        string relativePath,
-        IReadOnlyList<string> trustedDirectories,
-        long maximumBytes,
-        CancellationToken cancellationToken,
-        bool requireCanonicalJson = true)
+    private static async Task<TrustedFile> ReadTrustedFileAsync(string repositoryRoot, string relativePath, IReadOnlyList<string> trustedDirectories, long maximumBytes, CancellationToken cancellationToken, bool requireCanonicalJson = true)
     {
-        if (string.IsNullOrWhiteSpace(relativePath) ||
-            relativePath.Contains('\\') ||
-            relativePath.Split('/').Any(static segment => segment is "" or "." or ".."))
+        if (string.IsNullOrWhiteSpace(relativePath) || relativePath.Contains('\\') || relativePath.Split('/').Any(static segment => segment is "" or "." or ".."))
         {
             throw new BundleValidationException($"Promotion material path '{relativePath}' is not canonical.");
         }
 
         var root = Path.GetFullPath(repositoryRoot);
         var absolutePath = Path.GetFullPath(Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar)));
-        var deepestDirectory = Path.GetFullPath(Path.Combine(
-            root,
-            trustedDirectories[^1].Replace('/', Path.DirectorySeparatorChar)));
+        var deepestDirectory = Path.GetFullPath(Path.Combine(root, trustedDirectories[^1].Replace('/', Path.DirectorySeparatorChar)));
         if (!IsPathInside(deepestDirectory, absolutePath))
             throw new BundleValidationException($"Promotion material '{relativePath}' escapes its trusted directory.");
         foreach (var relativeDirectory in trustedDirectories)
         {
-            EnsureRegularDirectory(Path.Combine(
-                root,
-                relativeDirectory.Replace('/', Path.DirectorySeparatorChar)));
+            EnsureRegularDirectory(Path.Combine(root, relativeDirectory.Replace('/', Path.DirectorySeparatorChar)));
         }
 
         var info = new FileInfo(absolutePath);
         info.Refresh();
-        if (!info.Exists || info.LinkTarget is not null ||
-            info.Attributes.HasFlag(FileAttributes.ReparsePoint))
+        if (!info.Exists || info.LinkTarget is not null || info.Attributes.HasFlag(FileAttributes.ReparsePoint))
         {
-            throw new BundleValidationException(
-                $"Promotion material '{relativePath}' must be a regular non-link file.");
+            throw new BundleValidationException($"Promotion material '{relativePath}' must be a regular non-link file.");
         }
         if (info.Length < 1 || info.Length > maximumBytes)
         {
-            throw new BundleValidationException(
-                $"Promotion material '{relativePath}' exceeds the {maximumBytes}-byte limit.");
+            throw new BundleValidationException($"Promotion material '{relativePath}' exceeds the {maximumBytes}-byte limit.");
         }
 
         byte[] bytes;
         try
         {
-            await using var stream = new FileStream(
-                absolutePath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                16 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await using var stream = new FileStream(absolutePath, FileMode.Open, FileAccess.Read, FileShare.Read, 16 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
             if (stream.Length < 1 || stream.Length > maximumBytes)
             {
-                throw new BundleValidationException(
-                    $"Promotion material '{relativePath}' exceeds the {maximumBytes}-byte limit.");
+                throw new BundleValidationException($"Promotion material '{relativePath}' exceeds the {maximumBytes}-byte limit.");
             }
             bytes = new byte[checked((int)stream.Length)];
             await stream.ReadExactlyAsync(bytes, cancellationToken);
             if (stream.ReadByte() != -1)
             {
-                throw new BundleValidationException(
-                    $"Promotion material '{relativePath}' changed while it was being read.");
+                throw new BundleValidationException($"Promotion material '{relativePath}' changed while it was being read.");
             }
         }
         catch (BundleValidationException)
@@ -1288,16 +753,12 @@ internal static class RuntimePromotionTrust
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            throw new BundleValidationException(
-                $"Promotion material '{relativePath}' could not be read: {exception.Message}");
+            throw new BundleValidationException($"Promotion material '{relativePath}' could not be read: {exception.Message}");
         }
 
         if (requireCanonicalJson)
             ValidateCanonicalJsonEncoding(bytes, relativePath);
-        return new TrustedFile(
-            relativePath,
-            $"sha256:{Convert.ToHexStringLower(SHA256.HashData(bytes))}",
-            bytes);
+        return new TrustedFile(relativePath, $"sha256:{Convert.ToHexStringLower(SHA256.HashData(bytes))}", bytes);
     }
 
     private static void ValidateCanonicalJsonEncoding(ReadOnlySpan<byte> bytes, string relativePath)
@@ -1309,15 +770,12 @@ internal static class RuntimePromotionTrust
         }
         catch (DecoderFallbackException exception)
         {
-            throw new BundleValidationException(
-                $"Promotion material '{relativePath}' must use valid UTF-8: {exception.Message}");
+            throw new BundleValidationException($"Promotion material '{relativePath}' must use valid UTF-8: {exception.Message}");
         }
 
-        if (text.Length == 0 || text[0] == '\uFEFF' || text[^1] != '\n' ||
-            bytes.IndexOf((byte)'\r') >= 0)
+        if (text.Length == 0 || text[0] == '\uFEFF' || text[^1] != '\n' || bytes.IndexOf((byte)'\r') >= 0)
         {
-            throw new BundleValidationException(
-                $"Promotion material '{relativePath}' must be UTF-8 without a BOM, use LF-only line endings, and end with LF.");
+            throw new BundleValidationException($"Promotion material '{relativePath}' must be UTF-8 without a BOM, use LF-only line endings, and end with LF.");
         }
     }
 
@@ -1325,11 +783,9 @@ internal static class RuntimePromotionTrust
     {
         var info = new DirectoryInfo(path);
         info.Refresh();
-        if (!info.Exists || info.LinkTarget is not null ||
-            info.Attributes.HasFlag(FileAttributes.ReparsePoint))
+        if (!info.Exists || info.LinkTarget is not null || info.Attributes.HasFlag(FileAttributes.ReparsePoint))
         {
-            throw new BundleValidationException(
-                $"Promotion material directory '{path}' must be a regular non-link directory.");
+            throw new BundleValidationException($"Promotion material directory '{path}' must be a regular non-link directory.");
         }
     }
 
@@ -1348,8 +804,7 @@ internal static class RuntimePromotionTrust
         "coreclr-wine" => "wine",
         "mono" => "mono",
         "netfx-clr-wine" => "framework",
-        _ => throw new BundleValidationException(
-            $"Runtime family '{family}' cannot use a matrix promotion receipt.")
+        _ => throw new BundleValidationException($"Runtime family '{family}' cannot use a matrix promotion receipt.")
     };
 
     internal static string ExpectedMatrixTargetId(RuntimeProfileDefinition profile)
@@ -1364,33 +819,23 @@ internal static class RuntimePromotionTrust
                 when profile.Id.StartsWith("wine-", StringComparison.Ordinal) &&
                      profile.Id.EndsWith(suffix, StringComparison.Ordinal) =>
                 profile.Id["wine-".Length..^suffix.Length],
-            _ => throw new BundleValidationException(
-                $"Runtime '{profile.Id}' cannot be bound to a canonical matrix target ID.")
+            _ => throw new BundleValidationException($"Runtime '{profile.Id}' cannot be bound to a canonical matrix target ID.")
         };
     }
 
     internal static bool IsImmutableSourceUri(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value) || value.Length > 2048 || value != value.Trim() ||
-            value.Any(char.IsWhiteSpace))
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 2048 || value != value.Trim() || value.Any(char.IsWhiteSpace))
         {
             return false;
         }
         if (value.StartsWith("docker://", StringComparison.Ordinal))
         {
-            return Regex.IsMatch(
-                value,
-                DockerSourceUriPattern,
-                RegexOptions.CultureInvariant,
-                TimeSpan.FromSeconds(1));
+            return Regex.IsMatch(value, DockerSourceUriPattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
         }
         if (!value.StartsWith("https://", StringComparison.Ordinal))
             return false;
-        return Regex.IsMatch(
-                   value,
-                   HttpsSourceUriPattern,
-                   RegexOptions.CultureInvariant,
-                   TimeSpan.FromSeconds(1)) &&
+        return Regex.IsMatch(value, HttpsSourceUriPattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)) &&
                Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
                string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal) &&
                uri.Host.Length > 0 &&
@@ -1426,50 +871,29 @@ internal static class RuntimePromotionTrust
         return repository[(separator + 1)..].SequenceEqual("runtime-supervisor");
     }
 
-    private static void RequireCanonicalHelperPath(
-        string? value,
-        string extension,
-        string profileId,
-        string operation)
+    private static void RequireCanonicalHelperPath(string? value, string extension, string profileId, string operation)
     {
         const string prefix = "/opt/sharplabnext/";
-        if (value is null ||
-            !value.StartsWith(prefix, StringComparison.Ordinal) ||
-            !value.EndsWith(extension, StringComparison.Ordinal) ||
-            value[prefix.Length..].Length == extension.Length ||
-            value[prefix.Length..].Any(static character =>
-                !(char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-')))
+        if (value is null || !value.StartsWith(prefix, StringComparison.Ordinal) || !value.EndsWith(extension, StringComparison.Ordinal) || value[prefix.Length..].Length == extension.Length || value[prefix.Length..].Any(static character => !(char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-')))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' {operation} helper path '{value}' is not canonical.");
+            throw new BundleValidationException($"Runtime '{profileId}' {operation} helper path '{value}' is not canonical.");
         }
     }
 
-    private static void AddHelper(
-        IDictionary<string, string> helpers,
-        string profileId,
-        string path,
-        string digest)
+    private static void AddHelper(IDictionary<string, string> helpers, string profileId, string path, string digest)
     {
-        if (helpers.TryGetValue(path, out var existing) &&
-            !string.Equals(existing, digest, StringComparison.Ordinal))
+        if (helpers.TryGetValue(path, out var existing) && !string.Equals(existing, digest, StringComparison.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' receipt assigns different digests to helper '{path}'.");
+            throw new BundleValidationException($"Runtime '{profileId}' receipt assigns different digests to helper '{path}'.");
         }
         helpers[path] = digest;
     }
 
-    private static void RequireEqual(
-        string? actual,
-        string? expected,
-        string profileId,
-        string field)
+    private static void RequireEqual(string? actual, string? expected, string profileId, string field)
     {
         if (!string.Equals(actual, expected, StringComparison.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Runtime '{profileId}' promotion receipt {field} does not match active release material.");
+            throw new BundleValidationException($"Runtime '{profileId}' promotion receipt {field} does not match active release material.");
         }
     }
 
@@ -1481,10 +905,7 @@ internal static class RuntimePromotionTrust
 
     private static void RequireSha256(string? value, string label)
     {
-        if (value is null ||
-            value.Length != 71 ||
-            !value.StartsWith("sha256:", StringComparison.Ordinal) ||
-            !IsLowerHex(value[7..], 64))
+        if (value is null || value.Length != 71 || !value.StartsWith("sha256:", StringComparison.Ordinal) || !IsLowerHex(value[7..], 64))
         {
             throw new BundleValidationException($"{label} must be sha256:<64 lowercase hex>.");
         }
@@ -1497,31 +918,23 @@ internal static class RuntimePromotionTrust
     }
 
     private static bool IsCanonicalUtcTimestamp(string? value) =>
-        value is not null && DateTimeOffset.TryParseExact(
-            value,
-            ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"],
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-            out _);
+        value is not null && DateTimeOffset.TryParseExact(value, ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"], CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out _);
 
     private static bool IsOperationId(string? value) =>
         value is { Length: 35 } && value.StartsWith("op_", StringComparison.Ordinal) &&
-        value[3..].All(static character =>
-            char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
+        value[3..].All(static character => char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
 
     private static bool IsCanonicalId(string? value) =>
         value is { Length: > 0 and <= 128 } &&
         value[0] is >= 'a' and <= 'z' or >= '0' and <= '9' &&
-        value.All(static character =>
-            character is >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '_' or '-');
+        value.All(static character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '_' or '-');
 
     private static bool IsLowerHex(string? value, int length) =>
         value is not null &&
         value.Length == length &&
         value.All(static character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
 
-    private static bool IsCapability(string? value) =>
-        value is "run" or "jit-asm" or "inspection" or "execution-flow";
+    private static bool IsCapability(string? value) => value is "run" or "jit-asm" or "inspection" or "execution-flow";
 
     private static bool HasCanonicalRetainedMetadata(RuntimePromotionImageFileSnapshot artifact) =>
         artifact.Role switch
@@ -1538,9 +951,7 @@ internal static class RuntimePromotionTrust
     {
         RequireSha256(expected, label);
         RequireSha256(actual, label);
-        if (!CryptographicOperations.FixedTimeEquals(
-                Encoding.ASCII.GetBytes(expected!),
-                Encoding.ASCII.GetBytes(actual!)))
+        if (!CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(expected!), Encoding.ASCII.GetBytes(actual!)))
         {
             throw new BundleValidationException($"{label}; expected {expected}, observed {actual}.");
         }
@@ -1548,26 +959,14 @@ internal static class RuntimePromotionTrust
 
     private sealed record TrustedFile(string RelativePath, string Sha256, byte[] Bytes);
 
-    private sealed record RuntimePromotionPerformanceSnapshot(
-        RuntimePromotionFileSnapshot Policy,
-        RuntimePromotionFileSnapshot Evidence,
-        RuntimePromotionMeasurementHelperSnapshot MeasurementHelper);
+    private sealed record RuntimePromotionPerformanceSnapshot(RuntimePromotionFileSnapshot Policy, RuntimePromotionFileSnapshot Evidence, RuntimePromotionMeasurementHelperSnapshot MeasurementHelper);
 
     internal static class RuntimePromotionPlanSignatureTrust
     {
         private const long MaximumPlanBytes = RuntimePromotionPlanWorkflow.MaximumPromotionDocumentBytes;
-        private static readonly byte[] StrictSpki = Convert.FromBase64String(
-            "MCowBQYDK2VwAyEAFIFqMcFLVGn2aoQl0+CkTVtMS/QQlcZwUpSiag+hrRs=");
-        private static readonly byte[] StrictPem = Encoding.ASCII.GetBytes(
-            "-----BEGIN PUBLIC KEY-----\n" +
-            "MCowBQYDK2VwAyEAFIFqMcFLVGn2aoQl0+CkTVtMS/QQlcZwUpSiag+hrRs=\n" +
-            "-----END PUBLIC KEY-----\n");
-        internal static readonly RuntimePromotionPlanSignatureVerifier ProductionVerifier = new(
-            "sha256:d07b3d023359dfea9b8994115095768f9070ba6312092404b132e83d0e45d200",
-            "eng/profiles/trust/runtime-promotion-plan-public.pem",
-            StrictPem,
-            StrictSpki,
-            null);
+        private static readonly byte[] StrictSpki = Convert.FromBase64String("MCowBQYDK2VwAyEAFIFqMcFLVGn2aoQl0+CkTVtMS/QQlcZwUpSiag+hrRs=");
+        private static readonly byte[] StrictPem = Encoding.ASCII.GetBytes("-----BEGIN PUBLIC KEY-----\n" + "MCowBQYDK2VwAyEAFIFqMcFLVGn2aoQl0+CkTVtMS/QQlcZwUpSiag+hrRs=\n" + "-----END PUBLIC KEY-----\n");
+        internal static readonly RuntimePromotionPlanSignatureVerifier ProductionVerifier = new("sha256:d07b3d023359dfea9b8994115095768f9070ba6312092404b132e83d0e45d200", "eng/profiles/trust/runtime-promotion-plan-public.pem", StrictPem, StrictSpki, null);
 
         internal static void VerifyDetachedForTests(byte[] planBytes, byte[] signatureBytes)
         {
@@ -1589,104 +988,43 @@ internal static class RuntimePromotionTrust
             VerifySignature(planBytes, signatureBytes, ProductionVerifier);
         }
 
-        public static async Task<RuntimePromotionPlanSignatureSnapshot> CaptureAsync(
-            string repositoryRoot,
-            RuntimeProfileDefinition profile,
-            RuntimePromotionReceiptDocument receipt,
-            RuntimePromotionPlanSignatureVerifier verifier,
-            CancellationToken cancellationToken)
+        public static async Task<RuntimePromotionPlanSignatureSnapshot> CaptureAsync(string repositoryRoot, RuntimeProfileDefinition profile, RuntimePromotionReceiptDocument receipt, RuntimePromotionPlanSignatureVerifier verifier, CancellationToken cancellationToken)
         {
-            var binding = receipt.PlanSignature
-                ?? throw new BundleValidationException(
-                    $"Runtime '{profile.Id}' promotion receipt has no signed promotion plan binding.");
+            var binding = receipt.PlanSignature ?? throw new BundleValidationException($"Runtime '{profile.Id}' promotion receipt has no signed promotion plan binding.");
             var expectedPlanPath = $"profiles/runtime-promotion-plans/{profile.Id}.json";
             var expectedSignaturePath = expectedPlanPath + ".sig";
-            if (!StringComparer.Ordinal.Equals(binding.Path, expectedSignaturePath) ||
-                !IsSha256Digest(binding.Sha256) || !StringComparer.Ordinal.Equals(binding.KeyId, verifier.KeyId))
+            if (!StringComparer.Ordinal.Equals(binding.Path, expectedSignaturePath) || !IsSha256Digest(binding.Sha256) || !StringComparer.Ordinal.Equals(binding.KeyId, verifier.KeyId))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profile.Id}' promotion receipt plan signature binding is not canonical.");
+                throw new BundleValidationException($"Runtime '{profile.Id}' promotion receipt plan signature binding is not canonical.");
             }
 
-            var plan = await ReadTrustedFileAsync(
-                repositoryRoot,
-                expectedPlanPath,
-                ["profiles/runtime-promotion-plans"],
-                MaximumPlanBytes,
-                cancellationToken);
-            var signature = await ReadTrustedFileAsync(
-                repositoryRoot,
-                expectedSignaturePath,
-                ["profiles/runtime-promotion-plans"],
-                MaximumPromotionPlanSignatureBytes,
-                cancellationToken,
-                requireCanonicalJson: false);
-            var publicKey = await ReadTrustedFileAsync(
-                repositoryRoot,
-                verifier.PublicKeyPath,
-                ["eng", "eng/profiles", "eng/profiles/trust"],
-                MaximumPromotionPlanSignatureBytes,
-                cancellationToken,
-                requireCanonicalJson: false);
-            if (!StringComparer.Ordinal.Equals(receipt.PlanSha256, plan.Sha256) ||
-                !StringComparer.Ordinal.Equals(binding.Sha256, signature.Sha256) ||
-                !publicKey.Bytes.AsSpan().SequenceEqual(verifier.PublicKeyPem))
+            var plan = await ReadTrustedFileAsync(repositoryRoot, expectedPlanPath, ["profiles/runtime-promotion-plans"], MaximumPlanBytes, cancellationToken);
+            var signature = await ReadTrustedFileAsync(repositoryRoot, expectedSignaturePath, ["profiles/runtime-promotion-plans"], MaximumPromotionPlanSignatureBytes, cancellationToken, requireCanonicalJson: false);
+            var publicKey = await ReadTrustedFileAsync(repositoryRoot, verifier.PublicKeyPath, ["eng", "eng/profiles", "eng/profiles/trust"], MaximumPromotionPlanSignatureBytes, cancellationToken, requireCanonicalJson: false);
+            if (!StringComparer.Ordinal.Equals(receipt.PlanSha256, plan.Sha256) || !StringComparer.Ordinal.Equals(binding.Sha256, signature.Sha256) || !publicKey.Bytes.AsSpan().SequenceEqual(verifier.PublicKeyPem))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profile.Id}' promotion receipt does not bind the committed signed plan bytes.");
+                throw new BundleValidationException($"Runtime '{profile.Id}' promotion receipt does not bind the committed signed plan bytes.");
             }
 
             await VerifyAsync(repositoryRoot, profile.Id, receipt.SourceRevision, plan.Bytes, signature.Bytes, publicKey.Bytes, verifier, cancellationToken);
-            return new RuntimePromotionPlanSignatureSnapshot(
-                new RuntimePromotionFileSnapshot(plan.RelativePath, plan.Sha256),
-                new RuntimePromotionFileSnapshot(signature.RelativePath, signature.Sha256),
-                new RuntimePromotionFileSnapshot(publicKey.RelativePath, publicKey.Sha256),
-                plan.Bytes,
-                signature.Bytes,
-                publicKey.Bytes,
-                verifier);
+            return new RuntimePromotionPlanSignatureSnapshot(new RuntimePromotionFileSnapshot(plan.RelativePath, plan.Sha256), new RuntimePromotionFileSnapshot(signature.RelativePath, signature.Sha256), new RuntimePromotionFileSnapshot(publicKey.RelativePath, publicKey.Sha256), plan.Bytes, signature.Bytes, publicKey.Bytes, verifier);
         }
 
-        public static async Task RevalidateAsync(
-            string repositoryRoot,
-            string runtimeId,
-            string buildSourceRevision,
-            RuntimePromotionPlanSignatureSnapshot? expected,
-            CancellationToken cancellationToken)
+        public static async Task RevalidateAsync(string repositoryRoot, string runtimeId, string buildSourceRevision, RuntimePromotionPlanSignatureSnapshot? expected, CancellationToken cancellationToken)
         {
             if (expected is null)
                 throw new BundleValidationException($"Runtime '{runtimeId}' has no captured signed promotion plan.");
-            var plan = await ReadTrustedFileAsync(
-                repositoryRoot, expected.Plan.RelativePath, ["profiles/runtime-promotion-plans"],
-                MaximumPlanBytes, cancellationToken);
-            var signature = await ReadTrustedFileAsync(
-                repositoryRoot, expected.Signature.RelativePath, ["profiles/runtime-promotion-plans"],
-                MaximumPromotionPlanSignatureBytes, cancellationToken, requireCanonicalJson: false);
-            var publicKey = await ReadTrustedFileAsync(
-                repositoryRoot, expected.PublicKey.RelativePath, ["eng", "eng/profiles", "eng/profiles/trust"],
-                MaximumPromotionPlanSignatureBytes, cancellationToken, requireCanonicalJson: false);
-            if (!StringComparer.Ordinal.Equals(plan.Sha256, expected.Plan.Sha256) ||
-                !StringComparer.Ordinal.Equals(signature.Sha256, expected.Signature.Sha256) ||
-                !StringComparer.Ordinal.Equals(publicKey.Sha256, expected.PublicKey.Sha256) ||
-                !plan.Bytes.AsSpan().SequenceEqual(expected.PlanBytes) ||
-                !signature.Bytes.AsSpan().SequenceEqual(expected.SignatureBytes) ||
-                !publicKey.Bytes.AsSpan().SequenceEqual(expected.PublicKeyBytes))
+            var plan = await ReadTrustedFileAsync(repositoryRoot, expected.Plan.RelativePath, ["profiles/runtime-promotion-plans"], MaximumPlanBytes, cancellationToken);
+            var signature = await ReadTrustedFileAsync(repositoryRoot, expected.Signature.RelativePath, ["profiles/runtime-promotion-plans"], MaximumPromotionPlanSignatureBytes, cancellationToken, requireCanonicalJson: false);
+            var publicKey = await ReadTrustedFileAsync(repositoryRoot, expected.PublicKey.RelativePath, ["eng", "eng/profiles", "eng/profiles/trust"], MaximumPromotionPlanSignatureBytes, cancellationToken, requireCanonicalJson: false);
+            if (!StringComparer.Ordinal.Equals(plan.Sha256, expected.Plan.Sha256) || !StringComparer.Ordinal.Equals(signature.Sha256, expected.Signature.Sha256) || !StringComparer.Ordinal.Equals(publicKey.Sha256, expected.PublicKey.Sha256) || !plan.Bytes.AsSpan().SequenceEqual(expected.PlanBytes) || !signature.Bytes.AsSpan().SequenceEqual(expected.SignatureBytes) || !publicKey.Bytes.AsSpan().SequenceEqual(expected.PublicKeyBytes))
             {
-                throw new BundleValidationException(
-                    $"Runtime '{runtimeId}' signed promotion plan material changed before release finalization.");
+                throw new BundleValidationException($"Runtime '{runtimeId}' signed promotion plan material changed before release finalization.");
             }
             await VerifyAsync(repositoryRoot, runtimeId, buildSourceRevision, plan.Bytes, signature.Bytes, publicKey.Bytes, expected.Verifier, cancellationToken);
         }
 
-        private static async Task VerifyAsync(
-            string repositoryRoot,
-            string runtimeId,
-            string sourceRevision,
-            byte[] planBytes,
-            byte[] signatureText,
-            byte[] publicKey,
-            RuntimePromotionPlanSignatureVerifier verifier,
-            CancellationToken cancellationToken)
+        private static async Task VerifyAsync(string repositoryRoot, string runtimeId, string sourceRevision, byte[] planBytes, byte[] signatureText, byte[] publicKey, RuntimePromotionPlanSignatureVerifier verifier, CancellationToken cancellationToken)
         {
             if (!publicKey.AsSpan().SequenceEqual(verifier.PublicKeyPem))
                 throw new BundleValidationException("Runtime promotion plan public key is not the committed strict Ed25519 SPKI PEM.");
@@ -1695,11 +1033,7 @@ internal static class RuntimePromotionTrust
             JsonDocument document;
             try
             {
-                document = JsonDocument.Parse(planBytes, new JsonDocumentOptions
-                {
-                    AllowTrailingCommas = false,
-                    CommentHandling = JsonCommentHandling.Disallow
-                });
+                document = JsonDocument.Parse(planBytes, new JsonDocumentOptions { AllowTrailingCommas = false, CommentHandling = JsonCommentHandling.Disallow });
             }
             catch (JsonException exception)
             {
@@ -1715,23 +1049,13 @@ internal static class RuntimePromotionTrust
             RuntimePromotionPlanDocument plan;
             try
             {
-                plan = RuntimePromotionJson.Deserialize<RuntimePromotionPlanDocument>(
-                    planBytes,
-                    RuntimePromotionPlanWorkflowInput.JsonOptions,
-                    $"Runtime '{runtimeId}' signed promotion plan");
+                plan = RuntimePromotionJson.Deserialize<RuntimePromotionPlanDocument>(planBytes, RuntimePromotionPlanWorkflowInput.JsonOptions, $"Runtime '{runtimeId}' signed promotion plan");
             }
             catch (BundleValidationException)
             {
                 throw;
             }
-            if (!StringComparer.Ordinal.Equals(plan.ProfileId, runtimeId) ||
-                !StringComparer.Ordinal.Equals(plan.SourceRevision, sourceRevision) ||
-                !IsExpectedCandidateTarget(plan.CandidateTarget, plan.Family) ||
-                !IsGitObject(plan.SourceTree) ||
-                plan.BuildInputs is null || plan.BuildInputs.Count is < 1 or > 64 ||
-                plan.BuildInputs.Any(static item => !IsCanonicalInput(item.Key, item.Value)) ||
-                !HasRequiredBuildBindings(plan) ||
-                !StringComparer.Ordinal.Equals(plan.BuildInputsSha256, DigestCanonical(plan.BuildInputs)))
+            if (!StringComparer.Ordinal.Equals(plan.ProfileId, runtimeId) || !StringComparer.Ordinal.Equals(plan.SourceRevision, sourceRevision) || !IsExpectedCandidateTarget(plan.CandidateTarget, plan.Family) || !IsGitObject(plan.SourceTree) || plan.BuildInputs is null || plan.BuildInputs.Count is < 1 or > 64 || plan.BuildInputs.Any(static item => !IsCanonicalInput(item.Key, item.Value)) || !HasRequiredBuildBindings(plan) || !StringComparer.Ordinal.Equals(plan.BuildInputsSha256, DigestCanonical(plan.BuildInputs)))
             {
                 throw new BundleValidationException($"Runtime '{runtimeId}' signed promotion plan contract is invalid.");
             }
@@ -1743,10 +1067,7 @@ internal static class RuntimePromotionTrust
             VerifySignature(planBytes, signatureText, verifier);
         }
 
-        private static void VerifySignature(
-            byte[] planBytes,
-            byte[] signatureText,
-            RuntimePromotionPlanSignatureVerifier verifier)
+        private static void VerifySignature(byte[] planBytes, byte[] signatureText, RuntimePromotionPlanSignatureVerifier verifier)
         {
             string text;
             try { text = StrictUtf8.GetString(signatureText); }
@@ -1757,8 +1078,7 @@ internal static class RuntimePromotionTrust
             if (text.Contains('\r') || (text.Contains('\n') && (!text.EndsWith('\n') || text[..^1].Contains('\n'))))
                 throw new BundleValidationException("Runtime promotion plan signature must be canonical Base64 text.");
             var base64 = text.EndsWith('\n') ? text[..^1] : text;
-            if (base64.Length != 88 || !base64.EndsWith("==", StringComparison.Ordinal) ||
-                base64.Any(static value => !char.IsAsciiLetterOrDigit(value) && value is not '+' and not '/' and not '='))
+            if (base64.Length != 88 || !base64.EndsWith("==", StringComparison.Ordinal) || base64.Any(static value => !char.IsAsciiLetterOrDigit(value) && value is not '+' and not '/' and not '='))
             {
                 throw new BundleValidationException("Runtime promotion plan signature must be one canonical 64-byte Ed25519 signature.");
             }
@@ -1777,24 +1097,9 @@ internal static class RuntimePromotionTrust
                 throw new BundleValidationException("Runtime promotion plan signature is invalid.");
         }
 
-        private static async Task VerifySourceTreeAsync(
-            string repositoryRoot,
-            string revision,
-            string expectedTree,
-            CancellationToken cancellationToken)
+        private static async Task VerifySourceTreeAsync(string repositoryRoot, string revision, string expectedTree, CancellationToken cancellationToken)
         {
-            using var process = new System.Diagnostics.Process
-            {
-                StartInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "git",
-                    WorkingDirectory = Path.GetFullPath(repositoryRoot),
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
+            using var process = new System.Diagnostics.Process { StartInfo = new System.Diagnostics.ProcessStartInfo { FileName = "git", WorkingDirectory = Path.GetFullPath(repositoryRoot), RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true } };
             process.StartInfo.ArgumentList.Add("rev-parse");
             process.StartInfo.ArgumentList.Add(revision + "^{tree}");
             try { process.Start(); }
@@ -1816,16 +1121,11 @@ internal static class RuntimePromotionTrust
                 try { await Task.WhenAll(output, error); } catch { }
                 throw;
             }
-            if (process.ExitCode != 0 || !StringComparer.Ordinal.Equals(
-                    StrictUtf8.GetString(output.Result).Trim(), expectedTree))
+            if (process.ExitCode != 0 || !StringComparer.Ordinal.Equals(StrictUtf8.GetString(output.Result).Trim(), expectedTree))
                 throw new BundleValidationException("Runtime promotion plan source tree does not match its source revision.");
         }
 
-        private static async Task<byte[]> ReadBoundedAsync(
-            Stream stream,
-            int maximumBytes,
-            string streamName,
-            CancellationToken cancellationToken)
+        private static async Task<byte[]> ReadBoundedAsync(Stream stream, int maximumBytes, string streamName, CancellationToken cancellationToken)
         {
             await using var output = new MemoryStream();
             var buffer = new byte[1024];
@@ -1843,11 +1143,7 @@ internal static class RuntimePromotionTrust
         private static byte[] Canonicalize(JsonElement value)
         {
             using var stream = new MemoryStream();
-            using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions
-                   {
-                       Indented = false,
-                       Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-                   }))
+            using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
             {
                 WriteCanonical(writer, value);
             }
@@ -1912,10 +1208,8 @@ internal static class RuntimePromotionTrust
             plan.BuildInputs.TryGetValue("RUNTIME_MATRIX_RUNTIME_VERSION", out var runtimeVersion) &&
             StringComparer.Ordinal.Equals(runtimeVersion, plan.ResolvedVersion) &&
             !plan.BuildInputs.ContainsKey("SOURCE_REVISION") &&
-            (!plan.BuildInputs.TryGetValue("RUNTIME_MATRIX_RUNTIME_COMMIT", out var runtimeCommit) ||
-             StringComparer.Ordinal.Equals(runtimeCommit, plan.RuntimeIdentity.RuntimeCommit)) &&
-            (!plan.BuildInputs.TryGetValue("RUNTIME_MATRIX_JIT_COMMIT", out var jitCommit) ||
-             StringComparer.Ordinal.Equals(jitCommit, plan.RuntimeIdentity.JitCommit));
+            (!plan.BuildInputs.TryGetValue("RUNTIME_MATRIX_RUNTIME_COMMIT", out var runtimeCommit) || StringComparer.Ordinal.Equals(runtimeCommit, plan.RuntimeIdentity.RuntimeCommit)) &&
+            (!plan.BuildInputs.TryGetValue("RUNTIME_MATRIX_JIT_COMMIT", out var jitCommit) || StringComparer.Ordinal.Equals(jitCommit, plan.RuntimeIdentity.JitCommit));
 
         private static bool IsExpectedCandidateTarget(string? target, string? family) =>
             (target, family) switch
@@ -1933,144 +1227,78 @@ internal static class RuntimePromotionTrust
             value[0] is >= 'a' and <= 'z' or >= '0' and <= '9' &&
             value.All(static character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '_' or '-');
 
-        private static bool IsGitObject(string? value) =>
-            value is { Length: 40 or 64 } && value.All(static character =>
-                char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
+        private static bool IsGitObject(string? value) => value is { Length: 40 or 64 } && value.All(static character => char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
 
         private static bool IsSha256Digest(string? value) =>
             value is { Length: 71 } && value.StartsWith("sha256:", StringComparison.Ordinal) &&
-            value.AsSpan(7).ToArray().All(static character =>
-                char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
+            value.AsSpan(7).ToArray().All(static character => char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
     }
 }
 
 internal static class WineCoreClrOperatorReceiptTrust
 {
-    internal const string KeyId =
-        "sha256:16cdb3dd05ddc65de942187de063606b06c7c56c60e1a3394d166724d649e5a1";
-    internal const string PublicKeyPath =
-        "eng/profiles/trust/wine-coreclr-operator-receipt-public.pem";
+    internal const string KeyId = "sha256:16cdb3dd05ddc65de942187de063606b06c7c56c60e1a3394d166724d649e5a1";
+    internal const string PublicKeyPath = "eng/profiles/trust/wine-coreclr-operator-receipt-public.pem";
 
     private const long MaximumReceiptBytes = 1024 * 1024;
     private const long MaximumSignatureBytes = 4096;
     private const long MaximumSourceFileBytes = 4 * 1024 * 1024;
     private const long MaximumGitErrorBytes = 64 * 1024;
-    private static readonly byte[] StrictSpki = Convert.FromBase64String(
-        "MCowBQYDK2VwAyEAPyakAl2BdwqPhaYOUyfpQkjlCv9OrSLZ45InOqybNYY=");
-    private static readonly byte[] StrictPem = Encoding.ASCII.GetBytes(
-        "-----BEGIN PUBLIC KEY-----\n" +
-        "MCowBQYDK2VwAyEAPyakAl2BdwqPhaYOUyfpQkjlCv9OrSLZ45InOqybNYY=\n" +
-        "-----END PUBLIC KEY-----\n");
+    private static readonly byte[] StrictSpki = Convert.FromBase64String("MCowBQYDK2VwAyEAPyakAl2BdwqPhaYOUyfpQkjlCv9OrSLZ45InOqybNYY=");
+    private static readonly byte[] StrictPem = Encoding.ASCII.GetBytes("-----BEGIN PUBLIC KEY-----\n" + "MCowBQYDK2VwAyEAPyakAl2BdwqPhaYOUyfpQkjlCv9OrSLZ45InOqybNYY=\n" + "-----END PUBLIC KEY-----\n");
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
     private static readonly Regex Sha256 = new("^sha256:[0-9a-f]{64}$", RegexOptions.CultureInvariant);
     private static readonly Regex GitObject = new("^(?:[0-9a-f]{40}|[0-9a-f]{64})$", RegexOptions.CultureInvariant);
     private static readonly Regex ImmutableImage = new("^[^@\\s]+@sha256:[0-9a-f]{64}$", RegexOptions.CultureInvariant);
 
-    public static async Task<RuntimePromotionWineOperatorReceiptSnapshot?> CaptureAsync(
-        string repositoryRoot,
-        RepositorySourceProvenance source,
-        RuntimeProfileDefinition profile,
-        RuntimePromotionReceiptDocument promotionReceipt,
-        InspectedImage candidateImage,
-        IDockerCli docker,
-        CancellationToken cancellationToken)
+    public static async Task<RuntimePromotionWineOperatorReceiptSnapshot?> CaptureAsync(string repositoryRoot, RepositorySourceProvenance source, RuntimeProfileDefinition profile, RuntimePromotionReceiptDocument promotionReceipt, InspectedImage candidateImage, IDockerCli docker, CancellationToken cancellationToken)
     {
         var isWine = profile.Family is "coreclr-wine" or "netfx-clr-wine";
         if (!isWine)
         {
             if (promotionReceipt.WineOperator is not null)
             {
-                throw new BundleValidationException(
-                    $"Runtime '{profile.Id}' is not Wine and cannot bind a Wine operator receipt.");
+                throw new BundleValidationException($"Runtime '{profile.Id}' is not Wine and cannot bind a Wine operator receipt.");
             }
             return null;
         }
 
-        var binding = promotionReceipt.WineOperator
-            ?? throw new BundleValidationException(
-                $"Wine runtime '{profile.Id}' promotion receipt has no signed operator receipt binding.");
+        var binding = promotionReceipt.WineOperator ?? throw new BundleValidationException($"Wine runtime '{profile.Id}' promotion receipt has no signed operator receipt binding.");
         ValidateBinding(profile.Id, binding, profile.Family);
-        var snapshot = await LoadAsync(
-            repositoryRoot,
-            profile.Id,
-            promotionReceipt.SourceRevision,
-            binding,
-            docker,
-            cancellationToken);
+        var snapshot = await LoadAsync(repositoryRoot, profile.Id, promotionReceipt.SourceRevision, binding, docker, cancellationToken);
         ValidateCandidateImage(profile.Id, candidateImage, snapshot);
         return snapshot;
     }
 
-    public static async Task RevalidateAsync(
-        string repositoryRoot,
-        string runtimeId,
-        string buildSourceRevision,
-        RuntimePromotionWineOperatorReceiptSnapshot? expected,
-        IDockerCli docker,
-        CancellationToken cancellationToken)
+    public static async Task RevalidateAsync(string repositoryRoot, string runtimeId, string buildSourceRevision, RuntimePromotionWineOperatorReceiptSnapshot? expected, IDockerCli docker, CancellationToken cancellationToken)
     {
         if (expected is null)
             return;
 
-        var observed = await LoadAsync(
-            repositoryRoot,
-            runtimeId,
-            buildSourceRevision,
-            expected.Binding,
-            docker,
-            cancellationToken);
+        var observed = await LoadAsync(repositoryRoot, runtimeId, buildSourceRevision, expected.Binding, docker, cancellationToken);
         if (!Equivalent(observed, expected))
         {
-            throw new BundleValidationException(
-                $"Wine runtime '{runtimeId}' signed operator receipt changed before release finalization.");
+            throw new BundleValidationException($"Wine runtime '{runtimeId}' signed operator receipt changed before release finalization.");
         }
     }
 
-    public static void ValidateCandidateImage(
-        string runtimeId,
-        InspectedImage image,
-        RuntimePromotionWineOperatorReceiptSnapshot? receipt)
-        => ValidateCandidateLabels(runtimeId, image.Labels, receipt);
+    public static void ValidateCandidateImage(string runtimeId, InspectedImage image, RuntimePromotionWineOperatorReceiptSnapshot? receipt) => ValidateCandidateLabels(runtimeId, image.Labels, receipt);
 
-    public static void ValidateCandidateImage(
-        string runtimeId,
-        DockerImageInspection image,
-        RuntimePromotionWineOperatorReceiptSnapshot? receipt)
-        => ValidateCandidateLabels(runtimeId, image.Labels, receipt);
+    public static void ValidateCandidateImage(string runtimeId, DockerImageInspection image, RuntimePromotionWineOperatorReceiptSnapshot? receipt) => ValidateCandidateLabels(runtimeId, image.Labels, receipt);
 
-    private static void ValidateCandidateLabels(
-        string runtimeId,
-        IReadOnlyDictionary<string, string> labels,
-        RuntimePromotionWineOperatorReceiptSnapshot? receipt)
+    private static void ValidateCandidateLabels(string runtimeId, IReadOnlyDictionary<string, string> labels, RuntimePromotionWineOperatorReceiptSnapshot? receipt)
     {
         if (receipt is null)
             return;
-        RequireEqual(
-            labels,
-            "io.sharplabnext.operator.receipt-sha256",
-            receipt.Binding.ReceiptSha256,
-            runtimeId);
-        RequireEqual(
-            labels,
-            "io.sharplabnext.operator.receipt-key-id",
-            receipt.Binding.KeyId,
-            runtimeId);
-        RequireEqual(
-            labels,
-            "io.sharplabnext.operator.userspace-reference",
-            receipt.Binding.Reference,
-            runtimeId);
+        RequireEqual(labels, "io.sharplabnext.operator.receipt-sha256", receipt.Binding.ReceiptSha256, runtimeId);
+        RequireEqual(labels, "io.sharplabnext.operator.receipt-key-id", receipt.Binding.KeyId, runtimeId);
+        RequireEqual(labels, "io.sharplabnext.operator.userspace-reference", receipt.Binding.Reference, runtimeId);
         var finalOperatorReference = receipt.Binding.LineageKind == "framework-row"
-            ? receipt.Binding.IntermediaryReference!
-            : receipt.Binding.Reference;
+            ? receipt.Binding.IntermediaryReference! : receipt.Binding.Reference;
         RequireEqual(labels, "io.sharplabnext.operator-image.wine", finalOperatorReference, runtimeId);
         if (receipt.Binding.LineageKind == "framework-parent")
         {
-            RequireEqual(
-                labels,
-                "io.sharplabnext.framework.matrix-parent",
-                receipt.Binding.IntermediaryReference!,
-                runtimeId);
+            RequireEqual(labels, "io.sharplabnext.framework.matrix-parent", receipt.Binding.IntermediaryReference!, runtimeId);
         }
         RequireEqual(labels, "io.sharplabnext.component.wine-coreclr-userspace.version", receipt.UserspaceVersion, runtimeId);
         RequireEqual(labels, "io.sharplabnext.component.wine-coreclr-userspace.digest", receipt.UserspaceDigest, runtimeId);
@@ -2078,9 +1306,7 @@ internal static class WineCoreClrOperatorReceiptTrust
         RequireEqual(labels, "io.sharplabnext.operator.root", receipt.BaseImage, runtimeId);
     }
 
-    private static bool Equivalent(
-        RuntimePromotionWineOperatorReceiptSnapshot left,
-        RuntimePromotionWineOperatorReceiptSnapshot right) =>
+    private static bool Equivalent(RuntimePromotionWineOperatorReceiptSnapshot left, RuntimePromotionWineOperatorReceiptSnapshot right) =>
         left.Binding == right.Binding &&
         left.Receipt == right.Receipt &&
         left.Signature == right.Signature &&
@@ -2093,41 +1319,25 @@ internal static class WineCoreClrOperatorReceiptTrust
         StringComparer.Ordinal.Equals(left.UserspaceDigest, right.UserspaceDigest) &&
         StringComparer.Ordinal.Equals(left.UserspaceSourceUri, right.UserspaceSourceUri) &&
         StringComparer.Ordinal.Equals(left.BaseImage, right.BaseImage) &&
-        left.OperatorLabels.OrderBy(static item => item.Key, StringComparer.Ordinal)
-            .SequenceEqual(right.OperatorLabels.OrderBy(static item => item.Key, StringComparer.Ordinal));
+        left.OperatorLabels.OrderBy(static item => item.Key, StringComparer.Ordinal).SequenceEqual(right.OperatorLabels.OrderBy(static item => item.Key, StringComparer.Ordinal));
 
-    private static async Task<RuntimePromotionWineOperatorReceiptSnapshot> LoadAsync(
-        string repositoryRoot,
-        string runtimeId,
-        string buildSourceRevision,
-        RuntimePromotionWineOperatorBinding binding,
-        IDockerCli docker,
-        CancellationToken cancellationToken)
+    private static async Task<RuntimePromotionWineOperatorReceiptSnapshot> LoadAsync(string repositoryRoot, string runtimeId, string buildSourceRevision, RuntimePromotionWineOperatorBinding binding, IDockerCli docker, CancellationToken cancellationToken)
     {
         ValidateBinding(runtimeId, binding);
         var receiptFile = await ReadFileAsync(repositoryRoot, binding.ReceiptPath, MaximumReceiptBytes, cancellationToken);
         var signatureFile = await ReadFileAsync(repositoryRoot, binding.SignaturePath, MaximumSignatureBytes, cancellationToken);
         var publicKeyFile = await ReadFileAsync(repositoryRoot, PublicKeyPath, MaximumSignatureBytes, cancellationToken);
-        if (!StringComparer.Ordinal.Equals(receiptFile.Sha256, binding.ReceiptSha256) ||
-            !StringComparer.Ordinal.Equals(signatureFile.Sha256, binding.SignatureSha256))
+        if (!StringComparer.Ordinal.Equals(receiptFile.Sha256, binding.ReceiptSha256) || !StringComparer.Ordinal.Equals(signatureFile.Sha256, binding.SignatureSha256))
         {
-            throw new BundleValidationException(
-                $"Wine runtime '{runtimeId}' operator receipt digest does not match its plan binding.");
+            throw new BundleValidationException($"Wine runtime '{runtimeId}' operator receipt digest does not match its plan binding.");
         }
         if (!publicKeyFile.Bytes.AsSpan().SequenceEqual(StrictPem))
             throw new BundleValidationException("Wine operator receipt public key is not the committed strict Ed25519 SPKI PEM.");
 
         var receipt = ParseAndVerifyReceipt(receiptFile.Bytes, signatureFile.Bytes, publicKeyFile.Bytes);
-        if (!StringComparer.Ordinal.Equals(KeyId, binding.KeyId) ||
-            !StringComparer.Ordinal.Equals(receipt.Operator.Reference, binding.Reference) ||
-            !StringComparer.Ordinal.Equals(receipt.SourceRevision, buildSourceRevision) ||
-            !StringComparer.Ordinal.Equals(receipt.SourceRevision, binding.SourceRevision) ||
-            !StringComparer.Ordinal.Equals(receipt.SourceTree, binding.SourceTree) ||
-            !StringComparer.Ordinal.Equals(receipt.Operator.ImageId, binding.ImageId) ||
-            receipt.Operator.SizeBytes != binding.SizeBytes)
+        if (!StringComparer.Ordinal.Equals(KeyId, binding.KeyId) || !StringComparer.Ordinal.Equals(receipt.Operator.Reference, binding.Reference) || !StringComparer.Ordinal.Equals(receipt.SourceRevision, buildSourceRevision) || !StringComparer.Ordinal.Equals(receipt.SourceRevision, binding.SourceRevision) || !StringComparer.Ordinal.Equals(receipt.SourceTree, binding.SourceTree) || !StringComparer.Ordinal.Equals(receipt.Operator.ImageId, binding.ImageId) || receipt.Operator.SizeBytes != binding.SizeBytes)
         {
-            throw new BundleValidationException(
-                $"Wine runtime '{runtimeId}' operator receipt does not bind the promotion plan source or operator.");
+            throw new BundleValidationException($"Wine runtime '{runtimeId}' operator receipt does not bind the promotion plan source or operator.");
         }
         await VerifyCommittedSourceAsync(repositoryRoot, receipt, cancellationToken);
 
@@ -2137,26 +1347,18 @@ internal static class WineCoreClrOperatorReceiptTrust
             !StringComparer.Ordinal.Equals(operatorImage.OperatingSystem, "linux") ||
             !StringComparer.Ordinal.Equals(operatorImage.Architecture, "amd64") ||
             !operatorImage.RepoDigests.Contains(receipt.Operator.Reference, StringComparer.Ordinal) ||
-            !operatorImage.Labels.OrderBy(static pair => pair.Key, StringComparer.Ordinal)
-                .SequenceEqual(receipt.Operator.Labels.OrderBy(static pair => pair.Key, StringComparer.Ordinal)))
+            !operatorImage.Labels.OrderBy(static pair => pair.Key, StringComparer.Ordinal).SequenceEqual(receipt.Operator.Labels.OrderBy(static pair => pair.Key, StringComparer.Ordinal)))
         {
-            throw new BundleValidationException(
-                $"Wine runtime '{runtimeId}' signed operator receipt does not match its inspected immutable clean operator.");
+            throw new BundleValidationException($"Wine runtime '{runtimeId}' signed operator receipt does not match its inspected immutable clean operator.");
         }
         if (binding.IntermediaryReference is { } intermediaryReference)
         {
             var intermediary = await docker.InspectImageAsync(intermediaryReference, cancellationToken);
             var intermediaryOperatorLabel = binding.LineageKind == "framework-row"
-                ? "io.sharplabnext.operator-base"
-                : "io.sharplabnext.operator-image.wine";
-            if (!StringComparer.Ordinal.Equals(intermediary.ImageId, binding.IntermediaryImageId) ||
-                intermediary.SizeBytes != binding.IntermediarySizeBytes ||
-                !intermediary.RepoDigests.Contains(intermediaryReference, StringComparer.Ordinal) ||
-                !intermediary.Labels.TryGetValue(intermediaryOperatorLabel, out var intermediaryOperator) ||
-                !StringComparer.Ordinal.Equals(intermediaryOperator, receipt.Operator.Reference))
+                ? "io.sharplabnext.operator-base" : "io.sharplabnext.operator-image.wine";
+            if (!StringComparer.Ordinal.Equals(intermediary.ImageId, binding.IntermediaryImageId) || intermediary.SizeBytes != binding.IntermediarySizeBytes || !intermediary.RepoDigests.Contains(intermediaryReference, StringComparer.Ordinal) || !intermediary.Labels.TryGetValue(intermediaryOperatorLabel, out var intermediaryOperator) || !StringComparer.Ordinal.Equals(intermediaryOperator, receipt.Operator.Reference))
             {
-                throw new BundleValidationException(
-                    $"Wine runtime '{runtimeId}' Framework intermediary does not retain the signed clean operator lineage.");
+                throw new BundleValidationException($"Wine runtime '{runtimeId}' Framework intermediary does not retain the signed clean operator lineage.");
             }
         }
 
@@ -2176,10 +1378,7 @@ internal static class WineCoreClrOperatorReceiptTrust
             receipt.Operator.BaseImage);
     }
 
-    internal static void ValidateBinding(
-        string runtimeId,
-        RuntimePromotionWineOperatorBinding binding,
-        string? family = null)
+    internal static void ValidateBinding(string runtimeId, RuntimePromotionWineOperatorBinding binding, string? family = null)
     {
         var expectedPath = $"profiles/runtime-operator-receipts/wine-coreclr-{binding.SourceRevision}.json";
         if (!StringComparer.Ordinal.Equals(binding.ReceiptPath, expectedPath) ||
@@ -2190,19 +1389,13 @@ internal static class WineCoreClrOperatorReceiptTrust
             binding.SizeBytes <= 0 || !GitObject.IsMatch(binding.SourceRevision) ||
             !GitObject.IsMatch(binding.SourceTree) ||
             binding.LineageKind is not ("direct" or "framework-row" or "framework-parent") ||
-            (binding.LineageKind == "direct"
-                ? binding.IntermediaryReference is not null || binding.IntermediaryImageId is not null || binding.IntermediarySizeBytes is not null
-                : !ImmutableImage.IsMatch(binding.IntermediaryReference ?? string.Empty) || !Sha256.IsMatch(binding.IntermediaryImageId ?? string.Empty) || binding.IntermediarySizeBytes <= 0))
+            (binding.LineageKind == "direct" ? binding.IntermediaryReference is not null || binding.IntermediaryImageId is not null || binding.IntermediarySizeBytes is not null : !ImmutableImage.IsMatch(binding.IntermediaryReference ?? string.Empty) || !Sha256.IsMatch(binding.IntermediaryImageId ?? string.Empty) || binding.IntermediarySizeBytes <= 0))
         {
-            throw new BundleValidationException(
-                $"Wine runtime '{runtimeId}' operator receipt binding is not canonical.");
+            throw new BundleValidationException($"Wine runtime '{runtimeId}' operator receipt binding is not canonical.");
         }
-        if (family is not null &&
-            (family == "coreclr-wine" && binding.LineageKind != "direct" ||
-             family == "netfx-clr-wine" && binding.LineageKind == "direct"))
+        if (family is not null && (family == "coreclr-wine" && binding.LineageKind != "direct" || family == "netfx-clr-wine" && binding.LineageKind == "direct"))
         {
-            throw new BundleValidationException(
-                $"Wine runtime '{runtimeId}' operator receipt lineage does not match family '{family}'.");
+            throw new BundleValidationException($"Wine runtime '{runtimeId}' operator receipt lineage does not match family '{family}'.");
         }
     }
 
@@ -2214,11 +1407,7 @@ internal static class WineCoreClrOperatorReceiptTrust
         try
         {
             _ = StrictUtf8.GetString(bytes);
-            document = JsonDocument.Parse(bytes, new JsonDocumentOptions
-            {
-                AllowTrailingCommas = false,
-                CommentHandling = JsonCommentHandling.Disallow
-            });
+            document = JsonDocument.Parse(bytes, new JsonDocumentOptions { AllowTrailingCommas = false, CommentHandling = JsonCommentHandling.Disallow });
         }
         catch (Exception exception) when (exception is DecoderFallbackException or JsonException)
         {
@@ -2238,14 +1427,10 @@ internal static class WineCoreClrOperatorReceiptTrust
                 throw new BundleValidationException("Wine operator receipt source must use full lowercase Git identities.");
             var files = source.GetProperty("files");
             RequireProperties(files, "Wine operator receipt source files", RequiredSourceFiles);
-            var sourceFiles = RequiredSourceFiles.ToDictionary(
-                static path => path,
-                path => RequireSha256(files.GetProperty(path), $"Wine operator receipt source file '{path}'"),
-                StringComparer.Ordinal);
+            var sourceFiles = RequiredSourceFiles.ToDictionary(static path => path, path => RequireSha256(files.GetProperty(path), $"Wine operator receipt source file '{path}'"), StringComparer.Ordinal);
 
             var operatorElement = root.GetProperty("operator");
-            RequireProperties(operatorElement, "Wine operator receipt operator",
-                "reference", "imageId", "sizeBytes", "platform", "userspace", "baseImage", "labels");
+            RequireProperties(operatorElement, "Wine operator receipt operator", "reference", "imageId", "sizeBytes", "platform", "userspace", "baseImage", "labels");
             var reference = RequireString(operatorElement.GetProperty("reference"), null, "Wine operator receipt reference", 512);
             var imageId = RequireSha256(operatorElement.GetProperty("imageId"), "Wine operator receipt image ID");
             var sizeBytes = RequirePositiveInteger(operatorElement.GetProperty("sizeBytes"), "Wine operator receipt size");
@@ -2258,8 +1443,7 @@ internal static class WineCoreClrOperatorReceiptTrust
             var userspaceVersion = RequireString(userspace.GetProperty("version"), null, "Wine operator receipt userspace version", 256);
             var userspaceDigest = RequireSha256(userspace.GetProperty("digest"), "Wine operator receipt userspace digest");
             var userspaceUri = RequireString(userspace.GetProperty("sourceUri"), null, "Wine operator receipt userspace URI", 2048);
-            if (userspaceVersion.Length == 0 || !Uri.TryCreate(userspaceUri, UriKind.Absolute, out var uri) ||
-                uri.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(uri.UserInfo))
+            if (userspaceVersion.Length == 0 || !Uri.TryCreate(userspaceUri, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(uri.UserInfo))
             {
                 throw new BundleValidationException("Wine operator receipt userspace must bind a version, SHA-256 digest, and HTTPS URI.");
             }
@@ -2279,19 +1463,7 @@ internal static class WineCoreClrOperatorReceiptTrust
             if (!bytes.AsSpan().SequenceEqual(canonical))
                 throw new BundleValidationException("Wine operator receipt JSON is not strict canonical sorted-key UTF-8 LF encoding.");
             VerifySignature(canonical, signatureBytes, publicKeyPem);
-            return new ParsedReceipt(
-                revision,
-                tree,
-                sourceFiles,
-                new ParsedOperator(
-                    reference,
-                    imageId,
-                    sizeBytes,
-                    labelValues,
-                    userspaceVersion,
-                    userspaceDigest,
-                    userspaceUri,
-                    baseImage));
+            return new ParsedReceipt(revision, tree, sourceFiles, new ParsedOperator(reference, imageId, sizeBytes, labelValues, userspaceVersion, userspaceDigest, userspaceUri, baseImage));
         }
     }
 
@@ -2309,8 +1481,7 @@ internal static class WineCoreClrOperatorReceiptTrust
         if (text.Contains('\r') || (text.Contains('\n') && (!text.EndsWith('\n') || text[..^1].Contains('\n'))))
             throw new BundleValidationException("Wine operator receipt signature must be canonical Base64 text.");
         var base64 = text.EndsWith('\n') ? text[..^1] : text;
-        if (base64.Length != 88 || !base64.EndsWith("==", StringComparison.Ordinal) ||
-            base64.Any(static value => !char.IsAsciiLetterOrDigit(value) && value is not '+' and not '/' and not '='))
+        if (base64.Length != 88 || !base64.EndsWith("==", StringComparison.Ordinal) || base64.Any(static value => !char.IsAsciiLetterOrDigit(value) && value is not '+' and not '/' and not '='))
         {
             throw new BundleValidationException("Wine operator receipt signature must be one canonical 64-byte Ed25519 signature.");
         }
@@ -2323,8 +1494,7 @@ internal static class WineCoreClrOperatorReceiptTrust
         {
             throw new BundleValidationException($"Wine operator receipt signature is not Base64: {exception.Message}");
         }
-        if (signature.Length != 64 || !StringComparer.Ordinal.Equals(Convert.ToBase64String(signature), base64) ||
-            !publicKeyPem.AsSpan().SequenceEqual(StrictPem))
+        if (signature.Length != 64 || !StringComparer.Ordinal.Equals(Convert.ToBase64String(signature), base64) || !publicKeyPem.AsSpan().SequenceEqual(StrictPem))
         {
             throw new BundleValidationException("Wine operator receipt signature or public key is not canonical.");
         }
@@ -2335,42 +1505,25 @@ internal static class WineCoreClrOperatorReceiptTrust
             throw new BundleValidationException("Wine operator receipt signature is invalid.");
     }
 
-    private static async Task VerifyCommittedSourceAsync(
-        string repositoryRoot,
-        ParsedReceipt receipt,
-        CancellationToken cancellationToken)
+    private static async Task VerifyCommittedSourceAsync(string repositoryRoot, ParsedReceipt receipt, CancellationToken cancellationToken)
     {
-        var tree = StrictUtf8.GetString(await RunGitAsync(
-            repositoryRoot,
-            ["rev-parse", receipt.SourceRevision + "^{tree}"],
-            1024,
-            cancellationToken)).TrimEnd('\n');
+        var tree = StrictUtf8.GetString(await RunGitAsync(repositoryRoot, ["rev-parse", receipt.SourceRevision + "^{tree}"], 1024, cancellationToken)).TrimEnd('\n');
         if (!StringComparer.Ordinal.Equals(tree, receipt.SourceTree))
             throw new BundleValidationException("Wine operator receipt source tree does not match its source revision.");
         foreach (var path in RequiredSourceFiles)
         {
-            var bytes = await RunGitAsync(
-                repositoryRoot,
-                ["show", receipt.SourceRevision + ":" + path],
-                MaximumSourceFileBytes,
-                cancellationToken);
+            var bytes = await RunGitAsync(repositoryRoot, ["show", receipt.SourceRevision + ":" + path], MaximumSourceFileBytes, cancellationToken);
             var digest = "sha256:" + Convert.ToHexStringLower(SHA256.HashData(bytes));
             if (!StringComparer.Ordinal.Equals(digest, receipt.SourceFiles[path]))
             {
-                throw new BundleValidationException(
-                    $"Wine operator receipt committed file digest does not match '{path}'.");
+                throw new BundleValidationException($"Wine operator receipt committed file digest does not match '{path}'.");
             }
         }
     }
 
-    private static async Task<ReadFile> ReadFileAsync(
-        string repositoryRoot,
-        string relativePath,
-        long maximumBytes,
-        CancellationToken cancellationToken)
+    private static async Task<ReadFile> ReadFileAsync(string repositoryRoot, string relativePath, long maximumBytes, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(relativePath) || relativePath.Contains('\\') || Path.IsPathRooted(relativePath) ||
-            relativePath.Split('/').Any(static part => part is "" or "." or ".."))
+        if (string.IsNullOrWhiteSpace(relativePath) || relativePath.Contains('\\') || Path.IsPathRooted(relativePath) || relativePath.Split('/').Any(static part => part is "" or "." or ".."))
         {
             throw new BundleValidationException("Wine operator receipt path is not canonical.");
         }
@@ -2379,21 +1532,17 @@ internal static class WineCoreClrOperatorReceiptTrust
         var relative = Path.GetRelativePath(root, path);
         if (relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(relative))
             throw new BundleValidationException("Wine operator receipt path escapes the repository.");
-        for (var directory = new DirectoryInfo(Path.GetDirectoryName(path)!);
-             directory is not null && !StringComparer.OrdinalIgnoreCase.Equals(directory.FullName, root);
-             directory = directory.Parent)
+        for (var directory = new DirectoryInfo(Path.GetDirectoryName(path)!); directory is not null && !StringComparer.OrdinalIgnoreCase.Equals(directory.FullName, root); directory = directory.Parent)
         {
             directory.Refresh();
             if (!directory.Exists || directory.LinkTarget is not null || directory.Attributes.HasFlag(FileAttributes.ReparsePoint))
             {
-                throw new BundleValidationException(
-                    $"Wine operator receipt directory '{directory.FullName}' is not a regular directory.");
+                throw new BundleValidationException($"Wine operator receipt directory '{directory.FullName}' is not a regular directory.");
             }
         }
         var info = new FileInfo(path);
         info.Refresh();
-        if (!info.Exists || info.LinkTarget is not null || info.Attributes.HasFlag(FileAttributes.ReparsePoint) ||
-            info.Length < 1 || info.Length > maximumBytes)
+        if (!info.Exists || info.LinkTarget is not null || info.Attributes.HasFlag(FileAttributes.ReparsePoint) || info.Length < 1 || info.Length > maximumBytes)
         {
             throw new BundleValidationException($"Wine operator receipt material '{relativePath}' must be a bounded regular non-link file.");
         }
@@ -2403,24 +1552,9 @@ internal static class WineCoreClrOperatorReceiptTrust
         return new ReadFile(relativePath, "sha256:" + Convert.ToHexStringLower(SHA256.HashData(bytes)), bytes);
     }
 
-    private static async Task<byte[]> RunGitAsync(
-        string repositoryRoot,
-        IReadOnlyList<string> arguments,
-        long maximumBytes,
-        CancellationToken cancellationToken)
+    private static async Task<byte[]> RunGitAsync(string repositoryRoot, IReadOnlyList<string> arguments, long maximumBytes, CancellationToken cancellationToken)
     {
-        using var process = new System.Diagnostics.Process
-        {
-            StartInfo = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "git",
-                WorkingDirectory = Path.GetFullPath(repositoryRoot),
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
-        };
+        using var process = new System.Diagnostics.Process { StartInfo = new System.Diagnostics.ProcessStartInfo { FileName = "git", WorkingDirectory = Path.GetFullPath(repositoryRoot), RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true } };
         foreach (var argument in arguments)
             process.StartInfo.ArgumentList.Add(argument);
         try
@@ -2460,11 +1594,7 @@ internal static class WineCoreClrOperatorReceiptTrust
         return stdout.Result;
     }
 
-    private static async Task<byte[]> ReadBoundedAsync(
-        Stream stream,
-        long maximumBytes,
-        string streamName,
-        CancellationToken cancellationToken)
+    private static async Task<byte[]> ReadBoundedAsync(Stream stream, long maximumBytes, string streamName, CancellationToken cancellationToken)
     {
         await using var output = new MemoryStream();
         var buffer = new byte[8192];
@@ -2475,8 +1605,7 @@ internal static class WineCoreClrOperatorReceiptTrust
                 return output.ToArray();
             if (output.Length + read > maximumBytes)
             {
-                throw new GitOutputLimitException(
-                    $"Git {streamName} exceeded the Wine operator source closure limit.");
+                throw new GitOutputLimitException($"Git {streamName} exceeded the Wine operator source closure limit.");
             }
             await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
         }
@@ -2485,11 +1614,7 @@ internal static class WineCoreClrOperatorReceiptTrust
     private static byte[] Canonicalize(JsonElement value)
     {
         using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions
-               {
-                   Indented = false,
-                   Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-               }))
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
         {
             WriteCanonical(writer, value);
         }
@@ -2532,18 +1657,13 @@ internal static class WineCoreClrOperatorReceiptTrust
         if (value.ValueKind != JsonValueKind.Object)
             throw new BundleValidationException($"{description} must be an object.");
         var actual = value.EnumerateObject().Select(static item => item.Name).ToArray();
-        if (actual.Length != names.Length || actual.Distinct(StringComparer.Ordinal).Count() != actual.Length ||
-            !actual.Order(StringComparer.Ordinal).SequenceEqual(names.Order(StringComparer.Ordinal), StringComparer.Ordinal))
+        if (actual.Length != names.Length || actual.Distinct(StringComparer.Ordinal).Count() != actual.Length || !actual.Order(StringComparer.Ordinal).SequenceEqual(names.Order(StringComparer.Ordinal), StringComparer.Ordinal))
         {
             throw new BundleValidationException($"{description} has missing, duplicate, or unknown properties.");
         }
     }
 
-    private static string RequireString(
-        JsonElement value,
-        string? expected,
-        string description,
-        int maximumLength = 2048)
+    private static string RequireString(JsonElement value, string? expected, string description, int maximumLength = 2048)
     {
         if (value.ValueKind != JsonValueKind.String || value.GetString() is not { } result ||
             (expected is not null && !StringComparer.Ordinal.Equals(result, expected)))
@@ -2556,8 +1676,7 @@ internal static class WineCoreClrOperatorReceiptTrust
 
     private static void RequireCanonicalAscii(string value, string description, int maximumLength = 2048)
     {
-        if (value.Length == 0 || value.Length > maximumLength ||
-            value.Any(static character => character is < ' ' or > '~'))
+        if (value.Length == 0 || value.Length > maximumLength || value.Any(static character => character is < ' ' or > '~'))
         {
             throw new BundleValidationException($"{description} must be bounded printable ASCII.");
         }
@@ -2584,16 +1703,11 @@ internal static class WineCoreClrOperatorReceiptTrust
             throw new BundleValidationException($"{description} is invalid.");
     }
 
-    private static void RequireEqual(
-        IReadOnlyDictionary<string, string> labels,
-        string name,
-        string expected,
-        string runtimeId)
+    private static void RequireEqual(IReadOnlyDictionary<string, string> labels, string name, string expected, string runtimeId)
     {
         if (!labels.TryGetValue(name, out var actual) || !StringComparer.Ordinal.Equals(actual, expected))
         {
-            throw new BundleValidationException(
-                $"Wine runtime '{runtimeId}' candidate label '{name}' does not match its signed operator receipt.");
+            throw new BundleValidationException($"Wine runtime '{runtimeId}' candidate label '{name}' does not match its signed operator receipt.");
         }
     }
 
@@ -2606,20 +1720,8 @@ internal static class WineCoreClrOperatorReceiptTrust
     ];
 
     private sealed record ReadFile(string RelativePath, string Sha256, byte[] Bytes);
-    private sealed record ParsedReceipt(
-        string SourceRevision,
-        string SourceTree,
-        IReadOnlyDictionary<string, string> SourceFiles,
-        ParsedOperator Operator);
-    private sealed record ParsedOperator(
-        string Reference,
-        string ImageId,
-        long SizeBytes,
-        IReadOnlyDictionary<string, string> Labels,
-        string UserspaceVersion,
-        string UserspaceDigest,
-        string UserspaceSourceUri,
-        string BaseImage);
+    private sealed record ParsedReceipt(string SourceRevision, string SourceTree, IReadOnlyDictionary<string, string> SourceFiles, ParsedOperator Operator);
+    private sealed record ParsedOperator(string Reference, string ImageId, long SizeBytes, IReadOnlyDictionary<string, string> Labels, string UserspaceVersion, string UserspaceDigest, string UserspaceSourceUri, string BaseImage);
 
     private sealed class GitOutputLimitException(string message) : Exception(message);
 }
@@ -2649,12 +1751,7 @@ internal sealed record RuntimePromotionPlanSignatureSnapshot(
     byte[] PublicKeyBytes,
     RuntimePromotionPlanSignatureVerifier Verifier);
 
-internal sealed record RuntimePromotionPlanSignatureVerifier(
-    string KeyId,
-    string PublicKeyPath,
-    byte[] PublicKeyPem,
-    byte[] PublicKeySpki,
-    Func<string, string, CancellationToken, Task>? SourceTreeVerifier);
+internal sealed record RuntimePromotionPlanSignatureVerifier(string KeyId, string PublicKeyPath, byte[] PublicKeyPem, byte[] PublicKeySpki, Func<string, string, CancellationToken, Task>? SourceTreeVerifier);
 
 internal sealed record RuntimePromotionWineOperatorReceiptSnapshot(
     RuntimePromotionWineOperatorBinding Binding,
@@ -2671,31 +1768,15 @@ internal sealed record RuntimePromotionWineOperatorReceiptSnapshot(
     string UserspaceSourceUri,
     string BaseImage);
 
-internal sealed record RuntimePromotionMeasurementHelperSnapshot(
-    string Implementation,
-    string Reference,
-    string ImageId,
-    long SizeBytes,
-    string Entrypoint,
-    string SourceRevision,
-    string ContentSha256);
+internal sealed record RuntimePromotionMeasurementHelperSnapshot(string Implementation, string Reference, string ImageId, long SizeBytes, string Entrypoint, string SourceRevision, string ContentSha256);
 
 internal sealed record RuntimePromotionFileSnapshot(string RelativePath, string Sha256);
 
 internal sealed record RuntimePromotionOperationFileIdentity(string Path, string Sha256);
 
-internal sealed record RuntimePromotionImageFileSnapshot(
-    string Path,
-    string Sha256,
-    long SizeBytes,
-    string Role,
-    string Format,
-    string Architecture);
+internal sealed record RuntimePromotionImageFileSnapshot(string Path, string Sha256, long SizeBytes, string Role, string Format, string Architecture);
 
-internal sealed record RuntimePromotionChecksSnapshot(
-    IReadOnlyList<RuntimePromotionFileSnapshot> Evidence,
-    IReadOnlyList<RuntimePromotionImageFileSnapshot> ImageFiles,
-    string PreflightProfileSha256);
+internal sealed record RuntimePromotionChecksSnapshot(IReadOnlyList<RuntimePromotionFileSnapshot> Evidence, IReadOnlyList<RuntimePromotionImageFileSnapshot> ImageFiles, string PreflightProfileSha256);
 
 internal sealed class RuntimePromotionReceiptDocument
 {

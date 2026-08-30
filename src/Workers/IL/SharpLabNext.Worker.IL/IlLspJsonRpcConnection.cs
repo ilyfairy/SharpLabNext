@@ -7,11 +7,7 @@ using SharpLabNext.Contracts;
 
 namespace SharpLabNext.Worker.IL;
 
-internal sealed class IlLspJsonRpcConnection(
-    WebSocket socket,
-    IlLanguageSession session,
-    IlLspLimits limits,
-    CancellationToken requestAborted) : IAsyncDisposable
+internal sealed class IlLspJsonRpcConnection(WebSocket socket, IlLanguageSession session, IlLspLimits limits, CancellationToken requestAborted) : IAsyncDisposable
 {
     private const int MaxConcurrentRequests = 8;
     private const int MaxPendingWorkspaceNotifications = 128;
@@ -28,8 +24,7 @@ internal sealed class IlLspJsonRpcConnection(
             FullMode = BoundedChannelFullMode.Wait
         });
     private readonly object _diagnosticsLock = new();
-    private readonly CancellationTokenSource _connectionCancellation =
-        CancellationTokenSource.CreateLinkedTokenSource(requestAborted, session.LifetimeToken);
+    private readonly CancellationTokenSource _connectionCancellation = CancellationTokenSource.CreateLinkedTokenSource(requestAborted, session.LifetimeToken);
     private CancellationTokenSource? _activeDiagnostics;
     private Task? _diagnosticsTask;
     private Task? _workspaceTask;
@@ -53,12 +48,8 @@ internal sealed class IlLspJsonRpcConnection(
                 await DispatchAsync(message.RootElement, _connectionCancellation.Token).ConfigureAwait(false);
             }
         }
-        catch (OperationCanceledException) when (_connectionCancellation.IsCancellationRequested)
-        {
-        }
-        catch (WebSocketException)
-        {
-        }
+        catch (OperationCanceledException) when (_connectionCancellation.IsCancellationRequested) { }
+        catch (WebSocketException) { }
         finally
         {
             CancelIgnoringDisposal(_connectionCancellation);
@@ -94,9 +85,7 @@ internal sealed class IlLspJsonRpcConnection(
 
     private async Task DispatchAsync(JsonElement root, CancellationToken cancellationToken)
     {
-        if (root.ValueKind != JsonValueKind.Object ||
-            !root.TryGetProperty("jsonrpc", out var jsonRpc) || jsonRpc.GetString() != "2.0" ||
-            !root.TryGetProperty("method", out var methodElement) || methodElement.ValueKind != JsonValueKind.String)
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("jsonrpc", out var jsonRpc) || jsonRpc.GetString() != "2.0" || !root.TryGetProperty("method", out var methodElement) || methodElement.ValueKind != JsonValueKind.String)
         {
             await SendErrorAsync(GetOptionalId(root), -32600, "Invalid Request", cancellationToken).ConfigureAwait(false);
             return;
@@ -124,20 +113,12 @@ internal sealed class IlLspJsonRpcConnection(
         }
         if (Volatile.Read(ref _initialized) == 0 && method != "initialize")
         {
-            await SendErrorAsync(
-                idClone,
-                -32002,
-                "The IL LSP connection has not been initialized.",
-                cancellationToken).ConfigureAwait(false);
+            await SendErrorAsync(idClone, -32002, "The IL LSP connection has not been initialized.", cancellationToken).ConfigureAwait(false);
             return;
         }
         if (Volatile.Read(ref _shutdown) != 0)
         {
-            await SendErrorAsync(
-                idClone,
-                -32002,
-                "The IL LSP connection has been shut down.",
-                cancellationToken).ConfigureAwait(false);
+            await SendErrorAsync(idClone, -32002, "The IL LSP connection has been shut down.", cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -148,8 +129,7 @@ internal sealed class IlLspJsonRpcConnection(
         }
 
         var idKey = idClone.GetRawText();
-        var request = new InFlightRequest(
-            CancellationTokenSource.CreateLinkedTokenSource(_connectionCancellation.Token));
+        var request = new InFlightRequest(CancellationTokenSource.CreateLinkedTokenSource(_connectionCancellation.Token));
         if (!_requests.TryAdd(idKey, request))
         {
             request.Cancellation.Dispose();
@@ -161,10 +141,7 @@ internal sealed class IlLspJsonRpcConnection(
         if (method == "shutdown")
             Shutdown();
         request.Task = method is "initialize" or "shutdown"
-            ? ProcessRequestAsync(idClone, method, message, workspaceBarrier, request.Cancellation.Token)
-            : Task.Run(
-                () => ProcessRequestAsync(idClone, method, message, workspaceBarrier, request.Cancellation.Token),
-                CancellationToken.None);
+            ? ProcessRequestAsync(idClone, method, message, workspaceBarrier, request.Cancellation.Token) : Task.Run(() => ProcessRequestAsync(idClone, method, message, workspaceBarrier, request.Cancellation.Token), CancellationToken.None);
         _ = CompleteRequestAsync(idKey, request);
     }
 
@@ -175,12 +152,7 @@ internal sealed class IlLspJsonRpcConnection(
             completed.Cancellation.Dispose();
     }
 
-    private async Task ProcessRequestAsync(
-        JsonElement id,
-        string method,
-        JsonElement root,
-        Task workspaceBarrier,
-        CancellationToken cancellationToken)
+    private async Task ProcessRequestAsync(JsonElement id, string method, JsonElement root, Task workspaceBarrier, CancellationToken cancellationToken)
     {
         try
         {
@@ -190,28 +162,15 @@ internal sealed class IlLspJsonRpcConnection(
             {
                 "initialize" => Initialize(),
                 "shutdown" => Shutdown(),
-                "textDocument/completion" => await session.GetCompletionsAsync(
-                    RequiredParams<IlLspCompletionParams>(root), cancellationToken).ConfigureAwait(false),
-                "textDocument/hover" => await session.GetHoverAsync(
-                    RequiredParams<IlLspTextDocumentPositionParams>(root), cancellationToken).ConfigureAwait(false),
-                "textDocument/definition" => await session.GetDefinitionAsync(
-                    RequiredParams<IlLspTextDocumentPositionParams>(root), cancellationToken).ConfigureAwait(false),
-                "workspace/symbol" => await session.GetWorkspaceSymbolsAsync(
-                    RequiredParams<IlLspWorkspaceSymbolParams>(root),
-                    limits.MaxDocumentSymbols,
-                    cancellationToken).ConfigureAwait(false),
-                "textDocument/signatureHelp" => await session.GetSignatureHelpAsync(
-                    RequiredParams<IlLspTextDocumentPositionParams>(root), cancellationToken).ConfigureAwait(false),
-                "textDocument/semanticTokens/full" => await session.GetSemanticTokensAsync(
-                    RequiredParams<IlLspSemanticTokensParams>(root), cancellationToken).ConfigureAwait(false),
-                "textDocument/documentSymbol" => await session.GetDocumentSymbolsAsync(
-                    RequiredParams<IlLspDocumentSymbolParams>(root), cancellationToken).ConfigureAwait(false),
-                "textDocument/codeAction" => await session.GetCodeActionsAsync(
-                    RequiredParams<IlLspCodeActionParams>(root),
-                    limits.MaxCodeActions,
-                    cancellationToken).ConfigureAwait(false),
-                "textDocument/foldingRange" => await session.GetFoldingRangesAsync(
-                    RequiredParams<IlLspFoldingRangeParams>(root), cancellationToken).ConfigureAwait(false),
+                "textDocument/completion" => await session.GetCompletionsAsync(RequiredParams<IlLspCompletionParams>(root), cancellationToken).ConfigureAwait(false),
+                "textDocument/hover" => await session.GetHoverAsync(RequiredParams<IlLspTextDocumentPositionParams>(root), cancellationToken).ConfigureAwait(false),
+                "textDocument/definition" => await session.GetDefinitionAsync(RequiredParams<IlLspTextDocumentPositionParams>(root), cancellationToken).ConfigureAwait(false),
+                "workspace/symbol" => await session.GetWorkspaceSymbolsAsync(RequiredParams<IlLspWorkspaceSymbolParams>(root), limits.MaxDocumentSymbols, cancellationToken).ConfigureAwait(false),
+                "textDocument/signatureHelp" => await session.GetSignatureHelpAsync(RequiredParams<IlLspTextDocumentPositionParams>(root), cancellationToken).ConfigureAwait(false),
+                "textDocument/semanticTokens/full" => await session.GetSemanticTokensAsync(RequiredParams<IlLspSemanticTokensParams>(root), cancellationToken).ConfigureAwait(false),
+                "textDocument/documentSymbol" => await session.GetDocumentSymbolsAsync(RequiredParams<IlLspDocumentSymbolParams>(root), cancellationToken).ConfigureAwait(false),
+                "textDocument/codeAction" => await session.GetCodeActionsAsync(RequiredParams<IlLspCodeActionParams>(root), limits.MaxCodeActions, cancellationToken).ConfigureAwait(false),
+                "textDocument/foldingRange" => await session.GetFoldingRangesAsync(RequiredParams<IlLspFoldingRangeParams>(root), cancellationToken).ConfigureAwait(false),
                 _ => throw new IlLspMethodNotFoundException($"LSP method '{method}' is not supported.")
             };
             await SendResultAsync(id, result, cancellationToken).ConfigureAwait(false);
@@ -236,10 +195,7 @@ internal sealed class IlLspJsonRpcConnection(
         }
     }
 
-    private async Task HandleNotificationAsync(
-        string method,
-        JsonElement root,
-        CancellationToken cancellationToken)
+    private async Task HandleNotificationAsync(string method, JsonElement root, CancellationToken cancellationToken)
     {
         if (method == "exit")
         {
@@ -253,28 +209,13 @@ internal sealed class IlLspJsonRpcConnection(
             case "initialized":
                 return;
             case "textDocument/didOpen":
-                await QueueWorkspaceNotificationAsync(
-                    new WorkspaceNotification(
-                        WorkspaceNotificationKind.DidOpen,
-                        RequiredParams<IlLspDidOpenParams>(root),
-                        NewWorkspaceCompletion()),
-                    cancellationToken).ConfigureAwait(false);
+                await QueueWorkspaceNotificationAsync(new WorkspaceNotification(WorkspaceNotificationKind.DidOpen, RequiredParams<IlLspDidOpenParams>(root), NewWorkspaceCompletion()), cancellationToken).ConfigureAwait(false);
                 return;
             case "textDocument/didChange":
-                await QueueWorkspaceNotificationAsync(
-                    new WorkspaceNotification(
-                        WorkspaceNotificationKind.DidChange,
-                        RequiredParams<IlLspDidChangeParams>(root),
-                        NewWorkspaceCompletion()),
-                    cancellationToken).ConfigureAwait(false);
+                await QueueWorkspaceNotificationAsync(new WorkspaceNotification(WorkspaceNotificationKind.DidChange, RequiredParams<IlLspDidChangeParams>(root), NewWorkspaceCompletion()), cancellationToken).ConfigureAwait(false);
                 return;
             case "textDocument/didClose":
-                await QueueWorkspaceNotificationAsync(
-                    new WorkspaceNotification(
-                        WorkspaceNotificationKind.DidClose,
-                        RequiredParams<IlLspDidCloseParams>(root),
-                        NewWorkspaceCompletion()),
-                    cancellationToken).ConfigureAwait(false);
+                await QueueWorkspaceNotificationAsync(new WorkspaceNotification(WorkspaceNotificationKind.DidClose, RequiredParams<IlLspDidCloseParams>(root), NewWorkspaceCompletion()), cancellationToken).ConfigureAwait(false);
                 return;
         }
     }
@@ -286,23 +227,17 @@ internal sealed class IlLspJsonRpcConnection(
         return completion;
     }
 
-    private async Task QueueWorkspaceNotificationAsync(
-        WorkspaceNotification notification,
-        CancellationToken cancellationToken)
+    private async Task QueueWorkspaceNotificationAsync(WorkspaceNotification notification, CancellationToken cancellationToken)
     {
         if (_workspaceNotifications.Writer.TryWrite(notification))
             return;
 
-        notification.Completion.TrySetException(
-            new IlLspLimitExceededException("Too many pending IL LSP workspace notifications."));
+        notification.Completion.TrySetException(new IlLspLimitExceededException("Too many pending IL LSP workspace notifications."));
         try
         {
             if (socket.State == WebSocketState.Open)
             {
-                await socket.CloseOutputAsync(
-                    WebSocketCloseStatus.PolicyViolation,
-                    "Too many pending IL LSP workspace notifications.",
-                    cancellationToken).ConfigureAwait(false);
+                await socket.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, "Too many pending IL LSP workspace notifications.", cancellationToken).ConfigureAwait(false);
             }
         }
         finally
@@ -335,9 +270,7 @@ internal sealed class IlLspJsonRpcConnection(
                 }
             }
         }
-        catch (OperationCanceledException) when (_connectionCancellation.IsCancellationRequested)
-        {
-        }
+        catch (OperationCanceledException) when (_connectionCancellation.IsCancellationRequested) { }
         finally
         {
             while (_workspaceNotifications.Reader.TryRead(out var pending))
@@ -345,32 +278,21 @@ internal sealed class IlLspJsonRpcConnection(
         }
     }
 
-    private async Task ApplyWorkspaceNotificationAsync(
-        WorkspaceNotification notification,
-        CancellationToken cancellationToken)
+    private async Task ApplyWorkspaceNotificationAsync(WorkspaceNotification notification, CancellationToken cancellationToken)
     {
         CancelDiagnosticsComputation();
         switch (notification.Kind)
         {
             case WorkspaceNotificationKind.DidOpen:
-                await session.DidOpenAsync(
-                    (IlLspDidOpenParams)notification.Parameters,
-                    cancellationToken).ConfigureAwait(false);
+                await session.DidOpenAsync((IlLspDidOpenParams)notification.Parameters, cancellationToken).ConfigureAwait(false);
                 break;
             case WorkspaceNotificationKind.DidChange:
-                await session.DidChangeAsync(
-                    (IlLspDidChangeParams)notification.Parameters,
-                    cancellationToken).ConfigureAwait(false);
+                await session.DidChangeAsync((IlLspDidChangeParams)notification.Parameters, cancellationToken).ConfigureAwait(false);
                 break;
             case WorkspaceNotificationKind.DidClose:
             {
-                var state = await session.DidCloseAsync(
-                    (IlLspDidCloseParams)notification.Parameters,
-                    cancellationToken).ConfigureAwait(false);
-                await SendNotificationAsync(
-                    "textDocument/publishDiagnostics",
-                    new { uri = state.Uri, version = state.Version, diagnostics = Array.Empty<IlLspDiagnostic>() },
-                    cancellationToken).ConfigureAwait(false);
+                var state = await session.DidCloseAsync((IlLspDidCloseParams)notification.Parameters, cancellationToken).ConfigureAwait(false);
+                await SendNotificationAsync("textDocument/publishDiagnostics", new { uri = state.Uri, version = state.Version, diagnostics = Array.Empty<IlLspDiagnostic>() }, cancellationToken).ConfigureAwait(false);
                 break;
             }
             default:
@@ -389,33 +311,14 @@ internal sealed class IlLspJsonRpcConnection(
             {
                 positionEncoding = ContractConventions.TextCoordinateEncoding,
                 textDocumentSync = new { openClose = true, change = 2, save = false },
-                completionProvider = new
-                {
-                    resolveProvider = false,
-                    triggerCharacters = IlLanguageService.CompletionTriggerCharacters
-                },
+                completionProvider = new { resolveProvider = false, triggerCharacters = IlLanguageService.CompletionTriggerCharacters },
                 hoverProvider = true,
                 definitionProvider = true,
-                signatureHelpProvider = new
-                {
-                    triggerCharacters = IlLanguageService.SignatureHelpTriggerCharacters
-                },
-                semanticTokensProvider = new
-                {
-                    legend = new
-                    {
-                        tokenTypes = IlLanguageService.SemanticTokenTypes,
-                        tokenModifiers = IlLanguageService.SemanticTokenModifiers
-                    },
-                    range = false,
-                    full = true
-                },
+                signatureHelpProvider = new { triggerCharacters = IlLanguageService.SignatureHelpTriggerCharacters },
+                semanticTokensProvider = new { legend = new { tokenTypes = IlLanguageService.SemanticTokenTypes, tokenModifiers = IlLanguageService.SemanticTokenModifiers }, range = false, full = true },
                 documentSymbolProvider = true,
                 workspaceSymbolProvider = true,
-                codeActionProvider = new
-                {
-                    codeActionKinds = new[] { "quickfix", "refactor.rewrite" }
-                },
+                codeActionProvider = new { codeActionKinds = new[] { "quickfix", "refactor.rewrite" } },
                 foldingRangeProvider = true
             },
             serverInfo = new { name = "SharpLabNext IL language server", version = "1.0" }
@@ -436,9 +339,7 @@ internal sealed class IlLspJsonRpcConnection(
             if (_diagnosticsSignal.CurrentCount == 0)
                 _diagnosticsSignal.Release();
         }
-        catch (SemaphoreFullException)
-        {
-        }
+        catch (SemaphoreFullException) { }
     }
 
     private async Task RunDiagnosticsLoopAsync()
@@ -452,9 +353,7 @@ internal sealed class IlLspJsonRpcConnection(
                     await PublishWorkspaceDiagnosticsAsync().ConfigureAwait(false);
             }
         }
-        catch (OperationCanceledException) when (_connectionCancellation.IsCancellationRequested)
-        {
-        }
+        catch (OperationCanceledException) when (_connectionCancellation.IsCancellationRequested) { }
     }
 
     private async Task PublishWorkspaceDiagnosticsAsync()
@@ -471,15 +370,10 @@ internal sealed class IlLspJsonRpcConnection(
                 return;
             foreach (var report in reports)
             {
-                await SendNotificationAsync(
-                    "textDocument/publishDiagnostics",
-                    new { uri = report.Uri, version = report.Version, diagnostics = report.Diagnostics },
-                    cancellation.Token).ConfigureAwait(false);
+                await SendNotificationAsync("textDocument/publishDiagnostics", new { uri = report.Uri, version = report.Version, diagnostics = report.Diagnostics }, cancellation.Token).ConfigureAwait(false);
             }
         }
-        catch (OperationCanceledException)
-        {
-        }
+        catch (OperationCanceledException) { }
         finally
         {
             lock (_diagnosticsLock)
@@ -501,10 +395,7 @@ internal sealed class IlLspJsonRpcConnection(
 
     private void CancelRequest(JsonElement root)
     {
-        if (!root.TryGetProperty("params", out var parameters) ||
-            parameters.ValueKind != JsonValueKind.Object ||
-            !parameters.TryGetProperty("id", out var id) ||
-            id.ValueKind is not JsonValueKind.String and not JsonValueKind.Number)
+        if (!root.TryGetProperty("params", out var parameters) || parameters.ValueKind != JsonValueKind.Object || !parameters.TryGetProperty("id", out var id) || id.ValueKind is not JsonValueKind.String and not JsonValueKind.Number)
         {
             return;
         }
@@ -516,8 +407,7 @@ internal sealed class IlLspJsonRpcConnection(
     {
         if (!root.TryGetProperty("params", out var parameters))
             throw new IlLspInvalidParamsException("Request parameters are required.");
-        return parameters.Deserialize<T>(JsonOptions)
-            ?? throw new IlLspInvalidParamsException("Request parameters are invalid.");
+        return parameters.Deserialize<T>(JsonOptions) ?? throw new IlLspInvalidParamsException("Request parameters are invalid.");
     }
 
     private async Task<JsonDocument?> ReceiveAsync(CancellationToken cancellationToken)
@@ -531,18 +421,12 @@ internal sealed class IlLspJsonRpcConnection(
                 return null;
             if (result.MessageType != WebSocketMessageType.Text)
             {
-                await socket.CloseOutputAsync(
-                    WebSocketCloseStatus.InvalidMessageType,
-                    "IL LSP requires UTF-8 JSON text messages.",
-                    cancellationToken).ConfigureAwait(false);
+                await socket.CloseOutputAsync(WebSocketCloseStatus.InvalidMessageType, "IL LSP requires UTF-8 JSON text messages.", cancellationToken).ConfigureAwait(false);
                 return null;
             }
             if (content.Length + result.Count > limits.MaxMessageBytes)
             {
-                await socket.CloseOutputAsync(
-                    WebSocketCloseStatus.MessageTooBig,
-                    "IL LSP message exceeds the configured size limit.",
-                    cancellationToken).ConfigureAwait(false);
+                await socket.CloseOutputAsync(WebSocketCloseStatus.MessageTooBig, "IL LSP message exceeds the configured size limit.", cancellationToken).ConfigureAwait(false);
                 return null;
             }
             content.Write(buffer, 0, result.Count);
@@ -560,11 +444,9 @@ internal sealed class IlLspJsonRpcConnection(
         }
     }
 
-    private Task SendResultAsync(JsonElement id, object? result, CancellationToken cancellationToken) =>
-        SendAsync(new JsonRpcResult("2.0", id, result), cancellationToken);
+    private Task SendResultAsync(JsonElement id, object? result, CancellationToken cancellationToken) => SendAsync(new JsonRpcResult("2.0", id, result), cancellationToken);
 
-    private Task SendErrorAsync(JsonElement? id, int code, string message, CancellationToken cancellationToken) =>
-        SendAsync(new JsonRpcErrorResult("2.0", id, new JsonRpcError(code, message)), cancellationToken);
+    private Task SendErrorAsync(JsonElement? id, int code, string message, CancellationToken cancellationToken) => SendAsync(new JsonRpcErrorResult("2.0", id, new JsonRpcError(code, message)), cancellationToken);
 
     private async Task SendErrorIgnoringCancellationAsync(JsonElement id, int code, string message)
     {
@@ -572,16 +454,11 @@ internal sealed class IlLspJsonRpcConnection(
         {
             await SendErrorAsync(id, code, message, _connectionCancellation.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (WebSocketException)
-        {
-        }
+        catch (OperationCanceledException) { }
+        catch (WebSocketException) { }
     }
 
-    private Task SendNotificationAsync(string method, object parameters, CancellationToken cancellationToken) =>
-        SendAsync(new JsonRpcNotification("2.0", method, parameters), cancellationToken);
+    private Task SendNotificationAsync(string method, object parameters, CancellationToken cancellationToken) => SendAsync(new JsonRpcNotification("2.0", method, parameters), cancellationToken);
 
     private async Task SendAsync(object payload, CancellationToken cancellationToken)
     {
@@ -606,15 +483,10 @@ internal sealed class IlLspJsonRpcConnection(
         {
             if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
             {
-                await socket.CloseOutputAsync(
-                    WebSocketCloseStatus.NormalClosure,
-                    "IL LSP connection closed.",
-                    CancellationToken.None).ConfigureAwait(false);
+                await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "IL LSP connection closed.", CancellationToken.None).ConfigureAwait(false);
             }
         }
-        catch (WebSocketException)
-        {
-        }
+        catch (WebSocketException) { }
     }
 
     private void DisposeRequests()
@@ -626,8 +498,7 @@ internal sealed class IlLspJsonRpcConnection(
         }
     }
 
-    private static JsonElement? GetOptionalId(JsonElement root) =>
-        root.ValueKind == JsonValueKind.Object && root.TryGetProperty("id", out var id) ? id.Clone() : null;
+    private static JsonElement? GetOptionalId(JsonElement root) => root.ValueKind == JsonValueKind.Object && root.TryGetProperty("id", out var id) ? id.Clone() : null;
 
     private static void CancelIgnoringDisposal(CancellationTokenSource cancellation)
     {
@@ -635,9 +506,7 @@ internal sealed class IlLspJsonRpcConnection(
         {
             cancellation.Cancel();
         }
-        catch (ObjectDisposedException)
-        {
-        }
+        catch (ObjectDisposedException) { }
     }
 
     private sealed class InFlightRequest(CancellationTokenSource cancellation)
@@ -646,10 +515,7 @@ internal sealed class IlLspJsonRpcConnection(
         public Task Task { get; set; } = Task.CompletedTask;
     }
 
-    private sealed record WorkspaceNotification(
-        WorkspaceNotificationKind Kind,
-        object Parameters,
-        TaskCompletionSource Completion);
+    private sealed record WorkspaceNotification(WorkspaceNotificationKind Kind, object Parameters, TaskCompletionSource Completion);
 
     private enum WorkspaceNotificationKind
     {
@@ -658,14 +524,8 @@ internal sealed class IlLspJsonRpcConnection(
         DidClose
     }
 
-    private sealed record JsonRpcResult(
-        string Jsonrpc,
-        JsonElement Id,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] object? Result);
-    private sealed record JsonRpcErrorResult(
-        string Jsonrpc,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] JsonElement? Id,
-        JsonRpcError Error);
+    private sealed record JsonRpcResult(string Jsonrpc, JsonElement Id, [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] object? Result);
+    private sealed record JsonRpcErrorResult(string Jsonrpc, [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] JsonElement? Id, JsonRpcError Error);
     private sealed record JsonRpcError(int Code, string Message);
     private sealed record JsonRpcNotification(string Jsonrpc, string Method, object Params);
 }

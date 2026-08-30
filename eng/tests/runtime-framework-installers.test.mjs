@@ -5,34 +5,14 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const manifestPath = path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json')
 const schemaPath = path.join(repositoryRoot, 'schemas', 'runtime-framework-installers.schema.json')
-const dockerfilePath = path.join(
-  repositoryRoot,
-  'deploy',
-  'docker',
-  'Dockerfile.operator-wine-framework-matrix',
-)
-const bootstrapPath = path.join(
-  repositoryRoot,
-  'deploy',
-  'docker',
-  'wine-netfx-framework-bootstrap.sh',
-)
-const candidateDockerfilePath = path.join(
-  repositoryRoot,
-  'deploy',
-  'docker',
-  'Dockerfile.runtime-wine-framework-matrix',
-)
-const prefixLayoutHelperPath = path.join(
-  repositoryRoot,
-  'deploy',
-  'docker',
-  'dedupe-wine-prefixes.py',
-)
-const cliPath = path.join(repositoryRoot, 'eng', 'prepare-framework-runtime.cs')
+const dockerfilePath = path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.operator-wine-framework-matrix')
+const bootstrapPath = path.join(repositoryRoot, 'deploy', 'docker', 'wine-netfx-framework-bootstrap.sh')
+const candidateDockerfilePath = path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.runtime-wine-framework-matrix')
+const prefixLayoutHelperPath = path.join(repositoryRoot, 'deploy', 'docker', 'dedupe-wine-prefixes.py')
+const cliPath = path.join(repositoryRoot, 'eng', 'tools', 'prepare-framework-runtime.cs')
 const vendoredPayloadRelativePath = 'eng/prerequisites/dotnet-framework-2.0/NetFx64.exe'
 const vendoredPayloadPath = path.join(repositoryRoot, ...vendoredPayloadRelativePath.split('/'))
 const expectedVendoredPayload = {
@@ -300,11 +280,7 @@ test('only unavailable Winetricks versions use locked operator installers', () =
     },
   ])
 
-  const winetricks = new Map(
-    manifest.targets
-      .filter(target => target.recipe.kind === 'winetricks')
-      .map(target => [target.id, target.recipe.verb]),
-  )
+  const winetricks = new Map(manifest.targets.filter(target => target.recipe.kind === 'winetricks').map(target => [target.id, target.recipe.verb]));
   assert.deepEqual([...winetricks], [
     ['netfx20', 'dotnet20'],
     ['netfx30', 'dotnet35sp1'],

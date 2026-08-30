@@ -11,22 +11,15 @@ public sealed class GatewayProfileUpdateStatusTests
     [Fact]
     public async Task MissingStatusFileReturnsExplicitUnknownForCurrentRelease()
     {
-        var missingPath = Path.Combine(
-            Path.GetTempPath(),
-            $"SharpLabNext.ProfileStatus.{Guid.NewGuid():N}",
-            "missing.json");
+        var missingPath = Path.Combine(Path.GetTempPath(), $"SharpLabNext.ProfileStatus.{Guid.NewGuid():N}", "missing.json");
         await using var factory = new ProfileUpdateStatusGatewayFactory(missingPath);
         using var client = factory.CreateClient();
         var catalog = await GatewayTestCatalog.GetAsync(client);
 
-        using var response = await client.GetAsync(
-            "/api/v1/profile-updates",
-            TestContext.Current.CancellationToken);
+        using var response = await client.GetAsync("/api/v1/profile-updates", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var status = await response.Content.ReadFromJsonAsync<ProfileUpdateStatusDocument>(
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        var status = await response.Content.ReadFromJsonAsync<ProfileUpdateStatusDocument>(ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
         Assert.NotNull(status);
         Assert.Equal(ProfileUpdateStatusKind.Unknown, status.Status);
         Assert.False(status.Checked);
@@ -40,9 +33,7 @@ public sealed class GatewayProfileUpdateStatusTests
     [Fact]
     public async Task PublishedStatusIsReturnedWithoutInternalDetails()
     {
-        var root = Path.Combine(
-            Path.GetTempPath(),
-            $"SharpLabNext.ProfileStatus.{Guid.NewGuid():N}");
+        var root = Path.Combine(Path.GetTempPath(), $"SharpLabNext.ProfileStatus.{Guid.NewGuid():N}");
         var statusPath = Path.Combine(root, "status.public.json");
         Directory.CreateDirectory(root);
         try
@@ -85,18 +76,14 @@ public sealed class GatewayProfileUpdateStatusTests
                 """,
                 TestContext.Current.CancellationToken);
 
-            using var response = await client.GetAsync(
-                "/api/v1/profile-updates",
-                TestContext.Current.CancellationToken);
+            using var response = await client.GetAsync("/api/v1/profile-updates", TestContext.Current.CancellationToken);
             var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.DoesNotContain("private", json, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("dotnet build", json, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("SecretSource", json, StringComparison.Ordinal);
-            var status = await response.Content.ReadFromJsonAsync<ProfileUpdateStatusDocument>(
-                ContractJson.CreateSerializerOptions(),
-                TestContext.Current.CancellationToken);
+            var status = await response.Content.ReadFromJsonAsync<ProfileUpdateStatusDocument>(ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
             Assert.NotNull(status);
             Assert.Equal(ProfileUpdateStatusKind.CandidateFailed, status.Status);
             Assert.True(status.Checked);
@@ -104,9 +91,7 @@ public sealed class GatewayProfileUpdateStatusTests
             Assert.Equal("2026.07.11.2", status.Candidate?.ReleaseId);
             Assert.True(status.UpdateAvailable);
             Assert.Equal("profile-update.build-failed", status.LastStage.Error?.Code);
-            Assert.Equal(
-                "Profile candidate build failed; the approved release remains active.",
-                status.LastStage.Error?.Message);
+            Assert.Equal("Profile candidate build failed; the approved release remains active.", status.LastStage.Error?.Message);
         }
         finally
         {
@@ -115,8 +100,7 @@ public sealed class GatewayProfileUpdateStatusTests
     }
 }
 
-internal sealed class ProfileUpdateStatusGatewayFactory(string statusPath)
-    : WebApplicationFactory<Program>
+internal sealed class ProfileUpdateStatusGatewayFactory(string statusPath) : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

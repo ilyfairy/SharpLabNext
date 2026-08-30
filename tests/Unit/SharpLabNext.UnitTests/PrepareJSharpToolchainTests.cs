@@ -5,15 +5,8 @@ namespace SharpLabNext.UnitTests;
 public sealed class PrepareJSharpToolchainTests
 {
     private static readonly string RepositoryRoot = FindRepositoryRoot();
-    private static readonly string ScriptPath = Path.Combine(
-        RepositoryRoot,
-        "eng",
-        "prepare-jsharp-toolchain.cs");
-    private static readonly string DockerfilePath = Path.Combine(
-        RepositoryRoot,
-        "deploy",
-        "docker",
-        "Dockerfile.operator-jsharp20");
+    private static readonly string ScriptPath = Path.Combine(RepositoryRoot, "eng", "tools", "prepare-jsharp-toolchain.cs");
+    private static readonly string DockerfilePath = Path.Combine(RepositoryRoot, "deploy", "docker", "Dockerfile.operator-jsharp20");
 
     [Fact]
     public async Task DryRunUsesOneFixedLfsInstallerAndClr2FrameworkSeed()
@@ -26,24 +19,12 @@ public sealed class PrepareJSharpToolchainTests
         Assert.Contains("Dockerfile.operator-jsharp20", result.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("--load", result.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("--provenance=false", result.StandardOutput, StringComparison.Ordinal);
-        Assert.Contains(
-            $"FRAMEWORK_SEED_IMAGE=localhost:5000/framework-clr2@sha256:{new string('a', 64)}",
-            result.StandardOutput,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "visual-jsharp-installer-context=<repository-lfs-context>",
-            result.StandardOutput,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            $"OPERATOR_BUILD_INPUT_SHA256={new string('b', 64)}",
-            result.StandardOutput,
-            StringComparison.Ordinal);
+        Assert.Contains($"FRAMEWORK_SEED_IMAGE=localhost:5000/framework-clr2@sha256:{new string('a', 64)}", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("visual-jsharp-installer-context=<repository-lfs-context>", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains($"OPERATOR_BUILD_INPUT_SHA256={new string('b', 64)}", result.StandardOutput, StringComparison.Ordinal);
         Assert.DoesNotContain("url", result.StandardOutput, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("clr2-installer", result.StandardOutput, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(
-            Path.Combine(RepositoryRoot, "eng", "prerequisites"),
-            result.StandardOutput,
-            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Path.Combine(RepositoryRoot, "eng", "prerequisites"), result.StandardOutput, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -124,25 +105,14 @@ public sealed class PrepareJSharpToolchainTests
         Assert.Contains("vjredist64.exe", source, StringComparison.Ordinal);
         Assert.Contains("seed_prefix=/opt/wine-netfx-clr2", source, StringComparison.Ordinal);
         Assert.Contains("WINEPREFIX=\"${seed_prefix}\" timeout", source, StringComparison.Ordinal);
-        Assert.Contains(
-            "sharplabnext-wine-netfx-preflight \"${seed_prefix}\" 3.5",
-            source,
-            StringComparison.Ordinal);
+        Assert.Contains("sharplabnext-wine-netfx-preflight \"${seed_prefix}\" 3.5", source, StringComparison.Ordinal);
         Assert.Contains("mv \"${seed_prefix}\" \"${WINEPREFIX}\"", source, StringComparison.Ordinal);
-        Assert.True(
-            source.IndexOf("stage preflight-framework-seed", StringComparison.Ordinal) <
-            source.IndexOf("stage bind-jsharp-prefix", StringComparison.Ordinal));
+        Assert.True(source.IndexOf("stage preflight-framework-seed", StringComparison.Ordinal) < source.IndexOf("stage bind-jsharp-prefix", StringComparison.Ordinal));
         Assert.Contains("stage install-jsharp", source, StringComparison.Ordinal);
         Assert.Contains("run_logged install-jsharp-bootstrap", source, StringComparison.Ordinal);
         Assert.Contains("test -x /usr/lib/wine/wineserver", source, StringComparison.Ordinal);
-        Assert.Contains(
-            "env WINEPREFIX=\"${seed_prefix}\" /usr/lib/wine/wineserver -w",
-            source,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "run_logged install-jsharp-wineserver wineserver -w",
-            source,
-            StringComparison.Ordinal);
+        Assert.Contains("env WINEPREFIX=\"${seed_prefix}\" /usr/lib/wine/wineserver -w", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("run_logged install-jsharp-wineserver wineserver -w", source, StringComparison.Ordinal);
         Assert.Contains("[jsharp-verify] status=ok", source, StringComparison.Ordinal);
         Assert.DoesNotContain("dotnet-clr2-url", source, StringComparison.Ordinal);
         Assert.DoesNotContain("visual-jsharp-url", source, StringComparison.Ordinal);
@@ -178,8 +148,7 @@ public sealed class PrepareJSharpToolchainTests
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the J# preparation script test process.");
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the J# preparation script test process.");
         var outputTask = process.StandardOutput.ReadToEndAsync();
         var errorTask = process.StandardError.ReadToEndAsync();
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(1));
@@ -212,40 +181,22 @@ public sealed class PrepareJSharpToolchainTests
     {
         public RepositoryFixture()
         {
-            Root = Path.Combine(
-                Path.GetTempPath(),
-                $"SharpLabNext.JSharpLfs.Tests.{Guid.NewGuid():N}");
-            Directory.CreateDirectory(Path.Combine(
-                Root,
-                "eng",
-                "prerequisites",
-                "visual-jsharp-2.0-se-x64"));
+            Root = Path.Combine(Path.GetTempPath(), $"SharpLabNext.JSharpLfs.Tests.{Guid.NewGuid():N}");
+            Directory.CreateDirectory(Path.Combine(Root, "eng", "prerequisites", "visual-jsharp-2.0-se-x64"));
             Directory.CreateDirectory(Path.Combine(Root, "deploy", "docker"));
             File.WriteAllText(Path.Combine(Root, "SharpLabNext.slnx"), string.Empty);
-            File.WriteAllText(
-                Path.Combine(Root, "deploy", "docker", "Dockerfile.operator-jsharp20"),
-                "FROM scratch\n");
-            File.WriteAllText(
-                Path.Combine(Root, ".gitattributes"),
-                "eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe " +
-                "filter=lfs diff=lfs merge=lfs -text\n");
+            File.WriteAllText(Path.Combine(Root, "deploy", "docker", "Dockerfile.operator-jsharp20"), "FROM scratch\n");
+            File.WriteAllText(Path.Combine(Root, ".gitattributes"), "eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe " + "filter=lfs diff=lfs merge=lfs -text\n");
             RunGit("init", "--quiet");
         }
 
         public string Root { get; }
 
-        public void WriteInstaller(string content) =>
-            File.WriteAllText(InstallerPath, content);
+        public void WriteInstaller(string content) => File.WriteAllText(InstallerPath, content);
 
-        public void WriteInstaller(byte[] content) =>
-            File.WriteAllBytes(InstallerPath, content);
+        public void WriteInstaller(byte[] content) => File.WriteAllBytes(InstallerPath, content);
 
-        private string InstallerPath => Path.Combine(
-            Root,
-            "eng",
-            "prerequisites",
-            "visual-jsharp-2.0-se-x64",
-            "vjredist64.exe");
+        private string InstallerPath => Path.Combine(Root, "eng", "prerequisites", "visual-jsharp-2.0-se-x64", "vjredist64.exe");
 
         private void RunGit(params string[] arguments)
         {
@@ -257,8 +208,7 @@ public sealed class PrepareJSharpToolchainTests
             };
             foreach (var argument in arguments)
                 startInfo.ArgumentList.Add(argument);
-            using var process = Process.Start(startInfo)
-                ?? throw new InvalidOperationException("Could not start Git for the test fixture.");
+            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start Git for the test fixture.");
             process.WaitForExit();
             if (process.ExitCode != 0)
                 throw new InvalidOperationException(process.StandardError.ReadToEnd());
@@ -270,12 +220,8 @@ public sealed class PrepareJSharpToolchainTests
             {
                 Directory.Delete(Root, recursive: true);
             }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 

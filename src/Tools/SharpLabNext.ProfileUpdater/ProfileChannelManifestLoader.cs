@@ -5,18 +5,9 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace SharpLabNext.ProfileUpdater;
 
-internal sealed record ProfileChannelManifestSet(
-    IReadOnlyList<RuntimeChannelIntent> Runtimes,
-    IReadOnlyList<ComponentChannelIntent> Components,
-    IReadOnlyList<DerivedComponentIntent> DerivedComponents);
+internal sealed record ProfileChannelManifestSet(IReadOnlyList<RuntimeChannelIntent> Runtimes, IReadOnlyList<ComponentChannelIntent> Components, IReadOnlyList<DerivedComponentIntent> DerivedComponents);
 
-internal sealed record RuntimeChannelIntent(
-    string Id,
-    string Channel,
-    string Policy,
-    string? SdkComponentId,
-    string ReferenceSetId,
-    string ReferencePackage);
+internal sealed record RuntimeChannelIntent(string Id, string Channel, string Policy, string? SdkComponentId, string ReferenceSetId, string ReferencePackage);
 
 internal sealed record ComponentChannelIntent(
     string Id,
@@ -31,24 +22,14 @@ internal sealed record ComponentChannelIntent(
     string? SourceComponentId,
     string? ProvenanceCommit);
 
-internal sealed record DerivedComponentIntent(
-    string Id,
-    string Kind,
-    string VersionTemplate,
-    string? IdentitySourceComponentId);
+internal sealed record DerivedComponentIntent(string Id, string Kind, string VersionTemplate, string? IdentitySourceComponentId);
 
 internal static partial class ProfileChannelManifestLoader
 {
     private const int MaximumManifestBytes = 64 * 1024;
-    private static readonly IDeserializer Deserializer = new DeserializerBuilder()
-        .WithNamingConvention(CamelCaseNamingConvention.Instance)
-        .WithDuplicateKeyChecking()
-        .WithMaximumRecursion(32)
-        .Build();
+    private static readonly IDeserializer Deserializer = new DeserializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance).WithDuplicateKeyChecking().WithMaximumRecursion(32).Build();
 
-    public static async Task<ProfileChannelManifestSet> LoadAsync(
-        string channelRoot,
-        CancellationToken cancellationToken = default)
+    public static async Task<ProfileChannelManifestSet> LoadAsync(string channelRoot, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(channelRoot);
         var root = Path.GetFullPath(channelRoot);
@@ -56,40 +37,22 @@ internal static partial class ProfileChannelManifestLoader
             throw new InvalidDataException($"Profile channel directory '{root}' does not exist.");
 
         var toolchainPath = Path.Combine(root, "toolchains.yaml");
-        var toolchains = Deserialize<ToolchainManifestDocument>(
-            await ReadManifestAsync(toolchainPath, cancellationToken),
-            toolchainPath);
+        var toolchains = Deserialize<ToolchainManifestDocument>(await ReadManifestAsync(toolchainPath, cancellationToken), toolchainPath);
         ValidateUpdate(toolchains.Update, "toolchains.yaml", requireRetainLastKnownGood: false);
-        var releaseInputItems = (toolchains.ReleaseInputs ?? [])
-            .Select((input, index) => ValidateReleaseInput(input, $"toolchains.yaml releaseInputs[{index}]"))
-            .ToArray();
+        var releaseInputItems = (toolchains.ReleaseInputs ?? []).Select((input, index) => ValidateReleaseInput(input, $"toolchains.yaml releaseInputs[{index}]")).ToArray();
         var releaseInputs = new Dictionary<string, ReleaseInputIntent>(StringComparer.Ordinal);
         foreach (var input in releaseInputItems)
         {
             if (!releaseInputs.TryAdd(input.Id, input))
                 throw new InvalidDataException($"Profile channel release input ID '{input.Id}' is duplicated.");
         }
-        var componentIntents = (toolchains.Channels ?? [])
-            .Select((channel, index) => ValidateComponent(
-                channel,
-                releaseInputs,
-                $"toolchains.yaml channels[{index}]"))
-            .ToArray();
-        var derivedIntents = (toolchains.DerivedComponents ?? [])
-            .Select((component, index) => ValidateDerived(
-                component,
-                componentIntents,
-                $"toolchains.yaml derivedComponents[{index}]"))
-            .ToArray();
+        var componentIntents = (toolchains.Channels ?? []).Select((channel, index) => ValidateComponent(channel, releaseInputs, $"toolchains.yaml channels[{index}]")).ToArray();
+        var derivedIntents = (toolchains.DerivedComponents ?? []).Select((component, index) => ValidateDerived(component, componentIntents, $"toolchains.yaml derivedComponents[{index}]")).ToArray();
 
         var runtimeIntents = new List<RuntimeChannelIntent>();
-        foreach (var path in Directory.EnumerateFiles(root, "*.yaml", SearchOption.TopDirectoryOnly)
-                     .Where(path => !string.Equals(path, toolchainPath, PathComparison))
-                     .OrderBy(static path => path, StringComparer.Ordinal))
+        foreach (var path in Directory.EnumerateFiles(root, "*.yaml", SearchOption.TopDirectoryOnly).Where(path => !string.Equals(path, toolchainPath, PathComparison)).OrderBy(static path => path, StringComparer.Ordinal))
         {
-            var document = Deserialize<RuntimeManifestDocument>(
-                await ReadManifestAsync(path, cancellationToken),
-                path);
+            var document = Deserialize<RuntimeManifestDocument>(await ReadManifestAsync(path, cancellationToken), path);
             runtimeIntents.Add(ValidateRuntime(document, Path.GetFileName(path)));
         }
 
@@ -116,8 +79,7 @@ internal static partial class ProfileChannelManifestLoader
     {
         try
         {
-            return Deserializer.Deserialize<T>(yaml)
-                ?? throw new InvalidDataException($"Profile channel manifest '{path}' is empty.");
+            return Deserializer.Deserialize<T>(yaml) ?? throw new InvalidDataException($"Profile channel manifest '{path}' is empty.");
         }
         catch (YamlException exception)
         {
@@ -134,41 +96,21 @@ internal static partial class ProfileChannelManifestLoader
         if (!string.Equals(source.Type, "dotnet-release-metadata", StringComparison.Ordinal))
             throw Invalid(location, "source.type must be 'dotnet-release-metadata'");
         var channel = RequiredVersion(source.Channel, $"{location}.source.channel");
-        var policy = RequiredOneOf(
-            source.Policy,
-            $"{location}.source.policy",
-            "latest-release",
-            "latest-preview");
+        var policy = RequiredOneOf(source.Policy, $"{location}.source.policy", "latest-release", "latest-preview");
         var platform = document.Platform ?? throw Invalid(location, "platform is required");
-        if (!string.Equals(platform.Os, "linux", StringComparison.Ordinal) ||
-            !string.Equals(platform.Libc, "glibc", StringComparison.Ordinal) ||
-            !string.Equals(platform.Architecture, "x64", StringComparison.Ordinal))
+        if (!string.Equals(platform.Os, "linux", StringComparison.Ordinal) || !string.Equals(platform.Libc, "glibc", StringComparison.Ordinal) || !string.Equals(platform.Architecture, "x64", StringComparison.Ordinal))
         {
             throw Invalid(location, "only linux/glibc/x64 runtime channels are supported");
         }
         ValidateUpdate(document.Update, location, requireRetainLastKnownGood: true);
         var referenceSet = document.ReferenceSet ?? throw Invalid(location, "referenceSet is required");
-        return new RuntimeChannelIntent(
-            id,
-            channel,
-            policy,
-            OptionalId(document.SdkComponentId, $"{location}.sdkComponentId"),
-            RequiredId(referenceSet.Id, $"{location}.referenceSet.id"),
-            RequiredPackageId(referenceSet.Package, $"{location}.referenceSet.package"));
+        return new RuntimeChannelIntent(id, channel, policy, OptionalId(document.SdkComponentId, $"{location}.sdkComponentId"), RequiredId(referenceSet.Id, $"{location}.referenceSet.id"), RequiredPackageId(referenceSet.Package, $"{location}.referenceSet.package"));
     }
 
-    private static ComponentChannelIntent ValidateComponent(
-        ComponentManifestDocument document,
-        Dictionary<string, ReleaseInputIntent> releaseInputs,
-        string location)
+    private static ComponentChannelIntent ValidateComponent(ComponentManifestDocument document, Dictionary<string, ReleaseInputIntent> releaseInputs, string location)
     {
         var id = RequiredId(document.Id, $"{location}.id");
-        var kind = RequiredOneOf(
-            document.Kind,
-            $"{location}.kind",
-            "toolchain",
-            "runtime-dependency",
-            "artifact-processor");
+        var kind = RequiredOneOf(document.Kind, $"{location}.kind", "toolchain", "runtime-dependency", "artifact-processor");
         var source = document.Source ?? throw Invalid(location, "source is required");
         ReleaseInputIntent? releaseInput = null;
         if (document.ReleaseInput is not null)
@@ -191,20 +133,8 @@ internal static partial class ProfileChannelManifestLoader
             if (source.Version is not null && releaseInput?.Version is not null)
                 throw Invalid(location, "source.version is duplicated by releaseInput");
             var version = string.Equals(policy, "exact", StringComparison.Ordinal)
-                ? RequiredVersion(source.Version ?? releaseInput?.Version, $"{location}.source.version")
-                : RequireAbsent(source.Version ?? releaseInput?.Version, $"{location}.source.version");
-            return new ComponentChannelIntent(
-                id,
-                kind,
-                "nuget",
-                RequiredPackageId(source.Package, $"{location}.source.package"),
-                policy,
-                version,
-                null,
-                null,
-                null,
-                null,
-                provenanceCommit);
+                ? RequiredVersion(source.Version ?? releaseInput?.Version, $"{location}.source.version") : RequireAbsent(source.Version ?? releaseInput?.Version, $"{location}.source.version");
+            return new ComponentChannelIntent(id, kind, "nuget", RequiredPackageId(source.Package, $"{location}.source.package"), policy, version, null, null, null, null, provenanceCommit);
         }
 
         if (string.Equals(source.Type, "github-commit", StringComparison.Ordinal))
@@ -215,49 +145,23 @@ internal static partial class ProfileChannelManifestLoader
             if (source.Version is not null && releaseInput?.Version is not null)
                 throw Invalid(location, "source.version is duplicated by releaseInput");
             var version = OptionalVersion(source.Version ?? releaseInput?.Version, $"{location}.source.version");
-            var reference = GitReference(
-                source.Branch,
-                source.Ref,
-                source.TagPrefix,
-                version,
-                $"{location}.source.branch",
-                $"{location}.source.ref",
-                $"{location}.source.tagPrefix");
+            var reference = GitReference(source.Branch, source.Ref, source.TagPrefix, version, $"{location}.source.branch", $"{location}.source.ref", $"{location}.source.tagPrefix");
             var parts = repository.Split('/');
-            return new ComponentChannelIntent(
-                id,
-                kind,
-                "github-commit",
-                null,
-                "exact-ref",
-                version,
-                parts[0],
-                parts[1],
-                reference,
-                sourceComponentId,
-                null);
+            return new ComponentChannelIntent(id, kind, "github-commit", null, "exact-ref", version, parts[0], parts[1], reference, sourceComponentId, null);
         }
 
         throw Invalid(location, "source.type must be 'nuget' or 'github-commit'");
     }
 
-    private static ReleaseInputIntent ValidateReleaseInput(ReleaseInputDocument document, string location) => new(
-        RequiredId(document.Id, $"{location}.id"),
-        RequiredVersion(document.Version, $"{location}.version"),
-        OptionalCommit(document.ProvenanceCommit, $"{location}.provenanceCommit"));
+    private static ReleaseInputIntent ValidateReleaseInput(ReleaseInputDocument document, string location) => new(RequiredId(document.Id, $"{location}.id"), RequiredVersion(document.Version, $"{location}.version"), OptionalCommit(document.ProvenanceCommit, $"{location}.provenanceCommit"));
 
-    private static DerivedComponentIntent ValidateDerived(
-        DerivedManifestDocument document,
-        IReadOnlyCollection<ComponentChannelIntent> components,
-        string location)
+    private static DerivedComponentIntent ValidateDerived(DerivedManifestDocument document, IReadOnlyCollection<ComponentChannelIntent> components, string location)
     {
         var id = RequiredId(document.Id, $"{location}.id");
         var kind = RequiredOneOf(document.Kind, $"{location}.kind", "artifact-processor", "toolchain");
         var template = RequiredString(document.VersionTemplate, $"{location}.versionTemplate", 256);
         var componentIds = components.Select(static component => component.Id).ToHashSet(StringComparer.Ordinal);
-        var placeholders = VersionPlaceholderRegex().Matches(template)
-            .Select(static match => match.Groups["id"].Value)
-            .ToArray();
+        var placeholders = VersionPlaceholderRegex().Matches(template).Select(static match => match.Groups["id"].Value).ToArray();
         if (placeholders.Length == 0 || placeholders.Any(id => !componentIds.Contains(id)))
             throw Invalid(location, "versionTemplate must reference declared channel component IDs");
         if (VersionPlaceholderRegex().Replace(template, string.Empty).IndexOfAny(['{', '}']) >= 0)
@@ -265,21 +169,15 @@ internal static partial class ProfileChannelManifestLoader
         string? identitySourceComponentId = null;
         if (string.Equals(kind, "toolchain", StringComparison.Ordinal))
         {
-            if (placeholders.Length != 1 ||
-                !string.Equals(template, $"{{{placeholders[0]}}}", StringComparison.Ordinal))
+            if (placeholders.Length != 1 || !string.Equals(template, $"{{{placeholders[0]}}}", StringComparison.Ordinal))
             {
-                throw Invalid(
-                    location,
-                    "derived toolchain versionTemplate must contain exactly one component placeholder and no other text");
+                throw Invalid(location, "derived toolchain versionTemplate must contain exactly one component placeholder and no other text");
             }
             identitySourceComponentId = placeholders[0];
-            var identitySource = components.Single(component =>
-                string.Equals(component.Id, identitySourceComponentId, StringComparison.Ordinal));
+            var identitySource = components.Single(component => string.Equals(component.Id, identitySourceComponentId, StringComparison.Ordinal));
             if (!string.Equals(identitySource.Kind, "toolchain", StringComparison.Ordinal))
             {
-                throw Invalid(
-                    location,
-                    "derived toolchain versionTemplate must reference a direct toolchain component");
+                throw Invalid(location, "derived toolchain versionTemplate must reference a direct toolchain component");
             }
         }
         return new DerivedComponentIntent(id, kind, template, identitySourceComponentId);
@@ -297,10 +195,7 @@ internal static partial class ProfileChannelManifestLoader
             throw Invalid(location, "runtime channels must retain the last-known-good release");
     }
 
-    private static void ValidateUniqueOutputIds(
-        IReadOnlyCollection<RuntimeChannelIntent> runtimes,
-        IReadOnlyCollection<ComponentChannelIntent> components,
-        IReadOnlyCollection<DerivedComponentIntent> derivedComponents)
+    private static void ValidateUniqueOutputIds(IReadOnlyCollection<RuntimeChannelIntent> runtimes, IReadOnlyCollection<ComponentChannelIntent> components, IReadOnlyCollection<DerivedComponentIntent> derivedComponents)
     {
         var locations = new Dictionary<string, string>(StringComparer.Ordinal);
         void Add(string id, string location)
@@ -348,8 +243,7 @@ internal static partial class ProfileChannelManifestLoader
     }
 
     private static string RequiredVersion(string? value, string location) =>
-        RequiredString(value, location, 160, static character =>
-            char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '+');
+        RequiredString(value, location, 160, static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '+');
 
     private static string? OptionalVersion(string? value, string location) =>
         value is null ? null : RequiredVersion(value, location);
@@ -365,41 +259,26 @@ internal static partial class ProfileChannelManifestLoader
     {
         var result = RequiredString(value, location, 80);
         return allowed.Contains(result, StringComparer.Ordinal)
-            ? result
-            : throw Invalid(location, $"must be one of: {string.Join(", ", allowed)}");
+            ? result : throw Invalid(location, $"must be one of: {string.Join(", ", allowed)}");
     }
 
-    private static string GitReference(
-        string? branch,
-        string? reference,
-        string? tagPrefix,
-        string? version,
-        string branchLocation,
-        string referenceLocation,
-        string tagPrefixLocation)
+    private static string GitReference(string? branch, string? reference, string? tagPrefix, string? version, string branchLocation, string referenceLocation, string tagPrefixLocation)
     {
         if (new[] { branch, reference, tagPrefix }.Count(static value => value is not null) != 1)
             throw Invalid(branchLocation, "exactly one of source.branch, source.ref, and source.tagPrefix is required");
         if (tagPrefix is not null)
         {
-            var prefix = RequiredString(tagPrefix, tagPrefixLocation, 32, static character =>
-                char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_');
+            var prefix = RequiredString(tagPrefix, tagPrefixLocation, 32, static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_');
             return version is not null
-                ? prefix + version
-                : throw Invalid(tagPrefixLocation, "requires source.version or releaseInput");
+                ? prefix + version : throw Invalid(tagPrefixLocation, "requires source.version or releaseInput");
         }
-        return RequiredString(branch ?? reference, branch is null ? referenceLocation : branchLocation, 160, static character =>
-            char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_' or '/');
+        return RequiredString(branch ?? reference, branch is null ? referenceLocation : branchLocation, 160, static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_' or '/');
     }
 
     private static string? RequireAbsent(string? value, string location) =>
         value is null ? null : throw Invalid(location, "must be omitted for latest-stable policy");
 
-    private static string RequiredString(
-        string? value,
-        string location,
-        int maximumLength,
-        Func<char, bool>? characterPredicate = null)
+    private static string RequiredString(string? value, string location, int maximumLength, Func<char, bool>? characterPredicate = null)
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > maximumLength || value != value.Trim())
             throw Invalid(location, "is missing or malformed");
@@ -412,8 +291,7 @@ internal static partial class ProfileChannelManifestLoader
         new($"Profile channel manifest {location}: {message}.");
 
     private static StringComparison PathComparison => OperatingSystem.IsWindows()
-        ? StringComparison.OrdinalIgnoreCase
-        : StringComparison.Ordinal;
+        ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     [GeneratedRegex("^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$")]
     private static partial Regex IdRegex();

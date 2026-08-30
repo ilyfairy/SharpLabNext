@@ -6,14 +6,7 @@ namespace SharpLabNext.CheckedJitBridge;
 
 internal sealed class JitMethodResult
 {
-    public JitMethodResult(
-        string method,
-        int metadataToken,
-        string displayName,
-        string status,
-        string? address,
-        string? error,
-        JitMethodSignatureIdentity signatureIdentity)
+    public JitMethodResult(string method, int metadataToken, string displayName, string status, string? address, string? error, JitMethodSignatureIdentity signatureIdentity)
     {
         Method = method;
         MetadataToken = metadataToken;
@@ -53,44 +46,17 @@ internal sealed class JitMethodResult
     // EvidenceRanges is the bounded, PDB-verifiable representation consumed by
     // capability promotion. Keep it separate from LinkedRanges so the public
     // JIT result wire shape remains focused on source/output editor ranges.
-    public IReadOnlyList<JitEvidenceRange> EvidenceRanges => LinkedRanges
-        .Select(static range => range.EvidenceRange)
-        .OfType<JitEvidenceRange>()
-        .ToArray();
+    public IReadOnlyList<JitEvidenceRange> EvidenceRanges => LinkedRanges.Select(static range => range.EvidenceRange).OfType<JitEvidenceRange>().ToArray();
 }
 
-internal sealed record JitLinkedRange(
-    string SourceFilePath,
-    JitTextRange SourceRange,
-    JitTextRange OutputRange,
-    string Precision,
-    [property: JsonIgnore] JitEvidenceRange? EvidenceRange = null);
+internal sealed record JitLinkedRange(string SourceFilePath, JitTextRange SourceRange, JitTextRange OutputRange, string Precision, [property: JsonIgnore] JitEvidenceRange? EvidenceRange = null);
 
-internal sealed record JitEvidenceRange(
-    int IlOffset,
-    int NativeStartOffset,
-    int NativeEndOffset,
-    string Document,
-    int StartLine,
-    int StartColumn,
-    int EndLine,
-    int EndColumn);
+internal sealed record JitEvidenceRange(int IlOffset, int NativeStartOffset, int NativeEndOffset, string Document, int StartLine, int StartColumn, int EndLine, int EndColumn);
 
-internal sealed record JitTextRange(
-    int StartLine,
-    int StartCharacter,
-    int EndLine,
-    int EndCharacter);
+internal sealed record JitTextRange(int StartLine, int StartCharacter, int EndLine, int EndCharacter);
 
-internal sealed record CheckedSourcePoint(
-    int IlOffset,
-    string? DocumentPath,
-    JitTextRange? SourceRange);
+internal sealed record CheckedSourcePoint(int IlOffset, string? DocumentPath, JitTextRange? SourceRange);
 
-internal sealed record CheckedMethodSourceMap(
-    int IlLength,
-    IReadOnlyList<CheckedSourcePoint> Points);
+internal sealed record CheckedMethodSourceMap(int IlLength, IReadOnlyList<CheckedSourcePoint> Points);
 
-internal sealed record CheckedJitMappingSelection(
-    IReadOnlyList<JitLinkedRange> Ranges,
-    string Source);
+internal sealed record CheckedJitMappingSelection(IReadOnlyList<JitLinkedRange> Ranges, string Source);

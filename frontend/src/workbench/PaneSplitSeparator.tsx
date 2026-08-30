@@ -1,9 +1,5 @@
 import { type KeyboardEvent, type PointerEvent, type RefObject, useRef } from 'react'
-import {
-  clampSourcePanePercent,
-  maximumSourcePanePercent,
-  minimumSourcePanePercent,
-} from './paneSplitPreference'
+import { clampSourcePanePercent, maximumSourcePanePercent, minimumSourcePanePercent } from './paneSplitPreference'
 
 export interface PaneSplitSeparatorProps {
   containerRef: RefObject<HTMLElement | null>
@@ -13,23 +9,13 @@ export interface PaneSplitSeparatorProps {
   onReset: () => void
 }
 
-export function PaneSplitSeparator({
-  containerRef,
-  isMobile,
-  sourcePercent,
-  onChange,
-  onReset,
-}: PaneSplitSeparatorProps) {
+export function PaneSplitSeparator({ containerRef, isMobile, sourcePercent, onChange, onReset }: PaneSplitSeparatorProps) {
   const activePointer = useRef<number | null>(null)
 
   const updateFromPointer = (event: PointerEvent<HTMLHRElement>) => {
     const bounds = containerRef.current?.getBoundingClientRect()
     if (!bounds) return
-    const percent = paneSplitPercentFromPointer(
-      isMobile ? event.clientY : event.clientX,
-      isMobile ? bounds.top : bounds.left,
-      isMobile ? bounds.height : bounds.width,
-    )
+    const percent = paneSplitPercentFromPointer(isMobile ? event.clientY : event.clientX, isMobile ? bounds.top : bounds.left, isMobile ? bounds.height : bounds.width)
     if (percent !== null) onChange(percent)
   }
 
@@ -94,11 +80,7 @@ export function PaneSplitSeparator({
   )
 }
 
-export function paneSplitPercentFromPointer(
-  coordinate: number,
-  start: number,
-  length: number,
-): number | null {
+export function paneSplitPercentFromPointer(coordinate: number, start: number, length: number): number | null {
   if (![coordinate, start, length].every(Number.isFinite) || length <= 0) return null
   return clampSourcePanePercent(((coordinate - start) / length) * 100)
 }

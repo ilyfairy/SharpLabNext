@@ -4,9 +4,7 @@ import { sourceMethodFromDocumentSymbols } from './lspDocumentSymbols'
 
 describe('document-symbol source method selection', () => {
   it('selects the deepest method or local function containing the cursor', () => {
-    const symbols: CodeMirrorDocumentSymbol[] = [
-      symbol('Program', 5, 0, 20, [symbol('Run', 6, 2, 15, [symbol('Local', 12, 7, 10, [])])]),
-    ]
+    const symbols: CodeMirrorDocumentSymbol[] = [symbol('Program', 5, 0, 20, [symbol('Run', 6, 2, 15, [symbol('Local', 12, 7, 10, [])])])]
     expect(sourceMethodFromDocumentSymbols(symbols, { line: 8, character: 3 }, 'csharp')).toEqual({
       name: 'Local',
       lineNumber: 8,
@@ -27,13 +25,7 @@ describe('document-symbol source method selection', () => {
   })
 })
 
-function symbol(
-  name: string,
-  kind: number,
-  startLine: number,
-  endLine: number,
-  children: readonly CodeMirrorDocumentSymbol[],
-): CodeMirrorDocumentSymbol {
+function symbol(name: string, kind: number, startLine: number, endLine: number, children: readonly CodeMirrorDocumentSymbol[]): CodeMirrorDocumentSymbol {
   return {
     name,
     kind,

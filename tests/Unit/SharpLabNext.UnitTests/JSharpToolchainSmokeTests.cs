@@ -5,11 +5,7 @@ namespace SharpLabNext.UnitTests;
 public sealed class JSharpToolchainSmokeTests
 {
     private static readonly string RepositoryRoot = FindRepositoryRoot();
-    private static readonly string ScriptPath = Path.Combine(
-        RepositoryRoot,
-        "eng",
-        "smoke",
-        "jsharp-toolchain.cs");
+    private static readonly string ScriptPath = Path.Combine(RepositoryRoot, "eng", "smoke", "jsharp-toolchain.cs");
 
     [Fact]
     public void ScriptLocksTheIsolatedX64Clr2Contract()
@@ -28,11 +24,7 @@ public sealed class JSharpToolchainSmokeTests
         Assert.Contains("--ulimit=nofile=512:512", source, StringComparison.Ordinal);
         Assert.DoesNotContain("--ulimit=nofile=256:256", source, StringComparison.Ordinal);
         Assert.Contains("--tmpfs=/work:", source, StringComparison.Ordinal);
-        Assert.Contains(
-            "--tmpfs=/opt/wine-jsharp20/drive_c/users/root/Temp:" +
-            "rw,exec,nosuid,nodev,size=256m,mode=1777",
-            source,
-            StringComparison.Ordinal);
+        Assert.Contains("--tmpfs=/opt/wine-jsharp20/drive_c/users/root/Temp:" + "rw,exec,nosuid,nodev,size=256m,mode=1777", source, StringComparison.Ordinal);
         Assert.DoesNotContain("--env=TMP=", source, StringComparison.Ordinal);
         Assert.DoesNotContain("--env=TEMP=", source, StringComparison.Ordinal);
         Assert.DoesNotContain("--env=TMPDIR=", source, StringComparison.Ordinal);
@@ -43,21 +35,12 @@ public sealed class JSharpToolchainSmokeTests
         Assert.Contains("/usr/lib/wine/wineserver -k", source, StringComparison.Ordinal);
         Assert.DoesNotContain("command -v wineserver", source, StringComparison.Ordinal);
         Assert.Contains("Framework64/v2.0.50727", source, StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "Microsoft.NET/Framework/v2.0.50727/vjc.exe",
-            source,
-            StringComparison.Ordinal);
+        Assert.DoesNotContain("Microsoft.NET/Framework/v2.0.50727/vjc.exe", source, StringComparison.Ordinal);
         Assert.Contains("/platform:x64", source, StringComparison.Ordinal);
         Assert.Contains("expected AMD64", source, StringComparison.Ordinal);
         Assert.Contains("optional header is not PE32+", source, StringComparison.Ordinal);
-        Assert.Contains(
-            "(flags & 0x2) == 0 && (flags & 0x20000) == 0",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "test \"${metadata_version}\" = 'v2.0.50727'",
-            source,
-            StringComparison.Ordinal);
+        Assert.Contains("(flags & 0x2) == 0 && (flags & 0x20000) == 0", source, StringComparison.Ordinal);
+        Assert.Contains("test \"${metadata_version}\" = 'v2.0.50727'", source, StringComparison.Ordinal);
         Assert.Contains("cmp -s /work/runtime.expected /work/runtime.stdout", source, StringComparison.Ordinal);
         Assert.DoesNotContain("command -v objdump", source, StringComparison.Ordinal);
         Assert.DoesNotContain("command -v python3", source, StringComparison.Ordinal);
@@ -105,8 +88,7 @@ public sealed class JSharpToolchainSmokeTests
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the J# x64 smoke script test process.");
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the J# x64 smoke script test process.");
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(1));

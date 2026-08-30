@@ -16,13 +16,7 @@ internal sealed class ArtifactStoreProcess : IAsyncDisposable
     private readonly Task<string> _standardError;
     private readonly bool _deleteRootOnDispose;
 
-    private ArtifactStoreProcess(
-        Process process,
-        Task<string> standardOutput,
-        Task<string> standardError,
-        string rootPath,
-        bool deleteRootOnDispose,
-        HttpClient httpClient)
+    private ArtifactStoreProcess(Process process, Task<string> standardOutput, Task<string> standardError, string rootPath, bool deleteRootOnDispose, HttpClient httpClient)
     {
         _process = process;
         _standardOutput = standardOutput;
@@ -39,29 +33,14 @@ internal sealed class ArtifactStoreProcess : IAsyncDisposable
 
     public ArtifactStoreClient Client { get; }
 
-    public static async Task<ArtifactStoreProcess> StartAsync(
-        CancellationToken cancellationToken,
-        string? rootPath = null,
-        bool deleteRootOnDispose = true,
-        string? internalServiceToken = null)
+    public static async Task<ArtifactStoreProcess> StartAsync(CancellationToken cancellationToken, string? rootPath = null, bool deleteRootOnDispose = true, string? internalServiceToken = null)
     {
         var repositoryRoot = FindRepositoryRoot();
-        var storeRoot = rootPath ?? Path.Combine(
-            Path.GetTempPath(),
-            "SharpLabNext-ArtifactStoreTests",
-            Guid.NewGuid().ToString("N"));
+        var storeRoot = rootPath ?? Path.Combine(Path.GetTempPath(), "SharpLabNext-ArtifactStoreTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(storeRoot);
         var port = ReserveTcpPort();
         var baseAddress = new Uri($"http://127.0.0.1:{port}", UriKind.Absolute);
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            WorkingDirectory = repositoryRoot,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
+        var startInfo = new ProcessStartInfo { FileName = "dotnet", WorkingDirectory = repositoryRoot, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
         startInfo.ArgumentList.Add("run");
         startInfo.ArgumentList.Add("--project");
         startInfo.ArgumentList.Add("src/ArtifactStore/SharpLabNext.ArtifactStore/SharpLabNext.ArtifactStore.csproj");
@@ -79,18 +58,14 @@ internal sealed class ArtifactStoreProcess : IAsyncDisposable
         if (internalServiceToken is not null)
         {
             var tokenPath = Path.Combine(storeRoot, "internal-service-token");
-            await File.WriteAllTextAsync(
-                tokenPath,
-                internalServiceToken + Environment.NewLine,
-                cancellationToken);
+            await File.WriteAllTextAsync(tokenPath, internalServiceToken + Environment.NewLine, cancellationToken);
             startInfo.Environment["InternalServiceAuth__Required"] = "true";
             startInfo.Environment["InternalServiceAuth__TokenFile"] = tokenPath;
         }
         startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Testing";
         startInfo.Environment["DOTNET_NOLOGO"] = "1";
 
-        var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the Artifact Store test process.");
+        var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the Artifact Store test process.");
         var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var error = process.StandardError.ReadToEndAsync(cancellationToken);
         var httpClient = new HttpClient { BaseAddress = baseAddress, Timeout = TimeSpan.FromSeconds(10) };
@@ -105,21 +80,16 @@ internal sealed class ArtifactStoreProcess : IAsyncDisposable
                 cancellationToken.ThrowIfCancellationRequested();
                 if (process.HasExited)
                 {
-                    throw new InvalidOperationException(
-                        $"Artifact Store exited during startup.{Environment.NewLine}stdout:{Environment.NewLine}{await output}{Environment.NewLine}stderr:{Environment.NewLine}{await error}");
+                    throw new InvalidOperationException($"Artifact Store exited during startup.{Environment.NewLine}stdout:{Environment.NewLine}{await output}{Environment.NewLine}stderr:{Environment.NewLine}{await error}");
                 }
 
                 try
                 {
                     using var response = await httpClient.GetAsync("/health/ready", cancellationToken);
                     if (response.StatusCode == HttpStatusCode.OK)
-                    {
                         return result;
-                    }
                 }
-                catch (HttpRequestException)
-                {
-                }
+                catch (HttpRequestException) { }
 
                 await Task.Delay(50, cancellationToken);
             }
@@ -137,9 +107,7 @@ internal sealed class ArtifactStoreProcess : IAsyncDisposable
     {
         HttpClient.Dispose();
         if (!_process.HasExited)
-        {
             _process.Kill(entireProcessTree: true);
-        }
 
         try
         {
@@ -151,9 +119,7 @@ internal sealed class ArtifactStoreProcess : IAsyncDisposable
         {
             _process.Dispose();
             if (_deleteRootOnDispose)
-            {
                 DeleteTestRoot();
-            }
         }
     }
 
@@ -163,9 +129,7 @@ internal sealed class ArtifactStoreProcess : IAsyncDisposable
         while (directory is not null)
         {
             if (File.Exists(Path.Combine(directory.FullName, "SharpLabNext.slnx")))
-            {
                 return directory.FullName;
-            }
 
             directory = directory.Parent;
         }
@@ -206,38 +170,22 @@ internal static class ArtifactStoreTestData
     public static ArtifactManifest CreateManifest(params (string Path, byte[] Content, string Role)[] files)
     {
         if (files.Length == 0)
-        {
             files = [("app.dll", Encoding.UTF8.GetBytes("test assembly"), "primary-assembly")];
-        }
 
         var placeholder = new ArtifactRef($"sha256:{new string('0', ArtifactStoreProtocol.Sha256HexLength)}");
         var manifest = new ArtifactManifest(
             1,
             placeholder,
-            new ArtifactProducer(
-                "test-release",
-                "csharp",
-                "roslyn-stable",
-                "5.6.0",
-                null,
-                $"sha256:{new string('1', ArtifactStoreProtocol.Sha256HexLength)}"),
+            new ArtifactProducer("test-release", "csharp", "roslyn-stable", "5.6.0", null, $"sha256:{new string('1', ArtifactStoreProtocol.Sha256HexLength)}"),
             "net10-ref",
             "net10.0",
             "dotnet-managed-pe-v1",
-            new ArtifactRuntimeRequirement(
-                "coreclr",
-                [new FrameworkRequirement("Microsoft.NETCore.App", "10.0.9")],
-                "anycpu",
-                []),
+            new ArtifactRuntimeRequirement("coreclr", [new FrameworkRequirement("Microsoft.NETCore.App", "10.0.9")], "anycpu", []),
             [],
             BuildOutputKind.Console,
             files[0].Path,
             "Program.Main",
-            files.Select(file => new ArtifactFileDescriptor(
-                file.Role,
-                file.Path,
-                file.Content.LongLength,
-                ContentIdentity.Compute(file.Content).Value)).ToArray());
+            files.Select(file => new ArtifactFileDescriptor(file.Role, file.Path, file.Content.LongLength, ContentIdentity.Compute(file.Content).Value)).ToArray());
         return ArtifactIdentity.WithComputedId(manifest);
     }
 }

@@ -8,17 +8,9 @@ using SharpLabNext.WorkerHost;
 
 namespace SharpLabNext.Worker.Roslyn;
 
-public sealed record LoadedReferenceSet(
-    ReferenceSetDefinition Definition,
-    string ResolvedPath,
-    ImmutableArray<MetadataReference> References,
-    ImmutableArray<string> AssemblyPaths,
-    ReferenceSetAttestation Attestation);
+public sealed record LoadedReferenceSet(ReferenceSetDefinition Definition, string ResolvedPath, ImmutableArray<MetadataReference> References, ImmutableArray<string> AssemblyPaths, ReferenceSetAttestation Attestation);
 
-public sealed record ReferenceSetHealth(
-    bool IsHealthy,
-    string Message,
-    IReadOnlyList<string> LoadedReferenceSetIds);
+public sealed record ReferenceSetHealth(bool IsHealthy, string Message, IReadOnlyList<string> LoadedReferenceSetIds);
 
 public sealed class ReferenceSetProvider : IDisposable
 {
@@ -35,15 +27,11 @@ public sealed class ReferenceSetProvider : IDisposable
     private readonly SemaphoreSlim _loadLock = new(1, 1);
     private readonly bool _requireAttestation;
 
-    public ReferenceSetProvider(
-        IEnumerable<ReferenceSetDefinition> definitions,
-        bool requireAttestation = false)
+    public ReferenceSetProvider(IEnumerable<ReferenceSetDefinition> definitions, bool requireAttestation = false)
     {
         ArgumentNullException.ThrowIfNull(definitions);
         var materialized = definitions.ToArray();
-        var duplicate = materialized
-            .GroupBy(static definition => definition.Id, StringComparer.Ordinal)
-            .FirstOrDefault(static group => group.Count() > 1);
+        var duplicate = materialized.GroupBy(static definition => definition.Id, StringComparer.Ordinal).FirstOrDefault(static group => group.Count() > 1);
         if (duplicate is not null)
             throw new InvalidOperationException($"Duplicate reference set id '{duplicate.Key}'.");
         foreach (var definition in materialized)
@@ -55,10 +43,7 @@ public sealed class ReferenceSetProvider : IDisposable
 
     public IReadOnlyCollection<string> ReferenceSetIds => _definitions.Keys.ToArray();
 
-    public IReadOnlyList<ReferenceSetAttestation> Attestations => _loaded.Values
-        .OrderBy(static item => item.Definition.Id, StringComparer.Ordinal)
-        .Select(static item => item.Attestation)
-        .ToArray();
+    public IReadOnlyList<ReferenceSetAttestation> Attestations => _loaded.Values.OrderBy(static item => item.Definition.Id, StringComparer.Ordinal).Select(static item => item.Attestation).ToArray();
 
     public async Task<LoadedReferenceSet> GetAsync(string id, CancellationToken cancellationToken)
     {
@@ -110,105 +95,66 @@ public sealed class ReferenceSetProvider : IDisposable
             }
         }
 
-        return new ReferenceSetHealth(
-            true,
-            $"Loaded {loadedIds.Count} explicit reference set(s).",
-            loadedIds);
+        return new ReferenceSetHealth(true, $"Loaded {loadedIds.Count} explicit reference set(s).", loadedIds);
     }
 
     public void Dispose() => _loadLock.Dispose();
 
-    private static LoadedReferenceSet Load(
-        ReferenceSetDefinition definition,
-        bool requireAttestation,
-        CancellationToken cancellationToken)
+    private static LoadedReferenceSet Load(ReferenceSetDefinition definition, bool requireAttestation, CancellationToken cancellationToken)
     {
         var expandedPath = Environment.ExpandEnvironmentVariables(definition.Path);
         var path = Path.GetFullPath(expandedPath);
         if (!Directory.Exists(path))
         {
-            throw new ReferenceSetUnavailableException(
-                $"Reference set '{definition.Id}' configured directory does not exist.");
+            throw new ReferenceSetUnavailableException($"Reference set '{definition.Id}' configured directory does not exist.");
         }
 
         if (File.Exists(Path.Combine(path, "System.Private.CoreLib.dll")))
         {
-            throw new ReferenceSetUnavailableException(
-                $"Reference set '{definition.Id}' points to a runtime implementation directory instead of a reference bundle.");
+            throw new ReferenceSetUnavailableException($"Reference set '{definition.Id}' points to a runtime implementation directory instead of a reference bundle.");
         }
 
         var requiredAssemblies = definition.IsFrameworkReferenceSet
-            ? ["mscorlib.dll"]
-            : RequiredCoreAssemblies;
+            ? ["mscorlib.dll"] : RequiredCoreAssemblies;
         foreach (var requiredAssembly in requiredAssemblies)
         {
             if (!File.Exists(Path.Combine(path, requiredAssembly)))
             {
-                throw new ReferenceSetUnavailableException(
-                    $"Reference set '{definition.Id}' is missing required reference assembly '{requiredAssembly}'.");
+                throw new ReferenceSetUnavailableException($"Reference set '{definition.Id}' is missing required reference assembly '{requiredAssembly}'.");
             }
         }
 
         if (definition.IsFrameworkReferenceSet)
         {
-            ValidateFrameworkReferenceAssembly(
-                Path.Combine(path, "mscorlib.dll"),
-                definition);
+            ValidateFrameworkReferenceAssembly(Path.Combine(path, "mscorlib.dll"), definition);
         }
         else
         {
-            ValidateReferenceAssemblyAttribute(
-                Path.Combine(path, "System.Runtime.dll"),
-                definition.Id);
+            ValidateReferenceAssemblyAttribute(Path.Combine(path, "System.Runtime.dll"), definition.Id);
         }
         var processRuntimeApiPath = typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location;
         var attestedRuntimeApiPath = Path.Combine(path, Path.GetFileName(processRuntimeApiPath));
         if (definition.IncludeSharpLabRuntime && requireAttestation && !File.Exists(attestedRuntimeApiPath))
         {
-            throw new ReferenceSetUnavailableException(
-                $"Reference set '{definition.Id}' is missing its attested SharpLab.Runtime assembly.");
+            throw new ReferenceSetUnavailableException($"Reference set '{definition.Id}' is missing its attested SharpLab.Runtime assembly.");
         }
 
         ReferenceSetAttestation attestation;
         try
         {
-            attestation = ReferenceSetAttestationReader.LoadAndVerify(
-                path,
-                definition.Id,
-                definition.TargetFramework,
-                definition.FrameworkVersion,
-                definition.Digest,
-                requireAttestation,
-                definition.AttestationPath);
+            attestation = ReferenceSetAttestationReader.LoadAndVerify(path, definition.Id, definition.TargetFramework, definition.FrameworkVersion, definition.Digest, requireAttestation, definition.AttestationPath);
         }
         catch (InvalidDataException exception)
         {
-            throw new ReferenceSetUnavailableException(
-                $"Reference set '{definition.Id}' attestation validation failed.",
-                exception);
+            throw new ReferenceSetUnavailableException($"Reference set '{definition.Id}' attestation validation failed.", exception);
         }
-        var effectiveDefinition = definition with
-        {
-            TargetFramework = attestation.TargetFramework,
-            FrameworkVersion = attestation.Provenance.ResolvedVersion
-        };
+        var effectiveDefinition = definition with { TargetFramework = attestation.TargetFramework, FrameworkVersion = attestation.Provenance.ResolvedVersion };
 
         var runtimeApiFileName = Path.GetFileName(processRuntimeApiPath);
-        var assemblyPaths = Directory.EnumerateFiles(path, "*.dll", SearchOption.TopDirectoryOnly)
-            .Where(candidate =>
-                definition.IncludeSharpLabRuntime ||
-                !Path.GetFileName(candidate).Equals(runtimeApiFileName, StringComparison.OrdinalIgnoreCase))
-            .Where(candidate => IsManagedAssembly(candidate, definition.Id))
-            .Concat(definition.IncludeSharpLabRuntime
-                ? [File.Exists(attestedRuntimeApiPath) ? attestedRuntimeApiPath : processRuntimeApiPath]
-                : [])
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Order(StringComparer.Ordinal)
-            .ToImmutableArray();
+        var assemblyPaths = Directory.EnumerateFiles(path, "*.dll", SearchOption.TopDirectoryOnly).Where(candidate => definition.IncludeSharpLabRuntime || !Path.GetFileName(candidate).Equals(runtimeApiFileName, StringComparison.OrdinalIgnoreCase)).Where(candidate => IsManagedAssembly(candidate, definition.Id)).Concat(definition.IncludeSharpLabRuntime ? [File.Exists(attestedRuntimeApiPath) ? attestedRuntimeApiPath : processRuntimeApiPath] : []).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.Ordinal).ToImmutableArray();
         if (assemblyPaths.Length < requiredAssemblies.Length)
         {
-            throw new ReferenceSetUnavailableException(
-                $"Reference set '{definition.Id}' does not contain enough reference assemblies.");
+            throw new ReferenceSetUnavailableException($"Reference set '{definition.Id}' does not contain enough reference assemblies.");
         }
 
         var references = ImmutableArray.CreateBuilder<MetadataReference>(assemblyPaths.Length);
@@ -221,18 +167,11 @@ public sealed class ReferenceSetProvider : IDisposable
             }
             catch (Exception exception) when (exception is IOException or BadImageFormatException or UnauthorizedAccessException)
             {
-                throw new ReferenceSetUnavailableException(
-                    $"Reference set '{definition.Id}' contains an unreadable assembly.",
-                    exception);
+                throw new ReferenceSetUnavailableException($"Reference set '{definition.Id}' contains an unreadable assembly.", exception);
             }
         }
 
-        return new LoadedReferenceSet(
-            effectiveDefinition,
-            path,
-            references.MoveToImmutable(),
-            assemblyPaths,
-            attestation);
+        return new LoadedReferenceSet(effectiveDefinition, path, references.MoveToImmutable(), assemblyPaths, attestation);
     }
 
     private static bool IsManagedAssembly(string assemblyPath, string referenceSetId)
@@ -249,9 +188,7 @@ public sealed class ReferenceSetProvider : IDisposable
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            throw new ReferenceSetUnavailableException(
-                $"Reference set '{referenceSetId}' contains an unreadable assembly candidate.",
-                exception);
+            throw new ReferenceSetUnavailableException($"Reference set '{referenceSetId}' contains an unreadable assembly candidate.", exception);
         }
     }
 
@@ -266,13 +203,10 @@ public sealed class ReferenceSetProvider : IDisposable
 
             var reader = peReader.GetMetadataReader();
             var assembly = reader.GetAssemblyDefinition();
-            var isReferenceAssembly = assembly.GetCustomAttributes()
-                .Select(handle => GetAttributeTypeName(reader, reader.GetCustomAttribute(handle).Constructor))
-                .Any(static name => name == "System.Runtime.CompilerServices.ReferenceAssemblyAttribute");
+            var isReferenceAssembly = assembly.GetCustomAttributes().Select(handle => GetAttributeTypeName(reader, reader.GetCustomAttribute(handle).Constructor)).Any(static name => name == "System.Runtime.CompilerServices.ReferenceAssemblyAttribute");
             if (!isReferenceAssembly)
             {
-                throw new ReferenceSetUnavailableException(
-                    $"Reference set '{referenceSetId}' does not contain reference assemblies.");
+                throw new ReferenceSetUnavailableException($"Reference set '{referenceSetId}' does not contain reference assemblies.");
             }
         }
         catch (ReferenceSetUnavailableException)
@@ -281,15 +215,11 @@ public sealed class ReferenceSetProvider : IDisposable
         }
         catch (Exception exception) when (exception is IOException or BadImageFormatException or UnauthorizedAccessException)
         {
-            throw new ReferenceSetUnavailableException(
-                $"Reference set '{referenceSetId}' failed reference assembly validation.",
-                exception);
+            throw new ReferenceSetUnavailableException($"Reference set '{referenceSetId}' failed reference assembly validation.", exception);
         }
     }
 
-    private static void ValidateFrameworkReferenceAssembly(
-        string assemblyPath,
-        ReferenceSetDefinition definition)
+    private static void ValidateFrameworkReferenceAssembly(string assemblyPath, ReferenceSetDefinition definition)
     {
         try
         {
@@ -300,17 +230,13 @@ public sealed class ReferenceSetProvider : IDisposable
 
             var reader = peReader.GetMetadataReader();
             var assembly = reader.GetAssemblyDefinition();
-            var isReferenceAssembly = assembly.GetCustomAttributes()
-                .Select(handle => GetAttributeTypeName(reader, reader.GetCustomAttribute(handle).Constructor))
-                .Any(static name => name == "System.Runtime.CompilerServices.ReferenceAssemblyAttribute");
+            var isReferenceAssembly = assembly.GetCustomAttributes().Select(handle => GetAttributeTypeName(reader, reader.GetCustomAttribute(handle).Constructor)).Any(static name => name == "System.Runtime.CompilerServices.ReferenceAssemblyAttribute");
             if (isReferenceAssembly)
                 return;
 
-            if (!definition.IsLegacyFrameworkReferenceSet ||
-                !IsRecognizedLegacyFrameworkContract(peReader, reader, assembly))
+            if (!definition.IsLegacyFrameworkReferenceSet || !IsRecognizedLegacyFrameworkContract(peReader, reader, assembly))
             {
-                throw new ReferenceSetUnavailableException(
-                    $"Reference set '{definition.Id}' does not contain a recognized .NET Framework reference assembly.");
+                throw new ReferenceSetUnavailableException($"Reference set '{definition.Id}' does not contain a recognized .NET Framework reference assembly.");
             }
         }
         catch (ReferenceSetUnavailableException)
@@ -319,25 +245,14 @@ public sealed class ReferenceSetProvider : IDisposable
         }
         catch (Exception exception) when (exception is IOException or BadImageFormatException or UnauthorizedAccessException)
         {
-            throw new ReferenceSetUnavailableException(
-                $"Reference set '{definition.Id}' failed reference assembly validation.",
-                exception);
+            throw new ReferenceSetUnavailableException($"Reference set '{definition.Id}' failed reference assembly validation.", exception);
         }
     }
 
-    private static bool IsRecognizedLegacyFrameworkContract(
-        PEReader peReader,
-        MetadataReader reader,
-        AssemblyDefinition assembly)
+    private static bool IsRecognizedLegacyFrameworkContract(PEReader peReader, MetadataReader reader, AssemblyDefinition assembly)
     {
         var corHeader = peReader.PEHeaders.CorHeader!;
-        if ((corHeader.Flags & CorFlags.ILOnly) == 0 ||
-            (corHeader.Flags & CorFlags.NativeEntryPoint) != 0 ||
-            (corHeader.Flags & CorFlags.StrongNameSigned) == 0 ||
-            assembly.PublicKey.IsNil ||
-            assembly.Version.Major != 2 ||
-            assembly.Version.Minor != 0 ||
-            !reader.GetString(assembly.Name).Equals("mscorlib", StringComparison.OrdinalIgnoreCase))
+        if ((corHeader.Flags & CorFlags.ILOnly) == 0 || (corHeader.Flags & CorFlags.NativeEntryPoint) != 0 || (corHeader.Flags & CorFlags.StrongNameSigned) == 0 || assembly.PublicKey.IsNil || assembly.Version.Major != 2 || assembly.Version.Minor != 0 || !reader.GetString(assembly.Name).Equals("mscorlib", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -381,9 +296,7 @@ public sealed class ReferenceSetProvider : IDisposable
 
 }
 
-public sealed class ReferenceSetWarmupService(
-    ReferenceSetProvider referenceSets,
-    ILogger<ReferenceSetWarmupService> logger) : IHostedService
+public sealed class ReferenceSetWarmupService(ReferenceSetProvider referenceSets, ILogger<ReferenceSetWarmupService> logger) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {

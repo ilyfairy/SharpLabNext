@@ -4,21 +4,13 @@ public static class RuntimeProfileCommandBuilder
 {
     private const int MaximumDynamicArgumentLength = 32 * 1024;
 
-    public static IReadOnlyList<string> CreateRunCommand(
-        RuntimeProfileDefinition profile,
-        string normalizedEntryAssembly,
-        IReadOnlyList<string> arguments)
+    public static IReadOnlyList<string> CreateRunCommand(RuntimeProfileDefinition profile, string normalizedEntryAssembly, IReadOnlyList<string> arguments)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(arguments);
         if (profile.Operations?.Run is { } operation)
         {
-            return CreateOperationCommand(
-                operation,
-                RuntimeProfileValidation.Validate(operation),
-                normalizedEntryAssembly,
-                arguments,
-                methodFilter: null);
+            return CreateOperationCommand(operation, RuntimeProfileValidation.Validate(operation), normalizedEntryAssembly, arguments, methodFilter: null);
         }
 
         List<string> command = profile.Layout.RunnerKind switch
@@ -46,64 +38,42 @@ public static class RuntimeProfileCommandBuilder
                 WorkspaceFileWine(normalizedEntryAssembly),
                 "--"
             ],
-            _ => throw new InvalidOperationException(
-                $"Runtime runner kind '{profile.Layout.RunnerKind}' is not supported.")
+            _ => throw new InvalidOperationException($"Runtime runner kind '{profile.Layout.RunnerKind}' is not supported.")
         };
         command.AddRange(arguments);
         return command;
     }
 
-    public static IReadOnlyList<string> CreateJitCommand(
-        RuntimeProfileDefinition profile,
-        string normalizedEntryAssembly,
-        string? methodFilter)
+    public static IReadOnlyList<string> CreateJitCommand(RuntimeProfileDefinition profile, string normalizedEntryAssembly, string? methodFilter)
     {
         ArgumentNullException.ThrowIfNull(profile);
         if (profile.Operations?.Jit is { } operation)
         {
-            return CreateOperationCommand(
-                operation,
-                RuntimeProfileValidation.Validate(operation),
-                normalizedEntryAssembly,
-                arguments: [],
-                methodFilter);
+            return CreateOperationCommand(operation, RuntimeProfileValidation.Validate(operation), normalizedEntryAssembly, arguments: [], methodFilter);
         }
 
         if (StringComparer.Ordinal.Equals(profile.Layout.RunnerKind, RuntimeRunnerKinds.WineCoreClr))
         {
-            throw new NotSupportedException(
-                "Legacy wine-coreclr layouts do not support JIT inspection; declare an operation-based JIT command.");
+            throw new NotSupportedException("Legacy wine-coreclr layouts do not support JIT inspection; declare an operation-based JIT command.");
         }
         if (!StringComparer.Ordinal.Equals(profile.Layout.RunnerKind, RuntimeRunnerKinds.DotNet))
         {
-            throw new NotSupportedException(
-                $"Runtime runner kind '{profile.Layout.RunnerKind}' does not support JIT inspection.");
+            throw new NotSupportedException($"Runtime runner kind '{profile.Layout.RunnerKind}' does not support JIT inspection.");
         }
         var jitInspectorAssemblyPath = profile.Layout.JitInspectorAssemblyPath;
         if (string.IsNullOrWhiteSpace(jitInspectorAssemblyPath))
             throw new InvalidOperationException("The runtime profile does not declare a JIT inspector assembly.");
-        var command = new List<string>
-        {
-            profile.Layout.DotNetHostPath,
-            jitInspectorAssemblyPath,
-            WorkspaceFile(normalizedEntryAssembly)
-        };
+        var command = new List<string> { profile.Layout.DotNetHostPath, jitInspectorAssemblyPath, WorkspaceFile(normalizedEntryAssembly) };
         if (!string.IsNullOrWhiteSpace(methodFilter))
             command.Add(methodFilter);
         return command;
     }
 
-    private static List<string> CreateOperationCommand(
-        RuntimeOperationDefinition operation,
-        IReadOnlyList<string> validationFailures,
-        string normalizedEntryAssembly,
-        IReadOnlyList<string> arguments,
-        string? methodFilter)
+    private static List<string> CreateOperationCommand(RuntimeOperationDefinition operation, IReadOnlyList<string> validationFailures, string normalizedEntryAssembly, IReadOnlyList<string> arguments, string? methodFilter)
     {
         if (validationFailures.Count > 0)
         {
-            throw new InvalidOperationException(
-                $"The runtime operation command is invalid: {string.Join(" ", validationFailures)}");
+            throw new InvalidOperationException($"The runtime operation command is invalid: {string.Join(" ", validationFailures)}");
         }
 
         var entryAssembly = WorkspaceFile(normalizedEntryAssembly, operation.PathStyle);
@@ -162,18 +132,14 @@ public static class RuntimeProfileCommandBuilder
             return;
         if (value.Length > MaximumDynamicArgumentLength || value.Contains('\0'))
         {
-            throw new ArgumentException(
-                "Runtime arguments cannot exceed 32768 characters or contain NUL characters.",
-                parameterName);
+            throw new ArgumentException("Runtime arguments cannot exceed 32768 characters or contain NUL characters.", parameterName);
         }
     }
 
     public static string WorkspaceFile(string normalizedArtifactPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(normalizedArtifactPath);
-        if (normalizedArtifactPath.Length > 4096 || normalizedArtifactPath.Contains('\0') ||
-            normalizedArtifactPath.StartsWith('/') || normalizedArtifactPath.Contains('\\') ||
-            normalizedArtifactPath.Split('/').Any(static segment => segment is "" or "." or ".."))
+        if (normalizedArtifactPath.Length > 4096 || normalizedArtifactPath.Contains('\0') || normalizedArtifactPath.StartsWith('/') || normalizedArtifactPath.Contains('\\') || normalizedArtifactPath.Split('/').Any(static segment => segment is "" or "." or ".."))
         {
             throw new ArgumentException("The artifact path must be normalized and relative.", nameof(normalizedArtifactPath));
         }

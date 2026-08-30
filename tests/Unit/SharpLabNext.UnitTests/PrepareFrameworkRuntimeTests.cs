@@ -6,10 +6,7 @@ namespace SharpLabNext.UnitTests;
 public sealed class PrepareFrameworkRuntimeTests
 {
     private static readonly string RepositoryRoot = FindRepositoryRoot();
-    private static readonly string ScriptPath = Path.Combine(
-        RepositoryRoot,
-        "eng",
-        "prepare-framework-runtime.cs");
+    private static readonly string ScriptPath = Path.Combine(RepositoryRoot, "eng", "tools", "prepare-framework-runtime.cs");
     private static readonly string RepositoryRevision = ReadRepositoryRevision();
 
     [Fact]
@@ -82,10 +79,7 @@ public sealed class PrepareFrameworkRuntimeTests
     [Theory]
     [InlineData("clr2", "3.5", "/opt/wine-netfx-clr2")]
     [InlineData("clr4", "4.8", "/opt/wine-netfx-clr4")]
-    public async Task CompanionSeedUsesOneDigestPinnedWow64Base(
-        string generation,
-        string version,
-        string prefix)
+    public async Task CompanionSeedUsesOneDigestPinnedWow64Base(string generation, string version, string prefix)
     {
         var arguments = CommonArguments("companion-seed").ToList();
         arguments.InsertRange(arguments.Count - 1, [
@@ -125,10 +119,7 @@ public sealed class PrepareFrameworkRuntimeTests
     public async Task DotNet35Sp1TargetsRequireTheCachedWinetricksPayload(string targetId)
     {
         using var secrets = new SecretFiles();
-        var missing = await RunAsync(ValidArguments(
-            targetId,
-            secrets,
-            includeInstallerSource: false));
+        var missing = await RunAsync(ValidArguments(targetId, secrets, includeInstallerSource: false));
 
         Assert.Equal(64, missing.ExitCode);
         Assert.Contains("--cached-winetricks-payload-file", missing.StandardError, StringComparison.Ordinal);
@@ -231,9 +222,7 @@ public sealed class PrepareFrameworkRuntimeTests
     public async Task MissingEulaAcceptanceFailsAsUsage()
     {
         using var secrets = new SecretFiles();
-        var arguments = ValidArguments("netfx48", secrets, includeInstallerSource: false)
-            .Where(argument => argument != "--accept-microsoft-dotnet-framework-eula")
-            .ToArray();
+        var arguments = ValidArguments("netfx48", secrets, includeInstallerSource: false).Where(argument => argument != "--accept-microsoft-dotnet-framework-eula").ToArray();
 
         var result = await RunAsync(arguments);
 
@@ -271,31 +260,19 @@ public sealed class PrepareFrameworkRuntimeTests
     [InlineData(VendoredPayloadState.Missing, "Git LFS object is missing")]
     [InlineData(VendoredPayloadState.UnexpandedLfsObject, "unexpanded Git LFS pointer")]
     [InlineData(VendoredPayloadState.Corrupt, "SHA-256 does not match")]
-    public async Task VendoredPayloadFailureStopsBeforeDocker(
-        VendoredPayloadState state,
-        string expectedError)
+    public async Task VendoredPayloadFailureStopsBeforeDocker(VendoredPayloadState state, string expectedError)
     {
         using var fixture = new FrameworkRepositoryFixture(state);
         using var secrets = new SecretFiles();
 
-        var result = await RunAsync(ValidArguments(
-            "netfx48",
-            secrets,
-            includeInstallerSource: false,
-            fixture.Root,
-            fixture.Revision));
+        var result = await RunAsync(ValidArguments("netfx48", secrets, includeInstallerSource: false, fixture.Root, fixture.Revision));
 
         Assert.Equal(1, result.ExitCode);
         Assert.Contains(expectedError, result.StandardError, StringComparison.Ordinal);
         Assert.DoesNotContain("docker buildx build", result.StandardOutput, StringComparison.Ordinal);
     }
 
-    private static string[] ValidArguments(
-        string targetId,
-        SecretFiles secrets,
-        bool includeInstallerSource,
-        string? repositoryRoot = null,
-        string? sourceRevision = null)
+    private static string[] ValidArguments(string targetId, SecretFiles secrets, bool includeInstallerSource, string? repositoryRoot = null, string? sourceRevision = null)
     {
         repositoryRoot ??= RepositoryRoot;
         sourceRevision ??= RepositoryRevision;
@@ -352,8 +329,7 @@ public sealed class PrepareFrameworkRuntimeTests
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the Framework preparation script test process.");
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the Framework preparation script test process.");
         var outputTask = process.StandardOutput.ReadToEndAsync();
         var errorTask = process.StandardError.ReadToEndAsync();
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(1));
@@ -394,8 +370,7 @@ public sealed class PrepareFrameworkRuntimeTests
         startInfo.ArgumentList.Add("rev-parse");
         startInfo.ArgumentList.Add("--verify");
         startInfo.ArgumentList.Add("HEAD");
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not read the repository revision.");
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not read the repository revision.");
         var output = process.StandardOutput.ReadToEnd();
         process.WaitForExit();
         if (process.ExitCode != 0)
@@ -429,12 +404,8 @@ public sealed class PrepareFrameworkRuntimeTests
             {
                 Directory.Delete(Root, recursive: true);
             }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 
@@ -447,40 +418,26 @@ public sealed class PrepareFrameworkRuntimeTests
 
     private sealed class FrameworkRepositoryFixture : IDisposable
     {
-        private const string PayloadRelativePath =
-            "eng/prerequisites/dotnet-framework-2.0/NetFx64.exe";
+        private const string PayloadRelativePath = "eng/prerequisites/dotnet-framework-2.0/NetFx64.exe";
 
         public FrameworkRepositoryFixture(VendoredPayloadState state)
         {
-            Root = Path.Combine(
-                Path.GetTempPath(),
-                $"SharpLabNext.FrameworkRepository.Tests.{Guid.NewGuid():N}");
+            Root = Path.Combine(Path.GetTempPath(), $"SharpLabNext.FrameworkRepository.Tests.{Guid.NewGuid():N}");
             Directory.CreateDirectory(Root);
             RunGit("init", "--quiet");
             File.WriteAllText(Path.Combine(Root, "SharpLabNext.slnx"), "<Solution />\n");
             File.WriteAllText(Path.Combine(Root, "fixture.txt"), "fixture\n");
             RunGit("add", "fixture.txt");
-            RunGit(
-                "-c", "user.name=SharpLabNext Tests",
-                "-c", "user.email=tests@sharplabnext.invalid",
-                "commit", "--quiet", "-m", "fixture");
+            RunGit("-c", "user.name=SharpLabNext Tests", "-c", "user.email=tests@sharplabnext.invalid", "commit", "--quiet", "-m", "fixture");
             Revision = RunGit("rev-parse", "--verify", "HEAD").Trim();
 
             var profiles = Path.Combine(Root, "profiles");
             Directory.CreateDirectory(profiles);
-            File.Copy(
-                Path.Combine(RepositoryRoot, "profiles", "runtime-framework-installers.json"),
-                Path.Combine(profiles, "runtime-framework-installers.json"));
-            File.Copy(
-                Path.Combine(RepositoryRoot, "profiles", "runtime-matrix.json"),
-                Path.Combine(profiles, "runtime-matrix.json"));
-            File.WriteAllText(
-                Path.Combine(Root, ".gitattributes"),
-                $"{PayloadRelativePath} filter=lfs diff=lfs merge=lfs -text\n");
+            File.Copy(Path.Combine(RepositoryRoot, "profiles", "runtime-framework-installers.json"), Path.Combine(profiles, "runtime-framework-installers.json"));
+            File.Copy(Path.Combine(RepositoryRoot, "profiles", "runtime-matrix.json"), Path.Combine(profiles, "runtime-matrix.json"));
+            File.WriteAllText(Path.Combine(Root, ".gitattributes"), $"{PayloadRelativePath} filter=lfs diff=lfs merge=lfs -text\n");
 
-            var payloadPath = Path.Combine(
-                Root,
-                PayloadRelativePath.Replace('/', Path.DirectorySeparatorChar));
+            var payloadPath = Path.Combine(Root, PayloadRelativePath.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(payloadPath)!);
             switch (state)
             {
@@ -511,12 +468,8 @@ public sealed class PrepareFrameworkRuntimeTests
             {
                 Directory.Delete(Root, recursive: true);
             }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         private string RunGit(params string[] arguments)
@@ -530,8 +483,7 @@ public sealed class PrepareFrameworkRuntimeTests
             };
             foreach (var argument in arguments)
                 startInfo.ArgumentList.Add(argument);
-            using var process = Process.Start(startInfo)
-                ?? throw new InvalidOperationException("Could not start Git for the Framework fixture.");
+            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start Git for the Framework fixture.");
             var output = process.StandardOutput.ReadToEnd();
             var error = process.StandardError.ReadToEnd();
             process.WaitForExit();

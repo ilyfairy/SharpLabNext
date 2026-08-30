@@ -10,21 +10,17 @@ import {
   createFrameworkCandidateInput,
   createFrameworkCandidateInputFromImages,
   runCreateFrameworkCandidateInput,
-} from './create-runtime-framework-candidate-input.mjs'
-import { matrixInputDigest } from './build-framework-matrix-context.mjs'
-import { readRuntimeMatrix } from './runtime-candidate-environment.mjs'
+} from '../create-runtime-framework-candidate-input.mjs'
+import { matrixInputDigest } from '../build-framework-matrix-context.mjs'
+import { readRuntimeMatrix } from '../runtime-candidate-environment.mjs'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const runtimeMatrixPath = path.join(repositoryRoot, 'profiles', 'runtime-matrix.json')
 const runtimeMatrix = readRuntimeMatrix(runtimeMatrixPath)
-const installerManifestSha256 = crypto.createHash('sha256').update(fs.readFileSync(
-  path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json'),
-)).digest('hex')
+const installerManifestSha256 = crypto.createHash('sha256').update(fs.readFileSync(path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json'))).digest('hex');
 const revision = 'a'.repeat(40)
 
-function image(name, value) {
-  return `registry.example/sharplabnext/${name}@sha256:${value.repeat(64)}`
-}
+function image(name, value) { return `registry.example/sharplabnext/${name}@sha256:${value.repeat(64)}`; }
 
 function inputRows() {
   return runtimeMatrix.framework.targets.map((target, index) => ({

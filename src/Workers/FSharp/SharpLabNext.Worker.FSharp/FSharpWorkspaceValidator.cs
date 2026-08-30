@@ -4,11 +4,7 @@ using SharpLabNext.Contracts;
 
 namespace SharpLabNext.Worker.FSharp;
 
-internal sealed record ValidatedFSharpWorkspace(
-    WorkspaceSnapshot Snapshot,
-    IReadOnlyList<ValidatedFSharpWorkspaceFile> OrderedFiles,
-    string ActiveFile,
-    BuildOptions Options);
+internal sealed record ValidatedFSharpWorkspace(WorkspaceSnapshot Snapshot, IReadOnlyList<ValidatedFSharpWorkspaceFile> OrderedFiles, string ActiveFile, BuildOptions Options);
 
 internal sealed record ValidatedFSharpWorkspaceFile(string Path, long Version, string Text);
 
@@ -20,8 +16,7 @@ internal static partial class FSharpWorkspaceValidator
     public static ValidatedFSharpWorkspace Validate(BuildRequest request, FSharpCompilationLimits limits)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (string.IsNullOrWhiteSpace(request.RequestId) || string.IsNullOrWhiteSpace(request.IdempotencyKey) ||
-            string.IsNullOrWhiteSpace(request.PipelineResolutionId))
+        if (string.IsNullOrWhiteSpace(request.RequestId) || string.IsNullOrWhiteSpace(request.IdempotencyKey) || string.IsNullOrWhiteSpace(request.PipelineResolutionId))
         {
             throw new FSharpBuildRequestValidationException("Request, idempotency and pipeline IDs are required.");
         }
@@ -95,20 +90,15 @@ internal static partial class FSharpWorkspaceValidator
 
     private static void ValidateOptions(BuildOptions options)
     {
-        if (options.OutputKind is not (
-            BuildOutputKind.Console or
-            BuildOutputKind.Library or
-            BuildOutputKind.WindowsApplication))
+        if (options.OutputKind is not (BuildOutputKind.Console or BuildOutputKind.Library or BuildOutputKind.WindowsApplication))
         {
-            throw new FSharpBuildRequestValidationException(
-                "F# supports console, library and Windows application outputs only.");
+            throw new FSharpBuildRequestValidationException("F# supports console, library and Windows application outputs only.");
         }
         if (options.AllowUnsafe)
             throw new FSharpBuildRequestValidationException("F# does not expose the allowUnsafe option.");
         if (options.NullableContext is not (NullableContextMode.ProjectDefault or NullableContextMode.Disable))
             throw new FSharpBuildRequestValidationException("C# nullable context options are not applicable to F#.");
-        if (options.LanguageVersion is not null &&
-            options.LanguageVersion is not ("default" or "latest" or "preview" or "8.0" or "9.0"))
+        if (options.LanguageVersion is not null && options.LanguageVersion is not ("default" or "latest" or "preview" or "8.0" or "9.0"))
         {
             throw new FSharpBuildRequestValidationException($"F# language version '{options.LanguageVersion}' is not allowed.");
         }

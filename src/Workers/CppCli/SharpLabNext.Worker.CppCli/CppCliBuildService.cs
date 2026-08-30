@@ -16,35 +16,23 @@ public sealed class CppCliBuildService : ILanguageWorkerBuildService
     private readonly CppCliWorkerSettings _settings;
     private readonly LanguageWorkerCapabilityManifest _manifest;
 
-    public CppCliBuildService(
-        CppCliCompilerProcess compiler,
-        CppCliWorkerSettings settings,
-        LanguageWorkerCapabilityManifest manifest)
-        : this((ICppCliCompilerProcess)compiler, settings, manifest)
-    {
-    }
+    public CppCliBuildService(CppCliCompilerProcess compiler, CppCliWorkerSettings settings, LanguageWorkerCapabilityManifest manifest) : this((ICppCliCompilerProcess)compiler, settings, manifest) { }
 
-    internal CppCliBuildService(
-        ICppCliCompilerProcess compiler,
-        CppCliWorkerSettings settings,
-        LanguageWorkerCapabilityManifest manifest)
+    internal CppCliBuildService(ICppCliCompilerProcess compiler, CppCliWorkerSettings settings, LanguageWorkerCapabilityManifest manifest)
     {
         _compiler = compiler;
         _settings = settings;
         _manifest = manifest;
     }
 
-    public async Task<LanguageWorkerBuildExecution> BuildAsync(
-        BuildRequest request,
-        CancellationToken cancellationToken)
+    public async Task<LanguageWorkerBuildExecution> BuildAsync(BuildRequest request, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var telemetryOutcome = SharpLabNextTelemetryOutcome.Failed;
         try
         {
             var remaining = request.DeadlineUtc - DateTimeOffset.UtcNow;
-            if (remaining <= TimeSpan.Zero)
-                throw new OperationCanceledException("The C++/CLI build deadline has elapsed.", cancellationToken);
+            if (remaining <= TimeSpan.Zero) throw new OperationCanceledException("The C++/CLI build deadline has elapsed.", cancellationToken);
             var maximum = TimeSpan.FromMilliseconds(_manifest.Limits.MaximumBuildMilliseconds);
             using var deadline = new CancellationTokenSource(remaining < maximum ? remaining : maximum);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
@@ -54,8 +42,7 @@ public sealed class CppCliBuildService : ILanguageWorkerBuildService
                 telemetryOutcome = TelemetryOutcome(execution.Result);
                 return execution;
             }
-            catch (OperationCanceledException) when (
-                deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
                 telemetryOutcome = SharpLabNextTelemetryOutcome.TimedOut;
                 throw;
@@ -66,14 +53,12 @@ public sealed class CppCliBuildService : ILanguageWorkerBuildService
             telemetryOutcome = SharpLabNextTelemetryOutcome.Cancelled;
             throw;
         }
-        catch (LanguageWorkerRequestException exception) when (
-            exception.StatusCode == StatusCodes.Status429TooManyRequests)
+        catch (LanguageWorkerRequestException exception) when (exception.StatusCode == StatusCodes.Status429TooManyRequests)
         {
             telemetryOutcome = SharpLabNextTelemetryOutcome.Overloaded;
             throw;
         }
-        catch (LanguageWorkerRequestException exception) when (
-            exception.StatusCode == StatusCodes.Status503ServiceUnavailable)
+        catch (LanguageWorkerRequestException exception) when (exception.StatusCode == StatusCodes.Status503ServiceUnavailable)
         {
             telemetryOutcome = SharpLabNextTelemetryOutcome.Crashed;
             throw;
@@ -81,56 +66,29 @@ public sealed class CppCliBuildService : ILanguageWorkerBuildService
         finally
         {
             stopwatch.Stop();
-            SharpLabNextTelemetry.Metrics.RecordBuild(
-                CppCliToolchain.LanguageId,
-                CppCliToolchain.ToolchainId,
-                stopwatch.Elapsed,
-                telemetryOutcome,
-                cacheHit: false);
+            SharpLabNextTelemetry.Metrics.RecordBuild(CppCliToolchain.LanguageId, CppCliToolchain.ToolchainId, stopwatch.Elapsed, telemetryOutcome, cacheHit: false);
         }
     }
 
-    private async Task<LanguageWorkerBuildExecution> BuildCoreAsync(
-        BuildRequest request,
-        CancellationToken cancellationToken)
+    private async Task<LanguageWorkerBuildExecution> BuildCoreAsync(BuildRequest request, CancellationToken cancellationToken)
     {
-        var workspace = CppCliWorkspaceValidator.Validate(
-            request,
-            _manifest,
-            _settings.Identity.CompilerVersion);
+        var workspace = CppCliWorkspaceValidator.Validate(request, _manifest, _settings.Identity.CompilerVersion);
         var invocation = await _compiler.CompileAsync(workspace, cancellationToken).ConfigureAwait(false);
         var identity = _settings.Identity.CreateBuildIdentity();
         if (!invocation.Succeeded)
         {
             if (request.Target == BuildTarget.CompileCheck)
             {
-                return new LanguageWorkerBuildExecution(new CompilationCheckResult(
-                    false,
-                    invocation.Diagnostics,
-                    identity,
-                    workspace.Snapshot.Revision,
-                    workspace.Snapshot.SelectionRevision));
+                return new LanguageWorkerBuildExecution(new CompilationCheckResult(false, invocation.Diagnostics, identity, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision));
             }
-            var linkFailed = invocation.Diagnostics.Any(static diagnostic =>
-                diagnostic.Code.StartsWith("LNK", StringComparison.OrdinalIgnoreCase));
-            return new LanguageWorkerBuildExecution(new BuildResult(
-                linkFailed ? BuildOutcome.EmitFailed : BuildOutcome.CompilationFailed,
-                null,
-                invocation.Diagnostics,
-                identity,
-                workspace.Snapshot.Revision,
-                workspace.Snapshot.SelectionRevision));
+            var linkFailed = invocation.Diagnostics.Any(static diagnostic => diagnostic.Code.StartsWith("LNK", StringComparison.OrdinalIgnoreCase));
+            return new LanguageWorkerBuildExecution(new BuildResult(linkFailed ? BuildOutcome.EmitFailed : BuildOutcome.CompilationFailed, null, invocation.Diagnostics, identity, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision));
         }
 
         ValidateMixedModePe(invocation.PeImage);
         if (request.Target == BuildTarget.CompileCheck)
         {
-            return new LanguageWorkerBuildExecution(new CompilationCheckResult(
-                true,
-                invocation.Diagnostics,
-                identity,
-                workspace.Snapshot.Revision,
-                workspace.Snapshot.SelectionRevision));
+            return new LanguageWorkerBuildExecution(new CompilationCheckResult(true, invocation.Diagnostics, identity, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision));
         }
 
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -140,8 +98,7 @@ public sealed class CppCliBuildService : ILanguageWorkerBuildService
             ["deterministic"] = "true",
             ["mixedMode"] = "true",
             ["portablePdb"] = "false",
-            ["sourceSha256"] = Convert.ToHexStringLower(
-                SHA256.HashData(Encoding.UTF8.GetBytes(workspace.SourceFile.Text)))
+            ["sourceSha256"] = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(workspace.SourceFile.Text)))
         };
         if (_settings.Identity.CompilerCommit is { } compilerCommit)
             metadata["compilerCommit"] = compilerCommit;
@@ -151,30 +108,15 @@ public sealed class CppCliBuildService : ILanguageWorkerBuildService
             CppCliToolchain.AssemblyName,
             CppCliToolchain.ReferenceSetId,
             CppCliToolchain.TargetFramework,
-            new ArtifactRuntimeRequirement(
-                CppCliToolchain.RuntimeFamily,
-                [new FrameworkRequirement(CppCliToolchain.FrameworkName, CppCliToolchain.FrameworkVersion)],
-                "x64",
-                []),
+            new ArtifactRuntimeRequirement(CppCliToolchain.RuntimeFamily, [new FrameworkRequirement(CppCliToolchain.FrameworkName, CppCliToolchain.FrameworkVersion)], "x64", []),
             [],
             workspace.Options.OutputKind,
             CppCliToolchain.OutputFileName,
             null,
             [new LanguageArtifactFile("primary-assembly", CppCliToolchain.OutputFileName, invocation.PeImage)],
             metadata);
-        var envelope = LanguageArtifactBuilder.CreateGenericEnvelope(
-            definition,
-            identity,
-            _manifest.Limits.MaximumArtifactBytes);
-        return new LanguageWorkerBuildExecution(
-            new BuildResult(
-                BuildOutcome.Succeeded,
-                envelope.ArtifactRef,
-                invocation.Diagnostics,
-                identity,
-                workspace.Snapshot.Revision,
-                workspace.Snapshot.SelectionRevision),
-            envelope);
+        var envelope = LanguageArtifactBuilder.CreateGenericEnvelope(definition, identity, _manifest.Limits.MaximumArtifactBytes);
+        return new LanguageWorkerBuildExecution(new BuildResult(BuildOutcome.Succeeded, envelope.ArtifactRef, invocation.Diagnostics, identity, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision), envelope);
     }
 
     internal static void ValidateMixedModePe(byte[] image)
@@ -183,23 +125,14 @@ public sealed class CppCliBuildService : ILanguageWorkerBuildService
         {
             using var peReader = new PEReader(new MemoryStream(image, writable: false));
             var headers = peReader.PEHeaders;
-            if (headers.CoffHeader.Machine != Machine.Amd64 ||
-                headers.PEHeader?.Magic != PEMagic.PE32Plus ||
-                headers.CorHeader is null ||
-                !peReader.HasMetadata ||
-                !peReader.GetMetadataReader().IsAssembly ||
-                (headers.CorHeader.Flags & CorFlags.ILOnly) != 0)
+            if (headers.CoffHeader.Machine != Machine.Amd64 || headers.PEHeader?.Magic != PEMagic.PE32Plus || headers.CorHeader is null || !peReader.HasMetadata || !peReader.GetMetadataReader().IsAssembly || (headers.CorHeader.Flags & CorFlags.ILOnly) != 0)
             {
                 throw new BadImageFormatException("The image is not an x64 mixed-mode CLR assembly.");
             }
         }
         catch (BadImageFormatException exception)
         {
-            throw new LanguageWorkerRequestException(
-                "compiler-invalid-output",
-                "The C++/CLI compiler returned an invalid x64 mixed-mode PE.",
-                StatusCodes.Status503ServiceUnavailable,
-                exception);
+            throw new LanguageWorkerRequestException("compiler-invalid-output", "The C++/CLI compiler returned an invalid x64 mixed-mode PE.", StatusCodes.Status503ServiceUnavailable, exception);
         }
     }
 

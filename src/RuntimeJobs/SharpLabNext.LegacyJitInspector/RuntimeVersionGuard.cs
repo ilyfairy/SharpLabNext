@@ -43,10 +43,7 @@ namespace SharpLabNext.LegacyJitInspector
             Version actual = CurrentRuntimeVersion();
             if (!IsCompatible(expected, actual))
             {
-                throw new InvalidOperationException(
-                    "The Legacy JIT helper is running on runtime " +
-                    actual.ToString() + ", but the operation selected " +
-                    expectedVersion + ".");
+                throw new InvalidOperationException("The Legacy JIT helper is running on runtime " + actual.ToString() + ", but the operation selected " + expectedVersion + ".");
             }
         }
 
@@ -68,12 +65,9 @@ namespace SharpLabNext.LegacyJitInspector
                 description,
                 @"\.NET(?:\s+Core)?\s+(?<version>[0-9]+(?:\.[0-9]+){1,3})",
                 RegexOptions.CultureInvariant);
-            if (!match.Success ||
-                !Version.TryParse(match.Groups["version"].Value, out Version actual))
+            if (!match.Success || !Version.TryParse(match.Groups["version"].Value, out Version actual))
             {
-                throw new InvalidOperationException(
-                    "The Legacy JIT helper could not determine the product runtime version from " +
-                    RuntimeInformation.FrameworkDescription + ".");
+                throw new InvalidOperationException("The Legacy JIT helper could not determine the product runtime version from " + RuntimeInformation.FrameworkDescription + ".");
             }
             return actual;
         }
@@ -99,22 +93,14 @@ namespace SharpLabNext.LegacyJitInspector
 
             var parts = numeric.Split('.');
             if (parts.Length < 2 || parts.Length > 4)
-                throw new ArgumentException(
-                    "The runtime version must contain two to four numeric components.",
-                    nameof(value));
+                throw new ArgumentException("The runtime version must contain two to four numeric components.", nameof(value));
 
             var numbers = new int[4] { 0, 0, -1, -1 };
             for (var index = 0; index < parts.Length; index++)
             {
-                if (!int.TryParse(
-                        parts[index],
-                        NumberStyles.None,
-                        CultureInfo.InvariantCulture,
-                        out var number) || number < 0)
+                if (!int.TryParse(parts[index], NumberStyles.None, CultureInfo.InvariantCulture, out var number) || number < 0)
                 {
-                    throw new ArgumentException(
-                        "The runtime version must contain only non-negative numeric components.",
-                        nameof(value));
+                    throw new ArgumentException("The runtime version must contain only non-negative numeric components.", nameof(value));
                 }
                 numbers[index] = number;
             }
@@ -128,13 +114,9 @@ namespace SharpLabNext.LegacyJitInspector
 
         private static void ValidateSyntax(string value)
         {
-            if (string.IsNullOrWhiteSpace(value) ||
-                value.Length > 128 ||
-                value.IndexOfAny(InvalidCharacters) >= 0)
+            if (string.IsNullOrWhiteSpace(value) || value.Length > 128 || value.IndexOfAny(InvalidCharacters) >= 0)
             {
-                throw new ArgumentException(
-                    "The runtime version is missing or has an invalid length/content.",
-                    nameof(value));
+                throw new ArgumentException("The runtime version is missing or has an invalid length/content.", nameof(value));
             }
         }
     }

@@ -6,8 +6,7 @@ namespace SharpLabNext.CheckedJitBridge;
 
 internal sealed record CheckedJitBridgeArguments(string AssemblyPath, string? MethodFilter)
 {
-    private const string Usage =
-        "Usage: SharpLabNext.CheckedJitBridge jit <absolute-entry-assembly> [<method-filter>]";
+    private const string Usage = "Usage: SharpLabNext.CheckedJitBridge jit <absolute-entry-assembly> [<method-filter>]";
 
     public static CheckedJitBridgeArguments Parse(string[] args)
     {
@@ -33,11 +32,7 @@ internal sealed record CheckedJitBridgeArguments(string AssemblyPath, string? Me
     }
 }
 
-internal sealed record CheckedJitChildArguments(
-    string PipeHandle,
-    string AssemblyPath,
-    string Nonce,
-    string? MethodFilter)
+internal sealed record CheckedJitChildArguments(string PipeHandle, string AssemblyPath, string Nonce, string? MethodFilter)
 {
     public static CheckedJitChildArguments Parse(string[] args)
     {
@@ -50,11 +45,7 @@ internal sealed record CheckedJitChildArguments(
         if (!BridgePathValidation.IsLowerHexNonce(args[3]))
             throw new ArgumentException("The Checked JIT child nonce is invalid.", nameof(args));
 
-        return new CheckedJitChildArguments(
-            args[1],
-            BridgePathValidation.ValidateAssemblyPath(args[2]),
-            args[3],
-            CheckedJitBridgeArguments.ValidateMethodFilter(args[4]));
+        return new CheckedJitChildArguments(args[1], BridgePathValidation.ValidateAssemblyPath(args[2]), args[3], CheckedJitBridgeArguments.ValidateMethodFilter(args[4]));
     }
 }
 
@@ -75,8 +66,7 @@ internal static class BridgePathValidation
     {
         var path = ValidateCanonicalFilePath(value, "Target runtime host");
         var hostName = Path.GetFileNameWithoutExtension(path);
-        if (!string.Equals(hostName, "dotnet", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(hostName, "corerun", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(hostName, "dotnet", StringComparison.OrdinalIgnoreCase) && !string.Equals(hostName, "corerun", StringComparison.OrdinalIgnoreCase))
         {
             throw new ArgumentException("Target runtime host must be dotnet or corerun.", nameof(value));
         }
@@ -86,10 +76,7 @@ internal static class BridgePathValidation
     public static string ValidateBridgeAssemblyPath(string value)
     {
         var path = ValidateCanonicalFilePath(value, "Checked JIT bridge");
-        if (!string.Equals(
-                Path.GetFileName(path),
-                "SharpLabNext.CheckedJitBridge.dll",
-                StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(Path.GetFileName(path), "SharpLabNext.CheckedJitBridge.dll", StringComparison.OrdinalIgnoreCase))
         {
             throw new ArgumentException("The Checked JIT bridge assembly name is invalid.", nameof(value));
         }
@@ -110,19 +97,14 @@ internal static class BridgePathValidation
 
     private static string ValidateCanonicalFilePath(string value, string description)
     {
-        if (string.IsNullOrWhiteSpace(value) ||
-            value.Length > MaximumPathLength ||
-            value.Any(char.IsControl) ||
-            !Path.IsPathFullyQualified(value) ||
-            ContainsTraversalSegment(value))
+        if (string.IsNullOrWhiteSpace(value) || value.Length > MaximumPathLength || value.Any(char.IsControl) || !Path.IsPathFullyQualified(value) || ContainsTraversalSegment(value))
         {
             throw new ArgumentException($"{description} path must be absolute and canonical.", nameof(value));
         }
 
         var fullPath = Path.GetFullPath(value);
         var comparison = Path.DirectorySeparatorChar == '\\'
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
+            ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         if (!string.Equals(fullPath, value, comparison))
             throw new ArgumentException($"{description} path must be absolute and canonical.", nameof(value));
         if (!File.Exists(fullPath))
@@ -131,6 +113,5 @@ internal static class BridgePathValidation
     }
 
     private static bool ContainsTraversalSegment(string path) =>
-        path.Split(PathSeparators, StringSplitOptions.RemoveEmptyEntries)
-            .Any(segment => segment == "." || segment == "..");
+        path.Split(PathSeparators, StringSplitOptions.RemoveEmptyEntries).Any(segment => segment == "." || segment == "..");
 }

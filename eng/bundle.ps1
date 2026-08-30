@@ -17,17 +17,13 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $useContentSourceIdentity = [string]::IsNullOrWhiteSpace($SigningKey)
 $previousSourceIdentityMode = [Environment]::GetEnvironmentVariable("SHARPLABNEXT_SOURCE_IDENTITY_MODE")
 $lockPath = Join-Path $repositoryRoot "profiles/lock.json"
-$releaseId = [string](& dotnet run (Join-Path $repositoryRoot "eng/read-release-id.cs") -- $lockPath | Select-Object -Last 1)
+$releaseId = [string](& dotnet run (Join-Path $repositoryRoot "eng/tools/read-release-id.cs") -- $lockPath | Select-Object -Last 1)
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($releaseId)) {
     throw "Could not read the release id from profiles/lock.json."
 }
-if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
-    $OutputDirectory = Join-Path $repositoryRoot "artifacts/sharplabnext-$releaseId"
-}
+if ([string]::IsNullOrWhiteSpace($OutputDirectory)) { $OutputDirectory = Join-Path $repositoryRoot "artifacts/sharplabnext-$releaseId" }
 $OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
-if (Test-Path -LiteralPath $OutputDirectory) {
-    throw "Bundle output already exists: $OutputDirectory"
-}
+if (Test-Path -LiteralPath $OutputDirectory) { throw "Bundle output already exists: $OutputDirectory" }
 if ([string]::IsNullOrWhiteSpace($SigningKey) -ne [string]::IsNullOrWhiteSpace($SigningPublicKey)) {
     throw "SigningKey and SigningPublicKey are required together."
 }
@@ -48,27 +44,19 @@ try {
         Remove-Item Env:SHARPLABNEXT_SOURCE_IDENTITY_MODE -ErrorAction SilentlyContinue
     }
     $sourceArguments = @(
-        "run", "eng/resolve-source-provenance.cs", "--",
+        "run", "eng/tools/resolve-source-provenance.cs", "--",
         "--repository-root", $repositoryRoot
     )
-    if (-not [string]::IsNullOrWhiteSpace($SourceRevision)) {
-        $sourceArguments += @("--source-revision", $SourceRevision)
-    }
-    if ($AllowUncommittedSourceForDevelopment) {
-        $sourceArguments += "--allow-uncommitted-source-for-development"
-    }
-    if (-not [string]::IsNullOrWhiteSpace($SigningKey)) {
-        $sourceArguments += "--verify-git"
-    }
+    if (-not [string]::IsNullOrWhiteSpace($SourceRevision)) { $sourceArguments += @("--source-revision", $SourceRevision) }
+    if ($AllowUncommittedSourceForDevelopment) { $sourceArguments += "--allow-uncommitted-source-for-development" }
+    if (-not [string]::IsNullOrWhiteSpace($SigningKey)) { $sourceArguments += "--verify-git" }
     $sourceOutput = @(& dotnet @sourceArguments)
     if ($LASTEXITCODE -ne 0) { throw "Source provenance validation failed." }
     $revisionPrefix = "SHARPLABNEXT_SOURCE_REVISION="
     $revisionLine = $sourceOutput |
         Where-Object { $_ -is [string] -and $_.StartsWith($revisionPrefix, [StringComparison]::Ordinal) } |
         Select-Object -Last 1
-    if ([string]::IsNullOrWhiteSpace($revisionLine)) {
-        throw "Source provenance resolver did not return a revision."
-    }
+    if ([string]::IsNullOrWhiteSpace($revisionLine)) { throw "Source provenance resolver did not return a revision." }
     $SourceRevision = $revisionLine.Substring($revisionPrefix.Length)
 
     $arguments = @(
@@ -80,17 +68,11 @@ try {
         "--source-revision", $SourceRevision
     )
     if ($MetadataOnly) { $arguments += "--metadata-only" }
-    if ($AllowUncommittedSourceForDevelopment) {
-        $arguments += "--allow-uncommitted-source-for-development"
-    }
-    if ($AllowDevelopmentImageInputs) {
-        $arguments += "--allow-development-image-inputs"
-    }
+    if ($AllowUncommittedSourceForDevelopment) { $arguments += "--allow-uncommitted-source-for-development" }
+    if ($AllowDevelopmentImageInputs) { $arguments += "--allow-development-image-inputs" }
     if (-not [string]::IsNullOrWhiteSpace($SigningKey)) {
         $arguments += @("--signing-key", $SigningKey, "--signing-public-key", $SigningPublicKey)
-        if (-not [string]::IsNullOrWhiteSpace($SigningKeyId)) {
-            $arguments += @("--signing-key-id", $SigningKeyId)
-        }
+        if (-not [string]::IsNullOrWhiteSpace($SigningKeyId)) { $arguments += @("--signing-key-id", $SigningKeyId) }
     }
     foreach ($override in $Image) { $arguments += @("--image", $override) }
     & dotnet @arguments

@@ -15,14 +15,9 @@ export interface DecodedWorkbenchGist {
   warnings: string[]
 }
 
-export function createGistWorkspaceState(
-  catalog: CatalogDocument,
-  state: GistSourceState,
-): GistWorkspaceState {
+export function createGistWorkspaceState(catalog: CatalogDocument, state: GistSourceState): GistWorkspaceState {
   const toolchainId = state.toolchainId ?? catalog.languages[0]?.defaultToolchainId
-  const referenceSetId =
-    state.referenceSetId ??
-    catalog.toolchains.find((toolchain) => toolchain.id === toolchainId)?.defaultReferenceSetId
+  const referenceSetId = state.referenceSetId ?? catalog.toolchains.find((toolchain) => toolchain.id === toolchainId)?.defaultReferenceSetId
   if (!toolchainId || !referenceSetId) {
     throw new Error('The current selection is incomplete and cannot be saved to a Gist.')
   }
@@ -38,13 +33,10 @@ export function createGistWorkspaceState(
     activeFile: state.activeFile,
     sourceOrder: [...state.sourceOrder],
     files: state.files.map((file) => ({ ...file })),
-  }
+  };
 }
 
-export function decodeWorkbenchGist(
-  document: GistDocument,
-  catalog: CatalogDocument,
-): DecodedWorkbenchGist {
+export function decodeWorkbenchGist(document: GistDocument, catalog: CatalogDocument): DecodedWorkbenchGist {
   const state = document.workspace
   const requestedToolchain = state.toolchainId ?? state.legacyBranchId ?? null
   const requested: SelectionIntent = {
@@ -56,9 +48,7 @@ export function decodeWorkbenchGist(
   }
   const selection = normalizeSelectionIntent(catalog, requested)
   const language = catalog.languages.find((candidate) => candidate.id === selection.languageId)
-  const template = language
-    ? { fileName: language.defaultFileName, source: language.defaultSource }
-    : null
+  const template = language ? { fileName: language.defaultFileName, source: language.defaultSource } : null
   return {
     replacement: {
       files: state.files.map((file) => ({ ...file })),

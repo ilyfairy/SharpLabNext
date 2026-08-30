@@ -24,18 +24,11 @@ describe('Monaco lexical fallback', () => {
   })
 
   it('classifies decompiled attributes without treating their constructors as methods', () => {
-    const lines = monaco.editor.tokenize(
-      ['[CompilerGenerated]', '[module: RefSafetyRules(11)]', 'static void Main() {}'].join('\n'),
-      'csharp',
-    )
+    const lines = monaco.editor.tokenize(['[CompilerGenerated]', '[module: RefSafetyRules(11)]', 'static void Main() {}'].join('\n'), 'csharp')
 
-    expect(tokenTypeAt(lines[0] ?? [], '[CompilerGenerated]', 'CompilerGenerated')).toBe(
-      'type.identifier.cs',
-    )
+    expect(tokenTypeAt(lines[0] ?? [], '[CompilerGenerated]', 'CompilerGenerated')).toBe('type.identifier.cs')
     expect(tokenTypeAt(lines[1] ?? [], '[module: RefSafetyRules(11)]', 'module')).toBe('keyword.cs')
-    expect(tokenTypeAt(lines[1] ?? [], '[module: RefSafetyRules(11)]', 'RefSafetyRules')).toBe(
-      'type.identifier.cs',
-    )
+    expect(tokenTypeAt(lines[1] ?? [], '[module: RefSafetyRules(11)]', 'RefSafetyRules')).toBe('type.identifier.cs')
     expect(tokenTypeAt(lines[2] ?? [], 'static void Main() {}', 'Main')).toBe('function.cs')
   })
 
@@ -60,14 +53,10 @@ describe('Monaco lexical fallback', () => {
   })
 
   it('colors only the simple name in a standalone IL hover assembly identity', () => {
-    const assemblyLine =
-      '[System.Console, Version=11.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]'
+    const assemblyLine = '[System.Console, Version=11.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]'
     const arrayLine = 'int32[0...]'
     const qualifiedTypeLine = '[System.Runtime]System.Object'
-    const lines = monaco.editor.tokenize(
-      [assemblyLine, qualifiedTypeLine, '[out] int32', arrayLine, '[0]'].join('\n'),
-      'il',
-    )
+    const lines = monaco.editor.tokenize([assemblyLine, qualifiedTypeLine, '[out] int32', arrayLine, '[0]'].join('\n'), 'il')
 
     expect(tokenTypeAt(lines[0] ?? [], assemblyLine, 'System.Console')).toBe('macro.il')
     expect(tokenTypeAt(lines[0] ?? [], assemblyLine, 'Version')).not.toBe('macro.il')

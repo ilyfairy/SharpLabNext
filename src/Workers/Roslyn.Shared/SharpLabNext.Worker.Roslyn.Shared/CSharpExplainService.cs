@@ -7,21 +7,12 @@ using SharpLabNext.Contracts;
 
 namespace SharpLabNext.Worker.Roslyn;
 
-public sealed class CSharpExplainService(
-    RoslynWorkerIdentity identity,
-    CompilationLimits compilationLimits,
-    AstLimits explainLimits)
+public sealed class CSharpExplainService(RoslynWorkerIdentity identity, CompilationLimits compilationLimits, AstLimits explainLimits)
 {
-    public async Task<ExplainResult> ExecuteAsync(
-        ExplainRequest request,
-        CancellationToken cancellationToken)
+    public async Task<ExplainResult> ExecuteAsync(ExplainRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        RoslynCompilerIdentity.Ensure(
-            identity,
-            "C# compiler",
-            CSharpBuildService.GetLoadedCompilerVersion(),
-            CSharpBuildService.GetLoadedCompilerCommit());
+        RoslynCompilerIdentity.Ensure(identity, "C# compiler", CSharpBuildService.GetLoadedCompilerVersion(), CSharpBuildService.GetLoadedCompilerCommit());
 
         var remaining = request.DeadlineUtc - DateTimeOffset.UtcNow;
         if (remaining <= TimeSpan.Zero)
@@ -31,22 +22,14 @@ public sealed class CSharpExplainService(
             remaining = workerLimit;
 
         using var deadlineCancellation = new CancellationTokenSource(remaining);
-        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            deadlineCancellation.Token);
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadlineCancellation.Token);
         try
         {
-            return await Task.Run(
-                () => ExecuteCore(request, linkedCancellation.Token),
-                linkedCancellation.Token).ConfigureAwait(false);
+            return await Task.Run(() => ExecuteCore(request, linkedCancellation.Token), linkedCancellation.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (
-            deadlineCancellation.IsCancellationRequested &&
-            !cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (deadlineCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            throw new BuildDeadlineExceededException(
-                "The explain deadline elapsed.",
-                deadlineCancellation.Token);
+            throw new BuildDeadlineExceededException("The explain deadline elapsed.", deadlineCancellation.Token);
         }
     }
 
@@ -59,40 +42,16 @@ public sealed class CSharpExplainService(
         {
             cancellationToken.ThrowIfCancellationRequested();
             var text = SourceText.From(file.Text, Encoding.UTF8, SourceHashAlgorithm.Sha256);
-            var tree = CSharpSyntaxTree.ParseText(
-                text,
-                CSharpBuildService.CreateParseOptions(workspace.Options),
-                file.Path,
-                cancellationToken);
+            var tree = CSharpSyntaxTree.ParseText(text, CSharpBuildService.CreateParseOptions(workspace.Options), file.Path, cancellationToken);
             var nodes = new List<ExplanationNode>();
             AppendNode(tree.GetRoot(cancellationToken), text, depth: 0, nodes, state);
             files.Add(new ExplanationFile(file.Path, nodes));
         }
 
-        return new ExplainResult(
-            new ExplanationDocument(
-                "csharp",
-                identity.ToolchainId,
-                workspace.Snapshot.Revision,
-                workspace.Snapshot.SelectionRevision,
-                files,
-                state.Truncated),
-            new BuildIdentity(
-                identity.ReleaseId,
-                "csharp",
-                identity.ToolchainId,
-                identity.CompilerVersion,
-                CSharpBuildService.GetLoadedCompilerCommit(),
-                workspace.Snapshot.ReferenceSetId,
-                identity.WorkerImageId));
+        return new ExplainResult(new ExplanationDocument("csharp", identity.ToolchainId, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision, files, state.Truncated), new BuildIdentity(identity.ReleaseId, "csharp", identity.ToolchainId, identity.CompilerVersion, CSharpBuildService.GetLoadedCompilerCommit(), workspace.Snapshot.ReferenceSetId, identity.WorkerImageId));
     }
 
-    private static void AppendNode(
-        SyntaxNode node,
-        SourceText text,
-        int depth,
-        List<ExplanationNode> output,
-        ExplainConversionState state)
+    private static void AppendNode(SyntaxNode node, SourceText text, int depth, List<ExplanationNode> output, ExplainConversionState state)
     {
         state.CancellationToken.ThrowIfCancellationRequested();
         if (depth > state.Limits.MaxDepth)
@@ -106,12 +65,7 @@ public sealed class CSharpExplainService(
         var description = CreateDescription(node, kind);
         if (!state.TryReserve(kind, title, description))
             return;
-        output.Add(new ExplanationNode(
-            kind,
-            title,
-            description,
-            ToRange(text, node.Span),
-            depth));
+        output.Add(new ExplanationNode(kind, title, description, ToRange(text, node.Span), depth));
 
         foreach (var child in node.ChildNodes())
         {
@@ -197,8 +151,7 @@ public sealed class CSharpExplainService(
     {
         const string suffix = "Syntax";
         var value = kind.EndsWith(suffix, StringComparison.Ordinal)
-            ? kind[..^suffix.Length]
-            : kind;
+            ? kind[..^suffix.Length] : kind;
         var builder = new StringBuilder(value.Length + 8);
         for (var index = 0; index < value.Length; index++)
         {
@@ -213,16 +166,10 @@ public sealed class CSharpExplainService(
     private static TextRange ToRange(SourceText text, TextSpan span)
     {
         var lineSpan = text.Lines.GetLinePositionSpan(span);
-        return new TextRange(
-            lineSpan.Start.Line,
-            lineSpan.Start.Character,
-            lineSpan.End.Line,
-            lineSpan.End.Character);
+        return new TextRange(lineSpan.Start.Line, lineSpan.Start.Character, lineSpan.End.Line, lineSpan.End.Character);
     }
 
-    private sealed class ExplainConversionState(
-        AstLimits limits,
-        CancellationToken cancellationToken)
+    private sealed class ExplainConversionState(AstLimits limits, CancellationToken cancellationToken)
     {
         private int _nodes;
         private int _utf8Bytes;
@@ -233,10 +180,7 @@ public sealed class CSharpExplainService(
 
         public bool TryReserve(string kind, string title, string description)
         {
-            var bytes = Encoding.UTF8.GetByteCount(kind)
-                + Encoding.UTF8.GetByteCount(title)
-                + Encoding.UTF8.GetByteCount(description)
-                + 64;
+            var bytes = Encoding.UTF8.GetByteCount(kind) + Encoding.UTF8.GetByteCount(title) + Encoding.UTF8.GetByteCount(description) + 64;
             if (_nodes >= Limits.MaxNodes || _utf8Bytes > Limits.MaxUtf8Bytes - bytes)
             {
                 Truncated = true;

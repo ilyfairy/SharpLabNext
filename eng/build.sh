@@ -53,7 +53,7 @@ export NUGET_XMLDOC_MODE=skip
 export SHARPLABNEXT_SOURCE_IDENTITY_MODE=content
 
 if [[ "$skip_restore" == false ]]; then
-    dotnet run eng/verify-ilsense-inputs.cs -- \
+    dotnet run eng/tools/verify-ilsense-inputs.cs -- \
         --repository-root "$root" \
         --verify-restore \
         --allow-missing-git
@@ -74,28 +74,9 @@ dotnet build SharpLabNext.slnx \
     --no-restore
 
 if [[ "$skip_validation" == false && "$skip_schemas" == false ]]; then
-    node --test \
-        eng/runtime-profile-channel-validation.test.mjs \
-        eng/runtime-wine-packages.test.mjs \
-        eng/prerequisite-cache.test.mjs \
-        eng/image-build-inputs.test.mjs \
-        eng/cppcli-netfx-sdk-extraction.test.mjs \
-        eng/build-images.test.mjs \
-        eng/build-wine-coreclr-operator.test.mjs \
-        eng/runtime-candidate-input-validation.test.mjs \
-        eng/runtime-candidate-environment.test.mjs \
-        eng/runtime-framework-installers.test.mjs \
-        eng/build-framework-matrix-context.test.mjs \
-        eng/build-framework-matrix-parent.test.mjs \
-        eng/committed-source-context.test.mjs \
-        eng/rebuild-runtime-candidate.test.mjs \
-        eng/create-runtime-framework-candidate-input.test.mjs \
-        eng/framework-prefix-matrix.test.mjs \
-        eng/runtime-matrix-deployment-bridge.test.mjs \
-        eng/runtime-matrix-generator.test.mjs \
-        eng/runtime-promotion-receipt-validation.test.mjs \
-        eng/wine-netfx-framework-preflight.test.mjs
-    node eng/validate-bake-inputs.mjs
-    node eng/validate-schemas.mjs
-    node eng/validate-compose.mjs
+    mapfile -t test_files < <(find eng/tests -type f -name '*.test.mjs' -print | sort)
+    node --test "${test_files[@]}"
+    node eng/validation/validate-bake-inputs.mjs
+    node eng/validation/validate-schemas.mjs
+    node eng/validation/validate-compose.mjs
 fi

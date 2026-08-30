@@ -9,11 +9,7 @@ namespace SharpLabNext.LegacyJitInspector
     {
         private const int MaximumExceptionDepth = 32;
 
-        public static byte[] WriteJitSummary(
-            string runtimeVersion,
-            string assembly,
-            string methodFilter,
-            IList<JitMethodResult> methods)
+        public static byte[] WriteJitSummary(string runtimeVersion, string assembly, string methodFilter, IList<JitMethodResult> methods)
         {
             var json = new StringBuilder();
             json.Append('{');
@@ -136,12 +132,7 @@ namespace SharpLabNext.LegacyJitInspector
             json.Append('}');
         }
 
-        private static void WriteExceptionObject(
-            StringBuilder json,
-            Exception exception,
-            int depth,
-            bool includeElapsed,
-            double elapsedMilliseconds)
+        private static void WriteExceptionObject(StringBuilder json, Exception exception, int depth, bool includeElapsed, double elapsedMilliseconds)
         {
             json.Append('{');
             WritePropertyName(json, "TypeName");
@@ -169,9 +160,7 @@ namespace SharpLabNext.LegacyJitInspector
 
         private static void WriteFiniteDouble(StringBuilder json, double value)
         {
-            json.Append(double.IsNaN(value) || double.IsInfinity(value)
-                ? "0"
-                : value.ToString("R", CultureInfo.InvariantCulture));
+            json.Append(double.IsNaN(value) || double.IsInfinity(value) ? "0" : value.ToString("R", CultureInfo.InvariantCulture));
         }
 
         private static void WritePropertyName(StringBuilder json, string name)

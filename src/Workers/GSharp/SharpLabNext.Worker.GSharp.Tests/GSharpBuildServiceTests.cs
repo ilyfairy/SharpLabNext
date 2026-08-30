@@ -25,9 +25,7 @@ public sealed class GSharpBuildServiceTests
             var service = GSharpTestSettings.CreateBuildService(root, out var compiler);
             using (compiler)
             {
-                var execution = await service.BuildAsync(
-                    GSharpTestSettings.CreateRequest(BuildTarget.Artifact, ValidProgram),
-                    TestContext.Current.CancellationToken);
+                var execution = await service.BuildAsync(GSharpTestSettings.CreateRequest(BuildTarget.Artifact, ValidProgram), TestContext.Current.CancellationToken);
 
                 var result = Assert.IsType<BuildResult>(execution.Result);
                 Assert.Equal(BuildOutcome.Succeeded, result.Outcome);
@@ -51,13 +49,11 @@ public sealed class GSharpBuildServiceTests
                 Assert.True(peReader.HasMetadata);
                 Assert.True(peReader.GetMetadataReader().IsAssembly);
                 Assert.NotEqual(0, peReader.PEHeaders.CorHeader!.EntryPointTokenOrRelativeVirtualAddress);
-                using var pdbProvider = MetadataReaderProvider.FromPortablePdbStream(
-                    new MemoryStream(pdb, writable: false));
+                using var pdbProvider = MetadataReaderProvider.FromPortablePdbStream(new MemoryStream(pdb, writable: false));
                 Assert.NotEmpty(pdbProvider.GetMetadataReader().Documents);
                 Assert.Equal(1, compiler.StartedProcessCount);
             }
-            Assert.False(Directory.Exists(Path.Combine(root, "work")) &&
-                Directory.EnumerateFileSystemEntries(Path.Combine(root, "work")).Any());
+            Assert.False(Directory.Exists(Path.Combine(root, "work")) && Directory.EnumerateFileSystemEntries(Path.Combine(root, "work")).Any());
         }
         finally
         {
@@ -74,11 +70,7 @@ public sealed class GSharpBuildServiceTests
             var service = GSharpTestSettings.CreateBuildService(root, out var compiler);
             using (compiler)
             {
-                var execution = await service.BuildAsync(
-                    GSharpTestSettings.CreateRequest(
-                        BuildTarget.CompileCheck,
-                        "package Broken\n\n\""),
-                    TestContext.Current.CancellationToken);
+                var execution = await service.BuildAsync(GSharpTestSettings.CreateRequest(BuildTarget.CompileCheck, "package Broken\n\n\""), TestContext.Current.CancellationToken);
 
                 var result = Assert.IsType<CompilationCheckResult>(execution.Result);
                 Assert.False(result.CompilationSucceeded);
@@ -112,13 +104,7 @@ public sealed class GSharpBuildServiceTests
                     new("Library.gs", 1, "package Multi\n\nfunc Answer() int32 { return 42 }\n"),
                     new("More.gs", 1, "package Multi\n\nfunc Double(value int32) int32 { return value * 2 }\n")
                 ];
-                var execution = await service.BuildAsync(
-                    GSharpTestSettings.CreateRequest(
-                        BuildTarget.Artifact,
-                        files,
-                        ["More.gs", "Library.gs"],
-                        BuildOutputKind.Library),
-                    TestContext.Current.CancellationToken);
+                var execution = await service.BuildAsync(GSharpTestSettings.CreateRequest(BuildTarget.Artifact, files, ["More.gs", "Library.gs"], BuildOutputKind.Library), TestContext.Current.CancellationToken);
 
                 var result = Assert.IsType<BuildResult>(execution.Result);
                 Assert.Equal(BuildOutcome.Succeeded, result.Outcome);
@@ -145,19 +131,12 @@ public sealed class GSharpBuildServiceTests
             var service = GSharpTestSettings.CreateBuildService(root, out var compiler);
             using (compiler)
             {
-                var execution = await service.BuildAsync(
-                    GSharpTestSettings.CreateRequest(
-                        BuildTarget.Artifact,
-                        ValidProgram,
-                        BuildOutputKind.Auto,
-                        toolchainId),
-                    TestContext.Current.CancellationToken);
+                var execution = await service.BuildAsync(GSharpTestSettings.CreateRequest(BuildTarget.Artifact, ValidProgram, BuildOutputKind.Auto, toolchainId), TestContext.Current.CancellationToken);
 
                 var result = Assert.IsType<BuildResult>(execution.Result);
                 Assert.Equal(BuildOutcome.Succeeded, result.Outcome);
                 var expected = toolchainId == GSharpToolchain.ToolchainId
-                    ? GSharpTestSettings.StableToolchain
-                    : GSharpTestSettings.LegacyToolchain;
+                    ? GSharpTestSettings.StableToolchain : GSharpTestSettings.LegacyToolchain;
                 Assert.Equal(toolchainId, result.Identity.ToolchainId);
                 Assert.Equal(expected.CompilerVersion, result.Identity.CompilerVersion);
                 Assert.Equal(expected.CompilerCommit, result.Identity.CompilerCommit);
@@ -183,23 +162,15 @@ public sealed class GSharpBuildServiceTests
             using (compiler)
             {
                 const string source = "package Library\n\nfunc Answer() int32 { return 42 }\n";
-                var execution = await service.BuildAsync(
-                    GSharpTestSettings.CreateRequest(
-                        BuildTarget.Artifact,
-                        source,
-                        BuildOutputKind.Auto),
-                    TestContext.Current.CancellationToken);
+                var execution = await service.BuildAsync(GSharpTestSettings.CreateRequest(BuildTarget.Artifact, source, BuildOutputKind.Auto), TestContext.Current.CancellationToken);
 
                 var result = Assert.IsType<BuildResult>(execution.Result);
                 Assert.Equal(BuildOutcome.Succeeded, result.Outcome);
                 var envelope = Assert.IsType<LanguageWorkerArtifactEnvelope>(execution.Artifact);
                 Assert.Equal(BuildOutputKind.Library, envelope.Manifest.OutputKind);
                 Assert.Null(envelope.Manifest.EntryPoint);
-                var contents = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(
-                    envelope.FileContentsBase64);
-                using var peReader = new PEReader(new MemoryStream(
-                    Convert.FromBase64String(contents[$"{GSharpToolchain.AssemblyName}.dll"]),
-                    writable: false));
+                var contents = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(envelope.FileContentsBase64);
+                using var peReader = new PEReader(new MemoryStream(Convert.FromBase64String(contents[$"{GSharpToolchain.AssemblyName}.dll"]), writable: false));
                 Assert.Equal(0, peReader.PEHeaders.CorHeader!.EntryPointTokenOrRelativeVirtualAddress);
                 Assert.Equal(1, compiler.StartedProcessCount);
             }
@@ -219,12 +190,7 @@ public sealed class GSharpBuildServiceTests
             var service = GSharpTestSettings.CreateBuildService(root, out var compiler);
             using (compiler)
             {
-                var execution = await service.BuildAsync(
-                    GSharpTestSettings.CreateRequest(
-                        BuildTarget.Artifact,
-                        ValidProgram,
-                        BuildOutputKind.Library),
-                    TestContext.Current.CancellationToken);
+                var execution = await service.BuildAsync(GSharpTestSettings.CreateRequest(BuildTarget.Artifact, ValidProgram, BuildOutputKind.Library), TestContext.Current.CancellationToken);
 
                 var result = Assert.IsType<BuildResult>(execution.Result);
                 Assert.Equal(BuildOutcome.CompilationFailed, result.Outcome);
@@ -249,12 +215,7 @@ public sealed class GSharpBuildServiceTests
             using (compiler)
             {
                 const string source = "package Library\n\nfunc Answer() int32 { return 42 }\n";
-                var execution = await service.BuildAsync(
-                    GSharpTestSettings.CreateRequest(
-                        BuildTarget.Artifact,
-                        source,
-                        BuildOutputKind.Console),
-                    TestContext.Current.CancellationToken);
+                var execution = await service.BuildAsync(GSharpTestSettings.CreateRequest(BuildTarget.Artifact, source, BuildOutputKind.Console), TestContext.Current.CancellationToken);
 
                 var result = Assert.IsType<BuildResult>(execution.Result);
                 Assert.Equal(BuildOutcome.CompilationFailed, result.Outcome);
@@ -280,12 +241,7 @@ public sealed class GSharpBuildServiceTests
             using (compiler)
             {
                 const string source = "package Library\n\nfunc Answer() int32 { return 42 }\n";
-                var execution = await service.BuildAsync(
-                    GSharpTestSettings.CreateRequest(
-                        BuildTarget.CompileCheck,
-                        source,
-                        BuildOutputKind.Console),
-                    TestContext.Current.CancellationToken);
+                var execution = await service.BuildAsync(GSharpTestSettings.CreateRequest(BuildTarget.CompileCheck, source, BuildOutputKind.Console), TestContext.Current.CancellationToken);
 
                 var result = Assert.IsType<CompilationCheckResult>(execution.Result);
                 Assert.False(result.CompilationSucceeded);
@@ -308,12 +264,8 @@ public sealed class GSharpBuildServiceTests
             var service = GSharpTestSettings.CreateBuildService(root, out var compiler);
             using (compiler)
             {
-                var request = GSharpTestSettings.CreateRequest(
-                    BuildTarget.CompileCheck,
-                    [new WorkspaceFile("../Program.gs", 1, ValidProgram)],
-                    ["../Program.gs"]);
-                var exception = await Assert.ThrowsAsync<LanguageWorkerRequestException>(() =>
-                    service.BuildAsync(request, TestContext.Current.CancellationToken));
+                var request = GSharpTestSettings.CreateRequest(BuildTarget.CompileCheck, [new WorkspaceFile("../Program.gs", 1, ValidProgram)], ["../Program.gs"]);
+                var exception = await Assert.ThrowsAsync<LanguageWorkerRequestException>(() => service.BuildAsync(request, TestContext.Current.CancellationToken));
                 Assert.Equal("invalid-workspace", exception.Code);
                 Assert.Equal(0, compiler.StartedProcessCount);
             }
@@ -335,10 +287,7 @@ public sealed class GSharpBuildServiceTests
             var service = GSharpTestSettings.CreateBuildService(root, out var compiler);
             using (compiler)
             {
-                var exception = await Assert.ThrowsAsync<LanguageWorkerRequestException>(() =>
-                    service.BuildAsync(
-                        GSharpTestSettings.CreateRequest(BuildTarget.Artifact, ValidProgram, outputKind),
-                        TestContext.Current.CancellationToken));
+                var exception = await Assert.ThrowsAsync<LanguageWorkerRequestException>(() => service.BuildAsync(GSharpTestSettings.CreateRequest(BuildTarget.Artifact, ValidProgram, outputKind), TestContext.Current.CancellationToken));
 
                 Assert.Equal("unsupported-option", exception.Code);
                 Assert.Equal(0, compiler.StartedProcessCount);

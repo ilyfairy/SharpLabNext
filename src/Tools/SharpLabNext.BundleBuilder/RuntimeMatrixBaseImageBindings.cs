@@ -13,13 +13,9 @@ internal sealed class RuntimeMatrixBaseImageBindings
 
     public IReadOnlyDictionary<string, string> LinuxRuntimeBaseImages { get; }
 
-    public static async Task<RuntimeMatrixBaseImageBindings> LoadAsync(
-        string repositoryRoot,
-        CancellationToken cancellationToken)
+    public static async Task<RuntimeMatrixBaseImageBindings> LoadAsync(string repositoryRoot, CancellationToken cancellationToken)
     {
-        var bytes = await RuntimePromotionMatrixBinding.ReadMatrixAsync(
-            repositoryRoot,
-            cancellationToken);
+        var bytes = await RuntimePromotionMatrixBinding.ReadMatrixAsync(repositoryRoot, cancellationToken);
         return Parse(bytes);
     }
 
@@ -28,21 +24,13 @@ internal sealed class RuntimeMatrixBaseImageBindings
         ArgumentNullException.ThrowIfNull(matrixBytes);
         using var document = RuntimePromotionMatrixBinding.ParseMatrix(matrixBytes);
         var root = document.RootElement;
-        if (root.ValueKind != JsonValueKind.Object ||
-            !root.TryGetProperty("schemaVersion", out var schemaVersion) ||
-            schemaVersion.ValueKind != JsonValueKind.Number ||
-            !schemaVersion.TryGetInt32(out var schemaVersionValue) ||
-            schemaVersionValue != 1)
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("schemaVersion", out var schemaVersion) || schemaVersion.ValueKind != JsonValueKind.Number || !schemaVersion.TryGetInt32(out var schemaVersionValue) || schemaVersionValue != 1)
         {
-            throw new BundleValidationException(
-                $"{RuntimePromotionMatrixBinding.MatrixRelativePath} has an unsupported schema version.");
+            throw new BundleValidationException($"{RuntimePromotionMatrixBinding.MatrixRelativePath} has an unsupported schema version.");
         }
-        if (!root.TryGetProperty("coreClr", out var coreClr) ||
-            coreClr.ValueKind != JsonValueKind.Array ||
-            coreClr.GetArrayLength() == 0)
+        if (!root.TryGetProperty("coreClr", out var coreClr) || coreClr.ValueKind != JsonValueKind.Array || coreClr.GetArrayLength() == 0)
         {
-            throw new BundleValidationException(
-                $"{RuntimePromotionMatrixBinding.MatrixRelativePath} must contain CoreCLR runtime rows.");
+            throw new BundleValidationException($"{RuntimePromotionMatrixBinding.MatrixRelativePath} must contain CoreCLR runtime rows.");
         }
 
         var bindings = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -54,8 +42,7 @@ internal sealed class RuntimeMatrixBaseImageBindings
             var runtimeId = id + "-linux-x64";
             if (!bindings.TryAdd(runtimeId, baseImage))
             {
-                throw new BundleValidationException(
-                    $"{RuntimePromotionMatrixBinding.MatrixRelativePath} has duplicate Linux runtime row '{runtimeId}'.");
+                throw new BundleValidationException($"{RuntimePromotionMatrixBinding.MatrixRelativePath} has duplicate Linux runtime row '{runtimeId}'.");
             }
         }
         return new RuntimeMatrixBaseImageBindings(bindings);
@@ -63,13 +50,9 @@ internal sealed class RuntimeMatrixBaseImageBindings
 
     private static string RequiredString(JsonElement row, string property)
     {
-        if (row.ValueKind != JsonValueKind.Object ||
-            !row.TryGetProperty(property, out var element) ||
-            element.ValueKind != JsonValueKind.String ||
-            string.IsNullOrWhiteSpace(element.GetString()))
+        if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty(property, out var element) || element.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(element.GetString()))
         {
-            throw new BundleValidationException(
-                $"{RuntimePromotionMatrixBinding.MatrixRelativePath} CoreCLR row has no valid '{property}'.");
+            throw new BundleValidationException($"{RuntimePromotionMatrixBinding.MatrixRelativePath} CoreCLR row has no valid '{property}'.");
         }
         return element.GetString()!;
     }

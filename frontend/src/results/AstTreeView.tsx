@@ -1,18 +1,7 @@
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import {
-  type KeyboardEvent as ReactKeyboardEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type { AstDocument, AstNode, TextRange } from '../api/types'
-import {
-  type AstSourceMap,
-  type AstSourceMapEntry,
-  astAncestorIds,
-  createAstSourceMap,
-} from './astSourceMapModel'
+import { type AstSourceMap, type AstSourceMapEntry, astAncestorIds, createAstSourceMap } from './astSourceMapModel'
 import type { ExecutionFlowSourceTarget } from './executionFlowModel'
 
 interface AstTreeViewProps {
@@ -40,13 +29,7 @@ function formatRange(range: TextRange | null | undefined): string {
   return `${range.startLine + 1}:${range.startCharacter + 1}-${range.endLine + 1}:${range.endCharacter + 1}`
 }
 
-function collectExpanded(
-  node: AstNode,
-  nodeId: string,
-  target: Set<string>,
-  maximumDepth = Number.POSITIVE_INFINITY,
-  depth = 0,
-) {
+function collectExpanded(node: AstNode, nodeId: string, target: Set<string>, maximumDepth = Number.POSITIVE_INFINITY, depth = 0) {
   if (node.children.length === 0 || depth >= maximumDepth) return
   target.add(nodeId)
   node.children.forEach((child, index) => {
@@ -60,36 +43,15 @@ function defaultExpanded(root: AstNode): Set<string> {
   return expanded
 }
 
-function AstNodeItem({
-  entry,
-  sourceMap,
-  expanded,
-  selectedId,
-  focusedId,
-  onToggle,
-  onSelect,
-  onFocus,
-  onTreeKeyDown,
-}: AstNodeItemProps) {
+function AstNodeItem({ entry, sourceMap, expanded, selectedId, focusedId, onToggle, onSelect, onFocus, onTreeKeyDown }: AstNodeItemProps) {
   const { node, id, category } = entry
   const hasChildren = node.children.length > 0
   const isExpanded = hasChildren && expanded.has(id)
   return (
     <div className="ast-tree-item" role="none">
-      <div
-        className={`ast-tree-row${id === '0' ? ' ast-tree-root-row' : ''}`}
-        data-ast-category={category}
-        data-selected={selectedId === id}
-      >
+      <div className={`ast-tree-row${id === '0' ? ' ast-tree-root-row' : ''}`} data-ast-category={category} data-selected={selectedId === id}>
         {hasChildren ? (
-          <button
-            type="button"
-            className="ast-tree-toggle"
-            aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${node.kind}`}
-            aria-expanded={isExpanded}
-            tabIndex={-1}
-            onClick={() => onToggle(id)}
-          >
+          <button type="button" className="ast-tree-toggle" aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${node.kind}`} aria-expanded={isExpanded} tabIndex={-1} onClick={() => onToggle(id)}>
             {isExpanded ? <ChevronDown aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
           </button>
         ) : (
@@ -143,13 +105,7 @@ function AstNodeItem({
   )
 }
 
-export function AstTreeView({
-  document,
-  sourceMap: providedSourceMap,
-  activeSourceAssociationKey = null,
-  activeSourceAssociationRevision = 0,
-  onNavigateToSource,
-}: AstTreeViewProps) {
+export function AstTreeView({ document, sourceMap: providedSourceMap, activeSourceAssociationKey = null, activeSourceAssociationRevision = 0, onNavigateToSource }: AstTreeViewProps) {
   const createdSourceMap = useMemo(() => createAstSourceMap(document), [document])
   const sourceMap = providedSourceMap ?? createdSourceMap
   const [expanded, setExpanded] = useState<Set<string>>(() => defaultExpanded(document.root))
@@ -178,16 +134,9 @@ export function AstTreeView({
     setSelectedId(nodeId)
     setFocusedId(nodeId)
     const target = sourceMap.entries.get(nodeId)
-    setExpanded(
-      new Set([
-        ...astAncestorIds(sourceMap, nodeId),
-        ...(target && target.node.children.length > 0 ? [nodeId] : []),
-      ]),
-    )
+    setExpanded(new Set([...astAncestorIds(sourceMap, nodeId), ...(target && target.node.children.length > 0 ? [nodeId] : [])]))
     window.requestAnimationFrame(() => {
-      treeRef.current
-        ?.querySelector<HTMLElement>(`[data-node-id="${nodeId}"]`)
-        ?.scrollIntoView?.({ block: 'nearest' })
+      treeRef.current?.querySelector<HTMLElement>(`[data-node-id="${nodeId}"]`)?.scrollIntoView?.({ block: 'nearest' })
     })
   }, [activeSourceAssociationKey, activeSourceAssociationRevision, sourceMap])
 
@@ -258,26 +207,14 @@ export function AstTreeView({
       <div className="ast-layout">
         <div className="ast-tree-scroll">
           <div ref={treeRef} className="ast-tree" role="tree" aria-label="Abstract syntax tree">
-            <AstNodeItem
-              entry={rootEntry}
-              sourceMap={sourceMap}
-              expanded={expanded}
-              selectedId={selectedId}
-              focusedId={focusedId}
-              onToggle={toggle}
-              onSelect={select}
-              onFocus={setFocusedId}
-              onTreeKeyDown={treeKeyDown}
-            />
+            <AstNodeItem entry={rootEntry} sourceMap={sourceMap} expanded={expanded} selectedId={selectedId} focusedId={focusedId} onToggle={toggle} onSelect={select} onFocus={setFocusedId} onTreeKeyDown={treeKeyDown} />
           </div>
         </div>
         <aside className="ast-inspector" aria-label="Selected AST node">
           {selectedEntry ? (
             <>
               <header>
-                <strong data-ast-category={selectedEntry.category}>
-                  {selectedEntry.node.kind}
-                </strong>
+                <strong data-ast-category={selectedEntry.category}>{selectedEntry.node.kind}</strong>
                 <code>{formatRange(selectedEntry.node.range)}</code>
               </header>
               <dl>

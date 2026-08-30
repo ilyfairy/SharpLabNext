@@ -45,14 +45,7 @@ interface Harness {
   scheduled: Array<{ callback: () => void; delay: number }>
 }
 
-function createHarness(options?: {
-  start?: (key: string) => Promise<void>
-  open?: (
-    request: OpenLanguageSessionRequest,
-    signal: AbortSignal,
-    index: number,
-  ) => Promise<GatewayLanguageSession>
-}): Harness {
+function createHarness(options?: { start?: (key: string) => Promise<void>; open?: (request: OpenLanguageSessionRequest, signal: AbortSignal, index: number) => Promise<GatewayLanguageSession> }): Harness {
   const opened: Harness['opened'] = []
   const closed: string[] = []
   const sockets: FakeWebSocket[] = []
@@ -108,10 +101,7 @@ describe('LanguageSessionLifecycle', () => {
       start: (key) => (key === 'selection-1' ? firstStart.promise : Promise.resolve()),
     })
     const statuses: string[] = []
-    const lifecycle = new LanguageSessionLifecycle(
-      (change) => statuses.push(change.status),
-      harness.dependencies,
-    )
+    const lifecycle = new LanguageSessionLifecycle((change) => statuses.push(change.status), harness.dependencies)
 
     lifecycle.update(desired(planFor(1)))
     await eventually(() => expect(harness.opened).toHaveLength(1))
@@ -138,10 +128,7 @@ describe('LanguageSessionLifecycle', () => {
     let source = 'class Program { }'
     const harness = createHarness()
     const statuses: string[] = []
-    const lifecycle = new LanguageSessionLifecycle(
-      (change) => statuses.push(change.status),
-      harness.dependencies,
-    )
+    const lifecycle = new LanguageSessionLifecycle((change) => statuses.push(change.status), harness.dependencies)
     const plan = planFor(7, () => source)
 
     lifecycle.update(desired(plan))
@@ -174,10 +161,7 @@ describe('LanguageSessionLifecycle', () => {
       },
     })
     const statuses: string[] = []
-    const lifecycle = new LanguageSessionLifecycle(
-      (change) => statuses.push(change.status),
-      harness.dependencies,
-    )
+    const lifecycle = new LanguageSessionLifecycle((change) => statuses.push(change.status), harness.dependencies)
 
     lifecycle.update(desired(planFor(6)))
     await eventually(() => expect(harness.sockets).toHaveLength(1))
@@ -206,11 +190,7 @@ describe('LanguageSessionLifecycle', () => {
       maximumDelayMs: 250,
       shouldRetry: (error) => error instanceof LanguageSessionTransportError,
     }
-    const lifecycle = new LanguageSessionLifecycle(
-      (change) => statuses.push(change.status),
-      harness.dependencies,
-      policy,
-    )
+    const lifecycle = new LanguageSessionLifecycle((change) => statuses.push(change.status), harness.dependencies, policy)
 
     lifecycle.update(desired(planFor(8)))
     const expectedDelays = [100, 200, 250, 250]
@@ -232,23 +212,16 @@ describe('LanguageSessionLifecycle', () => {
       start: async () => {
         startAttempts += 1
         if (startAttempts === 1) {
-          throw new LanguageSessionTransportError(
-            'initialize-timeout',
-            'Language server initialize timed out.',
-          )
+          throw new LanguageSessionTransportError('initialize-timeout', 'Language server initialize timed out.')
         }
       },
     })
     const statuses: string[] = []
-    const lifecycle = new LanguageSessionLifecycle(
-      (change) => statuses.push(change.status),
-      harness.dependencies,
-      {
-        initialDelayMs: 75,
-        maximumDelayMs: 300,
-        shouldRetry: (error) => error instanceof LanguageSessionTransportError,
-      },
-    )
+    const lifecycle = new LanguageSessionLifecycle((change) => statuses.push(change.status), harness.dependencies, {
+      initialDelayMs: 75,
+      maximumDelayMs: 300,
+      shouldRetry: (error) => error instanceof LanguageSessionTransportError,
+    })
 
     lifecycle.update(desired(planFor(10)))
     await eventually(() => expect(harness.scheduled).toHaveLength(1))
@@ -301,17 +274,12 @@ describe('LanguageSessionLifecycle', () => {
       }),
     })
     const statuses: Array<{ status: string; message?: string }> = []
-    const lifecycle = new LanguageSessionLifecycle(
-      (change) => statuses.push(change),
-      harness.dependencies,
-    )
+    const lifecycle = new LanguageSessionLifecycle((change) => statuses.push(change), harness.dependencies)
 
     lifecycle.update(desired(planFor(3)))
     await eventually(() => expect(statuses.at(-1)?.status).toBe('error'))
 
-    expect(statuses.at(-1)?.message).toBe(
-      'Gateway returned a mismatched language session descriptor.',
-    )
+    expect(statuses.at(-1)?.message).toBe('Gateway returned a mismatched language session descriptor.')
     expect(harness.closed).toEqual(['gateway-session-1'])
     expect(harness.sockets).toHaveLength(0)
     await lifecycle.dispose()
@@ -324,15 +292,11 @@ describe('LanguageSessionLifecycle', () => {
       },
     })
     const statuses: Array<{ status: string; message?: string }> = []
-    const lifecycle = new LanguageSessionLifecycle(
-      (change) => statuses.push(change),
-      harness.dependencies,
-      {
-        initialDelayMs: 50,
-        maximumDelayMs: 200,
-        shouldRetry: (error) => error instanceof LanguageSessionTransportError,
-      },
-    )
+    const lifecycle = new LanguageSessionLifecycle((change) => statuses.push(change), harness.dependencies, {
+      initialDelayMs: 50,
+      maximumDelayMs: 200,
+      shouldRetry: (error) => error instanceof LanguageSessionTransportError,
+    })
 
     lifecycle.update(desired(planFor(9)))
     await eventually(() => expect(statuses.at(-1)?.status).toBe('error'))
@@ -350,10 +314,7 @@ describe('LanguageSessionLifecycle', () => {
       },
     })
     const statuses: string[] = []
-    const lifecycle = new LanguageSessionLifecycle(
-      (change) => statuses.push(change.status),
-      harness.dependencies,
-    )
+    const lifecycle = new LanguageSessionLifecycle((change) => statuses.push(change.status), harness.dependencies)
     const requested = desired(planFor(4))
 
     lifecycle.update(requested)
@@ -390,10 +351,16 @@ describe('createLanguageSessionKey', () => {
     expect(createLanguageSessionKey({ ...input, selectionRevision: 5 })).not.toBe(current)
     expect(createLanguageSessionKey({ ...input, outputKind: 'console' })).not.toBe(current)
     expect(
-      createLanguageSessionKey({ ...input, filePaths: ['Program.cs', 'Renamed.cs'] }),
+      createLanguageSessionKey({
+        ...input,
+        filePaths: ['Program.cs', 'Renamed.cs'],
+      }),
     ).not.toBe(current)
     expect(
-      createLanguageSessionKey({ ...input, sourceOrder: ['Helper.cs', 'Program.cs'] }),
+      createLanguageSessionKey({
+        ...input,
+        sourceOrder: ['Helper.cs', 'Program.cs'],
+      }),
     ).not.toBe(current)
   })
 })
@@ -411,10 +378,7 @@ function desired(plan: LanguageSessionConnectionPlan) {
   return { key: plan.key, plan }
 }
 
-function planFor(
-  selectionRevision: number,
-  getSource: () => string = () => 'class Program { }',
-): LanguageSessionConnectionPlan {
+function planFor(selectionRevision: number, getSource: () => string = () => 'class Program { }'): LanguageSessionConnectionPlan {
   return {
     key: `selection-${selectionRevision}`,
     languageId: 'csharp',

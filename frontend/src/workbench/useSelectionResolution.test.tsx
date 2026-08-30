@@ -167,7 +167,9 @@ describe('useSelectionResolution', () => {
   })
 
   it('keeps the 250ms debounce for a later language switch', async () => {
-    renderHook(() => useSelectionResolution(catalog, true), { wrapper: wrapper() })
+    renderHook(() => useSelectionResolution(catalog, true), {
+      wrapper: wrapper(),
+    })
     await flushAsync()
     expect(resolveSelectionMock).toHaveBeenCalledOnce()
 
@@ -208,7 +210,9 @@ describe('useSelectionResolution', () => {
       })
     })
 
-    renderHook(() => useSelectionResolution(catalog, true), { wrapper: wrapper() })
+    renderHook(() => useSelectionResolution(catalog, true), {
+      wrapper: wrapper(),
+    })
     await flushAsync()
     expect(requests).toHaveLength(1)
 

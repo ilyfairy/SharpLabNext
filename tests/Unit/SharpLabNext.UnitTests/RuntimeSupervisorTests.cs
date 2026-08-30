@@ -29,17 +29,13 @@ namespace SharpLabNext.UnitTests;
 public sealed class RuntimeSupervisorTests
 {
     private const string RuntimeMeasurementToken = "0123456789abcdef0123456789abcdef";
-    private const string RuntimeTargetContainerId =
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    private const string RuntimeMeasurementSidecarId =
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-    private const string RuntimeExecId =
-        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    private const string RuntimeTargetContainerId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    private const string RuntimeMeasurementSidecarId = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    private const string RuntimeExecId = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
     private const string RuntimeMeasurementHelperReference =
         "registry.example/sharplabnext/runtime-supervisor@sha256:" +
         "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
-    private const string RuntimeMeasurementHelperImageId =
-        "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+    private const string RuntimeMeasurementHelperImageId = "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
     private const string RuntimePreflightSourceRevision = "dddddddddddddddddddddddddddddddddddddddd";
 
     private static readonly JsonSerializerOptions RuntimeProfilePreflightJsonOptions =
@@ -52,11 +48,7 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public void MeasurementHelperContractMatchesReviewedSourceBytes()
     {
-        var sourcePath = Path.Combine(
-            FindRepositoryRoot(),
-            "deploy",
-            "docker",
-            "runtime-measurement-helper.sh");
+        var sourcePath = Path.Combine(FindRepositoryRoot(), "deploy", "docker", "runtime-measurement-helper.sh");
         var digest = $"sha256:{Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(sourcePath)))}";
 
         Assert.Equal(RuntimeMeasurementHelperContract.ContentSha256, digest);
@@ -84,11 +76,9 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public void PromotionPreflightRejectsProfileDigestMismatch()
     {
-        using var fixture = CreatePromotionPreflightProfile(
-            profileSha256: $"sha256:{new string('0', 64)}");
+        using var fixture = CreatePromotionPreflightProfile(profileSha256: $"sha256:{new string('0', 64)}");
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            RuntimePromotionPreflightOptions.Load(fixture.Configuration));
+        var exception = Assert.Throws<InvalidOperationException>(() => RuntimePromotionPreflightOptions.Load(fixture.Configuration));
 
         Assert.Contains("digest does not match", exception.Message, StringComparison.Ordinal);
     }
@@ -102,8 +92,7 @@ public sealed class RuntimeSupervisorTests
             profile.RuntimeImageId = profile.Image;
         });
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            RuntimePromotionPreflightOptions.Load(fixture.Configuration));
+        var exception = Assert.Throws<InvalidOperationException>(() => RuntimePromotionPreflightOptions.Load(fixture.Configuration));
 
         Assert.Contains("invalid", exception.Message, StringComparison.Ordinal);
     }
@@ -132,14 +121,7 @@ public sealed class RuntimeSupervisorTests
     public void ApplicationSettingsBindWithoutDuplicatingProfileCollections()
     {
         var root = FindRepositoryRoot();
-        var configuration = new ConfigurationBuilder()
-            .AddJsonFile(Path.Combine(
-                root,
-                "src",
-                "Supervisor",
-                "SharpLabNext.RuntimeSupervisor",
-                "appsettings.json"))
-            .Build();
+        var configuration = new ConfigurationBuilder().AddJsonFile(Path.Combine(root, "src", "Supervisor", "SharpLabNext.RuntimeSupervisor", "appsettings.json")).Build();
         var options = new RuntimeSupervisorOptions();
 
         configuration.GetSection(RuntimeSupervisorOptions.SectionName).Bind(options);
@@ -148,16 +130,13 @@ public sealed class RuntimeSupervisorTests
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Failures ?? []));
         Assert.False(options.RequireDigestPinnedImages);
         Assert.True(options.SessionReuseEnabled);
-        var wine = Assert.Single(options.Profiles, static profile =>
-            profile.Id == "wine-netfx48-linux-x64");
+        var wine = Assert.Single(options.Profiles, static profile => profile.Id == "wine-netfx48-linux-x64");
         Assert.Equal("netfx-clr-wine", wine.Family);
         Assert.Equal("wine-9.0+netfx48", wine.RuntimeVersion);
         Assert.Equal("not-applicable", wine.RuntimeCommit);
         Assert.Equal("not-applicable", wine.JitVersion);
         Assert.Equal("not-applicable", wine.JitCommit);
-        Assert.Equal(
-            ["dotnet-framework-managed-pe-v1", "dotnet-framework-mixed-pe-v1"],
-            wine.AcceptedArtifactFormats);
+        Assert.Equal(["dotnet-framework-managed-pe-v1", "dotnet-framework-mixed-pe-v1"], wine.AcceptedArtifactFormats);
         Assert.Equal(["run"], wine.Capabilities);
         Assert.Equal(["runtime.netfx48-wine"], wine.ProvidedRuntimeFeatureTags);
         Assert.Equal(["runtime-job-wine-netfx"], wine.AllowedSecurityPolicyIds);
@@ -165,8 +144,7 @@ public sealed class RuntimeSupervisorTests
         Assert.Equal("/usr/lib/wine/wine64", wine.Layout.WineHostPath);
         Assert.Equal("/opt/wine-dotnet", wine.Layout.WinePrefixPath);
         Assert.Null(wine.Layout.JitInspectorAssemblyPath);
-        var winePolicy = Assert.Single(options.SecurityPolicies, static policy =>
-            policy.Id == "runtime-job-wine-netfx");
+        var winePolicy = Assert.Single(options.SecurityPolicies, static policy => policy.Id == "runtime-job-wine-netfx");
         Assert.Equal(1024L * 1024 * 1024, winePolicy.MemoryBytes);
         Assert.Equal(1_000_000_000, winePolicy.NanoCpus);
         Assert.Equal(128, winePolicy.PidsLimit);
@@ -174,8 +152,7 @@ public sealed class RuntimeSupervisorTests
         Assert.Equal(64L * 1024 * 1024, winePolicy.MaximumArtifactBytes);
         Assert.Equal(1L * 1024 * 1024, winePolicy.MaximumOutputBytes);
         Assert.Equal(32 * 1024 * 1024, winePolicy.TmpfsBytes);
-        var jsharp = Assert.Single(options.Profiles, static profile =>
-            profile.Id == "wine-jsharp20-linux-x64");
+        var jsharp = Assert.Single(options.Profiles, static profile => profile.Id == "wine-jsharp20-linux-x64");
         Assert.Equal("wine-9.0+clr2+jsharp-2.0.50727.937", jsharp.RuntimeVersion);
         Assert.Equal("x64", jsharp.Architecture);
         Assert.Equal(["dotnet-framework-managed-pe-v1"], jsharp.AcceptedArtifactFormats);
@@ -186,8 +163,7 @@ public sealed class RuntimeSupervisorTests
         Assert.Equal("/usr/lib/wine/wine64", jsharp.Layout.WineHostPath);
         Assert.Equal("/opt/wine-jsharp20", jsharp.Layout.WinePrefixPath);
         Assert.Null(jsharp.Layout.JitInspectorAssemblyPath);
-        var jsharpPolicy = Assert.Single(options.SecurityPolicies, static policy =>
-            policy.Id == "runtime-job-wine-jsharp20");
+        var jsharpPolicy = Assert.Single(options.SecurityPolicies, static policy => policy.Id == "runtime-job-wine-jsharp20");
         Assert.Equal(1024L * 1024 * 1024, jsharpPolicy.MemoryBytes);
         Assert.Equal(1_000_000_000, jsharpPolicy.NanoCpus);
         Assert.Equal(64, jsharpPolicy.PidsLimit);
@@ -231,14 +207,7 @@ public sealed class RuntimeSupervisorTests
     public void ManagedDockerResourcesCarryAuditableLifecycleLabels()
     {
         const string traceParent = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01";
-        var labels = DockerEngineClient.CreateManagedLabels(
-            "com.sharplabnext.runtime-job",
-            "true",
-            "operation-1",
-            "release-1",
-            "candidate-scope-1",
-            materializer: true,
-            traceParent: traceParent);
+        var labels = DockerEngineClient.CreateManagedLabels("com.sharplabnext.runtime-job", "true", "operation-1", "release-1", "candidate-scope-1", materializer: true, traceParent: traceParent);
 
         Assert.Equal("true", labels["com.sharplabnext.runtime-job"]);
         Assert.Equal("operation-1", labels["com.sharplabnext.job-id"]);
@@ -247,28 +216,16 @@ public sealed class RuntimeSupervisorTests
         Assert.Equal("candidate-scope-1", labels["com.sharplabnext.resource-scope"]);
         Assert.Equal("true", labels["com.sharplabnext.materializer"]);
         Assert.Equal(traceParent, labels["com.sharplabnext.traceparent"]);
-        Assert.True(DateTimeOffset.TryParse(
-            labels["com.sharplabnext.created-at"],
-            System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.RoundtripKind,
-            out _));
+        Assert.True(DateTimeOffset.TryParse(labels["com.sharplabnext.created-at"], System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out _));
     }
 
     [Fact]
     public void RuntimeJobCapturesOnlyW3CTraceContext()
     {
-        using var activity = new Activity("runtime-job")
-            .SetIdFormat(ActivityIdFormat.W3C)
-            .Start();
+        using var activity = new Activity("runtime-job").SetIdFormat(ActivityIdFormat.W3C).Start();
 
         Assert.Equal(activity.Id, RuntimeJobExecutor.CaptureTraceParent());
-        Assert.Throws<ArgumentException>(() => DockerEngineClient.CreateManagedLabels(
-            "com.sharplabnext.runtime-job",
-            "true",
-            "operation-1",
-            "release-1",
-            "candidate-scope-1",
-            traceParent: "invalid"));
+        Assert.Throws<ArgumentException>(() => DockerEngineClient.CreateManagedLabels("com.sharplabnext.runtime-job", "true", "operation-1", "release-1", "candidate-scope-1", traceParent: "invalid"));
     }
 
     [Fact]
@@ -277,25 +234,12 @@ public sealed class RuntimeSupervisorTests
         using var handler = new RecordingDockerHandler();
         using var docker = CreateDockerClient(handler);
         var policy = new RuntimeSecurityPolicyOptions();
-        var spec = new RuntimeContainerSpec(
-            "runtime-test",
-            "operation-1",
-            "release-1",
-            "runtime-image:test",
-            ["/runtime/entrypoint"],
-            new Dictionary<string, string>(StringComparer.Ordinal),
-            policy,
-            "com.sharplabnext.runtime-job",
-            "candidate-scope-1",
-            "workspace-1");
+        var spec = new RuntimeContainerSpec("runtime-test", "operation-1", "release-1", "runtime-image:test", ["/runtime/entrypoint"], new Dictionary<string, string>(StringComparer.Ordinal), policy, "com.sharplabnext.runtime-job", "candidate-scope-1", "workspace-1");
 
         var containerId = await docker.CreateContainerAsync(spec, TestContext.Current.CancellationToken);
 
         Assert.Equal(RecordingDockerHandler.ContainerId, containerId);
-        var createRequest = Assert.Single(
-            handler.Requests,
-            static request => request.Method == HttpMethod.Post &&
-                              request.Path.StartsWith("/v1.47/containers/create?", StringComparison.Ordinal));
+        var createRequest = Assert.Single(handler.Requests, static request => request.Method == HttpMethod.Post && request.Path.StartsWith("/v1.47/containers/create?", StringComparison.Ordinal));
         using var body = JsonDocument.Parse(createRequest.Body!);
         var logConfig = body.RootElement.GetProperty("HostConfig").GetProperty("LogConfig");
         Assert.Equal("local", logConfig.GetProperty("Type").GetString());
@@ -303,10 +247,7 @@ public sealed class RuntimeSupervisorTests
         Assert.Equal("1", logConfig.GetProperty("Config").GetProperty("max-file").GetString());
         Assert.Equal("false", logConfig.GetProperty("Config").GetProperty("compress").GetString());
         Assert.Equal("1654:1654", body.RootElement.GetProperty("User").GetString());
-        Assert.Contains(
-            "noexec",
-            body.RootElement.GetProperty("HostConfig").GetProperty("Tmpfs").GetProperty("/tmp").GetString(),
-            StringComparison.Ordinal);
+        Assert.Contains("noexec", body.RootElement.GetProperty("HostConfig").GetProperty("Tmpfs").GetProperty("/tmp").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -315,18 +256,12 @@ public sealed class RuntimeSupervisorTests
         using var handler = new RecordingDockerHandler();
         using var docker = CreateDockerClient(handler);
 
-        await using var output = await docker.AttachContainerOutputAsync(
-            RecordingDockerHandler.ContainerId,
-            TestContext.Current.CancellationToken);
+        await using var output = await docker.AttachContainerOutputAsync(RecordingDockerHandler.ContainerId, TestContext.Current.CancellationToken);
         using var copy = new MemoryStream();
         await output.CopyToAsync(copy, TestContext.Current.CancellationToken);
 
         Assert.Equal("runtime output"u8.ToArray(), copy.ToArray());
-        Assert.Contains(
-            handler.Requests,
-            request => request.Method == HttpMethod.Post &&
-                       request.Path ==
-                       $"/v1.47/containers/{RecordingDockerHandler.ContainerId}/attach?logs=false&stream=true&stdin=false&stdout=true&stderr=true");
+        Assert.Contains(handler.Requests, request => request.Method == HttpMethod.Post && request.Path == $"/v1.47/containers/{RecordingDockerHandler.ContainerId}/attach?logs=false&stream=true&stdin=false&stdout=true&stderr=true");
     }
 
     [Fact]
@@ -334,31 +269,13 @@ public sealed class RuntimeSupervisorTests
     {
         using var handler = new RecordingDockerHandler();
         using var docker = CreateDockerClient(handler);
-        var spec = new RuntimeContainerSpec(
-            "runtime-measured-test",
-            "operation-1",
-            "release-1",
-            "runtime-image:test",
-            ["/runtime/entrypoint"],
-            new Dictionary<string, string>(StringComparer.Ordinal),
-            new RuntimeSecurityPolicyOptions(),
-            "com.sharplabnext.runtime-job",
-            "candidate-scope-1",
-            "workspace-1",
-            Entrypoint: ["/bin/sh", "-c"]);
+        var spec = new RuntimeContainerSpec("runtime-measured-test", "operation-1", "release-1", "runtime-image:test", ["/runtime/entrypoint"], new Dictionary<string, string>(StringComparer.Ordinal), new RuntimeSecurityPolicyOptions(), "com.sharplabnext.runtime-job", "candidate-scope-1", "workspace-1", Entrypoint: ["/bin/sh", "-c"]);
 
         await docker.CreateContainerAsync(spec, TestContext.Current.CancellationToken);
 
-        var createRequest = Assert.Single(
-            handler.Requests,
-            static request => request.Method == HttpMethod.Post &&
-                              request.Path.StartsWith("/v1.47/containers/create?", StringComparison.Ordinal));
+        var createRequest = Assert.Single(handler.Requests, static request => request.Method == HttpMethod.Post && request.Path.StartsWith("/v1.47/containers/create?", StringComparison.Ordinal));
         using var body = JsonDocument.Parse(createRequest.Body!);
-        var mounts = body.RootElement
-            .GetProperty("HostConfig")
-            .GetProperty("Mounts")
-            .EnumerateArray()
-            .ToArray();
+        var mounts = body.RootElement.GetProperty("HostConfig").GetProperty("Mounts").EnumerateArray().ToArray();
         var workspace = Assert.Single(mounts);
         Assert.Equal("workspace-1", workspace.GetProperty("Source").GetString());
         Assert.Equal("/workspace", workspace.GetProperty("Target").GetString());
@@ -366,9 +283,7 @@ public sealed class RuntimeSupervisorTests
         Assert.Equal("/bin/sh", body.RootElement.GetProperty("Entrypoint")[0].GetString());
         Assert.Equal("-c", body.RootElement.GetProperty("Entrypoint")[1].GetString());
         Assert.True(body.RootElement.GetProperty("OpenStdin").GetBoolean());
-        Assert.DoesNotContain(
-            mounts,
-            static mount => mount.GetProperty("Target").GetString() == "/measurement");
+        Assert.DoesNotContain(mounts, static mount => mount.GetProperty("Target").GetString() == "/measurement");
     }
 
     [Fact]
@@ -378,31 +293,13 @@ public sealed class RuntimeSupervisorTests
         handler.CreateContainerIds.Enqueue(RuntimeMeasurementSidecarId);
         using var docker = CreateDockerClient(handler);
 
-        var sidecarId = await docker.CreateRuntimeMeasurementSidecarAsync(
-            new RuntimeMeasurementSidecarSpec(
-                "operation-1",
-                "release-1",
-                $"sha256:{new string('f', 64)}",
-                RuntimeTargetContainerId,
-                4242,
-                RuntimeMeasurementToken,
-                "sln-measure-0123456789abcdef0123456789abcdef",
-                "com.sharplabnext.runtime-job",
-                "candidate-scope-1"),
-            TestContext.Current.CancellationToken);
+        var sidecarId = await docker.CreateRuntimeMeasurementSidecarAsync(new RuntimeMeasurementSidecarSpec("operation-1", "release-1", $"sha256:{new string('f', 64)}", RuntimeTargetContainerId, 4242, RuntimeMeasurementToken, "sln-measure-0123456789abcdef0123456789abcdef", "com.sharplabnext.runtime-job", "candidate-scope-1"), TestContext.Current.CancellationToken);
 
         Assert.Equal(RuntimeMeasurementSidecarId, sidecarId);
-        var request = Assert.Single(
-            handler.Requests,
-            static value => value.Method == HttpMethod.Post &&
-                             value.Path.StartsWith("/v1.47/containers/create?name=sln-measurement-", StringComparison.Ordinal));
+        var request = Assert.Single(handler.Requests, static value => value.Method == HttpMethod.Post && value.Path.StartsWith("/v1.47/containers/create?name=sln-measurement-", StringComparison.Ordinal));
         using var body = JsonDocument.Parse(request.Body!);
-        Assert.Equal(
-            ["/usr/local/bin/sharplabnext-runtime-measurement"],
-            body.RootElement.GetProperty("Entrypoint").EnumerateArray().Select(static value => value.GetString()!).ToArray());
-        Assert.Equal(
-            [RuntimeMeasurementToken, RuntimeTargetContainerId],
-            body.RootElement.GetProperty("Cmd").EnumerateArray().Select(static value => value.GetString()!).ToArray());
+        Assert.Equal(["/usr/local/bin/sharplabnext-runtime-measurement"], body.RootElement.GetProperty("Entrypoint").EnumerateArray().Select(static value => value.GetString()!).ToArray());
+        Assert.Equal([RuntimeMeasurementToken, RuntimeTargetContainerId], body.RootElement.GetProperty("Cmd").EnumerateArray().Select(static value => value.GetString()!).ToArray());
         Assert.Equal("1654:1654", body.RootElement.GetProperty("User").GetString());
         var host = body.RootElement.GetProperty("HostConfig");
         Assert.Equal("none", host.GetProperty("NetworkMode").GetString());
@@ -419,9 +316,7 @@ public sealed class RuntimeSupervisorTests
         var cgroup = Assert.Single(mounts, static mount => mount.GetProperty("Target").GetString() == "/run/sharplabnext-target-cgroup");
         Assert.Equal("/proc/4242/cgroup", cgroup.GetProperty("Source").GetString());
         Assert.True(cgroup.GetProperty("ReadOnly").GetBoolean());
-        Assert.Equal(
-            RuntimeTargetContainerId,
-            body.RootElement.GetProperty("Labels").GetProperty("com.sharplabnext.target-container-id").GetString());
+        Assert.Equal(RuntimeTargetContainerId, body.RootElement.GetProperty("Labels").GetProperty("com.sharplabnext.target-container-id").GetString());
     }
 
     [Fact]
@@ -442,73 +337,44 @@ public sealed class RuntimeSupervisorTests
                     ["SHARPLABNEXT_WINE_CLEANUP"] = "1"
                 }),
             TestContext.Current.CancellationToken);
-        await using var stream = await docker.StartContainerExecAsync(
-            execId,
-            TestContext.Current.CancellationToken);
+        await using var stream = await docker.StartContainerExecAsync(execId, TestContext.Current.CancellationToken);
         using var output = new MemoryStream();
         await stream.CopyToAsync(output, TestContext.Current.CancellationToken);
-        var inspection = await docker.InspectContainerExecAsync(
-            execId,
-            TestContext.Current.CancellationToken);
+        var inspection = await docker.InspectContainerExecAsync(execId, TestContext.Current.CancellationToken);
 
         Assert.Equal(RuntimeExecId, execId);
         Assert.Equal("stdout"u8.ToArray(), output.ToArray());
         Assert.False(inspection.Running);
         Assert.Equal(0, inspection.ExitCode);
-        var create = Assert.Single(
-            handler.Requests,
-            static request => request.Method == HttpMethod.Post && request.Path.EndsWith("/exec", StringComparison.Ordinal));
+        var create = Assert.Single(handler.Requests, static request => request.Method == HttpMethod.Post && request.Path.EndsWith("/exec", StringComparison.Ordinal));
         using var body = JsonDocument.Parse(create.Body!);
         Assert.Equal("1654:1654", body.RootElement.GetProperty("User").GetString());
         Assert.Equal("/workspace", body.RootElement.GetProperty("WorkingDir").GetString());
         Assert.True(body.RootElement.GetProperty("AttachStdout").GetBoolean());
         Assert.True(body.RootElement.GetProperty("AttachStderr").GetBoolean());
-        Assert.Equal(
-            ["SHARPLABNEXT_WINE_CLEANUP=1"],
-            body.RootElement.GetProperty("Env").EnumerateArray()
-                .Select(static value => value.GetString()!)
-                .ToArray());
-        Assert.Equal(
-            ["/opt/sharplabnext/runtime-entrypoint.sh", "/usr/share/dotnet/dotnet", "probe"],
-            body.RootElement.GetProperty("Cmd").EnumerateArray().Select(static value => value.GetString()!).ToArray());
-        Assert.Contains(
-            handler.Requests,
-            request => request.Method == HttpMethod.Post &&
-                       request.Path == $"/v1.47/exec/{RuntimeExecId}/start");
-        Assert.Contains(
-            handler.Requests,
-            request => request.Method == HttpMethod.Get &&
-                       request.Path == $"/v1.47/exec/{RuntimeExecId}/json");
+        Assert.Equal(["SHARPLABNEXT_WINE_CLEANUP=1"], body.RootElement.GetProperty("Env").EnumerateArray().Select(static value => value.GetString()!).ToArray());
+        Assert.Equal(["/opt/sharplabnext/runtime-entrypoint.sh", "/usr/share/dotnet/dotnet", "probe"], body.RootElement.GetProperty("Cmd").EnumerateArray().Select(static value => value.GetString()!).ToArray());
+        Assert.Contains(handler.Requests, request => request.Method == HttpMethod.Post && request.Path == $"/v1.47/exec/{RuntimeExecId}/start");
+        Assert.Contains(handler.Requests, request => request.Method == HttpMethod.Get && request.Path == $"/v1.47/exec/{RuntimeExecId}/json");
     }
 
     [Theory]
     [InlineData(RuntimeMeasurementSignalKind.Capture, "capture")]
     [InlineData(RuntimeMeasurementSignalKind.Finish, "finish")]
-    public async Task RuntimeMeasurementSignalUploadsAtomicTemporaryCanonicalTar(
-        RuntimeMeasurementSignalKind signalKind,
-        string signalName)
+    public async Task RuntimeMeasurementSignalUploadsAtomicTemporaryCanonicalTar(RuntimeMeasurementSignalKind signalKind, string signalName)
     {
         using var handler = new RecordingDockerHandler();
         using var docker = CreateDockerClient(handler);
 
-        await docker.UploadRuntimeMeasurementSignalAsync(
-            RuntimeMeasurementSidecarId,
-            RuntimeMeasurementToken,
-            RuntimeTargetContainerId,
-            signalKind,
-            TestContext.Current.CancellationToken);
+        await docker.UploadRuntimeMeasurementSignalAsync(RuntimeMeasurementSidecarId, RuntimeMeasurementToken, RuntimeTargetContainerId, signalKind, TestContext.Current.CancellationToken);
 
         var request = Assert.Single(handler.Requests);
         Assert.Equal(HttpMethod.Put, request.Method);
-        Assert.Equal(
-            $"/v1.47/containers/{RuntimeMeasurementSidecarId}/archive?path=%2Fmeasurement&copyUIDGID=true",
-            request.Path);
+        Assert.Equal($"/v1.47/containers/{RuntimeMeasurementSidecarId}/archive?path=%2Fmeasurement&copyUIDGID=true", request.Path);
         Assert.NotNull(request.BodyBytes);
         var entry = await ReadSingleTarEntryAsync(request.BodyBytes!, TestContext.Current.CancellationToken);
         Assert.Equal($"{signalName}-{RuntimeMeasurementToken}.upload", entry.Name);
-        Assert.Equal(
-            $"sharplabnext-runtime-measurement-signal-v1\n{RuntimeMeasurementToken}\n{RuntimeTargetContainerId}\n{signalName}\n",
-            Encoding.ASCII.GetString(entry.Payload));
+        Assert.Equal($"sharplabnext-runtime-measurement-signal-v1\n{RuntimeMeasurementToken}\n{RuntimeTargetContainerId}\n{signalName}\n", Encoding.ASCII.GetString(entry.Payload));
         Assert.Equal(1654, entry.Uid);
         Assert.Equal(1654, entry.Gid);
         Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, entry.Mode);
@@ -517,34 +383,18 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task ManagedResourceListingBindsManagementLabelAndResourceScopeTogether()
     {
-        using var handler = new RecordingDockerHandler
-        {
-            ManagedContainersPayload =
-                $"[{{\"Id\":\"{RuntimeTargetContainerId}\",\"State\":\"running\"}}]",
-            ManagedVolumesPayload =
-                "{\"Volumes\":[{\"Name\":\"sln-measure-0123456789abcdef0123456789abcdef\"}]}"
-        };
+        using var handler = new RecordingDockerHandler { ManagedContainersPayload = $"[{{\"Id\":\"{RuntimeTargetContainerId}\",\"State\":\"running\"}}]", ManagedVolumesPayload = "{\"Volumes\":[{\"Name\":\"sln-measure-0123456789abcdef0123456789abcdef\"}]}" };
         using var docker = CreateDockerClient(handler);
 
-        var containers = await docker.ListManagedContainersAsync(
-            "com.sharplabnext.runtime-job",
-            "scope-a",
-            TestContext.Current.CancellationToken);
-        var volumes = await docker.ListManagedWorkspaceVolumesAsync(
-            "com.sharplabnext.runtime-job",
-            "scope-a",
-            TestContext.Current.CancellationToken);
+        var containers = await docker.ListManagedContainersAsync("com.sharplabnext.runtime-job", "scope-a", TestContext.Current.CancellationToken);
+        var volumes = await docker.ListManagedWorkspaceVolumesAsync("com.sharplabnext.runtime-job", "scope-a", TestContext.Current.CancellationToken);
 
         Assert.Single(containers);
         Assert.Equal(RuntimeTargetContainerId, containers[0].Id);
         Assert.Single(volumes);
         Assert.Equal("sln-measure-0123456789abcdef0123456789abcdef", volumes[0].Name);
-        var containerRequest = Assert.Single(
-            handler.Requests,
-            static request => request.Method == HttpMethod.Get && request.Path.StartsWith("/v1.47/containers/json?", StringComparison.Ordinal));
-        var volumeRequest = Assert.Single(
-            handler.Requests,
-            static request => request.Method == HttpMethod.Get && request.Path.StartsWith("/v1.47/volumes?", StringComparison.Ordinal));
+        var containerRequest = Assert.Single(handler.Requests, static request => request.Method == HttpMethod.Get && request.Path.StartsWith("/v1.47/containers/json?", StringComparison.Ordinal));
+        var volumeRequest = Assert.Single(handler.Requests, static request => request.Method == HttpMethod.Get && request.Path.StartsWith("/v1.47/volumes?", StringComparison.Ordinal));
         Assert.Contains("com.sharplabnext.runtime-job%3Dtrue", containerRequest.Path, StringComparison.Ordinal);
         Assert.Contains("com.sharplabnext.resource-scope%3Dscope-a", containerRequest.Path, StringComparison.Ordinal);
         Assert.Contains("com.sharplabnext.runtime-job%3Dworkspace", volumeRequest.Path, StringComparison.Ordinal);
@@ -572,10 +422,7 @@ public sealed class RuntimeSupervisorTests
 
         await docker.CreateContainerAsync(spec, TestContext.Current.CancellationToken);
 
-        var createRequest = Assert.Single(
-            handler.Requests,
-            static request => request.Method == HttpMethod.Post &&
-                              request.Path.StartsWith("/v1.47/containers/create?", StringComparison.Ordinal));
+        var createRequest = Assert.Single(handler.Requests, static request => request.Method == HttpMethod.Post && request.Path.StartsWith("/v1.47/containers/create?", StringComparison.Ordinal));
         using var body = JsonDocument.Parse(createRequest.Body!);
         var root = body.RootElement;
         var host = root.GetProperty("HostConfig");
@@ -585,20 +432,14 @@ public sealed class RuntimeSupervisorTests
         Assert.True(host.GetProperty("ReadonlyRootfs").GetBoolean());
         Assert.False(host.GetProperty("Privileged").GetBoolean());
         Assert.Equal("ALL", Assert.Single(host.GetProperty("CapDrop").EnumerateArray()).GetString());
-        Assert.Contains(
-            host.GetProperty("SecurityOpt").EnumerateArray(),
-            static value => value.GetString() == "no-new-privileges:true");
-        var nofile = Assert.Single(
-            host.GetProperty("Ulimits").EnumerateArray(),
-            static value => value.GetProperty("Name").GetString() == "nofile");
+        Assert.Contains(host.GetProperty("SecurityOpt").EnumerateArray(), static value => value.GetString() == "no-new-privileges:true");
+        var nofile = Assert.Single(host.GetProperty("Ulimits").EnumerateArray(), static value => value.GetProperty("Name").GetString() == "nofile");
         Assert.Equal(512, nofile.GetProperty("Soft").GetInt64());
         Assert.Equal(512, nofile.GetProperty("Hard").GetInt64());
         var tmpfs = host.GetProperty("Tmpfs");
         Assert.Equal(2, tmpfs.EnumerateObject().Count());
         Assert.Equal("rw,exec,nosuid,nodev,size=64m", tmpfs.GetProperty("/tmp").GetString());
-        Assert.Equal(
-            "rw,exec,nosuid,nodev,size=256m",
-            tmpfs.GetProperty("/opt/wine-dotnet/drive_c/users/root/Temp").GetString());
+        Assert.Equal("rw,exec,nosuid,nodev,size=256m", tmpfs.GetProperty("/opt/wine-dotnet/drive_c/users/root/Temp").GetString());
         var workspace = Assert.Single(host.GetProperty("Mounts").EnumerateArray());
         Assert.Equal("/workspace", workspace.GetProperty("Target").GetString());
         Assert.True(workspace.GetProperty("ReadOnly").GetBoolean());
@@ -626,25 +467,16 @@ public sealed class RuntimeSupervisorTests
 
         await docker.CreateContainerAsync(spec, TestContext.Current.CancellationToken);
 
-        var createRequest = Assert.Single(
-            handler.Requests,
-            static request => request.Method == HttpMethod.Post &&
-                              request.Path.StartsWith("/v1.47/containers/create?", StringComparison.Ordinal));
+        var createRequest = Assert.Single(handler.Requests, static request => request.Method == HttpMethod.Post && request.Path.StartsWith("/v1.47/containers/create?", StringComparison.Ordinal));
         using var body = JsonDocument.Parse(createRequest.Body!);
         var root = body.RootElement;
         Assert.Equal("1654:1654", root.GetProperty("User").GetString());
         var host = root.GetProperty("HostConfig");
         var tmpfs = host.GetProperty("Tmpfs");
         Assert.Single(tmpfs.EnumerateObject());
-        Assert.Equal(
-            "rw,exec,nosuid,nodev,size=50331648,uid=0,gid=0,mode=1777",
-            tmpfs.GetProperty("/tmp").GetString());
-        Assert.False(tmpfs.TryGetProperty(
-            "/opt/wine-dotnet/drive_c/users/root/Temp",
-            out _));
-        var nofile = Assert.Single(
-            host.GetProperty("Ulimits").EnumerateArray(),
-            static value => value.GetProperty("Name").GetString() == "nofile");
+        Assert.Equal("rw,exec,nosuid,nodev,size=50331648,uid=0,gid=0,mode=1777", tmpfs.GetProperty("/tmp").GetString());
+        Assert.False(tmpfs.TryGetProperty("/opt/wine-dotnet/drive_c/users/root/Temp", out _));
+        var nofile = Assert.Single(host.GetProperty("Ulimits").EnumerateArray(), static value => value.GetProperty("Name").GetString() == "nofile");
         Assert.Equal(512, nofile.GetProperty("Soft").GetInt64());
         Assert.Equal(512, nofile.GetProperty("Hard").GetInt64());
     }
@@ -653,32 +485,18 @@ public sealed class RuntimeSupervisorTests
     public void ProfileIsolationResolutionUsesOnlyExplicitSupportedCombinations()
     {
         var profile = Assert.Single(ValidOptions().Profiles);
-        Assert.Equal(
-            RuntimeContainerIsolationKind.Standard,
-            RuntimeJobExecutor.ResolveIsolationKind(profile));
+        Assert.Equal(RuntimeContainerIsolationKind.Standard, RuntimeJobExecutor.ResolveIsolationKind(profile));
 
-        profile.Container = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Wine,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-            ExecutionUser = RuntimeContainerExecutionUsers.NonRoot,
-            WinePrefixPath = "/opt/wine-dotnet"
-        };
-        Assert.Equal(
-            RuntimeContainerIsolationKind.WineNonRoot,
-            RuntimeJobExecutor.ResolveIsolationKind(profile));
+        profile.Container = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, ExecutionUser = RuntimeContainerExecutionUsers.NonRoot, WinePrefixPath = "/opt/wine-dotnet" };
+        Assert.Equal(RuntimeContainerIsolationKind.WineNonRoot, RuntimeJobExecutor.ResolveIsolationKind(profile));
 
         profile.Container.ExecutionUser = RuntimeContainerExecutionUsers.Root;
-        Assert.Equal(
-            RuntimeContainerIsolationKind.WineRoot,
-            RuntimeJobExecutor.ResolveIsolationKind(profile));
+        Assert.Equal(RuntimeContainerIsolationKind.WineRoot, RuntimeJobExecutor.ResolveIsolationKind(profile));
 
         profile.Container.IsolationKind = RuntimeContainerIsolationKinds.Standard;
-        Assert.Throws<InvalidOperationException>(() =>
-            RuntimeJobExecutor.ResolveIsolationKind(profile));
+        Assert.Throws<InvalidOperationException>(() => RuntimeJobExecutor.ResolveIsolationKind(profile));
         profile.Container.ExecutionUser = "1000:1000";
-        Assert.Throws<InvalidOperationException>(() =>
-            RuntimeJobExecutor.ResolveIsolationKind(profile));
+        Assert.Throws<InvalidOperationException>(() => RuntimeJobExecutor.ResolveIsolationKind(profile));
     }
 
     [Fact]
@@ -686,11 +504,8 @@ public sealed class RuntimeSupervisorTests
     {
         var profile = WineRuntimeProfile();
 
-        Assert.Equal(
-            RuntimeContainerIsolationKind.WineRoot,
-            RuntimeJobExecutor.ResolveIsolationKind(profile));
-        var exception = Assert.Throws<RuntimeJobFailureException>(() =>
-            RuntimeJobExecutor.ValidateCapability(profile, "jit-asm"));
+        Assert.Equal(RuntimeContainerIsolationKind.WineRoot, RuntimeJobExecutor.ResolveIsolationKind(profile));
+        var exception = Assert.Throws<RuntimeJobFailureException>(() => RuntimeJobExecutor.ValidateCapability(profile, "jit-asm"));
         Assert.Equal("runtime-capability-not-supported", exception.Code);
         Assert.False(exception.Retryable);
     }
@@ -716,24 +531,17 @@ public sealed class RuntimeSupervisorTests
 
         await docker.CreateContainerAsync(spec, TestContext.Current.CancellationToken);
 
-        var createRequest = Assert.Single(
-            handler.Requests,
-            static request => request.Method == HttpMethod.Post &&
-                              request.Path.StartsWith("/v1.47/containers/create?", StringComparison.Ordinal));
+        var createRequest = Assert.Single(handler.Requests, static request => request.Method == HttpMethod.Post && request.Path.StartsWith("/v1.47/containers/create?", StringComparison.Ordinal));
         using var body = JsonDocument.Parse(createRequest.Body!);
         var root = body.RootElement;
         var host = root.GetProperty("HostConfig");
         Assert.Equal("0:0", root.GetProperty("User").GetString());
-        var nofile = Assert.Single(
-            host.GetProperty("Ulimits").EnumerateArray(),
-            static value => value.GetProperty("Name").GetString() == "nofile");
+        var nofile = Assert.Single(host.GetProperty("Ulimits").EnumerateArray(), static value => value.GetProperty("Name").GetString() == "nofile");
         Assert.Equal(512, nofile.GetProperty("Soft").GetInt64());
         Assert.Equal(512, nofile.GetProperty("Hard").GetInt64());
         var tmpfs = host.GetProperty("Tmpfs");
         Assert.Equal(2, tmpfs.EnumerateObject().Count());
-        Assert.Equal(
-            "rw,exec,nosuid,nodev,size=256m",
-            tmpfs.GetProperty("/opt/wine-jsharp20/drive_c/users/root/Temp").GetString());
+        Assert.Equal("rw,exec,nosuid,nodev,size=256m", tmpfs.GetProperty("/opt/wine-jsharp20/drive_c/users/root/Temp").GetString());
         Assert.False(tmpfs.TryGetProperty("/opt/wine-dotnet/drive_c/users/root/Temp", out _));
     }
 
@@ -742,16 +550,13 @@ public sealed class RuntimeSupervisorTests
     {
         var profile = JSharpWineRuntimeProfile();
 
-        Assert.Equal(
-            RuntimeContainerIsolationKind.WineRoot,
-            RuntimeJobExecutor.ResolveIsolationKind(profile));
+        Assert.Equal(RuntimeContainerIsolationKind.WineRoot, RuntimeJobExecutor.ResolveIsolationKind(profile));
         var environment = RuntimeJobExecutor.CreateRunEnvironment(profile, RunInstrumentation.None);
         Assert.Equal("/opt/wine-jsharp20", environment["WINEPREFIX"]);
         Assert.Equal("win64", environment["WINEARCH"]);
         Assert.Equal("-all", environment["WINEDEBUG"]);
         Assert.Equal(@"Z:\tmp", environment["SHARPLABNEXT_CAPTURE_DIRECTORY"]);
-        var exception = Assert.Throws<RuntimeJobFailureException>(() =>
-            RuntimeJobExecutor.ValidateCapability(profile, "jit-asm"));
+        var exception = Assert.Throws<RuntimeJobFailureException>(() => RuntimeJobExecutor.ValidateCapability(profile, "jit-asm"));
         Assert.Equal("runtime-capability-not-supported", exception.Code);
     }
 
@@ -765,27 +570,13 @@ public sealed class RuntimeSupervisorTests
 
         foreach (var architecture in new[] { "anycpu", "x86" })
         {
-            var substituted = manifest with
-            {
-                RuntimeRequirement = manifest.RuntimeRequirement with { Architecture = architecture }
-            };
-            var exception = Assert.Throws<RuntimeJobFailureException>(() =>
-                RuntimeJobExecutor.ValidateCompatibility(substituted, profile));
+            var substituted = manifest with { RuntimeRequirement = manifest.RuntimeRequirement with { Architecture = architecture } };
+            var exception = Assert.Throws<RuntimeJobFailureException>(() => RuntimeJobExecutor.ValidateCompatibility(substituted, profile));
             Assert.Equal("incompatible-jsharp20-contract", exception.Code);
         }
 
-        var net48Substitution = manifest with
-        {
-            ReferenceSetId = "netfx48-managed-ref",
-            TargetFramework = "net48",
-            RuntimeRequirement = manifest.RuntimeRequirement with
-            {
-                Frameworks = [new FrameworkRequirement(".NETFramework", "4.8")],
-                RequiredRuntimeFeatureTags = ["runtime.netfx48-wine"]
-            }
-        };
-        var net48Exception = Assert.Throws<RuntimeJobFailureException>(() =>
-            RuntimeJobExecutor.ValidateCompatibility(net48Substitution, profile));
+        var net48Substitution = manifest with { ReferenceSetId = "netfx48-managed-ref", TargetFramework = "net48", RuntimeRequirement = manifest.RuntimeRequirement with { Frameworks = [new FrameworkRequirement(".NETFramework", "4.8")], RequiredRuntimeFeatureTags = ["runtime.netfx48-wine"] } };
+        var net48Exception = Assert.Throws<RuntimeJobFailureException>(() => RuntimeJobExecutor.ValidateCompatibility(net48Substitution, profile));
         Assert.Equal("incompatible-jsharp20-contract", net48Exception.Code);
     }
 
@@ -793,28 +584,11 @@ public sealed class RuntimeSupervisorTests
     public void JSharpAndNetFx48RuntimeProfilesCannotSubstituteForEachOther()
     {
         var jsharpManifest = JSharpManifest();
-        var jsharpOnNet48 = Assert.Throws<RuntimeJobFailureException>(() =>
-            RuntimeJobExecutor.ValidateCompatibility(jsharpManifest, WineRuntimeProfile()));
+        var jsharpOnNet48 = Assert.Throws<RuntimeJobFailureException>(() => RuntimeJobExecutor.ValidateCompatibility(jsharpManifest, WineRuntimeProfile()));
         Assert.Equal("incompatible-jsharp20-contract", jsharpOnNet48.Code);
 
-        var net48Manifest = jsharpManifest with
-        {
-            Producer = jsharpManifest.Producer with
-            {
-                LanguageId = "csharp",
-                ToolchainId = "roslyn-stable-netfx48"
-            },
-            ReferenceSetId = "netfx48-managed-ref",
-            TargetFramework = "net48",
-            RuntimeRequirement = new ArtifactRuntimeRequirement(
-                "netfx-clr-wine",
-                [new FrameworkRequirement(".NETFramework", "4.8")],
-                "anycpu",
-                ["runtime.netfx48-wine"]),
-            EntryPoint = "Program.Main()"
-        };
-        var net48OnJSharp = Assert.Throws<RuntimeJobFailureException>(() =>
-            RuntimeJobExecutor.ValidateCompatibility(net48Manifest, JSharpWineRuntimeProfile()));
+        var net48Manifest = jsharpManifest with { Producer = jsharpManifest.Producer with { LanguageId = "csharp", ToolchainId = "roslyn-stable-netfx48" }, ReferenceSetId = "netfx48-managed-ref", TargetFramework = "net48", RuntimeRequirement = new ArtifactRuntimeRequirement("netfx-clr-wine", [new FrameworkRequirement(".NETFramework", "4.8")], "anycpu", ["runtime.netfx48-wine"]), EntryPoint = "Program.Main()" };
+        var net48OnJSharp = Assert.Throws<RuntimeJobFailureException>(() => RuntimeJobExecutor.ValidateCompatibility(net48Manifest, JSharpWineRuntimeProfile()));
         Assert.Equal("incompatible-jsharp20-contract", net48OnJSharp.Code);
     }
 
@@ -823,20 +597,7 @@ public sealed class RuntimeSupervisorTests
     {
         var profile = WineNetFx20RuntimeProfile();
         var jsharp = JSharpManifest();
-        var manifest = jsharp with
-        {
-            Producer = jsharp.Producer with
-            {
-                LanguageId = "csharp",
-                ToolchainId = "roslyn-stable-netfx20"
-            },
-            ReferenceSetId = "netfx20-managed-ref",
-            RuntimeRequirement = jsharp.RuntimeRequirement with
-            {
-                RequiredRuntimeFeatureTags = []
-            },
-            EntryPoint = "SharpLabNext.RuntimeCapabilityProbe.Program.Main"
-        };
+        var manifest = jsharp with { Producer = jsharp.Producer with { LanguageId = "csharp", ToolchainId = "roslyn-stable-netfx20" }, ReferenceSetId = "netfx20-managed-ref", RuntimeRequirement = jsharp.RuntimeRequirement with { RequiredRuntimeFeatureTags = [] }, EntryPoint = "SharpLabNext.RuntimeCapabilityProbe.Program.Main" };
 
         RuntimeJobExecutor.ValidateCompatibility(manifest, profile);
     }
@@ -848,8 +609,7 @@ public sealed class RuntimeSupervisorTests
     {
         var manifest = Manifest(metadata: null, derived: false) with { OutputKind = outputKind };
 
-        var exception = Assert.Throws<RuntimeJobFailureException>(() =>
-            RuntimeJobExecutor.ValidateCompatibility(manifest, Assert.Single(ValidOptions().Profiles)));
+        var exception = Assert.Throws<RuntimeJobFailureException>(() => RuntimeJobExecutor.ValidateCompatibility(manifest, Assert.Single(ValidOptions().Profiles)));
 
         Assert.Equal("incompatible-artifact", exception.Code);
         Assert.Equal(WorkerErrorCategory.IncompatibleArtifact, exception.Category);
@@ -862,41 +622,18 @@ public sealed class RuntimeSupervisorTests
         profile.AcceptedRuntimeFamilies = ["coreclr", "coreclr-compatible"];
         profile.AcceptedFrameworks =
         [
-            new RuntimeFrameworkCompatibilityDefinition
-            {
-                Name = "Microsoft.NETCore.App",
-                MinimumVersion = "9.0.0",
-                MaximumVersion = "10.0.9"
-            }
+            new RuntimeFrameworkCompatibilityDefinition { Name = "Microsoft.NETCore.App", MinimumVersion = "9.0.0", MaximumVersion = "10.0.9" }
         ];
-        var manifest = Manifest(metadata: null, derived: false) with
-        {
-            RuntimeRequirement = new ArtifactRuntimeRequirement(
-                "coreclr-compatible",
-                [new FrameworkRequirement("Microsoft.NETCore.App", "10.0.0")],
-                "anycpu",
-                [])
-        };
+        var manifest = Manifest(metadata: null, derived: false) with { RuntimeRequirement = new ArtifactRuntimeRequirement("coreclr-compatible", [new FrameworkRequirement("Microsoft.NETCore.App", "10.0.0")], "anycpu", []) };
 
         RuntimeJobExecutor.ValidateCompatibility(manifest, profile);
 
-        var wrongVersion = manifest with
-        {
-            RuntimeRequirement = manifest.RuntimeRequirement with
-            {
-                Frameworks = [new FrameworkRequirement("Microsoft.NETCore.App", "11.0.0")]
-            }
-        };
-        var frameworkException = Assert.Throws<RuntimeJobFailureException>(() =>
-            RuntimeJobExecutor.ValidateCompatibility(wrongVersion, profile));
+        var wrongVersion = manifest with { RuntimeRequirement = manifest.RuntimeRequirement with { Frameworks = [new FrameworkRequirement("Microsoft.NETCore.App", "11.0.0")] } };
+        var frameworkException = Assert.Throws<RuntimeJobFailureException>(() => RuntimeJobExecutor.ValidateCompatibility(wrongVersion, profile));
         Assert.Equal("incompatible-framework", frameworkException.Code);
 
-        var wrongFamily = manifest with
-        {
-            RuntimeRequirement = manifest.RuntimeRequirement with { Family = "netfx-clr-wine" }
-        };
-        var familyException = Assert.Throws<RuntimeJobFailureException>(() =>
-            RuntimeJobExecutor.ValidateCompatibility(wrongFamily, profile));
+        var wrongFamily = manifest with { RuntimeRequirement = manifest.RuntimeRequirement with { Family = "netfx-clr-wine" } };
+        var familyException = Assert.Throws<RuntimeJobFailureException>(() => RuntimeJobExecutor.ValidateCompatibility(wrongFamily, profile));
         Assert.Equal("incompatible-artifact", familyException.Code);
     }
 
@@ -904,30 +641,12 @@ public sealed class RuntimeSupervisorTests
     public void CoreClrRuntimeCanLoadOlderButNotNewerTargetFrameworkArtifacts()
     {
         var profile = Assert.Single(ValidOptions().Profiles);
-        var manifest = Manifest(metadata: null, derived: false) with
-        {
-            ReferenceSetId = "net5-ref",
-            TargetFramework = "net5.0",
-            RuntimeRequirement = new ArtifactRuntimeRequirement(
-                "coreclr",
-                [new FrameworkRequirement("Microsoft.NETCore.App", "5.0.0")],
-                "anycpu",
-                [])
-        };
+        var manifest = Manifest(metadata: null, derived: false) with { ReferenceSetId = "net5-ref", TargetFramework = "net5.0", RuntimeRequirement = new ArtifactRuntimeRequirement("coreclr", [new FrameworkRequirement("Microsoft.NETCore.App", "5.0.0")], "anycpu", []) };
 
         RuntimeJobExecutor.ValidateCompatibility(manifest, profile);
 
-        var newer = manifest with
-        {
-            ReferenceSetId = "net11-preview-ref",
-            TargetFramework = "net11.0",
-            RuntimeRequirement = manifest.RuntimeRequirement with
-            {
-                Frameworks = [new FrameworkRequirement("Microsoft.NETCore.App", "11.0.0")]
-            }
-        };
-        var exception = Assert.Throws<RuntimeJobFailureException>(() =>
-            RuntimeJobExecutor.ValidateCompatibility(newer, profile));
+        var newer = manifest with { ReferenceSetId = "net11-preview-ref", TargetFramework = "net11.0", RuntimeRequirement = manifest.RuntimeRequirement with { Frameworks = [new FrameworkRequirement("Microsoft.NETCore.App", "11.0.0")] } };
+        var exception = Assert.Throws<RuntimeJobFailureException>(() => RuntimeJobExecutor.ValidateCompatibility(newer, profile));
         Assert.Equal("incompatible-framework", exception.Code);
     }
 
@@ -944,60 +663,36 @@ public sealed class RuntimeSupervisorTests
         };
         using var docker = CreateDockerClient(handler);
 
-        await using var monitor = await docker.StartContainerResourceMonitorAsync(
-            RecordingDockerHandler.ContainerId,
-            TestContext.Current.CancellationToken);
+        await using var monitor = await docker.StartContainerResourceMonitorAsync(RecordingDockerHandler.ContainerId, TestContext.Current.CancellationToken);
         var usage = await monitor.StopAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(3, usage.SampleCount);
         Assert.Equal(24576, usage.PeakMemoryBytes);
-        Assert.Contains(
-            handler.Requests,
-            request => request.Method == HttpMethod.Get &&
-                       request.Path ==
-                       $"/v1.47/containers/{RecordingDockerHandler.ContainerId}/stats?stream=true&one-shot=false");
+        Assert.Contains(handler.Requests, request => request.Method == HttpMethod.Get && request.Path == $"/v1.47/containers/{RecordingDockerHandler.ContainerId}/stats?stream=true&one-shot=false");
     }
 
     [Fact]
     public async Task RuntimeContainerResourceMonitorUsesOneShotSampleWhenStreamEndsBeforeFirstObservation()
     {
-        using var handler = new RecordingDockerHandler
-        {
-            StatsPayload = string.Empty,
-            StatsOneShotPayload = "{\"memory_stats\":{\"usage\":32768,\"max_usage\":65536}}"
-        };
+        using var handler = new RecordingDockerHandler { StatsPayload = string.Empty, StatsOneShotPayload = "{\"memory_stats\":{\"usage\":32768,\"max_usage\":65536}}" };
         using var docker = CreateDockerClient(handler);
 
-        await using var monitor = await docker.StartContainerResourceMonitorAsync(
-            RecordingDockerHandler.ContainerId,
-            TestContext.Current.CancellationToken);
+        await using var monitor = await docker.StartContainerResourceMonitorAsync(RecordingDockerHandler.ContainerId, TestContext.Current.CancellationToken);
         var usage = await monitor.StopAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(1, usage.SampleCount);
         Assert.Equal(65536, usage.PeakMemoryBytes);
-        Assert.Contains(
-            handler.Requests,
-            request => request.Method == HttpMethod.Get &&
-                       request.Path ==
-                       $"/v1.47/containers/{RecordingDockerHandler.ContainerId}/stats?stream=false&one-shot=true");
+        Assert.Contains(handler.Requests, request => request.Method == HttpMethod.Get && request.Path == $"/v1.47/containers/{RecordingDockerHandler.ContainerId}/stats?stream=false&one-shot=true");
     }
 
     [Fact]
     public async Task RuntimeContainerResourceMonitorReportsOversizedFirstSampleWithoutCancellation()
     {
-        using var handler = new RecordingDockerHandler
-        {
-            StatsPayload = new string('x', (1024 * 1024) + 1)
-        };
+        using var handler = new RecordingDockerHandler { StatsPayload = new string('x', (1024 * 1024) + 1) };
         using var docker = CreateDockerClient(handler);
-        await using var monitor = await docker.StartContainerResourceMonitorAsync(
-            RecordingDockerHandler.ContainerId,
-            TestContext.Current.CancellationToken);
+        await using var monitor = await docker.StartContainerResourceMonitorAsync(RecordingDockerHandler.ContainerId, TestContext.Current.CancellationToken);
 
-        var exception = await Assert.ThrowsAsync<DockerEngineException>(() =>
-            monitor.WaitForFirstSampleAsync(CancellationToken.None).WaitAsync(
-                TimeSpan.FromSeconds(5),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<DockerEngineException>(() => monitor.WaitForFirstSampleAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
 
         Assert.Contains("oversized container-stats sample", exception.Message, StringComparison.Ordinal);
     }
@@ -1005,23 +700,13 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimeContainerResourceMonitorRejectsNaturalEndBeforeCheckpointSample()
     {
-        using var handler = new RecordingDockerHandler
-        {
-            StatsPayload = "{\"memory_stats\":{\"usage\":4096,\"max_usage\":8192}}"
-        };
+        using var handler = new RecordingDockerHandler { StatsPayload = "{\"memory_stats\":{\"usage\":4096,\"max_usage\":8192}}" };
         using var docker = CreateDockerClient(handler);
-        await using var monitor = await docker.StartContainerResourceMonitorAsync(
-            RecordingDockerHandler.ContainerId,
-            TestContext.Current.CancellationToken);
+        await using var monitor = await docker.StartContainerResourceMonitorAsync(RecordingDockerHandler.ContainerId, TestContext.Current.CancellationToken);
         await monitor.WaitForFirstSampleAsync(TestContext.Current.CancellationToken);
         var checkpoint = monitor.SampleCount;
 
-        var exception = await Assert.ThrowsAsync<DockerEngineException>(() =>
-            monitor.WaitForSampleAfterAsync(
-                checkpoint,
-                TestContext.Current.CancellationToken).WaitAsync(
-                    TimeSpan.FromSeconds(5),
-                    TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<DockerEngineException>(() => monitor.WaitForSampleAfterAsync(checkpoint, TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
 
         Assert.Contains("container-stats", exception.Message, StringComparison.Ordinal);
         Assert.Contains("ended before", exception.Message, StringComparison.Ordinal);
@@ -1047,9 +732,7 @@ public sealed class RuntimeSupervisorTests
         };
         using var docker = CreateDockerClient(handler);
 
-        var inspection = await docker.InspectImageAsync(
-            reference,
-            TestContext.Current.CancellationToken);
+        var inspection = await docker.InspectImageAsync(reference, TestContext.Current.CancellationToken);
 
         Assert.Equal(reference, inspection.ImmutableReference);
         Assert.Equal($"sha256:{new string('c', 64)}", inspection.ImageId);
@@ -1057,26 +740,20 @@ public sealed class RuntimeSupervisorTests
         Assert.Equal("linux", inspection.OperatingSystem);
         Assert.Equal("amd64", inspection.Architecture);
         Assert.Contains(reference, inspection.RepoDigests);
-        await Assert.ThrowsAsync<ArgumentException>(() => docker.InspectImageAsync(
-            "sharplabnext/runtime:mutable",
-            TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ArgumentException>(() => docker.InspectImageAsync("sharplabnext/runtime:mutable", TestContext.Current.CancellationToken));
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("{not-json}")]
     [InlineData("{\"memory_stats\":{\"usage\":0,\"max_usage\":0}}")]
-    public async Task RuntimeContainerResourceMonitorRejectsMissingOrMalformedMemoryEvidence(
-        string statsPayload)
+    public async Task RuntimeContainerResourceMonitorRejectsMissingOrMalformedMemoryEvidence(string statsPayload)
     {
         using var handler = new RecordingDockerHandler { StatsPayload = statsPayload };
         using var docker = CreateDockerClient(handler);
-        await using var monitor = await docker.StartContainerResourceMonitorAsync(
-            RecordingDockerHandler.ContainerId,
-            TestContext.Current.CancellationToken);
+        await using var monitor = await docker.StartContainerResourceMonitorAsync(RecordingDockerHandler.ContainerId, TestContext.Current.CancellationToken);
 
-        await Assert.ThrowsAsync<DockerEngineException>(() =>
-            monitor.StopAsync(TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<DockerEngineException>(() => monitor.StopAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -1097,9 +774,7 @@ public sealed class RuntimeSupervisorTests
         };
         using var docker = CreateDockerClient(handler);
 
-        await Assert.ThrowsAsync<DockerEngineException>(() => docker.InspectImageAsync(
-            reference,
-            TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<DockerEngineException>(() => docker.InspectImageAsync(reference, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -1109,16 +784,8 @@ public sealed class RuntimeSupervisorTests
         using (var writer = new TarWriter(archive, leaveOpen: true))
         {
             var directories = new HashSet<string>(StringComparer.Ordinal);
-            RuntimeJobExecutor.WriteArchiveEntry(
-                writer,
-                directories,
-                ".sharplabnext/stdin.txt",
-                new MemoryStream("first"u8.ToArray(), writable: false));
-            RuntimeJobExecutor.WriteArchiveEntry(
-                writer,
-                directories,
-                ".sharplabnext/ready",
-                new MemoryStream("ready\n"u8.ToArray(), writable: false));
+            RuntimeJobExecutor.WriteArchiveEntry(writer, directories, ".sharplabnext/stdin.txt", new MemoryStream("first"u8.ToArray(), writable: false));
+            RuntimeJobExecutor.WriteArchiveEntry(writer, directories, ".sharplabnext/ready", new MemoryStream("ready\n"u8.ToArray(), writable: false));
         }
 
         archive.Position = 0;
@@ -1135,9 +802,7 @@ public sealed class RuntimeSupervisorTests
                 Assert.Equal(TarEntryType.Directory, directory.EntryType);
                 Assert.Equal(1654, directory.Uid);
                 Assert.Equal(1654, directory.Gid);
-                Assert.Equal(
-                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute,
-                    directory.Mode);
+                Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, directory.Mode);
             },
             stdin => Assert.Equal(".sharplabnext/stdin.txt", stdin.Name),
             ready => Assert.Equal(".sharplabnext/ready", ready.Name));
@@ -1149,13 +814,7 @@ public sealed class RuntimeSupervisorTests
         using var archive = new MemoryStream();
         using (var writer = new TarWriter(archive, leaveOpen: true))
         {
-            RuntimeJobExecutor.WriteArchiveEntry(
-                writer,
-                new HashSet<string>(StringComparer.Ordinal),
-                ".sharplabnext/ready",
-                new MemoryStream("ready\n"u8.ToArray(), writable: false),
-                uid: 0,
-                gid: 0);
+            RuntimeJobExecutor.WriteArchiveEntry(writer, new HashSet<string>(StringComparer.Ordinal), ".sharplabnext/ready", new MemoryStream("ready\n"u8.ToArray(), writable: false), uid: 0, gid: 0);
         }
 
         archive.Position = 0;
@@ -1185,16 +844,7 @@ public sealed class RuntimeSupervisorTests
         using var docker = CreateDockerClient(handler);
         await using var archive = new MemoryStream("tar payload"u8.ToArray());
 
-        var materialization = await docker.MaterializeWorkspaceAsync(
-            "operation-1",
-            "release-1",
-            "runtime-image:test",
-            archive,
-            new RuntimeSecurityPolicyOptions(),
-            RuntimeContainerIsolationKind.Standard,
-            "com.sharplabnext.runtime-job",
-            "candidate-scope-1",
-            cancellationToken: TestContext.Current.CancellationToken);
+        var materialization = await docker.MaterializeWorkspaceAsync("operation-1", "release-1", "runtime-image:test", archive, new RuntimeSecurityPolicyOptions(), RuntimeContainerIsolationKind.Standard, "com.sharplabnext.runtime-job", "candidate-scope-1", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(RecordingDockerHandler.ContainerId, materialization.MaterializerContainerId);
         Assert.Null(materialization.MeasurementVolumeName);
@@ -1222,10 +872,7 @@ public sealed class RuntimeSupervisorTests
                     "trap 'rm -rf -- /workspace/* /workspace/.[!.]* /workspace/..?*; exit $?' TERM INT",
                     body.RootElement.GetProperty("Cmd")[1].GetString(),
                     StringComparison.Ordinal);
-                Assert.Contains(
-                    "while :; do sleep 2147483647 & wait $!; done",
-                    body.RootElement.GetProperty("Cmd")[1].GetString(),
-                    StringComparison.Ordinal);
+                Assert.Contains("while :; do sleep 2147483647 & wait $!; done", body.RootElement.GetProperty("Cmd")[1].GetString(), StringComparison.Ordinal);
                 var hostConfig = body.RootElement.GetProperty("HostConfig");
                 Assert.False(hostConfig.TryGetProperty("Init", out _));
                 Assert.Equal("none", hostConfig.GetProperty("LogConfig").GetProperty("Type").GetString());
@@ -1236,16 +883,12 @@ public sealed class RuntimeSupervisorTests
             request =>
             {
                 Assert.Equal(HttpMethod.Post, request.Method);
-                Assert.Equal(
-                    $"/v1.47/containers/{RecordingDockerHandler.ContainerId}/start",
-                    request.Path);
+                Assert.Equal($"/v1.47/containers/{RecordingDockerHandler.ContainerId}/start", request.Path);
             },
             request =>
             {
                 Assert.Equal(HttpMethod.Put, request.Method);
-                Assert.Equal(
-                    $"/v1.47/containers/{RecordingDockerHandler.ContainerId}/archive?path=%2Fworkspace",
-                    request.Path);
+                Assert.Equal($"/v1.47/containers/{RecordingDockerHandler.ContainerId}/archive?path=%2Fworkspace", request.Path);
                 Assert.Equal("application/x-tar", request.ContentType);
                 Assert.Equal("tar payload", request.Body);
             });
@@ -1258,66 +901,29 @@ public sealed class RuntimeSupervisorTests
         using var docker = CreateDockerClient(handler);
         await using var archive = new MemoryStream("tar payload"u8.ToArray());
 
-        var materialization = await docker.MaterializeWorkspaceAsync(
-            "operation-1",
-            "release-1",
-            "runtime-image:test",
-            archive,
-            new RuntimeSecurityPolicyOptions(),
-            RuntimeContainerIsolationKind.Standard,
-            "com.sharplabnext.runtime-job",
-            "candidate-scope-1",
-            createMeasurementControl: true,
-            cancellationToken: TestContext.Current.CancellationToken);
+        var materialization = await docker.MaterializeWorkspaceAsync("operation-1", "release-1", "runtime-image:test", archive, new RuntimeSecurityPolicyOptions(), RuntimeContainerIsolationKind.Standard, "com.sharplabnext.runtime-job", "candidate-scope-1", createMeasurementControl: true, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.NotNull(materialization.MeasurementVolumeName);
         Assert.NotEqual(materialization.VolumeName, materialization.MeasurementVolumeName);
-        var volumeRequests = handler.Requests
-            .Where(static request => request.Method == HttpMethod.Post &&
-                                     request.Path == "/v1.47/volumes/create")
-            .ToArray();
+        var volumeRequests = handler.Requests.Where(static request => request.Method == HttpMethod.Post && request.Path == "/v1.47/volumes/create").ToArray();
         Assert.Equal(2, volumeRequests.Length);
         using var workspaceVolume = JsonDocument.Parse(volumeRequests[0].Body!);
         using var measurementVolume = JsonDocument.Parse(volumeRequests[1].Body!);
-        Assert.Equal(
-            materialization.VolumeName,
-            workspaceVolume.RootElement.GetProperty("Name").GetString());
-        Assert.Equal(
-            materialization.MeasurementVolumeName,
-            measurementVolume.RootElement.GetProperty("Name").GetString());
-        Assert.Equal(
-            "noexec,nosuid,nodev,size=65536,uid=1654,gid=1654,mode=0700",
-            measurementVolume.RootElement
-                .GetProperty("DriverOpts")
-                .GetProperty("o")
-                .GetString());
+        Assert.Equal(materialization.VolumeName, workspaceVolume.RootElement.GetProperty("Name").GetString());
+        Assert.Equal(materialization.MeasurementVolumeName, measurementVolume.RootElement.GetProperty("Name").GetString());
+        Assert.Equal("noexec,nosuid,nodev,size=65536,uid=1654,gid=1654,mode=0700", measurementVolume.RootElement.GetProperty("DriverOpts").GetProperty("o").GetString());
         var measurementLabels = measurementVolume.RootElement.GetProperty("Labels");
-        Assert.Equal(
-            "workspace",
-            measurementLabels.GetProperty("com.sharplabnext.runtime-job").GetString());
-        Assert.Equal(
-            "true",
-            measurementLabels.GetProperty("com.sharplabnext.measurement-control").GetString());
+        Assert.Equal("workspace", measurementLabels.GetProperty("com.sharplabnext.runtime-job").GetString());
+        Assert.Equal("true", measurementLabels.GetProperty("com.sharplabnext.measurement-control").GetString());
 
-        var createRequest = Assert.Single(
-            handler.Requests,
-            static request => request.Method == HttpMethod.Post &&
-                              request.Path.StartsWith(
-                                  "/v1.47/containers/create?name=sln-materialize-",
-                                  StringComparison.Ordinal));
+        var createRequest = Assert.Single(handler.Requests, static request => request.Method == HttpMethod.Post && request.Path.StartsWith("/v1.47/containers/create?name=sln-materialize-", StringComparison.Ordinal));
         using var materializer = JsonDocument.Parse(createRequest.Body!);
-        var mounts = materializer.RootElement
-            .GetProperty("HostConfig")
-            .GetProperty("Mounts")
-            .EnumerateArray()
-            .ToArray();
+        var mounts = materializer.RootElement.GetProperty("HostConfig").GetProperty("Mounts").EnumerateArray().ToArray();
         var workspace = Assert.Single(mounts);
         Assert.Equal(materialization.VolumeName, workspace.GetProperty("Source").GetString());
         Assert.Equal("/workspace", workspace.GetProperty("Target").GetString());
         Assert.False(workspace.GetProperty("ReadOnly").GetBoolean());
-        Assert.DoesNotContain(
-            mounts,
-            static mount => mount.GetProperty("Target").GetString() == "/measurement");
+        Assert.DoesNotContain(mounts, static mount => mount.GetProperty("Target").GetString() == "/measurement");
     }
 
     [Fact]
@@ -1327,30 +933,16 @@ public sealed class RuntimeSupervisorTests
         using var docker = CreateDockerClient(handler);
         await using var archive = new MemoryStream("tar payload"u8.ToArray());
 
-        await docker.MaterializeWorkspaceAsync(
-            "operation-1",
-            "release-1",
-            "runtime-image:test",
-            archive,
-            new RuntimeSecurityPolicyOptions(),
-            RuntimeContainerIsolationKind.WineRoot,
-            "com.sharplabnext.runtime-job",
-            "candidate-scope-1",
-            cancellationToken: TestContext.Current.CancellationToken);
+        await docker.MaterializeWorkspaceAsync("operation-1", "release-1", "runtime-image:test", archive, new RuntimeSecurityPolicyOptions(), RuntimeContainerIsolationKind.WineRoot, "com.sharplabnext.runtime-job", "candidate-scope-1", cancellationToken: TestContext.Current.CancellationToken);
 
         using var volume = JsonDocument.Parse(handler.Requests[0].Body!);
-        Assert.Contains(
-            "uid=0,gid=0,mode=0700",
-            volume.RootElement.GetProperty("DriverOpts").GetProperty("o").GetString(),
-            StringComparison.Ordinal);
+        Assert.Contains("uid=0,gid=0,mode=0700", volume.RootElement.GetProperty("DriverOpts").GetProperty("o").GetString(), StringComparison.Ordinal);
         using var materializer = JsonDocument.Parse(handler.Requests[1].Body!);
         Assert.Equal("0:0", materializer.RootElement.GetProperty("User").GetString());
         var host = materializer.RootElement.GetProperty("HostConfig");
         Assert.True(host.GetProperty("ReadonlyRootfs").GetBoolean());
         Assert.Equal("ALL", Assert.Single(host.GetProperty("CapDrop").EnumerateArray()).GetString());
-        Assert.Contains(
-            host.GetProperty("SecurityOpt").EnumerateArray(),
-            static value => value.GetString() == "no-new-privileges:true");
+        Assert.Contains(host.GetProperty("SecurityOpt").EnumerateArray(), static value => value.GetString() == "no-new-privileges:true");
     }
 
     [Fact]
@@ -1360,22 +952,10 @@ public sealed class RuntimeSupervisorTests
         using var docker = CreateDockerClient(handler);
         await using var archive = new MemoryStream("tar payload"u8.ToArray());
 
-        await docker.MaterializeWorkspaceAsync(
-            "operation-1",
-            "release-1",
-            "runtime-image:test",
-            archive,
-            new RuntimeSecurityPolicyOptions(),
-            RuntimeContainerIsolationKind.WineNonRoot,
-            "com.sharplabnext.runtime-job",
-            "candidate-scope-1",
-            cancellationToken: TestContext.Current.CancellationToken);
+        await docker.MaterializeWorkspaceAsync("operation-1", "release-1", "runtime-image:test", archive, new RuntimeSecurityPolicyOptions(), RuntimeContainerIsolationKind.WineNonRoot, "com.sharplabnext.runtime-job", "candidate-scope-1", cancellationToken: TestContext.Current.CancellationToken);
 
         using var volume = JsonDocument.Parse(handler.Requests[0].Body!);
-        Assert.Contains(
-            "uid=1654,gid=1654,mode=0700",
-            volume.RootElement.GetProperty("DriverOpts").GetProperty("o").GetString(),
-            StringComparison.Ordinal);
+        Assert.Contains("uid=1654,gid=1654,mode=0700", volume.RootElement.GetProperty("DriverOpts").GetProperty("o").GetString(), StringComparison.Ordinal);
         using var materializer = JsonDocument.Parse(handler.Requests[1].Body!);
         Assert.Equal("1654:1654", materializer.RootElement.GetProperty("User").GetString());
     }
@@ -1386,70 +966,41 @@ public sealed class RuntimeSupervisorTests
         using var handler = new RecordingDockerHandler();
         using var docker = CreateDockerClient(handler);
 
-        await docker.StopContainerAsync(
-            RecordingDockerHandler.ContainerId,
-            TimeSpan.FromSeconds(2),
-            TestContext.Current.CancellationToken);
+        await docker.StopContainerAsync(RecordingDockerHandler.ContainerId, TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         var request = Assert.Single(handler.Requests);
         Assert.Equal(HttpMethod.Post, request.Method);
-        Assert.Equal(
-            $"/v1.47/containers/{RecordingDockerHandler.ContainerId}/stop?t=2",
-            request.Path);
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
-            docker.StopContainerAsync(
-                RecordingDockerHandler.ContainerId,
-                TimeSpan.FromSeconds(11),
-                TestContext.Current.CancellationToken));
+        Assert.Equal($"/v1.47/containers/{RecordingDockerHandler.ContainerId}/stop?t=2", request.Path);
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => docker.StopContainerAsync(RecordingDockerHandler.ContainerId, TimeSpan.FromSeconds(11), TestContext.Current.CancellationToken));
     }
 
     [Theory]
     [InlineData(HttpStatusCode.NotFound)]
     [InlineData(HttpStatusCode.NotModified)]
-    public async Task WorkspaceMaterializerStopFailsClosedWhenKeeperIsMissingOrAlreadyStopped(
-        HttpStatusCode statusCode)
+    public async Task WorkspaceMaterializerStopFailsClosedWhenKeeperIsMissingOrAlreadyStopped(HttpStatusCode statusCode)
     {
-        using var handler = new RecordingDockerHandler
-        {
-            StopStatusCode = statusCode
-        };
+        using var handler = new RecordingDockerHandler { StopStatusCode = statusCode };
         using var docker = CreateDockerClient(handler);
 
-        await Assert.ThrowsAsync<DockerEngineException>(() =>
-            docker.StopContainerAsync(
-                RecordingDockerHandler.ContainerId,
-                TimeSpan.FromSeconds(2),
-                TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<DockerEngineException>(() => docker.StopContainerAsync(RecordingDockerHandler.ContainerId, TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task ArchiveUploadFailureLeavesCallerOwnedStreamOpenForRetry()
     {
-        using var handler = new RecordingDockerHandler
-        {
-            ArchiveStatusCode = HttpStatusCode.BadGateway
-        };
+        using var handler = new RecordingDockerHandler { ArchiveStatusCode = HttpStatusCode.BadGateway };
         using var docker = CreateDockerClient(handler);
         await using var archive = new MemoryStream("retryable tar payload"u8.ToArray());
 
-        await Assert.ThrowsAsync<DockerEngineException>(() => docker.UploadArchiveAsync(
-            RecordingDockerHandler.ContainerId,
-            archive,
-            cancellationToken: TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<DockerEngineException>(() => docker.UploadArchiveAsync(RecordingDockerHandler.ContainerId, archive, cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.True(archive.CanRead);
         Assert.True(archive.CanSeek);
         archive.Position = 0;
         handler.ArchiveStatusCode = HttpStatusCode.OK;
-        await docker.UploadArchiveAsync(
-            RecordingDockerHandler.ContainerId,
-            archive,
-            destinationPath: "/measurement",
-            cancellationToken: TestContext.Current.CancellationToken);
+        await docker.UploadArchiveAsync(RecordingDockerHandler.ContainerId, archive, destinationPath: "/measurement", cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(
-            ["retryable tar payload", "retryable tar payload"],
-            handler.Requests.Select(static request => request.Body));
+        Assert.Equal(["retryable tar payload", "retryable tar payload"], handler.Requests.Select(static request => request.Body));
         Assert.Equal(
             [
                 $"/v1.47/containers/{RecordingDockerHandler.ContainerId}/archive?path=%2Fworkspace",
@@ -1461,18 +1012,13 @@ public sealed class RuntimeSupervisorTests
     [Theory]
     [InlineData("/tmp")]
     [InlineData("/etc")]
-    public async Task ArchiveUploadRejectsDestinationsOutsideReviewedWritableMounts(
-        string destinationPath)
+    public async Task ArchiveUploadRejectsDestinationsOutsideReviewedWritableMounts(string destinationPath)
     {
         using var handler = new RecordingDockerHandler();
         using var docker = CreateDockerClient(handler);
         await using var archive = new MemoryStream("signal"u8.ToArray());
 
-        await Assert.ThrowsAsync<ArgumentException>(() => docker.UploadArchiveAsync(
-            RecordingDockerHandler.ContainerId,
-            archive,
-            destinationPath,
-            cancellationToken: TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ArgumentException>(() => docker.UploadArchiveAsync(RecordingDockerHandler.ContainerId, archive, destinationPath, cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.Empty(handler.Requests);
     }
@@ -1480,25 +1026,14 @@ public sealed class RuntimeSupervisorTests
     [Theory]
     [InlineData("cgroup-v1")]
     [InlineData("cgroup-v2")]
-    public async Task RuntimeMeasurementPollsAndAcceptsOneCanonicalSidecarCompletion(
-        string cgroupKind)
+    public async Task RuntimeMeasurementPollsAndAcceptsOneCanonicalSidecarCompletion(string cgroupKind)
     {
         using var handler = new RecordingDockerHandler();
         handler.ArchiveReadResponses.Enqueue(new HttpResponseMessage(HttpStatusCode.NotFound));
-        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(
-            CreateRuntimeMeasurementArchive(
-                $"completion-{RuntimeMeasurementToken}",
-                CreateRuntimeMeasurementPayload(
-                    "sharplabnext-runtime-measurement-sidecar-v1",
-                    cgroupKind,
-                    peakMemoryBytes: "8192"))));
+        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(CreateRuntimeMeasurementArchive($"completion-{RuntimeMeasurementToken}", CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-sidecar-v1", cgroupKind, peakMemoryBytes: "8192"))));
         using var docker = CreateDockerClient(handler);
 
-        var measurement = await docker.WaitForRuntimeMeasurementAsync(
-            RuntimeMeasurementSidecarId,
-            RuntimeMeasurementToken,
-            RuntimeTargetContainerId,
-            TestContext.Current.CancellationToken);
+        var measurement = await docker.WaitForRuntimeMeasurementAsync(RuntimeMeasurementSidecarId, RuntimeMeasurementToken, RuntimeTargetContainerId, TestContext.Current.CancellationToken);
 
         Assert.Equal(cgroupKind, measurement.CgroupKind);
         Assert.Equal(8192, measurement.PeakMemoryBytes);
@@ -1508,10 +1043,7 @@ public sealed class RuntimeSupervisorTests
             request =>
             {
                 Assert.Equal(HttpMethod.Get, request.Method);
-                Assert.Equal(
-                    $"/v1.47/containers/{RuntimeMeasurementSidecarId}/archive?" +
-                    $"path=%2Fmeasurement%2Fcompletion-{RuntimeMeasurementToken}",
-                    request.Path);
+                Assert.Equal($"/v1.47/containers/{RuntimeMeasurementSidecarId}/archive?" + $"path=%2Fmeasurement%2Fcompletion-{RuntimeMeasurementToken}", request.Path);
             });
     }
 
@@ -1519,25 +1051,13 @@ public sealed class RuntimeSupervisorTests
     public async Task RuntimeMeasurementAcceptsCanonicalArmedRecordBoundToTarget()
     {
         using var handler = new RecordingDockerHandler();
-        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(
-            CreateRuntimeMeasurementArchive(
-                $"armed-{RuntimeMeasurementToken}",
-                CreateRuntimeMeasurementPayload(
-                    "sharplabnext-runtime-measurement-sidecar-armed-v1",
-                    "cgroup-v2"))));
+        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(CreateRuntimeMeasurementArchive($"armed-{RuntimeMeasurementToken}", CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-sidecar-armed-v1", "cgroup-v2"))));
         using var docker = CreateDockerClient(handler);
 
-        await docker.WaitForRuntimeMeasurementArmedAsync(
-            RuntimeMeasurementSidecarId,
-            RuntimeMeasurementToken,
-            RuntimeTargetContainerId,
-            TestContext.Current.CancellationToken);
+        await docker.WaitForRuntimeMeasurementArmedAsync(RuntimeMeasurementSidecarId, RuntimeMeasurementToken, RuntimeTargetContainerId, TestContext.Current.CancellationToken);
 
         var request = Assert.Single(handler.Requests);
-        Assert.Equal(
-            $"/v1.47/containers/{RuntimeMeasurementSidecarId}/archive?" +
-            $"path=%2Fmeasurement%2Farmed-{RuntimeMeasurementToken}",
-            request.Path);
+        Assert.Equal($"/v1.47/containers/{RuntimeMeasurementSidecarId}/archive?" + $"path=%2Fmeasurement%2Farmed-{RuntimeMeasurementToken}", request.Path);
     }
 
     [Theory]
@@ -1548,18 +1068,10 @@ public sealed class RuntimeSupervisorTests
     public async Task RuntimeMeasurementRejectsMalformedArmedRecord(string scenario)
     {
         using var handler = new RecordingDockerHandler();
-        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(
-            CreateRuntimeMeasurementArchive(
-                $"armed-{RuntimeMeasurementToken}",
-                CreateInvalidRuntimeMeasurementArmedPayload(scenario))));
+        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(CreateRuntimeMeasurementArchive($"armed-{RuntimeMeasurementToken}", CreateInvalidRuntimeMeasurementArmedPayload(scenario))));
         using var docker = CreateDockerClient(handler);
 
-        await Assert.ThrowsAsync<DockerEngineException>(() =>
-            docker.WaitForRuntimeMeasurementArmedAsync(
-                RuntimeMeasurementSidecarId,
-                RuntimeMeasurementToken,
-                RuntimeTargetContainerId,
-                TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<DockerEngineException>(() => docker.WaitForRuntimeMeasurementArmedAsync(RuntimeMeasurementSidecarId, RuntimeMeasurementToken, RuntimeTargetContainerId, TestContext.Current.CancellationToken));
     }
 
     [Theory]
@@ -1573,27 +1085,13 @@ public sealed class RuntimeSupervisorTests
     [InlineData("wrong-mode", "one canonical regular measurement file")]
     [InlineData("empty", "one canonical regular measurement file")]
     [InlineData("oversized", "one canonical regular measurement file")]
-    public async Task RuntimeMeasurementRejectsNoncanonicalArchiveShape(
-        string scenario,
-        string expectedMessage)
+    public async Task RuntimeMeasurementRejectsNoncanonicalArchiveShape(string scenario, string expectedMessage)
     {
         using var handler = new RecordingDockerHandler();
-        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(
-            CreateRuntimeMeasurementArchive(
-                $"completion-{RuntimeMeasurementToken}",
-                CreateRuntimeMeasurementPayload(
-                    "sharplabnext-runtime-measurement-sidecar-v1",
-                    "cgroup-v2",
-                    peakMemoryBytes: "8192"),
-                scenario)));
+        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(CreateRuntimeMeasurementArchive($"completion-{RuntimeMeasurementToken}", CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-sidecar-v1", "cgroup-v2", peakMemoryBytes: "8192"), scenario)));
         using var docker = CreateDockerClient(handler);
 
-        var exception = await Assert.ThrowsAsync<DockerEngineException>(() =>
-            docker.WaitForRuntimeMeasurementAsync(
-                RuntimeMeasurementSidecarId,
-                RuntimeMeasurementToken,
-                RuntimeTargetContainerId,
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<DockerEngineException>(() => docker.WaitForRuntimeMeasurementAsync(RuntimeMeasurementSidecarId, RuntimeMeasurementToken, RuntimeTargetContainerId, TestContext.Current.CancellationToken));
 
         Assert.Contains(expectedMessage, exception.Message, StringComparison.Ordinal);
     }
@@ -1610,23 +1108,13 @@ public sealed class RuntimeSupervisorTests
     [InlineData("missing-final-lf", "malformed or noncanonical")]
     [InlineData("extra-line", "malformed or noncanonical")]
     [InlineData("non-ascii", "not canonical ASCII")]
-    public async Task RuntimeMeasurementRejectsMalformedOrNoncanonicalPayload(
-        string scenario,
-        string expectedMessage)
+    public async Task RuntimeMeasurementRejectsMalformedOrNoncanonicalPayload(string scenario, string expectedMessage)
     {
         using var handler = new RecordingDockerHandler();
-        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(
-            CreateRuntimeMeasurementArchive(
-                $"completion-{RuntimeMeasurementToken}",
-                CreateInvalidRuntimeMeasurementPayload(scenario))));
+        handler.ArchiveReadResponses.Enqueue(CreateArchiveResponse(CreateRuntimeMeasurementArchive($"completion-{RuntimeMeasurementToken}", CreateInvalidRuntimeMeasurementPayload(scenario))));
         using var docker = CreateDockerClient(handler);
 
-        var exception = await Assert.ThrowsAsync<DockerEngineException>(() =>
-            docker.WaitForRuntimeMeasurementAsync(
-                RuntimeMeasurementSidecarId,
-                RuntimeMeasurementToken,
-                RuntimeTargetContainerId,
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<DockerEngineException>(() => docker.WaitForRuntimeMeasurementAsync(RuntimeMeasurementSidecarId, RuntimeMeasurementToken, RuntimeTargetContainerId, TestContext.Current.CancellationToken));
 
         Assert.Contains(expectedMessage, exception.Message, StringComparison.Ordinal);
     }
@@ -1640,11 +1128,7 @@ public sealed class RuntimeSupervisorTests
         using var handler = new RecordingDockerHandler();
         using var docker = CreateDockerClient(handler);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => docker.WaitForRuntimeMeasurementAsync(
-            RuntimeMeasurementSidecarId,
-            token,
-            RuntimeTargetContainerId,
-            TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ArgumentException>(() => docker.WaitForRuntimeMeasurementAsync(RuntimeMeasurementSidecarId, token, RuntimeTargetContainerId, TestContext.Current.CancellationToken));
 
         Assert.Empty(handler.Requests);
     }
@@ -1656,22 +1140,9 @@ public sealed class RuntimeSupervisorTests
         var options = ValidOptions();
         var fakeDocker = new SessionDockerClient();
         var sandbox = RuntimeSandboxPolicy.Load(
-            new RuntimeSandboxOptions
-            {
-                SeccompProfilePath = Path.Combine(
-                    root,
-                    "src",
-                    "Supervisor",
-                    "SharpLabNext.RuntimeSupervisor",
-                    "security",
-                    "runtime-job-seccomp.v1.json")
-            },
+            new RuntimeSandboxOptions { SeccompProfilePath = Path.Combine(root, "src", "Supervisor", "SharpLabNext.RuntimeSupervisor", "security", "runtime-job-seccomp.v1.json") },
             root);
-        var sessions = new RuntimeSessionRegistry(
-            fakeDocker,
-            Options.Create(options),
-            sandbox,
-            NullLogger<RuntimeSessionRegistry>.Instance);
+        var sessions = new RuntimeSessionRegistry(fakeDocker, Options.Create(options), sandbox, NullLogger<RuntimeSessionRegistry>.Instance);
         var request = new RuntimeSessionRequest(
             "rs_0123456789abcdef",
             "release-1",
@@ -1723,22 +1194,9 @@ public sealed class RuntimeSupervisorTests
         var options = ValidOptions();
         var fakeDocker = new SessionDockerClient();
         var sandbox = RuntimeSandboxPolicy.Load(
-            new RuntimeSandboxOptions
-            {
-                SeccompProfilePath = Path.Combine(
-                    root,
-                    "src",
-                    "Supervisor",
-                    "SharpLabNext.RuntimeSupervisor",
-                    "security",
-                    "runtime-job-seccomp.v1.json")
-            },
+            new RuntimeSandboxOptions { SeccompProfilePath = Path.Combine(root, "src", "Supervisor", "SharpLabNext.RuntimeSupervisor", "security", "runtime-job-seccomp.v1.json") },
             root);
-        var sessions = new RuntimeSessionRegistry(
-            fakeDocker,
-            Options.Create(options),
-            sandbox,
-            NullLogger<RuntimeSessionRegistry>.Instance);
+        var sessions = new RuntimeSessionRegistry(fakeDocker, Options.Create(options), sandbox, NullLogger<RuntimeSessionRegistry>.Instance);
         var request = new RuntimeSessionRequest(
             "rs_released_before_acquire",
             "release-1",
@@ -1754,8 +1212,7 @@ public sealed class RuntimeSupervisorTests
         await sessions.ReleaseAsync(request.SessionId, TestContext.Current.CancellationToken);
         await using var archive = new MemoryStream("must-not-upload"u8.ToArray());
 
-        await Assert.ThrowsAsync<RuntimeSessionClosingException>(() =>
-            sessions.AcquireAsync(request, archive, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<RuntimeSessionClosingException>(() => sessions.AcquireAsync(request, archive, TestContext.Current.CancellationToken));
         Assert.Equal(0, fakeDocker.RuntimeContainerCreates);
         Assert.Empty(fakeDocker.UploadedArchives);
         Assert.Empty(fakeDocker.StartedContainers);
@@ -1767,18 +1224,12 @@ public sealed class RuntimeSupervisorTests
     public async Task RuntimeSessionReleasedBeforeOneShotAdmissionRejectsWhenReuseIsDisabled()
     {
         var fakeDocker = new SessionDockerClient();
-        var (sessions, request) = CreateRuntimeSessionFixture(
-            fakeDocker,
-            "rs_released_before_one_shot",
-            sessionReuseEnabled: false);
+        var (sessions, request) = CreateRuntimeSessionFixture(fakeDocker, "rs_released_before_one_shot", sessionReuseEnabled: false);
         Assert.False(sessions.Enabled);
 
         await sessions.ReleaseAsync(request.SessionId, TestContext.Current.CancellationToken);
 
-        await Assert.ThrowsAsync<RuntimeSessionClosingException>(() =>
-            sessions.AcquireOneShotAdmissionAsync(
-                request.SessionId,
-                TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<RuntimeSessionClosingException>(() => sessions.AcquireOneShotAdmissionAsync(request.SessionId, TestContext.Current.CancellationToken));
         Assert.Equal(0, fakeDocker.RuntimeContainerCreates);
         Assert.Empty(fakeDocker.UploadedArchives);
         Assert.Empty(fakeDocker.StartedContainers);
@@ -1795,63 +1246,17 @@ public sealed class RuntimeSupervisorTests
         var fakeDocker = new SessionDockerClient();
         var root = FindRepositoryRoot();
         var sandbox = RuntimeSandboxPolicy.Load(
-            new RuntimeSandboxOptions
-            {
-                SeccompProfilePath = Path.Combine(
-                    root,
-                    "src",
-                    "Supervisor",
-                    "SharpLabNext.RuntimeSupervisor",
-                    "security",
-                    "runtime-job-seccomp.v1.json")
-            },
+            new RuntimeSandboxOptions { SeccompProfilePath = Path.Combine(root, "src", "Supervisor", "SharpLabNext.RuntimeSupervisor", "security", "runtime-job-seccomp.v1.json") },
             root);
-        var sessions = new RuntimeSessionRegistry(
-            fakeDocker,
-            Options.Create(options),
-            sandbox,
-            NullLogger<RuntimeSessionRegistry>.Instance);
-        var artifactStore = new RuntimeArtifactStoreClient(new ArtifactBundleDescriptor(
-            Manifest(metadata: null, derived: false),
-            []));
+        var sessions = new RuntimeSessionRegistry(fakeDocker, Options.Create(options), sandbox, NullLogger<RuntimeSessionRegistry>.Instance);
+        var artifactStore = new RuntimeArtifactStoreClient(new ArtifactBundleDescriptor(Manifest(metadata: null, derived: false), []));
         var operations = new OperationStore();
         await using var scheduler = new BoundedOperationScheduler(
             operations,
-            new OperationExecutionOptions
-            {
-                QueueCapacity = 1,
-                WorkerConcurrency = 1,
-                ExecutorId = "runtime-session-test"
-            });
-        var executor = new RuntimeJobExecutor(
-            operations,
-            scheduler,
-            artifactStore,
-            fakeDocker,
-            sessions,
-            Options.Create(options),
-            new ServiceIdentity(
-                "runtime-supervisor",
-                ServiceKind.RuntimeSupervisor,
-                "release-1",
-                ProtocolVersion.WorkerV1,
-                [],
-                "ready"),
-            NullLogger<RuntimeJobExecutor>.Instance);
-        var request = new RunRequest(
-            "released-one-shot-run",
-            "released-one-shot-run-key",
-            "pr_released_one_shot",
-            artifactStore.Descriptor.Manifest.ArtifactId,
-            "dotnet-10-linux-x64",
-            new RunOptions([], null, RunInstrumentation.None, "runtime-job-default"),
-            DateTimeOffset.UtcNow.AddMinutes(1));
-        var operation = operations.Start(
-            request.RequestId,
-            request.IdempotencyKey,
-            OperationKind.Run,
-            "runtime-session-test-trace",
-            DateTimeOffset.UtcNow);
+            new OperationExecutionOptions { QueueCapacity = 1, WorkerConcurrency = 1, ExecutorId = "runtime-session-test" });
+        var executor = new RuntimeJobExecutor(operations, scheduler, artifactStore, fakeDocker, sessions, Options.Create(options), new ServiceIdentity("runtime-supervisor", ServiceKind.RuntimeSupervisor, "release-1", ProtocolVersion.WorkerV1, [], "ready"), NullLogger<RuntimeJobExecutor>.Instance);
+        var request = new RunRequest("released-one-shot-run", "released-one-shot-run-key", "pr_released_one_shot", artifactStore.Descriptor.Manifest.ArtifactId, "dotnet-10-linux-x64", new RunOptions([], null, RunInstrumentation.None, "runtime-job-default"), DateTimeOffset.UtcNow.AddMinutes(1));
+        var operation = operations.Start(request.RequestId, request.IdempotencyKey, OperationKind.Run, "runtime-session-test-trace", DateTimeOffset.UtcNow);
 
         await sessions.ReleaseAsync(sessionId, TestContext.Current.CancellationToken);
         executor.QueueRun(operation, request, sessionId);
@@ -1870,78 +1275,27 @@ public sealed class RuntimeSupervisorTests
     public async Task OneShotMaterializerRemovalFailureIsRetriedBeforeWorkspaceVolumeCleanup()
     {
         var options = ValidOptions();
-        var fakeDocker = new SessionDockerClient
-        {
-            NextRemoveContainerException = new HttpRequestException("Transient materializer removal failure.")
-        };
+        var fakeDocker = new SessionDockerClient { NextRemoveContainerException = new HttpRequestException("Transient materializer removal failure.") };
         var root = FindRepositoryRoot();
         var sandbox = RuntimeSandboxPolicy.Load(
-            new RuntimeSandboxOptions
-            {
-                SeccompProfilePath = Path.Combine(
-                    root,
-                    "src",
-                    "Supervisor",
-                    "SharpLabNext.RuntimeSupervisor",
-                    "security",
-                    "runtime-job-seccomp.v1.json")
-            },
+            new RuntimeSandboxOptions { SeccompProfilePath = Path.Combine(root, "src", "Supervisor", "SharpLabNext.RuntimeSupervisor", "security", "runtime-job-seccomp.v1.json") },
             root);
-        var sessions = new RuntimeSessionRegistry(
-            fakeDocker,
-            Options.Create(options),
-            sandbox,
-            NullLogger<RuntimeSessionRegistry>.Instance);
-        var artifactStore = new RuntimeArtifactStoreClient(new ArtifactBundleDescriptor(
-            Manifest(metadata: null, derived: false),
-            []));
+        var sessions = new RuntimeSessionRegistry(fakeDocker, Options.Create(options), sandbox, NullLogger<RuntimeSessionRegistry>.Instance);
+        var artifactStore = new RuntimeArtifactStoreClient(new ArtifactBundleDescriptor(Manifest(metadata: null, derived: false), []));
         var operations = new OperationStore();
         await using var scheduler = new BoundedOperationScheduler(
             operations,
-            new OperationExecutionOptions
-            {
-                QueueCapacity = 1,
-                WorkerConcurrency = 1,
-                ExecutorId = "runtime-one-shot-cleanup-test"
-            });
-        var executor = new RuntimeJobExecutor(
-            operations,
-            scheduler,
-            artifactStore,
-            fakeDocker,
-            sessions,
-            Options.Create(options),
-            new ServiceIdentity(
-                "runtime-supervisor",
-                ServiceKind.RuntimeSupervisor,
-                "release-1",
-                ProtocolVersion.WorkerV1,
-                [],
-                "ready"),
-            NullLogger<RuntimeJobExecutor>.Instance);
-        var request = new RunRequest(
-            "one-shot-cleanup-retry",
-            "one-shot-cleanup-retry-key",
-            "pr_one_shot_cleanup_retry",
-            artifactStore.Descriptor.Manifest.ArtifactId,
-            "dotnet-10-linux-x64",
-            new RunOptions([], null, RunInstrumentation.None, "runtime-job-default"),
-            DateTimeOffset.UtcNow.AddMinutes(1));
-        var operation = operations.Start(
-            request.RequestId,
-            request.IdempotencyKey,
-            OperationKind.Run,
-            "runtime-one-shot-cleanup-trace",
-            DateTimeOffset.UtcNow);
+            new OperationExecutionOptions { QueueCapacity = 1, WorkerConcurrency = 1, ExecutorId = "runtime-one-shot-cleanup-test" });
+        var executor = new RuntimeJobExecutor(operations, scheduler, artifactStore, fakeDocker, sessions, Options.Create(options), new ServiceIdentity("runtime-supervisor", ServiceKind.RuntimeSupervisor, "release-1", ProtocolVersion.WorkerV1, [], "ready"), NullLogger<RuntimeJobExecutor>.Instance);
+        var request = new RunRequest("one-shot-cleanup-retry", "one-shot-cleanup-retry-key", "pr_one_shot_cleanup_retry", artifactStore.Descriptor.Manifest.ArtifactId, "dotnet-10-linux-x64", new RunOptions([], null, RunInstrumentation.None, "runtime-job-default"), DateTimeOffset.UtcNow.AddMinutes(1));
+        var operation = operations.Start(request.RequestId, request.IdempotencyKey, OperationKind.Run, "runtime-one-shot-cleanup-trace", DateTimeOffset.UtcNow);
 
         executor.QueueRun(operation, request);
         await WaitForTerminalAsync(operations, operation.Handle.OperationId);
         for (var attempt = 0; attempt < 200 && fakeDocker.RemovedVolumes.Count == 0; attempt++)
             await Task.Delay(10, TestContext.Current.CancellationToken);
 
-        Assert.Equal(
-            ["materializer-1", "runtime-1", "materializer-1"],
-            fakeDocker.RemoveContainerAttempts);
+        Assert.Equal(["materializer-1", "runtime-1", "materializer-1"], fakeDocker.RemoveContainerAttempts);
         Assert.Equal(
             [
                 "remove-failed:materializer-1",
@@ -1956,27 +1310,18 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimeCapabilityPreflightProducesRunInspectionAndExecutionFlowEvidence()
     {
-        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
-            ["run", "inspection", "execution-flow"],
-            RuntimeJitSourceMappingKinds.None);
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(["run", "inspection", "execution-flow"], RuntimeJitSourceMappingKinds.None);
 
-        var response = await fixture.Coordinator.ProduceAsync(
-            fixture.CreateRequest(),
-            TestContext.Current.CancellationToken);
+        var response = await fixture.Coordinator.ProduceAsync(fixture.CreateRequest(), TestContext.Current.CancellationToken);
 
-        var documents = response.Documents.ToDictionary(
-            static document => document["capability"]!.GetValue<string>(),
-            StringComparer.Ordinal);
+        var documents = response.Documents.ToDictionary(static document => document["capability"]!.GetValue<string>(), StringComparer.Ordinal);
         Assert.Equal(["execution-flow", "inspection", "run"], documents.Keys.Order(StringComparer.Ordinal));
         Assert.Equal("passed", documents["run"]["result"]!.GetValue<string>());
         Assert.True(documents["run"]["run"]!["exceptionFrameValidated"]!.GetValue<bool>());
         Assert.Equal(2, documents["inspection"]["inspection"]!["recordCount"]!.GetValue<int>());
         Assert.Equal(3, documents["execution-flow"]["executionFlow"]!["recordCount"]!.GetValue<int>());
-        Assert.Equal(fixture.FlowArtifactRef.Value,
-            documents["execution-flow"]["executionFlow"]!["derivedArtifactSha256"]!.GetValue<string>());
-        Assert.All(response.Documents, document => Assert.Equal(
-            fixture.PlanSha256,
-            document["producer"]!["planSha256"]!.GetValue<string>()));
+        Assert.Equal(fixture.FlowArtifactRef.Value, documents["execution-flow"]["executionFlow"]!["derivedArtifactSha256"]!.GetValue<string>());
+        Assert.All(response.Documents, document => Assert.Equal(fixture.PlanSha256, document["producer"]!["planSha256"]!.GetValue<string>()));
         Assert.Equal(8, fixture.Docker.RuntimeContainerCreates);
         Assert.Equal(8, fixture.Docker.RuntimeContainerCreates - fixture.Docker.ActiveContainers.Count);
         Assert.All(fixture.Docker.CreatedSpecs, static spec => Assert.Null(spec.Entrypoint));
@@ -1992,14 +1337,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimeCapabilityTimeoutProbeStartsItsDeadlineAfterSlowContainerStartup()
     {
-        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
-            ["run"],
-            RuntimeJitSourceMappingKinds.None);
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(["run"], RuntimeJitSourceMappingKinds.None);
         fixture.Docker.StartupDelay = TimeSpan.FromMilliseconds(300);
 
-        var response = await fixture.Coordinator.ProduceAsync(
-            fixture.CreateRequest(),
-            TestContext.Current.CancellationToken);
+        var response = await fixture.Coordinator.ProduceAsync(fixture.CreateRequest(), TestContext.Current.CancellationToken);
 
         var run = Assert.Single(response.Documents);
         Assert.Equal("passed", run["lifecycle"]!["timeout"]!["result"]!.GetValue<string>());
@@ -2010,14 +1351,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimeCapabilityTimeoutProbeStartsItsDeadlineAfterSlowProbeInitialization()
     {
-        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
-            ["run"],
-            RuntimeJitSourceMappingKinds.None);
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(["run"], RuntimeJitSourceMappingKinds.None);
         fixture.Docker.HangReadyDelay = TimeSpan.FromMilliseconds(300);
 
-        var response = await fixture.Coordinator.ProduceAsync(
-            fixture.CreateRequest(),
-            TestContext.Current.CancellationToken);
+        var response = await fixture.Coordinator.ProduceAsync(fixture.CreateRequest(), TestContext.Current.CancellationToken);
 
         var run = Assert.Single(response.Documents);
         Assert.Equal("passed", run["lifecycle"]!["timeout"]!["result"]!.GetValue<string>());
@@ -2028,14 +1365,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimeCapabilityCancellationProbeWaitsForReadyMarker()
     {
-        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
-            ["run"],
-            RuntimeJitSourceMappingKinds.None);
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(["run"], RuntimeJitSourceMappingKinds.None);
         fixture.Docker.StartupDelay = TimeSpan.FromMilliseconds(300);
 
-        var response = await fixture.Coordinator.ProduceAsync(
-            fixture.CreateRequest(),
-            TestContext.Current.CancellationToken);
+        var response = await fixture.Coordinator.ProduceAsync(fixture.CreateRequest(), TestContext.Current.CancellationToken);
 
         Assert.Equal("passed", Assert.Single(response.Documents)["result"]!.GetValue<string>());
         Assert.True(fixture.Docker.HangWaitCancellationCount >= 2);
@@ -2045,15 +1378,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimeCapabilityTimeoutProbeRejectsMissingReadyMarkerAfterCleanup()
     {
-        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
-            ["run"],
-            RuntimeJitSourceMappingKinds.None);
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(["run"], RuntimeJitSourceMappingKinds.None);
         fixture.Docker.OmitHangReadyMarker = true;
 
-        var exception = await Assert.ThrowsAsync<RuntimeCapabilityPreflightException>(() =>
-            fixture.Coordinator.ProduceAsync(
-                fixture.CreateRequest(),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimeCapabilityPreflightException>(() => fixture.Coordinator.ProduceAsync(fixture.CreateRequest(), TestContext.Current.CancellationToken));
 
         Assert.Equal("capability-timeout-marker-missing", exception.Code);
         Assert.Empty(fixture.Docker.ActiveContainers);
@@ -2062,45 +1390,26 @@ public sealed class RuntimeSupervisorTests
     [Theory]
     [InlineData(RuntimeContainerExecutionUsers.Root, RuntimeContainerIsolationKind.WineRoot)]
     [InlineData(RuntimeContainerExecutionUsers.NonRoot, RuntimeContainerIsolationKind.WineNonRoot)]
-    public async Task RuntimeCapabilityEvidenceReportsTheResolvedWineExecutionUser(
-        string executionUser,
-        RuntimeContainerIsolationKind expectedIsolation)
+    public async Task RuntimeCapabilityEvidenceReportsTheResolvedWineExecutionUser(string executionUser, RuntimeContainerIsolationKind expectedIsolation)
     {
-        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
-            ["run"],
-            RuntimeJitSourceMappingKinds.None);
-        fixture.Profile.Container = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Wine,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-            ExecutionUser = executionUser,
-            WinePrefixPath = "/opt/wine-dotnet"
-        };
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(["run"], RuntimeJitSourceMappingKinds.None);
+        fixture.Profile.Container = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, ExecutionUser = executionUser, WinePrefixPath = "/opt/wine-dotnet" };
 
-        var response = await fixture.Coordinator.ProduceAsync(
-            fixture.CreateRequest(),
-            TestContext.Current.CancellationToken);
+        var response = await fixture.Coordinator.ProduceAsync(fixture.CreateRequest(), TestContext.Current.CancellationToken);
 
         var run = Assert.Single(response.Documents);
         Assert.Equal(executionUser, run["sandbox"]!["user"]!.GetValue<string>());
-        Assert.All(
-            fixture.Docker.CreatedSpecs,
-            spec => Assert.Equal(expectedIsolation, spec.IsolationKind));
+        Assert.All(fixture.Docker.CreatedSpecs, spec => Assert.Equal(expectedIsolation, spec.IsolationKind));
     }
 
     [Fact]
     public async Task RuntimeCapabilityPreflightProducesMethodOnlyJitEvidenceWithoutPdbClaims()
     {
-        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
-            ["run", "jit-asm"],
-            RuntimeJitSourceMappingKinds.None);
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(["run", "jit-asm"], RuntimeJitSourceMappingKinds.None);
 
-        var response = await fixture.Coordinator.ProduceAsync(
-            fixture.CreateRequest(),
-            TestContext.Current.CancellationToken);
+        var response = await fixture.Coordinator.ProduceAsync(fixture.CreateRequest(), TestContext.Current.CancellationToken);
 
-        var jit = Assert.Single(response.Documents, static document =>
-            document["capability"]!.GetValue<string>() == "jit-asm")["jit"]!;
+        var jit = Assert.Single(response.Documents, static document => document["capability"]!.GetValue<string>() == "jit-asm")["jit"]!;
         Assert.Null(jit["pdb"]);
         Assert.Equal("none", jit["mapping"]!["kind"]!.GetValue<string>());
         Assert.Equal("method", jit["mapping"]!["source"]!.GetValue<string>());
@@ -2112,16 +1421,11 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimeCapabilityPreflightValidatesMappedJitRangesAgainstRealPeAndPortablePdb()
     {
-        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
-            ["run", "jit-asm"],
-            RuntimeJitSourceMappingKinds.LinuxProfiler);
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(["run", "jit-asm"], RuntimeJitSourceMappingKinds.LinuxProfiler);
 
-        var response = await fixture.Coordinator.ProduceAsync(
-            fixture.CreateRequest(),
-            TestContext.Current.CancellationToken);
+        var response = await fixture.Coordinator.ProduceAsync(fixture.CreateRequest(), TestContext.Current.CancellationToken);
 
-        var document = Assert.Single(response.Documents, static document =>
-            document["capability"]!.GetValue<string>() == "jit-asm");
+        var document = Assert.Single(response.Documents, static document => document["capability"]!.GetValue<string>() == "jit-asm");
         var jit = document["jit"]!;
         Assert.Equal("linux-profiler", jit["mapping"]!["kind"]!.GetValue<string>());
         Assert.Equal("ordinary", jit["mapping"]!["source"]!.GetValue<string>());
@@ -2129,45 +1433,27 @@ public sealed class RuntimeSupervisorTests
         Assert.InRange(jit["mapping"]!["rangeCount"]!.GetValue<int>(), 2, int.MaxValue);
         Assert.Equal(fixture.PdbIdentity.ContentId, jit["pdb"]!["contentId"]!.GetValue<string>());
         Assert.Equal(fixture.PdbIdentity.Digest, jit["pdb"]!["sha256"]!.GetValue<string>());
-        Assert.Equal(
-            "/workspace/SharpLabNext.RuntimeCapabilityProbe.pdb",
-            jit["pdb"]!["path"]!.GetValue<string>());
-        Assert.Contains(document["artifacts"]!.AsArray(), static artifact =>
-            artifact!["role"]!.GetValue<string>() == "profiler");
+        Assert.Equal("/workspace/SharpLabNext.RuntimeCapabilityProbe.pdb", jit["pdb"]!["path"]!.GetValue<string>());
+        Assert.Contains(document["artifacts"]!.AsArray(), static artifact => artifact!["role"]!.GetValue<string>() == "profiler");
     }
 
     [Fact]
     public async Task RuntimeCapabilityPreflightDocumentsPassSharedPromotionValidation()
     {
-        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
-            ["run", "jit-asm", "inspection", "execution-flow"],
-            RuntimeJitSourceMappingKinds.LinuxProfiler);
-        var response = await fixture.Coordinator.ProduceAsync(
-            fixture.CreateRequest(),
-            TestContext.Current.CancellationToken);
-        var documents = response.Documents.ToDictionary(
-            static document => document["capability"]!.GetValue<string>(),
-            static document => Encoding.UTF8.GetBytes(document.ToJsonString() + "\n"),
-            StringComparer.Ordinal);
-        var profileBytes = JsonSerializer.SerializeToUtf8Bytes<RuntimeProfileDefinition>(
-            fixture.Profile,
-            RuntimeProfilePreflightJsonOptions);
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(["run", "jit-asm", "inspection", "execution-flow"], RuntimeJitSourceMappingKinds.LinuxProfiler);
+        var response = await fixture.Coordinator.ProduceAsync(fixture.CreateRequest(), TestContext.Current.CancellationToken);
+        var documents = response.Documents.ToDictionary(static document => document["capability"]!.GetValue<string>(), static document => Encoding.UTF8.GetBytes(document.ToJsonString() + "\n"), StringComparer.Ordinal);
+        var profileBytes = JsonSerializer.SerializeToUtf8Bytes<RuntimeProfileDefinition>(fixture.Profile, RuntimeProfilePreflightJsonOptions);
         var receiptBytes = CreateCapabilityDraftReceipt(fixture, response.Documents, documents);
 
-        var context = RuntimeCapabilityEvidencePreflightValidator.CreateContext(
-            profileBytes,
-            receiptBytes,
-            fixture.Policy.Id);
-        var retainedImageFiles = new Dictionary<string, RuntimeCapabilityEvidenceImageFile>(
-            StringComparer.Ordinal);
+        var context = RuntimeCapabilityEvidencePreflightValidator.CreateContext(profileBytes, receiptBytes, fixture.Policy.Id);
+        var retainedImageFiles = new Dictionary<string, RuntimeCapabilityEvidenceImageFile>(StringComparer.Ordinal);
         foreach (var capability in context.Capabilities)
         {
             var validated = context.ValidateDocument(documents[capability]);
 
             Assert.Equal(capability, validated.Capability);
-            Assert.Equal(
-                $"profiles/runtime-promotion-evidence/{fixture.Profile.Id}/{capability}.json",
-                validated.EvidencePath);
+            Assert.Equal($"profiles/runtime-promotion-evidence/{fixture.Profile.Id}/{capability}.json", validated.EvidencePath);
             foreach (var file in validated.ImageFiles)
             {
                 if (retainedImageFiles.TryGetValue(file.Path, out var existing))
@@ -2186,15 +1472,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimeCapabilityPreflightEndpointPreservesPublicErrorStatusAndPascalCaseBody()
     {
-        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
-            ["run"],
-            RuntimeJitSourceMappingKinds.None);
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(["run"], RuntimeJitSourceMappingKinds.None);
         var request = fixture.CreateRequest() with { RuntimeProfileId = "not-installed" };
 
-        var result = await RuntimeCapabilityPreflightEndpoint.HandleAsync(
-            request,
-            fixture.Coordinator,
-            TestContext.Current.CancellationToken);
+        var result = await RuntimeCapabilityPreflightEndpoint.HandleAsync(request, fixture.Coordinator, TestContext.Current.CancellationToken);
         await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
         var http = new DefaultHttpContext { RequestServices = services };
         http.Response.Body = new MemoryStream();
@@ -2203,24 +1484,16 @@ public sealed class RuntimeSupervisorTests
 
         Assert.Equal(StatusCodes.Status404NotFound, http.Response.StatusCode);
         http.Response.Body.Position = 0;
-        using var document = await JsonDocument.ParseAsync(
-            http.Response.Body,
-            cancellationToken: TestContext.Current.CancellationToken);
-        Assert.Equal(
-            "capability-profile-not-installed",
-            document.RootElement.GetProperty("Error").GetString());
-        Assert.Equal(
-            "The selected Runtime Profile is not installed.",
-            document.RootElement.GetProperty("Message").GetString());
+        using var document = await JsonDocument.ParseAsync(http.Response.Body, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal("capability-profile-not-installed", document.RootElement.GetProperty("Error").GetString());
+        Assert.Equal("The selected Runtime Profile is not installed.", document.RootElement.GetProperty("Message").GetString());
         Assert.False(document.RootElement.TryGetProperty("error", out _));
     }
 
     [Fact]
     public void RuntimeSupervisorDescriptorDeclaresBothPreflightCapabilitiesExactlyOnce()
     {
-        Assert.Equal(
-            RuntimeSupervisorServiceCapabilities.All.Count,
-            RuntimeSupervisorServiceCapabilities.All.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(RuntimeSupervisorServiceCapabilities.All.Count, RuntimeSupervisorServiceCapabilities.All.Distinct(StringComparer.Ordinal).Count());
         Assert.Contains("runtime-capability-preflight", RuntimeSupervisorServiceCapabilities.All);
         Assert.Contains("runtime-performance-preflight", RuntimeSupervisorServiceCapabilities.All);
     }
@@ -2228,15 +1501,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimeCapabilityPreflightRejectsImageArtifactMismatchBeforeQueueing()
     {
-        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
-            ["run"],
-            RuntimeJitSourceMappingKinds.None);
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(["run"], RuntimeJitSourceMappingKinds.None);
         fixture.Docker.CorruptInspectedRole = "helper";
 
-        var exception = await Assert.ThrowsAsync<RuntimeCapabilityPreflightException>(() =>
-            fixture.Coordinator.ProduceAsync(
-                fixture.CreateRequest(),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimeCapabilityPreflightException>(() => fixture.Coordinator.ProduceAsync(fixture.CreateRequest(), TestContext.Current.CancellationToken));
 
         Assert.Equal("capability-helper-identity-mismatch", exception.Code);
         Assert.Equal(0, fixture.Docker.RuntimeContainerCreates);
@@ -2246,9 +1514,7 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimeCapabilityPreflightRejectsInvalidPlanDigestBeforeQueueing()
     {
-        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(
-            ["run"],
-            RuntimeJitSourceMappingKinds.None);
+        await using var fixture = await CreateRuntimeCapabilityFixtureAsync(["run"], RuntimeJitSourceMappingKinds.None);
 
         var exception = await Assert.ThrowsAsync<RuntimeCapabilityPreflightException>(() =>
             fixture.Coordinator.ProduceAsync(
@@ -2263,21 +1529,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceSampleMeasuresQueueThroughCleanupWithDockerPeakMemory()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync(),
-            ResourceUsage = new RuntimeContainerResourceUsage(73400320, 2)
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync(), ResourceUsage = new RuntimeContainerResourceUsage(73400320, 2) };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var sample = await fixture.Coordinator.MeasureAsync(
-            new RuntimePerformanceSampleRequest(
-                fixture.Options.Profiles[0].Id,
-                fixture.Options.PromotionPreflightPlanSha256!,
-                fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                fixture.Options.SecurityPolicies[0].Id,
-                RuntimePerformanceScenarios.Run),
-            TestContext.Current.CancellationToken);
+        var sample = await fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken);
 
         Assert.Equal(RuntimePerformanceScenarios.Run, sample.Scenario);
         Assert.Equal(73400320, sample.Sample.PeakMemoryBytes);
@@ -2320,17 +1575,14 @@ public sealed class RuntimeSupervisorTests
         foreach (var phase in lifecyclePhases)
         {
             var current = fakeDocker.RuntimeLifecycle.IndexOf(phase);
-            Assert.True(current > previous, $"Missing or out-of-order phase '{phase}': " +
-                string.Join(", ", fakeDocker.RuntimeLifecycle));
+            Assert.True(current > previous, $"Missing or out-of-order phase '{phase}': " + string.Join(", ", fakeDocker.RuntimeLifecycle));
             previous = current;
         }
         Assert.Equal([true], fakeDocker.MeasurementControlRequests);
         var spec = Assert.Single(fakeDocker.CreatedSpecs);
         Assert.Equal("workspace-1", spec.WorkspaceVolumeName);
         Assert.Equal(["/bin/sh", "-c"], spec.Entrypoint);
-        Assert.Equal(
-            ["trap 'while wait 2>/dev/null; do :; done' CHLD; trap 'exit 143' TERM INT; IFS= read -r _"],
-            spec.Command);
+        Assert.Equal(["trap 'while wait 2>/dev/null; do :; done' CHLD; trap 'exit 143' TERM INT; IFS= read -r _"], spec.Command);
         Assert.Single(fakeDocker.MeasurementSidecarSpecs);
         var execSpec = Assert.Single(fakeDocker.ContainerExecSpecs).Spec;
         Assert.Equal("/workspace", execSpec.WorkingDirectory);
@@ -2351,55 +1603,25 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task MeasuredWineCleanupIsExecScopedAndNeverPollutesTheKeeper()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync(),
-            ResourceUsage = new RuntimeContainerResourceUsage(73400320, 2)
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync(), ResourceUsage = new RuntimeContainerResourceUsage(73400320, 2) };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker, wine: true);
 
-        _ = await fixture.Coordinator.MeasureAsync(
-            new RuntimePerformanceSampleRequest(
-                fixture.Options.Profiles[0].Id,
-                fixture.Options.PromotionPreflightPlanSha256!,
-                fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                fixture.Options.SecurityPolicies[0].Id,
-                RuntimePerformanceScenarios.Run),
-            TestContext.Current.CancellationToken);
+        _ = await fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken);
 
         var containerSpec = Assert.Single(fakeDocker.CreatedSpecs);
-        Assert.DoesNotContain(
-            "SHARPLABNEXT_WINE_CLEANUP",
-            containerSpec.Environment.Keys,
-            StringComparer.Ordinal);
+        Assert.DoesNotContain("SHARPLABNEXT_WINE_CLEANUP", containerSpec.Environment.Keys, StringComparer.Ordinal);
         var execSpec = Assert.Single(fakeDocker.ContainerExecSpecs).Spec;
-        Assert.Equal(
-            "1",
-            Assert.Single(execSpec.Environment!).Value);
-        Assert.Equal(
-            "SHARPLABNEXT_WINE_CLEANUP",
-            Assert.Single(execSpec.Environment!).Key);
+        Assert.Equal("1", Assert.Single(execSpec.Environment!).Value);
+        Assert.Equal("SHARPLABNEXT_WINE_CLEANUP", Assert.Single(execSpec.Environment!).Key);
     }
 
     [Fact]
     public async Task RuntimePerformanceRejectsTargetExitBeforeBaselineAndCleansEveryResource()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync(),
-            TargetExitsBeforeBaseline = true
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync(), TargetExitsBeforeBaseline = true };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
         Assert.Empty(fakeDocker.MeasurementSidecarSpecs);
@@ -2415,22 +1637,11 @@ public sealed class RuntimeSupervisorTests
     [InlineData(nameof(SessionDockerClient.SidecarExitsBeforeCompletion))]
     public async Task RuntimePerformanceRejectsMeasurementSidecarEarlyExitAtEveryHandshakePhase(string phase)
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync()
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync() };
         typeof(SessionDockerClient).GetProperty(phase)!.SetValue(fakeDocker, true);
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
         Assert.Contains(RuntimeMeasurementSidecarId, fakeDocker.RemovedContainers);
@@ -2443,27 +1654,13 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceRejectsExecAndProtocolExitMismatch()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync(),
-            ExecInspection = new RuntimeContainerExecInspection(RuntimeExecId, Running: false, ExitCode: 1)
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync(), ExecInspection = new RuntimeContainerExecInspection(RuntimeExecId, Running: false, ExitCode: 1) };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
-        Assert.DoesNotContain(
-            fakeDocker.MeasurementSignals,
-            signal => signal.Kind == RuntimeMeasurementSignalKind.Capture);
+        Assert.DoesNotContain(fakeDocker.MeasurementSignals, signal => signal.Kind == RuntimeMeasurementSignalKind.Capture);
         Assert.Contains(RuntimeMeasurementSidecarId, fakeDocker.RemovedContainers);
         Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
     }
@@ -2471,79 +1668,38 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceRejectsKeeperPidDriftAfterExec()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync()
-        };
-        fakeDocker.RunningInspections.Enqueue(
-            new RuntimeRunningContainerInspection(RuntimeTargetContainerId, 4242, Running: true));
-        fakeDocker.RunningInspections.Enqueue(
-            new RuntimeRunningContainerInspection(RuntimeTargetContainerId, 9999, Running: true));
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync() };
+        fakeDocker.RunningInspections.Enqueue(new RuntimeRunningContainerInspection(RuntimeTargetContainerId, 4242, Running: true));
+        fakeDocker.RunningInspections.Enqueue(new RuntimeRunningContainerInspection(RuntimeTargetContainerId, 9999, Running: true));
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
-        Assert.DoesNotContain(
-            fakeDocker.MeasurementSignals,
-            signal => signal.Kind == RuntimeMeasurementSignalKind.Capture);
+        Assert.DoesNotContain(fakeDocker.MeasurementSignals, signal => signal.Kind == RuntimeMeasurementSignalKind.Capture);
         Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
     }
 
     [Fact]
     public async Task RuntimePerformanceRejectsNonzeroSidecarExitAfterFinish()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync(),
-            MeasurementSidecarExit = new RuntimeContainerExit(1, false, "helper failed")
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync(), MeasurementSidecarExit = new RuntimeContainerExit(1, false, "helper failed") };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
-        Assert.Contains(
-            fakeDocker.MeasurementSignals,
-            signal => signal.Kind == RuntimeMeasurementSignalKind.Finish);
+        Assert.Contains(fakeDocker.MeasurementSignals, signal => signal.Kind == RuntimeMeasurementSignalKind.Finish);
         Assert.Contains(RuntimeMeasurementSidecarId, fakeDocker.RemovedContainers);
     }
 
     [Fact]
     public async Task RuntimePerformanceRejectsKeeperThatDoesNotExitWithSupervisorStopStatus()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync(),
-            MeasuredKeeperStopExit = new RuntimeContainerExit(0, false, null)
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync(), MeasuredKeeperStopExit = new RuntimeContainerExit(0, false, null) };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
         Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
@@ -2552,49 +1708,23 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceRejectsMissingPostCompletionStatsSample()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync(),
-            SuppressPostCompletionSample = true
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync(), SuppressPostCompletionSample = true };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
-        Assert.DoesNotContain(
-            fakeDocker.MeasurementSignals,
-            signal => signal.Kind == RuntimeMeasurementSignalKind.Finish);
+        Assert.DoesNotContain(fakeDocker.MeasurementSignals, signal => signal.Kind == RuntimeMeasurementSignalKind.Finish);
         Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
     }
 
     [Fact]
     public async Task RuntimePerformanceSampleAttachesMonitorBeforeStartingTheRuntimeContainer()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync(),
-            NextResourceMonitorStartException = new DockerEngineException("stats attach failed")
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync(), NextResourceMonitorStartException = new DockerEngineException("stats attach failed") };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("resource-monitor-start-failed", exception.Code);
         Assert.Contains($"monitor:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
@@ -2608,22 +1738,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceSampleStopsAndDisposesAttachedMonitorWhenRuntimeStartFails()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync(),
-            NextStartContainerException = new DockerEngineException("runtime start failed")
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync(), NextStartContainerException = new DockerEngineException("runtime start failed") };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("runtime-job-failed", exception.Code);
         Assert.Equal([$"monitor:{RuntimeTargetContainerId}"], fakeDocker.ResourceMonitorStops);
@@ -2641,23 +1759,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceSampleKeepsRuntimeGatedWhenFirstStatsSampleFails()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync(),
-            NextResourceMonitorFirstSampleException = new DockerEngineException(
-                "first stats sample failed")
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync(), NextResourceMonitorFirstSampleException = new DockerEngineException("first stats sample failed") };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
         Assert.Contains($"monitor:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
@@ -2675,30 +1780,16 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceCancellationDuringStatsAttachPreservesCancellationAndCleanup()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            BlockResourceMonitorAttachUntilCancellation = true,
-            ContainerLogBytes = await CompletedRunFramesAsync()
-        };
+        var fakeDocker = new SessionDockerClient { BlockResourceMonitorAttachUntilCancellation = true, ContainerLogBytes = await CompletedRunFramesAsync() };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
-        var (operation, measurement) = fixture.QueueRunForMeasurement(
-            DateTimeOffset.UtcNow.AddMinutes(1));
+        var (operation, measurement) = fixture.QueueRunForMeasurement(DateTimeOffset.UtcNow.AddMinutes(1));
 
-        await fakeDocker.ResourceMonitorAttachEntered.Task.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken);
-        fixture.Operations.Cancel(
-            operation.Handle.OperationId,
-            "cancel-during-stats-attach",
-            DateTimeOffset.UtcNow);
-        var completion = await measurement.Completion.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken);
+        await fakeDocker.ResourceMonitorAttachEntered.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        fixture.Operations.Cancel(operation.Handle.OperationId, "cancel-during-stats-attach", DateTimeOffset.UtcNow);
+        var completion = await measurement.Completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.Equal("operation-cancelled", completion.FailureCode);
-        Assert.Equal(
-            RunTerminalStatus.Cancelled,
-            Assert.IsType<RunResult>(completion.Result).Status);
+        Assert.Equal(RunTerminalStatus.Cancelled, Assert.IsType<RunResult>(completion.Result).Status);
         Assert.True(completion.CleanupSucceeded);
         Assert.Contains($"monitor:{RuntimeTargetContainerId}", fakeDocker.RuntimeLifecycle);
         Assert.Contains("remove:materializer-1", fakeDocker.RuntimeLifecycle);
@@ -2706,10 +1797,7 @@ public sealed class RuntimeSupervisorTests
         Assert.Empty(fakeDocker.ResourceMonitorStops);
         Assert.Empty(fakeDocker.ResourceMonitorDisposals);
         Assert.Single(fakeDocker.UploadedArchives);
-        Assert.DoesNotContain(
-            "start-",
-            fakeDocker.UploadedArchives[0],
-            StringComparison.Ordinal);
+        Assert.DoesNotContain("start-", fakeDocker.UploadedArchives[0], StringComparison.Ordinal);
         Assert.Equal(["/workspace"], fakeDocker.UploadDestinations);
         Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
         Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
@@ -2718,26 +1806,15 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceDeadlineDuringFirstStatsSamplePreservesTimeoutAndCleanup()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            BlockResourceMonitorFirstSampleUntilCancellation = true,
-            ContainerLogBytes = await CompletedRunFramesAsync()
-        };
+        var fakeDocker = new SessionDockerClient { BlockResourceMonitorFirstSampleUntilCancellation = true, ContainerLogBytes = await CompletedRunFramesAsync() };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
-        var (_, measurement) = fixture.QueueRunForMeasurement(
-            DateTimeOffset.UtcNow.AddSeconds(2));
+        var (_, measurement) = fixture.QueueRunForMeasurement(DateTimeOffset.UtcNow.AddSeconds(2));
 
-        await fakeDocker.ResourceMonitorFirstSampleEntered.Task.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken);
-        var completion = await measurement.Completion.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken);
+        await fakeDocker.ResourceMonitorFirstSampleEntered.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        var completion = await measurement.Completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.Equal("operation-timeout", completion.FailureCode);
-        Assert.Equal(
-            RunTerminalStatus.Timeout,
-            Assert.IsType<RunResult>(completion.Result).Status);
+        Assert.Equal(RunTerminalStatus.Timeout, Assert.IsType<RunResult>(completion.Result).Status);
         Assert.True(completion.CleanupSucceeded);
         Assert.Equal([$"monitor:{RuntimeTargetContainerId}"], fakeDocker.ResourceMonitorStops);
         Assert.Equal([$"monitor:{RuntimeTargetContainerId}"], fakeDocker.ResourceMonitorDisposals);
@@ -2751,10 +1828,7 @@ public sealed class RuntimeSupervisorTests
         Assert.DoesNotContain(RuntimeTargetContainerId, fakeDocker.KilledContainers);
         Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
         Assert.Single(fakeDocker.UploadedArchives);
-        Assert.DoesNotContain(
-            "start-",
-            fakeDocker.UploadedArchives[0],
-            StringComparison.Ordinal);
+        Assert.DoesNotContain("start-", fakeDocker.UploadedArchives[0], StringComparison.Ordinal);
         Assert.Equal(["/workspace"], fakeDocker.UploadDestinations);
         Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
         Assert.Equal(["workspace-1", "measurement-1"], fakeDocker.RemovedVolumes);
@@ -2763,22 +1837,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceJitSamplePublishesOutputAndReturnsACompletedSample()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedJitFramesAsync(sequencePointRangeCount: 0),
-            ResourceUsage = new RuntimeContainerResourceUsage(83886080, 3)
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedJitFramesAsync(sequencePointRangeCount: 0), ResourceUsage = new RuntimeContainerResourceUsage(83886080, 3) };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var sample = await fixture.Coordinator.MeasureAsync(
-            new RuntimePerformanceSampleRequest(
-                fixture.Options.Profiles[0].Id,
-                fixture.Options.PromotionPreflightPlanSha256!,
-                fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                fixture.Options.SecurityPolicies[0].Id,
-                RuntimePerformanceScenarios.Jit,
-                "Program.Main"),
-            TestContext.Current.CancellationToken);
+        var sample = await fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Jit, "Program.Main"), TestContext.Current.CancellationToken);
 
         Assert.Equal(RuntimePerformanceScenarios.Jit, sample.Scenario);
         Assert.Equal(RuntimeJitSourceMappingKinds.None, sample.SourceMappingKind);
@@ -2792,24 +1854,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceMappingSampleRequiresTwoDistinctSequencePointRanges()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedJitFramesAsync(sequencePointRangeCount: 1)
-        };
-        await using var fixture = CreateRuntimePerformanceFixture(
-            fakeDocker,
-            RuntimeJitSourceMappingKinds.LinuxProfiler);
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedJitFramesAsync(sequencePointRangeCount: 1) };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker, RuntimeJitSourceMappingKinds.LinuxProfiler);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Mapping,
-                    "Program.Main"),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Mapping, "Program.Main"), TestContext.Current.CancellationToken));
 
         Assert.Equal("performance-mapping-unavailable", exception.Code);
         Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
@@ -2819,23 +1867,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceMappingSampleRetainsDistinctSequencePointCount()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedJitFramesAsync(sequencePointRangeCount: 2)
-        };
-        await using var fixture = CreateRuntimePerformanceFixture(
-            fakeDocker,
-            RuntimeJitSourceMappingKinds.LinuxProfiler);
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedJitFramesAsync(sequencePointRangeCount: 2) };
+        await using var fixture = CreateRuntimePerformanceFixture(fakeDocker, RuntimeJitSourceMappingKinds.LinuxProfiler);
 
-        var sample = await fixture.Coordinator.MeasureAsync(
-            new RuntimePerformanceSampleRequest(
-                fixture.Options.Profiles[0].Id,
-                fixture.Options.PromotionPreflightPlanSha256!,
-                fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                fixture.Options.SecurityPolicies[0].Id,
-                RuntimePerformanceScenarios.Mapping,
-                "Program.Main"),
-            TestContext.Current.CancellationToken);
+        var sample = await fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Mapping, "Program.Main"), TestContext.Current.CancellationToken);
 
         Assert.Equal(RuntimePerformanceScenarios.Mapping, sample.Scenario);
         Assert.Equal(RuntimeJitSourceMappingKinds.LinuxProfiler, sample.SourceMappingKind);
@@ -2846,22 +1881,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceSampleRejectsMissingDockerStatsEvidence()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync(),
-            NextResourceMonitorStopException = new DockerEngineException("No positive stats sample.")
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync(), NextResourceMonitorStopException = new DockerEngineException("No positive stats sample.") };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("resource-monitor-stop-failed", exception.Code);
         Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
@@ -2871,22 +1894,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceSampleRejectsIncompleteOneShotCleanup()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync(),
-            FailRuntimeContainerRemoval = true
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync(), FailRuntimeContainerRemoval = true };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("performance-cleanup-failed", exception.Code);
         Assert.Contains($"remove-failed:{RuntimeTargetContainerId}", fakeDocker.CleanupLifecycle);
@@ -2900,15 +1911,7 @@ public sealed class RuntimeSupervisorTests
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
         await fixture.Scheduler.DisposeAsync();
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("performance-queue-rejected", exception.Code);
         Assert.Empty(fakeDocker.StartedContainers);
@@ -2938,15 +1941,7 @@ public sealed class RuntimeSupervisorTests
         };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("performance-image-identity-mismatch", exception.Code);
         Assert.Empty(fakeDocker.StartedContainers);
@@ -2973,15 +1968,7 @@ public sealed class RuntimeSupervisorTests
         };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("performance-helper-image-identity-mismatch", exception.Code);
         Assert.Empty(fakeDocker.StartedContainers);
@@ -3009,15 +1996,7 @@ public sealed class RuntimeSupervisorTests
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
         fixture.Options.MeasurementHelperImageId = $"sha256:{new string('a', 64)}";
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("performance-helper-image-not-distinct", exception.Code);
         Assert.Empty(fakeDocker.StartedContainers);
@@ -3026,21 +2005,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceSampleRejectsHelperContentDrift()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            MeasurementHelperContentSha256 = $"sha256:{new string('9', 64)}"
-        };
+        var fakeDocker = new SessionDockerClient { MeasurementHelperContentSha256 = $"sha256:{new string('9', 64)}" };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("performance-helper-content-mismatch", exception.Code);
         Assert.Empty(fakeDocker.StartedContainers);
@@ -3049,25 +2017,13 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceSampleRejectsHelperFromWrongRepository()
     {
-        const string wrongReference =
-            "registry.example/sharplabnext/not-supervisor@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-        var fakeDocker = new SessionDockerClient
-        {
-            MeasurementHelperImageReference = wrongReference
-        };
+        const string wrongReference = "registry.example/sharplabnext/not-supervisor@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        var fakeDocker = new SessionDockerClient { MeasurementHelperImageReference = wrongReference };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
         fixture.Options.MeasurementHelperImage = wrongReference;
         fakeDocker.MeasurementHelperImageReference = wrongReference;
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("performance-helper-image-identity-mismatch", exception.Code);
         Assert.Empty(fakeDocker.StartedContainers);
@@ -3076,22 +2032,10 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceSampleRejectsATimedOutJobAfterCleanup()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync(),
-            NextWaitContainerException = new OperationCanceledException("simulated deadline")
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync(), NextWaitContainerException = new OperationCanceledException("simulated deadline") };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("runtime-measurement-protocol-failed", exception.Code);
         Assert.DoesNotContain(RuntimeTargetContainerId, fakeDocker.KilledContainers);
@@ -3102,22 +2046,11 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public async Task RuntimePerformanceSampleRejectsArtifactLeaseCleanupFailure()
     {
-        var fakeDocker = new SessionDockerClient
-        {
-            ContainerLogBytes = await CompletedRunFramesAsync()
-        };
+        var fakeDocker = new SessionDockerClient { ContainerLogBytes = await CompletedRunFramesAsync() };
         await using var fixture = CreateRuntimePerformanceFixture(fakeDocker);
         fixture.ArtifactStore.FailLeaseRelease = true;
 
-        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() =>
-            fixture.Coordinator.MeasureAsync(
-                new RuntimePerformanceSampleRequest(
-                    fixture.Options.Profiles[0].Id,
-                    fixture.Options.PromotionPreflightPlanSha256!,
-                    fixture.ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    fixture.Options.SecurityPolicies[0].Id,
-                    RuntimePerformanceScenarios.Run),
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<RuntimePerformancePreflightException>(() => fixture.Coordinator.MeasureAsync(new RuntimePerformanceSampleRequest(fixture.Options.Profiles[0].Id, fixture.Options.PromotionPreflightPlanSha256!, fixture.ArtifactStore.Descriptor.Manifest.ArtifactId, fixture.Options.SecurityPolicies[0].Id, RuntimePerformanceScenarios.Run), TestContext.Current.CancellationToken));
 
         Assert.Equal("performance-cleanup-failed", exception.Code);
         Assert.Contains(RuntimeTargetContainerId, fakeDocker.RemovedContainers);
@@ -3143,31 +2076,20 @@ public sealed class RuntimeSupervisorTests
     public async Task RuntimeSessionIsolationChangeDestroysThePreviousContainer()
     {
         var fakeDocker = new SessionDockerClient();
-        var (sessions, request) = CreateRuntimeSessionFixture(
-            fakeDocker,
-            "rs_isolation_change");
+        var (sessions, request) = CreateRuntimeSessionFixture(fakeDocker, "rs_isolation_change");
         await using var firstArchive = new MemoryStream("standard"u8.ToArray());
-        var first = await sessions.AcquireAsync(
-            request,
-            firstArchive,
-            TestContext.Current.CancellationToken);
+        var first = await sessions.AcquireAsync(request, firstArchive, TestContext.Current.CancellationToken);
         await first.CompleteAsync(reusable: true);
 
         await using var secondArchive = new MemoryStream("wine"u8.ToArray());
         var second = await sessions.AcquireAsync(
-            request with
-            {
-                IsolationKind = RuntimeContainerIsolationKind.WineRoot,
-                WinePrefixPath = "/opt/wine-dotnet"
-            },
+            request with { IsolationKind = RuntimeContainerIsolationKind.WineRoot, WinePrefixPath = "/opt/wine-dotnet" },
             secondArchive,
             TestContext.Current.CancellationToken);
 
         Assert.False(second.Reused);
         Assert.Equal("runtime-2", second.ContainerId);
-        Assert.Equal(
-            [RuntimeContainerIsolationKind.Standard, RuntimeContainerIsolationKind.WineRoot],
-            fakeDocker.CreatedSpecs.Select(static spec => spec.IsolationKind));
+        Assert.Equal([RuntimeContainerIsolationKind.Standard, RuntimeContainerIsolationKind.WineRoot], fakeDocker.CreatedSpecs.Select(static spec => spec.IsolationKind));
         Assert.Contains("runtime-1", fakeDocker.RemovedContainers);
         await second.CompleteAsync(reusable: false);
     }
@@ -3175,18 +2097,12 @@ public sealed class RuntimeSupervisorTests
     [Theory]
     [InlineData("start")]
     [InlineData("upload")]
-    public async Task RuntimeSessionKeeperStartOrUploadHttpFailureRemovesOldGenerationAndRebuildsOnce(
-        string failurePoint)
+    public async Task RuntimeSessionKeeperStartOrUploadHttpFailureRemovesOldGenerationAndRebuildsOnce(string failurePoint)
     {
         var fakeDocker = new SessionDockerClient();
-        var (sessions, request) = CreateRuntimeSessionFixture(
-            fakeDocker,
-            "rs_upload_http_failure");
+        var (sessions, request) = CreateRuntimeSessionFixture(fakeDocker, "rs_upload_http_failure");
         await using var firstArchive = new MemoryStream("first"u8.ToArray());
-        var first = await sessions.AcquireAsync(
-            request,
-            firstArchive,
-            TestContext.Current.CancellationToken);
+        var first = await sessions.AcquireAsync(request, firstArchive, TestContext.Current.CancellationToken);
         await first.CompleteAsync(reusable: true);
         if (failurePoint == "start")
             fakeDocker.NextStartContainerException = new HttpRequestException("Keeper start failed.");
@@ -3194,10 +2110,7 @@ public sealed class RuntimeSupervisorTests
             fakeDocker.NextUploadArchiveException = new HttpRequestException("Docker archive upload failed.");
 
         await using var replacementArchive = new MemoryStream("replacement"u8.ToArray());
-        var replacement = await sessions.AcquireAsync(
-            request,
-            replacementArchive,
-            TestContext.Current.CancellationToken);
+        var replacement = await sessions.AcquireAsync(request, replacementArchive, TestContext.Current.CancellationToken);
 
         Assert.False(replacement.Reused);
         Assert.Equal("runtime-2", replacement.ContainerId);
@@ -3213,29 +2126,16 @@ public sealed class RuntimeSupervisorTests
     public async Task RuntimeSessionUploadCancellationRemovesOldGenerationWithoutCreatingReplacement()
     {
         var fakeDocker = new SessionDockerClient();
-        var (sessions, request) = CreateRuntimeSessionFixture(
-            fakeDocker,
-            "rs_upload_cancelled");
+        var (sessions, request) = CreateRuntimeSessionFixture(fakeDocker, "rs_upload_cancelled");
         await using var firstArchive = new MemoryStream("first"u8.ToArray());
-        var first = await sessions.AcquireAsync(
-            request,
-            firstArchive,
-            TestContext.Current.CancellationToken);
+        var first = await sessions.AcquireAsync(request, firstArchive, TestContext.Current.CancellationToken);
         await first.CompleteAsync(reusable: true);
-        using var uploadCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-            TestContext.Current.CancellationToken);
+        using var uploadCancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         fakeDocker.BeforeNextUploadArchive = uploadCancellation.Cancel;
-        fakeDocker.NextUploadArchiveException = new OperationCanceledException(
-            "Docker archive upload was cancelled.",
-            innerException: null,
-            uploadCancellation.Token);
+        fakeDocker.NextUploadArchiveException = new OperationCanceledException("Docker archive upload was cancelled.", innerException: null, uploadCancellation.Token);
 
         await using var cancelledArchive = new MemoryStream("cancelled"u8.ToArray());
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            sessions.AcquireAsync(
-                request,
-                cancelledArchive,
-                uploadCancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sessions.AcquireAsync(request, cancelledArchive, uploadCancellation.Token));
 
         Assert.Equal(1, fakeDocker.RuntimeContainerCreates);
         Assert.Equal(["first"], fakeDocker.UploadedArchives);
@@ -3244,10 +2144,7 @@ public sealed class RuntimeSupervisorTests
         Assert.Contains("workspace-1", fakeDocker.RemovedVolumes);
 
         await using var recoveryArchive = new MemoryStream("recovery"u8.ToArray());
-        var recovery = await sessions.AcquireAsync(
-            request,
-            recoveryArchive,
-            TestContext.Current.CancellationToken);
+        var recovery = await sessions.AcquireAsync(request, recoveryArchive, TestContext.Current.CancellationToken);
         Assert.False(recovery.Reused);
         Assert.Equal("runtime-2", recovery.ContainerId);
         Assert.Equal(2, fakeDocker.RuntimeContainerCreates);
@@ -3260,18 +2157,12 @@ public sealed class RuntimeSupervisorTests
     [InlineData("exit")]
     [InlineData("oom")]
     [InlineData("error")]
-    public async Task RuntimeSessionWorkspaceCleanupFailureDoesNotEscapeAndForcesNewGeneration(
-        string failurePoint)
+    public async Task RuntimeSessionWorkspaceCleanupFailureDoesNotEscapeAndForcesNewGeneration(string failurePoint)
     {
         var fakeDocker = new SessionDockerClient();
-        var (sessions, request) = CreateRuntimeSessionFixture(
-            fakeDocker,
-            $"rs_cleanup_http_failure_{failurePoint}");
+        var (sessions, request) = CreateRuntimeSessionFixture(fakeDocker, $"rs_cleanup_http_failure_{failurePoint}");
         await using var firstArchive = new MemoryStream("first"u8.ToArray());
-        var first = await sessions.AcquireAsync(
-            request,
-            firstArchive,
-            TestContext.Current.CancellationToken);
+        var first = await sessions.AcquireAsync(request, firstArchive, TestContext.Current.CancellationToken);
         switch (failurePoint)
         {
             case "stop":
@@ -3291,8 +2182,7 @@ public sealed class RuntimeSupervisorTests
                 break;
         }
 
-        var completionException = await Record.ExceptionAsync(async () =>
-            await first.CompleteAsync(reusable: true));
+        var completionException = await Record.ExceptionAsync(async () => await first.CompleteAsync(reusable: true));
 
         Assert.Null(completionException);
         Assert.Contains("runtime-1", fakeDocker.RemovedContainers);
@@ -3300,10 +2190,7 @@ public sealed class RuntimeSupervisorTests
         Assert.Contains("workspace-1", fakeDocker.RemovedVolumes);
 
         await using var secondArchive = new MemoryStream("second"u8.ToArray());
-        var second = await sessions.AcquireAsync(
-            request,
-            secondArchive,
-            TestContext.Current.CancellationToken);
+        var second = await sessions.AcquireAsync(request, secondArchive, TestContext.Current.CancellationToken);
         Assert.False(second.Reused);
         Assert.Equal("runtime-2", second.ContainerId);
         Assert.Equal(2, fakeDocker.RuntimeContainerCreates);
@@ -3314,16 +2201,7 @@ public sealed class RuntimeSupervisorTests
     public void VersionedSandboxProfileIsDigestVerifiedAndDenyByDefault()
     {
         var root = FindRepositoryRoot();
-        var options = new RuntimeSandboxOptions
-        {
-            SeccompProfilePath = Path.Combine(
-                root,
-                "src",
-                "Supervisor",
-                "SharpLabNext.RuntimeSupervisor",
-                "security",
-                "runtime-job-seccomp.v1.json")
-        };
+        var options = new RuntimeSandboxOptions { SeccompProfilePath = Path.Combine(root, "src", "Supervisor", "SharpLabNext.RuntimeSupervisor", "security", "runtime-job-seccomp.v1.json") };
 
         var policy = RuntimeSandboxPolicy.Load(options, root);
 
@@ -3338,17 +2216,7 @@ public sealed class RuntimeSupervisorTests
     public void SandboxProfileRejectsDigestMismatch()
     {
         var root = FindRepositoryRoot();
-        var options = new RuntimeSandboxOptions
-        {
-            SeccompProfilePath = Path.Combine(
-                root,
-                "src",
-                "Supervisor",
-                "SharpLabNext.RuntimeSupervisor",
-                "security",
-                "runtime-job-seccomp.v1.json"),
-            SeccompProfileSha256 = $"sha256:{new string('0', 64)}"
-        };
+        var options = new RuntimeSandboxOptions { SeccompProfilePath = Path.Combine(root, "src", "Supervisor", "SharpLabNext.RuntimeSupervisor", "security", "runtime-job-seccomp.v1.json"), SeccompProfileSha256 = $"sha256:{new string('0', 64)}" };
 
         var exception = Assert.Throws<InvalidOperationException>(() => RuntimeSandboxPolicy.Load(options, root));
 
@@ -3358,14 +2226,7 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public void RunRequestAcceptsExecutionFlowAsAProtocolMode()
     {
-        var request = new RunRequest(
-            "request-1",
-            "run:req_00000000-0000-4000-8000-000000000001",
-            "resolution-1",
-            new ArtifactRef($"sha256:{new string('a', 64)}"),
-            "dotnet-10-linux-x64",
-            new RunOptions([], null, RunInstrumentation.ExecutionFlow, "runtime-job-default"),
-            DateTimeOffset.UtcNow.AddMinutes(1));
+        var request = new RunRequest("request-1", "run:req_00000000-0000-4000-8000-000000000001", "resolution-1", new ArtifactRef($"sha256:{new string('a', 64)}"), "dotnet-10-linux-x64", new RunOptions([], null, RunInstrumentation.ExecutionFlow, "runtime-job-default"), DateTimeOffset.UtcNow.AddMinutes(1));
 
         Assert.Null(RuntimeJobRequestValidator.Validate(request));
     }
@@ -3373,14 +2234,7 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public void RuntimeRequestRejectsControlCharactersInIdempotencyKey()
     {
-        var request = new RunRequest(
-            "request-1",
-            "run:req-1\nforged-log-line",
-            "resolution-1",
-            new ArtifactRef($"sha256:{new string('a', 64)}"),
-            "dotnet-10-linux-x64",
-            new RunOptions([], null, RunInstrumentation.None, "runtime-job-default"),
-            DateTimeOffset.UtcNow.AddMinutes(1));
+        var request = new RunRequest("request-1", "run:req-1\nforged-log-line", "resolution-1", new ArtifactRef($"sha256:{new string('a', 64)}"), "dotnet-10-linux-x64", new RunOptions([], null, RunInstrumentation.None, "runtime-job-default"), DateTimeOffset.UtcNow.AddMinutes(1));
 
         Assert.NotNull(RuntimeJobRequestValidator.Validate(request));
     }
@@ -3390,8 +2244,7 @@ public sealed class RuntimeSupervisorTests
     {
         var manifest = Manifest(metadata: null, derived: false);
 
-        var exception = Assert.Throws<RuntimeJobFailureException>(() =>
-            RuntimeJobExecutor.ValidateInstrumentation(manifest, RunInstrumentation.ExecutionFlow));
+        var exception = Assert.Throws<RuntimeJobFailureException>(() => RuntimeJobExecutor.ValidateInstrumentation(manifest, RunInstrumentation.ExecutionFlow));
 
         Assert.Equal("execution-flow-artifact-required", exception.Code);
     }
@@ -3413,14 +2266,7 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public void JitRequestOnlyAllowsTheConfiguredProviderAndPolicies()
     {
-        var request = new JitRequest(
-            "request-1",
-            "idempotency-1",
-            "resolution-1",
-            new ArtifactRef($"sha256:{new string('a', 64)}"),
-            "dotnet-10-linux-x64",
-            new JitOptions(null, "tier0-diffable", "disabled", "arbitrary-command", "runtime-job-default"),
-            DateTimeOffset.UtcNow.AddMinutes(1));
+        var request = new JitRequest("request-1", "idempotency-1", "resolution-1", new ArtifactRef($"sha256:{new string('a', 64)}"), "dotnet-10-linux-x64", new JitOptions(null, "tier0-diffable", "disabled", "arbitrary-command", "runtime-job-default"), DateTimeOffset.UtcNow.AddMinutes(1));
 
         Assert.NotNull(RuntimeJobRequestValidator.Validate(request));
     }
@@ -3434,28 +2280,11 @@ public sealed class RuntimeSupervisorTests
     [InlineData("Program:Main", "*Program:Main*")]
     [InlineData("Program..ctor", "*Program:.ctor*")]
     [InlineData("Program..cctor", "*Program:.cctor*")]
-    public void JitEnvironmentUsesCoreClrMethodFilterGrammar(
-        string? methodFilter,
-        string expectedDisasmFilter)
+    public void JitEnvironmentUsesCoreClrMethodFilterGrammar(string? methodFilter, string expectedDisasmFilter)
     {
-        var request = new JitRequest(
-            "request-1",
-            "idempotency-1",
-            "resolution-1",
-            new ArtifactRef($"sha256:{new string('a', 64)}"),
-            "dotnet-10-linux-x64",
-            new JitOptions(
-                methodFilter,
-                "tier0-diffable",
-                "disabled",
-                "coreclr-jitdisasm",
-                "runtime-job-default"),
-            DateTimeOffset.UtcNow.AddMinutes(1));
+        var request = new JitRequest("request-1", "idempotency-1", "resolution-1", new ArtifactRef($"sha256:{new string('a', 64)}"), "dotnet-10-linux-x64", new JitOptions(methodFilter, "tier0-diffable", "disabled", "coreclr-jitdisasm", "runtime-job-default"), DateTimeOffset.UtcNow.AddMinutes(1));
 
-        var environment = RuntimeJobExecutor.CreateJitEnvironment(
-            Assert.Single(ValidOptions().Profiles),
-            request,
-            "SharpLabNext.User.dll");
+        var environment = RuntimeJobExecutor.CreateJitEnvironment(Assert.Single(ValidOptions().Profiles), request, "SharpLabNext.User.dll");
 
         Assert.Equal(expectedDisasmFilter, environment["COMPlus_JitDisasm"]);
         Assert.Equal("SharpLabNext.User", environment["COMPlus_JitDisasmAssemblies"]);
@@ -3470,28 +2299,18 @@ public sealed class RuntimeSupervisorTests
         Assert.Equal("0", environment["DOTNET_EnableDiagnostics_Debugger"]);
         Assert.Equal("1", environment["DOTNET_EnableDiagnostics_Profiler"]);
         Assert.Equal("1", environment["CORECLR_ENABLE_PROFILING"]);
-        Assert.Equal(
-            "/opt/sharplabnext/SharpLabNext.JitProfiler.so",
-            environment["CORECLR_PROFILER_PATH"]);
+        Assert.Equal("/opt/sharplabnext/SharpLabNext.JitProfiler.so", environment["CORECLR_PROFILER_PATH"]);
         Assert.Equal("1", environment["SHARPLABNEXT_JIT_RESET_OUTPUT"]);
         Assert.Equal("SharpLabNext.User.dll", environment["SHARPLABNEXT_JIT_MAP_MODULE"]);
         Assert.Equal("/tmp/sharplabnext-jit.map", environment["SHARPLABNEXT_JIT_MAP_PATH"]);
-        Assert.Equal(
-            "/tmp/sharplabnext-jit-rich.map",
-            environment["SHARPLABNEXT_JIT_RICH_MAP_PATH"]);
+        Assert.Equal("/tmp/sharplabnext-jit-rich.map", environment["SHARPLABNEXT_JIT_RICH_MAP_PATH"]);
     }
 
     [Fact]
     public void WineJitEnvironmentUsesWindowsPathsWithoutTheLinuxProfiler()
     {
         var profile = Assert.Single(ValidOptions().Profiles);
-        profile.Container = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Wine,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-            ExecutionUser = RuntimeContainerExecutionUsers.NonRoot,
-            WinePrefixPath = "/opt/wine-coreclr"
-        };
+        profile.Container = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, ExecutionUser = RuntimeContainerExecutionUsers.NonRoot, WinePrefixPath = "/opt/wine-coreclr" };
         profile.Operations = new RuntimeProfileOperations
         {
             Jit = new RuntimeJitOperationDefinition
@@ -3512,14 +2331,7 @@ public sealed class RuntimeSupervisorTests
                 }
             }
         };
-        var request = new JitRequest(
-            "request-1",
-            "idempotency-1",
-            "resolution-1",
-            new ArtifactRef($"sha256:{new string('a', 64)}"),
-            profile.Id,
-            new JitOptions(null, "tier0-diffable", "disabled", "coreclr-jitdisasm", "runtime-job-default"),
-            DateTimeOffset.UtcNow.AddMinutes(1));
+        var request = new JitRequest("request-1", "idempotency-1", "resolution-1", new ArtifactRef($"sha256:{new string('a', 64)}"), profile.Id, new JitOptions(null, "tier0-diffable", "disabled", "coreclr-jitdisasm", "runtime-job-default"), DateTimeOffset.UtcNow.AddMinutes(1));
 
         var environment = RuntimeJobExecutor.CreateJitEnvironment(profile, request, "SharpLabNext.User.dll");
 
@@ -3558,19 +2370,9 @@ public sealed class RuntimeSupervisorTests
                 }
             }
         };
-        var request = new JitRequest(
-            "request-1",
-            "idempotency-1",
-            "resolution-1",
-            new ArtifactRef($"sha256:{new string('a', 64)}"),
-            profile.Id,
-            new JitOptions(null, "tier0-diffable", "disabled", "coreclr-jitdisasm", "runtime-job-default"),
-            DateTimeOffset.UtcNow.AddMinutes(1));
+        var request = new JitRequest("request-1", "idempotency-1", "resolution-1", new ArtifactRef($"sha256:{new string('a', 64)}"), profile.Id, new JitOptions(null, "tier0-diffable", "disabled", "coreclr-jitdisasm", "runtime-job-default"), DateTimeOffset.UtcNow.AddMinutes(1));
 
-        var environment = RuntimeJobExecutor.CreateJitEnvironment(
-            profile,
-            request,
-            "SharpLabNext.User.dll");
+        var environment = RuntimeJobExecutor.CreateJitEnvironment(profile, request, "SharpLabNext.User.dll");
 
         Assert.Equal("0", environment["DOTNET_EnableDiagnostics"]);
         Assert.Equal("0", environment["COMPlus_EnableDiagnostics"]);
@@ -3591,12 +2393,7 @@ public sealed class RuntimeSupervisorTests
     public void MonoJitEnvironmentDoesNotInjectCoreClrDiagnostics()
     {
         var profile = Assert.Single(ValidOptions().Profiles);
-        profile.Container = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Standard,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Mono,
-            ExecutionUser = RuntimeContainerExecutionUsers.NonRoot
-        };
+        profile.Container = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Standard, EnvironmentKind = RuntimeContainerEnvironmentKinds.Mono, ExecutionUser = RuntimeContainerExecutionUsers.NonRoot };
         profile.Operations = new RuntimeProfileOperations
         {
             Jit = new RuntimeJitOperationDefinition
@@ -3616,19 +2413,9 @@ public sealed class RuntimeSupervisorTests
                 }
             }
         };
-        var request = new JitRequest(
-            "request-1",
-            "idempotency-1",
-            "resolution-1",
-            new ArtifactRef($"sha256:{new string('a', 64)}"),
-            profile.Id,
-            new JitOptions(null, "tier0-diffable", "disabled", "mono-jit", "runtime-job-default"),
-            DateTimeOffset.UtcNow.AddMinutes(1));
+        var request = new JitRequest("request-1", "idempotency-1", "resolution-1", new ArtifactRef($"sha256:{new string('a', 64)}"), profile.Id, new JitOptions(null, "tier0-diffable", "disabled", "mono-jit", "runtime-job-default"), DateTimeOffset.UtcNow.AddMinutes(1));
 
-        var environment = RuntimeJobExecutor.CreateJitEnvironment(
-            profile,
-            request,
-            "SharpLabNext.User.exe");
+        var environment = RuntimeJobExecutor.CreateJitEnvironment(profile, request, "SharpLabNext.User.exe");
 
         Assert.Equal("0", environment["DOTNET_EnableDiagnostics"]);
         Assert.Equal("0", environment["COMPlus_EnableDiagnostics"]);
@@ -3659,13 +2446,9 @@ public sealed class RuntimeSupervisorTests
     [Fact]
     public void RuntimeEntrypointRetainsDirectPidOneReadyGateWithoutMeasurementProtocol()
     {
-        var script = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "deploy", "docker", "runtime-entrypoint.sh"));
+        var script = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "deploy", "docker", "runtime-entrypoint.sh"));
 
-        Assert.Contains(
-            "if [ \"${SHARPLABNEXT_JIT_RESET_OUTPUT:-0}\" = \"1\" ]; then",
-            script,
-            StringComparison.Ordinal);
+        Assert.Contains("if [ \"${SHARPLABNEXT_JIT_RESET_OUTPUT:-0}\" = \"1\" ]; then", script, StringComparison.Ordinal);
         Assert.Contains("ready=/workspace/.sharplabnext/ready", script, StringComparison.Ordinal);
         Assert.DoesNotContain("sharplabnext-runtime-measurement", script, StringComparison.Ordinal);
         Assert.DoesNotContain("/measurement", script, StringComparison.Ordinal);
@@ -3811,14 +2594,9 @@ public sealed class RuntimeSupervisorTests
     [InlineData("AnyCPU", "arm64", true)]
     [InlineData("x64", "x64", true)]
     [InlineData("arm64", "x64", false)]
-    public void RuntimeArchitectureCompatibilityNormalizesPortableArtifacts(
-        string artifactArchitecture,
-        string runtimeArchitecture,
-        bool expected)
+    public void RuntimeArchitectureCompatibilityNormalizesPortableArtifacts(string artifactArchitecture, string runtimeArchitecture, bool expected)
     {
-        Assert.Equal(
-            expected,
-            RuntimeArchitectureCompatibility.IsCompatible(artifactArchitecture, runtimeArchitecture));
+        Assert.Equal(expected, RuntimeArchitectureCompatibility.IsCompatible(artifactArchitecture, runtimeArchitecture));
     }
 
     [Theory]
@@ -3829,17 +2607,9 @@ public sealed class RuntimeSupervisorTests
     [InlineData("out-of-memory", 137, 137, false, RunTerminalStatus.OutOfMemory)]
     [InlineData(null, null, 139, false, RunTerminalStatus.ProcessCrash)]
     [InlineData("process-crash", 137, 137, true, RunTerminalStatus.OutOfMemory)]
-    public void RunTerminalStatusPreservesCrashAndOutOfMemoryIdentity(
-        string? reportedStatus,
-        int? reportedExitCode,
-        long containerExitCode,
-        bool oomKilled,
-        RunTerminalStatus expected)
+    public void RunTerminalStatusPreservesCrashAndOutOfMemoryIdentity(string? reportedStatus, int? reportedExitCode, long containerExitCode, bool oomKilled, RunTerminalStatus expected)
     {
-        var actual = RuntimeJobExecutor.ClassifyRunStatus(
-            reportedStatus,
-            reportedExitCode,
-            new RuntimeContainerExit(containerExitCode, oomKilled, null));
+        var actual = RuntimeJobExecutor.ClassifyRunStatus(reportedStatus, reportedExitCode, new RuntimeContainerExit(containerExitCode, oomKilled, null));
 
         Assert.Equal(expected, actual);
     }
@@ -3852,38 +2622,18 @@ public sealed class RuntimeSupervisorTests
     [InlineData("out-of-memory", 137, false, 0, false, JitTerminalStatus.OutOfMemory)]
     [InlineData(null, 137, true, 0, false, JitTerminalStatus.OutOfMemory)]
     [InlineData("completed", 0, false, 1, true, JitTerminalStatus.OutputLimitExceeded)]
-    public void JitTerminalStatusPreservesCrashAndResourceIdentity(
-        string? reportedStatus,
-        long containerExitCode,
-        bool oomKilled,
-        int methodCount,
-        bool outputTruncated,
-        JitTerminalStatus expected)
+    public void JitTerminalStatusPreservesCrashAndResourceIdentity(string? reportedStatus, long containerExitCode, bool oomKilled, int methodCount, bool outputTruncated, JitTerminalStatus expected)
     {
-        var actual = RuntimeJobExecutor.ClassifyJitStatus(
-            reportedStatus,
-            new RuntimeContainerExit(containerExitCode, oomKilled, null),
-            methodCount,
-            outputTruncated);
+        var actual = RuntimeJobExecutor.ClassifyJitStatus(reportedStatus, new RuntimeContainerExit(containerExitCode, oomKilled, null), methodCount, outputTruncated);
 
         Assert.Equal(expected, actual);
     }
 
-    private static PromotionPreflightProfileFixture CreatePromotionPreflightProfile(
-        Action<RuntimeProfileOptions>? update = null,
-        string? profileSha256 = null)
+    private static PromotionPreflightProfileFixture CreatePromotionPreflightProfile(Action<RuntimeProfileOptions>? update = null, string? profileSha256 = null)
     {
         var repositoryRoot = FindRepositoryRoot();
-        var sourcePath = Path.Combine(
-            repositoryRoot,
-            "profiles",
-            "runtimes",
-            "candidates",
-            "dotnet-10-linux-x64.json");
-        var profile = JsonSerializer.Deserialize<RuntimeProfileOptions>(
-            File.ReadAllBytes(sourcePath),
-            RuntimeProfilePreflightJsonOptions)
-            ?? throw new InvalidOperationException("The preflight test profile is empty.");
+        var sourcePath = Path.Combine(repositoryRoot, "profiles", "runtimes", "candidates", "dotnet-10-linux-x64.json");
+        var profile = JsonSerializer.Deserialize<RuntimeProfileOptions>(File.ReadAllBytes(sourcePath), RuntimeProfilePreflightJsonOptions) ?? throw new InvalidOperationException("The preflight test profile is empty.");
         profile.Image = $"registry.example/sharplabnext/runtime@sha256:{new string('a', 64)}";
         profile.RuntimeImageId = $"sha256:{new string('b', 64)}";
         profile.PromotionReceipt = null;
@@ -3897,8 +2647,7 @@ public sealed class RuntimeSupervisorTests
             $"sha256:{Convert.ToHexStringLower(SHA256.HashData(bytes))}";
         var planSha256 = $"sha256:{new string('c', 64)}";
         var sourceRevision = new string('d', 40);
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
                 [$"{RuntimePromotionPreflightOptions.SectionName}:Enabled"] = "true",
                 [$"{RuntimePromotionPreflightOptions.SectionName}:PlanSha256"] = planSha256,
@@ -3910,13 +2659,7 @@ public sealed class RuntimeSupervisorTests
                     profileSha256 ?? observedProfileSha256
             })
             .Build();
-        return new PromotionPreflightProfileFixture(
-            root,
-            profile.Id,
-            planSha256,
-            observedProfileSha256,
-            sourceRevision,
-            configuration);
+        return new PromotionPreflightProfileFixture(root, profile.Id, planSha256, observedProfileSha256, sourceRevision, configuration);
     }
 
     private static RuntimeSupervisorOptions ValidOptions() => new()
@@ -3937,22 +2680,12 @@ public sealed class RuntimeSupervisorTests
                 AcceptedArtifactFormats = ["dotnet-managed-pe-v1"],
                 AcceptedFrameworks =
                 [
-                    new RuntimeFrameworkCompatibilityDefinition
-                    {
-                        Name = "Microsoft.NETCore.App",
-                        ExactVersion = "10.0.9"
-                    }
+                    new RuntimeFrameworkCompatibilityDefinition { Name = "Microsoft.NETCore.App", ExactVersion = "10.0.9" }
                 ],
                 Capabilities = ["run", "jit-asm"],
                 AllowedSecurityPolicyIds = ["runtime-job-default"],
-                Container = new RuntimeContainerDefinition
-                {
-                    ExecutionUser = RuntimeContainerExecutionUsers.NonRoot
-                },
-                Layout = new RuntimeImageLayout
-                {
-                    JitInspectorAssemblyPath = "/opt/sharplabnext/SharpLabNext.JitInspector.dll"
-                }
+                Container = new RuntimeContainerDefinition { ExecutionUser = RuntimeContainerExecutionUsers.NonRoot },
+                Layout = new RuntimeImageLayout { JitInspectorAssemblyPath = "/opt/sharplabnext/SharpLabNext.JitInspector.dll" }
             }
         ],
         SecurityPolicies = [new RuntimeSecurityPolicyOptions()]
@@ -3975,28 +2708,13 @@ public sealed class RuntimeSupervisorTests
         ],
         AcceptedFrameworks =
         [
-            new RuntimeFrameworkCompatibilityDefinition
-            {
-                Name = ".NETFramework",
-                ExactVersion = "4.8"
-            }
+            new RuntimeFrameworkCompatibilityDefinition { Name = ".NETFramework", ExactVersion = "4.8" }
         ],
         Capabilities = ["run"],
         ProvidedRuntimeFeatureTags = ["runtime.netfx48-wine"],
         AllowedSecurityPolicyIds = ["runtime-job-wine-netfx"],
-        Container = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Wine,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-            ExecutionUser = RuntimeContainerExecutionUsers.Root,
-            WinePrefixPath = "/opt/wine-dotnet"
-        },
-        Layout = new RuntimeImageLayout
-        {
-            RunnerKind = RuntimeRunnerKinds.WineNetFx,
-            RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.WineRunner.dll",
-            WinePrefixPath = "/opt/wine-dotnet"
-        }
+        Container = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, ExecutionUser = RuntimeContainerExecutionUsers.Root, WinePrefixPath = "/opt/wine-dotnet" },
+        Layout = new RuntimeImageLayout { RunnerKind = RuntimeRunnerKinds.WineNetFx, RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.WineRunner.dll", WinePrefixPath = "/opt/wine-dotnet" }
     };
 
     private static RuntimeProfileOptions JSharpWineRuntimeProfile() => new()
@@ -4012,28 +2730,13 @@ public sealed class RuntimeSupervisorTests
         AcceptedArtifactFormats = ["dotnet-framework-managed-pe-v1"],
         AcceptedFrameworks =
         [
-            new RuntimeFrameworkCompatibilityDefinition
-            {
-                Name = ".NETFramework",
-                ExactVersion = "2.0"
-            }
+            new RuntimeFrameworkCompatibilityDefinition { Name = ".NETFramework", ExactVersion = "2.0" }
         ],
         Capabilities = ["run"],
         ProvidedRuntimeFeatureTags = ["runtime.jsharp20-wine"],
         AllowedSecurityPolicyIds = ["runtime-job-wine-jsharp20"],
-        Container = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Wine,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-            ExecutionUser = RuntimeContainerExecutionUsers.Root,
-            WinePrefixPath = "/opt/wine-jsharp20"
-        },
-        Layout = new RuntimeImageLayout
-        {
-            RunnerKind = RuntimeRunnerKinds.WineJSharp20,
-            RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.WineRunner.dll",
-            WinePrefixPath = "/opt/wine-jsharp20"
-        }
+        Container = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, ExecutionUser = RuntimeContainerExecutionUsers.Root, WinePrefixPath = "/opt/wine-jsharp20" },
+        Layout = new RuntimeImageLayout { RunnerKind = RuntimeRunnerKinds.WineJSharp20, RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.WineRunner.dll", WinePrefixPath = "/opt/wine-jsharp20" }
     };
 
     private static RuntimeProfileOptions WineNetFx20RuntimeProfile() => new()
@@ -4049,27 +2752,12 @@ public sealed class RuntimeSupervisorTests
         AcceptedArtifactFormats = ["dotnet-framework-managed-pe-v1"],
         AcceptedFrameworks =
         [
-            new RuntimeFrameworkCompatibilityDefinition
-            {
-                Name = ".NETFramework",
-                ExactVersion = "2.0"
-            }
+            new RuntimeFrameworkCompatibilityDefinition { Name = ".NETFramework", ExactVersion = "2.0" }
         ],
         Capabilities = ["run"],
         AllowedSecurityPolicyIds = ["runtime-job-wine-netfx"],
-        Container = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Wine,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-            ExecutionUser = RuntimeContainerExecutionUsers.Root,
-            WinePrefixPath = "/opt/wine-netfx-clr2"
-        },
-        Layout = new RuntimeImageLayout
-        {
-            RunnerKind = RuntimeRunnerKinds.WineNetFx,
-            RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe",
-            WinePrefixPath = "/opt/wine-netfx-clr2"
-        }
+        Container = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, ExecutionUser = RuntimeContainerExecutionUsers.Root, WinePrefixPath = "/opt/wine-netfx-clr2" },
+        Layout = new RuntimeImageLayout { RunnerKind = RuntimeRunnerKinds.WineNetFx, RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe", WinePrefixPath = "/opt/wine-netfx-clr2" }
     };
 
     private static ArtifactManifest JSharpManifest()
@@ -4078,21 +2766,11 @@ public sealed class RuntimeSupervisorTests
         return new ArtifactManifest(
             1,
             artifactRef,
-            new ArtifactProducer(
-                "release",
-                "jsharp",
-                "vjc-jsharp20",
-                "2.0.50727.937",
-                null,
-                $"sha256:{new string('d', 64)}"),
+            new ArtifactProducer("release", "jsharp", "vjc-jsharp20", "2.0.50727.937", null, $"sha256:{new string('d', 64)}"),
             "jsharp20-ref",
             "net20",
             "dotnet-framework-managed-pe-v1",
-            new ArtifactRuntimeRequirement(
-                "netfx-clr-wine",
-                [new FrameworkRequirement(".NETFramework", "2.0")],
-                "x64",
-                ["runtime.jsharp20-wine"]),
+            new ArtifactRuntimeRequirement("netfx-clr-wine", [new FrameworkRequirement(".NETFramework", "2.0")], "x64", ["runtime.jsharp20-wine"]),
             [],
             BuildOutputKind.Console,
             "SharpLabNext.User.exe",
@@ -4100,41 +2778,24 @@ public sealed class RuntimeSupervisorTests
             []);
     }
 
-    private static SharpLabNext.Artifacts.Contracts.ArtifactManifest Manifest(
-        IReadOnlyDictionary<string, string>? metadata,
-        bool derived)
+    private static SharpLabNext.Artifacts.Contracts.ArtifactManifest Manifest(IReadOnlyDictionary<string, string>? metadata, bool derived)
     {
         var artifactRef = new ArtifactRef($"sha256:{new string('a', 64)}");
         return new SharpLabNext.Artifacts.Contracts.ArtifactManifest(
             1,
             artifactRef,
-            new SharpLabNext.Artifacts.Contracts.ArtifactProducer(
-                "release",
-                "csharp",
-                "roslyn-stable",
-                "1.0.0",
-                null,
-                "image"),
+            new SharpLabNext.Artifacts.Contracts.ArtifactProducer("release", "csharp", "roslyn-stable", "1.0.0", null, "image"),
             "net10-ref",
             "net10.0",
             "dotnet-managed-pe-v1",
-            new SharpLabNext.Artifacts.Contracts.ArtifactRuntimeRequirement(
-                "coreclr",
-                [],
-                "anycpu",
-                []),
+            new SharpLabNext.Artifacts.Contracts.ArtifactRuntimeRequirement("coreclr", [], "anycpu", []),
             [],
             BuildOutputKind.Console,
             "app.dll",
             "Program.Main",
             [],
             derived
-                ? new SharpLabNext.Artifacts.Contracts.ArtifactDerivation(
-                    artifactRef,
-                    "artifacts-default",
-                    "1.0.0",
-                    $"sha256:{new string('b', 64)}")
-                : null,
+                ? new SharpLabNext.Artifacts.Contracts.ArtifactDerivation(artifactRef, "artifacts-default", "1.0.0", $"sha256:{new string('b', 64)}") : null,
             metadata);
     }
 
@@ -4142,16 +2803,7 @@ public sealed class RuntimeSupervisorTests
     {
         var root = FindRepositoryRoot();
         var sandbox = RuntimeSandboxPolicy.Load(
-            new RuntimeSandboxOptions
-            {
-                SeccompProfilePath = Path.Combine(
-                    root,
-                    "src",
-                    "Supervisor",
-                    "SharpLabNext.RuntimeSupervisor",
-                    "security",
-                    "runtime-job-seccomp.v1.json")
-            },
+            new RuntimeSandboxOptions { SeccompProfilePath = Path.Combine(root, "src", "Supervisor", "SharpLabNext.RuntimeSupervisor", "security", "runtime-job-seccomp.v1.json") },
             root);
         return new DockerEngineClient(ValidOptions(), sandbox, handler);
     }
@@ -4171,30 +2823,19 @@ public sealed class RuntimeSupervisorTests
         return frame;
     }
 
-    private static async Task<TarEntrySnapshot> ReadSingleTarEntryAsync(
-        byte[] archive,
-        CancellationToken cancellationToken)
+    private static async Task<TarEntrySnapshot> ReadSingleTarEntryAsync(byte[] archive, CancellationToken cancellationToken)
     {
         await using var stream = new MemoryStream(archive, writable: false);
         using var reader = new TarReader(stream, leaveOpen: true);
-        var entry = await reader.GetNextEntryAsync(copyData: true, cancellationToken)
-            ?? throw new InvalidOperationException("The archive did not contain an entry.");
+        var entry = await reader.GetNextEntryAsync(copyData: true, cancellationToken) ?? throw new InvalidOperationException("The archive did not contain an entry.");
         using var payload = new MemoryStream();
         if (entry.DataStream is not null)
             await entry.DataStream.CopyToAsync(payload, cancellationToken);
         Assert.Null(await reader.GetNextEntryAsync(copyData: false, cancellationToken));
-        return new TarEntrySnapshot(
-            entry.Name,
-            payload.ToArray(),
-            entry.Uid,
-            entry.Gid,
-            entry.Mode);
+        return new TarEntrySnapshot(entry.Name, payload.ToArray(), entry.Uid, entry.Gid, entry.Mode);
     }
 
-    private static byte[] CreateRuntimeMeasurementArchive(
-        string expectedName,
-        byte[] payload,
-        string scenario = "valid")
+    private static byte[] CreateRuntimeMeasurementArchive(string expectedName, byte[] payload, string scenario = "valid")
     {
         var entryName = scenario == "wrong-name" ? "completion-unexpected" : expectedName;
         var entryType = scenario switch
@@ -4212,65 +2853,28 @@ public sealed class RuntimeSupervisorTests
         var uid = scenario == "wrong-uid" ? 1655 : 1654;
         var gid = scenario == "wrong-gid" ? 1655 : 1654;
         var mode = scenario == "wrong-mode"
-            ? UnixFileMode.UserRead | UnixFileMode.GroupRead
-            : UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            ? UnixFileMode.UserRead | UnixFileMode.GroupRead : UnixFileMode.UserRead | UnixFileMode.UserWrite;
 
         using var archive = new MemoryStream();
         using (var writer = new TarWriter(archive, leaveOpen: true))
         {
-            WriteRuntimeMeasurementEntry(
-                writer,
-                entryName,
-                entryPayload,
-                entryType,
-                uid,
-                gid,
-                mode);
+            WriteRuntimeMeasurementEntry(writer, entryName, entryPayload, entryType, uid, gid, mode);
             if (scenario == "duplicate")
-            {
-                WriteRuntimeMeasurementEntry(
-                    writer,
-                    expectedName,
-                    payload,
-                    TarEntryType.RegularFile,
-                    1654,
-                    1654,
-                    UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            }
+                WriteRuntimeMeasurementEntry(writer, expectedName, payload, TarEntryType.RegularFile, 1654, 1654, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             else if (scenario == "additional")
             {
-                WriteRuntimeMeasurementEntry(
-                    writer,
-                    "unexpected",
-                    "unexpected"u8.ToArray(),
-                    TarEntryType.RegularFile,
-                    1654,
-                    1654,
-                    UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                WriteRuntimeMeasurementEntry(writer, "unexpected", "unexpected"u8.ToArray(), TarEntryType.RegularFile, 1654, 1654, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             }
         }
         return archive.ToArray();
     }
 
-    private sealed record TarEntrySnapshot(
-        string Name,
-        byte[] Payload,
-        long Uid,
-        long Gid,
-        UnixFileMode Mode);
+    private sealed record TarEntrySnapshot(string Name, byte[] Payload, long Uid, long Gid, UnixFileMode Mode);
 
-    private static void WriteRuntimeMeasurementEntry(
-        TarWriter writer,
-        string name,
-        byte[] payload,
-        TarEntryType entryType,
-        int uid,
-        int gid,
-        UnixFileMode mode)
+    private static void WriteRuntimeMeasurementEntry(TarWriter writer, string name, byte[] payload, TarEntryType entryType, int uid, int gid, UnixFileMode mode)
     {
         using var data = entryType == TarEntryType.RegularFile
-            ? new MemoryStream(payload, writable: false)
-            : null;
+            ? new MemoryStream(payload, writable: false) : null;
         var entry = new PaxTarEntry(entryType, name)
         {
             Gid = gid,
@@ -4285,53 +2889,20 @@ public sealed class RuntimeSupervisorTests
         writer.WriteEntry(entry);
     }
 
-    private static byte[] CreateRuntimeMeasurementPayload(
-        string header,
-        string cgroupKind,
-        string? peakMemoryBytes = null,
-        string token = RuntimeMeasurementToken,
-        string targetContainerId = RuntimeTargetContainerId) => Encoding.ASCII.GetBytes(
-            $"{header}\n{token}\n{targetContainerId}\n{cgroupKind}\n" +
-            (peakMemoryBytes is null ? string.Empty : $"{peakMemoryBytes}\n"));
+    private static byte[] CreateRuntimeMeasurementPayload(string header, string cgroupKind, string? peakMemoryBytes = null, string token = RuntimeMeasurementToken, string targetContainerId = RuntimeTargetContainerId) => Encoding.ASCII.GetBytes($"{header}\n{token}\n{targetContainerId}\n{cgroupKind}\n" + (peakMemoryBytes is null ? string.Empty : $"{peakMemoryBytes}\n"));
 
     private static byte[] CreateInvalidRuntimeMeasurementPayload(string scenario)
     {
-        var canonical = Encoding.ASCII.GetString(CreateRuntimeMeasurementPayload(
-            "sharplabnext-runtime-measurement-sidecar-v1",
-            "cgroup-v2",
-            peakMemoryBytes: "8192"));
+        var canonical = Encoding.ASCII.GetString(CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-sidecar-v1", "cgroup-v2", peakMemoryBytes: "8192"));
         return scenario switch
         {
-            "wrong-token" => CreateRuntimeMeasurementPayload(
-                "sharplabnext-runtime-measurement-sidecar-v1",
-                "cgroup-v2",
-                peakMemoryBytes: "8192",
-                token: new string('f', 32)),
-            "wrong-target" => CreateRuntimeMeasurementPayload(
-                "sharplabnext-runtime-measurement-sidecar-v1",
-                "cgroup-v2",
-                peakMemoryBytes: "8192",
-                targetContainerId: new string('e', 64)),
-            "wrong-header" => CreateRuntimeMeasurementPayload(
-                "sharplabnext-runtime-measurement-v1",
-                "cgroup-v2",
-                peakMemoryBytes: "8192"),
-            "wrong-cgroup" => CreateRuntimeMeasurementPayload(
-                "sharplabnext-runtime-measurement-sidecar-v1",
-                "cgroup-v3",
-                peakMemoryBytes: "8192"),
-            "zero-peak" => CreateRuntimeMeasurementPayload(
-                "sharplabnext-runtime-measurement-sidecar-v1",
-                "cgroup-v2",
-                peakMemoryBytes: "0"),
-            "leading-zero-peak" => CreateRuntimeMeasurementPayload(
-                "sharplabnext-runtime-measurement-sidecar-v1",
-                "cgroup-v2",
-                peakMemoryBytes: "08192"),
-            "overflow-peak" => CreateRuntimeMeasurementPayload(
-                "sharplabnext-runtime-measurement-sidecar-v1",
-                "cgroup-v2",
-                peakMemoryBytes: "9223372036854775808"),
+            "wrong-token" => CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-sidecar-v1", "cgroup-v2", peakMemoryBytes: "8192", token: new string('f', 32)),
+            "wrong-target" => CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-sidecar-v1", "cgroup-v2", peakMemoryBytes: "8192", targetContainerId: new string('e', 64)),
+            "wrong-header" => CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-v1", "cgroup-v2", peakMemoryBytes: "8192"),
+            "wrong-cgroup" => CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-sidecar-v1", "cgroup-v3", peakMemoryBytes: "8192"),
+            "zero-peak" => CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-sidecar-v1", "cgroup-v2", peakMemoryBytes: "0"),
+            "leading-zero-peak" => CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-sidecar-v1", "cgroup-v2", peakMemoryBytes: "08192"),
+            "overflow-peak" => CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-sidecar-v1", "cgroup-v2", peakMemoryBytes: "9223372036854775808"),
             "crlf" => Encoding.ASCII.GetBytes(canonical.Replace("\n", "\r\n", StringComparison.Ordinal)),
             "missing-final-lf" => Encoding.ASCII.GetBytes(canonical[..^1]),
             "extra-line" => Encoding.ASCII.GetBytes(canonical + "extra\n"),
@@ -4343,20 +2914,10 @@ public sealed class RuntimeSupervisorTests
     private static byte[] CreateInvalidRuntimeMeasurementArmedPayload(string scenario) =>
         scenario switch
         {
-            "wrong-token" => CreateRuntimeMeasurementPayload(
-                "sharplabnext-runtime-measurement-sidecar-armed-v1",
-                "cgroup-v2",
-                token: new string('f', 32)),
-            "wrong-target" => CreateRuntimeMeasurementPayload(
-                "sharplabnext-runtime-measurement-sidecar-armed-v1",
-                "cgroup-v2",
-                targetContainerId: new string('e', 64)),
-            "wrong-header" => CreateRuntimeMeasurementPayload(
-                "sharplabnext-runtime-measurement-sidecar-v1",
-                "cgroup-v2"),
-            "wrong-cgroup" => CreateRuntimeMeasurementPayload(
-                "sharplabnext-runtime-measurement-sidecar-armed-v1",
-                "cgroup-v3"),
+            "wrong-token" => CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-sidecar-armed-v1", "cgroup-v2", token: new string('f', 32)),
+            "wrong-target" => CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-sidecar-armed-v1", "cgroup-v2", targetContainerId: new string('e', 64)),
+            "wrong-header" => CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-sidecar-v1", "cgroup-v2"),
+            "wrong-cgroup" => CreateRuntimeMeasurementPayload("sharplabnext-runtime-measurement-sidecar-armed-v1", "cgroup-v3"),
             _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario, null)
         };
 
@@ -4367,30 +2928,15 @@ public sealed class RuntimeSupervisorTests
         return doubled - 3;
     }
 
-    private static async Task<RuntimeCapabilityFixture> CreateRuntimeCapabilityFixtureAsync(
-        IReadOnlyList<string> capabilities,
-        string sourceMappingKind)
+    private static async Task<RuntimeCapabilityFixture> CreateRuntimeCapabilityFixtureAsync(IReadOnlyList<string> capabilities, string sourceMappingKind)
     {
         var repositoryRoot = FindRepositoryRoot();
-        var configuration = Directory.GetParent(
-                Path.GetDirectoryName(typeof(RuntimeSupervisorTests).Assembly.Location)!)?.Name
-            ?? throw new InvalidOperationException("The unit-test build configuration could not be resolved.");
-        var probeOutput = Path.Combine(
-            repositoryRoot,
-            "tests",
-            "Fixtures",
-            "SharpLabNext.RuntimeCapabilityProbe",
-            "bin",
-            configuration,
-            "netcoreapp2.0");
+        var configuration = Directory.GetParent(Path.GetDirectoryName(typeof(RuntimeSupervisorTests).Assembly.Location)!)?.Name ?? throw new InvalidOperationException("The unit-test build configuration could not be resolved.");
+        var probeOutput = Path.Combine(repositoryRoot, "tests", "Fixtures", "SharpLabNext.RuntimeCapabilityProbe", "bin", configuration, "netcoreapp2.0");
         var assemblyPath = Path.Combine(probeOutput, "SharpLabNext.RuntimeCapabilityProbe.dll");
         var pdbPath = Path.Combine(probeOutput, "SharpLabNext.RuntimeCapabilityProbe.pdb");
-        var assemblyBytes = await File.ReadAllBytesAsync(
-            assemblyPath,
-            TestContext.Current.CancellationToken);
-        var pdbBytes = await File.ReadAllBytesAsync(
-            pdbPath,
-            TestContext.Current.CancellationToken);
+        var assemblyBytes = await File.ReadAllBytesAsync(assemblyPath, TestContext.Current.CancellationToken);
+        var pdbBytes = await File.ReadAllBytesAsync(pdbPath, TestContext.Current.CancellationToken);
         var pdbIdentity = ReadCapabilityPdbIdentity(assemblyBytes, pdbBytes);
 
         var options = ValidOptions();
@@ -4408,13 +2954,7 @@ public sealed class RuntimeSupervisorTests
         profile.RuntimeImageId = $"sha256:{new string('a', 64)}";
         profile.Capabilities = capabilities.ToList();
         profile.SecurityPolicies = [policy];
-        profile.Layout = new RuntimeImageLayout
-        {
-            DotNetHostPath = "/usr/share/dotnet/dotnet",
-            RunnerKind = RuntimeRunnerKinds.DotNet,
-            RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.Runner.dll",
-            JitInspectorAssemblyPath = "/opt/sharplabnext/SharpLabNext.JitInspector.dll"
-        };
+        profile.Layout = new RuntimeImageLayout { DotNetHostPath = "/usr/share/dotnet/dotnet", RunnerKind = RuntimeRunnerKinds.DotNet, RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.Runner.dll", JitInspectorAssemblyPath = "/opt/sharplabnext/SharpLabNext.JitInspector.dll" };
         profile.Operations = new RuntimeProfileOperations
         {
             Run = new RuntimeRunOperationDefinition
@@ -4440,8 +2980,7 @@ public sealed class RuntimeSupervisorTests
                     PathStyle = RuntimeOperationPathStyles.Unix,
                     SourceMappingKind = sourceMappingKind,
                     ProfilerPath = sourceMappingKind == RuntimeJitSourceMappingKinds.LinuxProfiler
-                        ? "/opt/sharplabnext/SharpLabNext.JitProfiler.so"
-                        : null,
+                        ? "/opt/sharplabnext/SharpLabNext.JitProfiler.so" : null,
                     Command = new RuntimeOperationCommandDefinition
                     {
                         Executable = profile.Layout.DotNetHostPath,
@@ -4457,23 +2996,9 @@ public sealed class RuntimeSupervisorTests
         };
 
         var sourceRevision = new string('1', 40);
-        var probeDescriptor = CreateCapabilityDescriptor(
-            assemblyBytes,
-            pdbBytes,
-            sourceRevision,
-            planSha256,
-            preflightProfileSha256,
-            profile,
-            parentArtifactRef: null);
+        var probeDescriptor = CreateCapabilityDescriptor(assemblyBytes, pdbBytes, sourceRevision, planSha256, preflightProfileSha256, profile, parentArtifactRef: null);
         var probeArtifactRef = probeDescriptor.Manifest.ArtifactId;
-        var flowDescriptor = CreateCapabilityDescriptor(
-            assemblyBytes,
-            pdbBytes,
-            sourceRevision,
-            planSha256,
-            preflightProfileSha256,
-            profile,
-            probeArtifactRef);
+        var flowDescriptor = CreateCapabilityDescriptor(assemblyBytes, pdbBytes, sourceRevision, planSha256, preflightProfileSha256, profile, probeArtifactRef);
         var flowArtifactRef = flowDescriptor.Manifest.ArtifactId;
         var artifactStore = new CapabilityArtifactStoreClient(
         [
@@ -4487,101 +3012,32 @@ public sealed class RuntimeSupervisorTests
             [(flowArtifactRef, "SharpLabNext.RuntimeCapabilityProbe.dll")] = assemblyBytes,
             [(flowArtifactRef, "SharpLabNext.RuntimeCapabilityProbe.pdb")] = pdbBytes
         });
-        var frames = await CreateCapabilityFramesAsync(
-            pdbIdentity,
-            mappedJit: sourceMappingKind != RuntimeJitSourceMappingKinds.None,
-            checked((int)policy.MaximumOutputBytes));
+        var frames = await CreateCapabilityFramesAsync(pdbIdentity, mappedJit: sourceMappingKind != RuntimeJitSourceMappingKinds.None, checked((int)policy.MaximumOutputBytes));
         var docker = new CapabilityDockerClient(profile, frames);
         var root = repositoryRoot;
         var sandbox = RuntimeSandboxPolicy.Load(
-            new RuntimeSandboxOptions
-            {
-                SeccompProfilePath = Path.Combine(
-                    root,
-                    "src",
-                    "Supervisor",
-                    "SharpLabNext.RuntimeSupervisor",
-                    "security",
-                    "runtime-job-seccomp.v1.json")
-            },
+            new RuntimeSandboxOptions { SeccompProfilePath = Path.Combine(root, "src", "Supervisor", "SharpLabNext.RuntimeSupervisor", "security", "runtime-job-seccomp.v1.json") },
             root);
         var operations = new OperationStore();
         var scheduler = new BoundedOperationScheduler(
             operations,
-            new OperationExecutionOptions
-            {
-                QueueCapacity = 16,
-                WorkerConcurrency = 1,
-                ExecutorId = "runtime-capability-test"
-            });
-        var sessions = new RuntimeSessionRegistry(
-            docker,
-            Options.Create(options),
-            sandbox,
-            NullLogger<RuntimeSessionRegistry>.Instance);
-        var executor = new RuntimeJobExecutor(
-            operations,
-            scheduler,
-            artifactStore,
-            docker,
-            sessions,
-            Options.Create(options),
-            new ServiceIdentity(
-                "runtime-supervisor",
-                ServiceKind.RuntimeSupervisor,
-                "release-1",
-                ProtocolVersion.WorkerV1,
-                [],
-                "ready"),
-            NullLogger<RuntimeJobExecutor>.Instance);
-        var coordinator = new RuntimeCapabilityPreflightCoordinator(
-            operations,
-            executor,
-            docker,
-            artifactStore,
-            sandbox,
-            Options.Create(options));
-        return new RuntimeCapabilityFixture(
-            coordinator,
-            scheduler,
-            docker,
-            profile,
-            policy,
-            probeArtifactRef,
-            flowArtifactRef,
-            pdbIdentity);
+            new OperationExecutionOptions { QueueCapacity = 16, WorkerConcurrency = 1, ExecutorId = "runtime-capability-test" });
+        var sessions = new RuntimeSessionRegistry(docker, Options.Create(options), sandbox, NullLogger<RuntimeSessionRegistry>.Instance);
+        var executor = new RuntimeJobExecutor(operations, scheduler, artifactStore, docker, sessions, Options.Create(options), new ServiceIdentity("runtime-supervisor", ServiceKind.RuntimeSupervisor, "release-1", ProtocolVersion.WorkerV1, [], "ready"), NullLogger<RuntimeJobExecutor>.Instance);
+        var coordinator = new RuntimeCapabilityPreflightCoordinator(operations, executor, docker, artifactStore, sandbox, Options.Create(options));
+        return new RuntimeCapabilityFixture(coordinator, scheduler, docker, profile, policy, probeArtifactRef, flowArtifactRef, pdbIdentity);
     }
 
-    private static byte[] CreateCapabilityDraftReceipt(
-        RuntimeCapabilityFixture fixture,
-        IReadOnlyList<JsonObject> documents,
-        Dictionary<string, byte[]> documentBytes)
+    private static byte[] CreateCapabilityDraftReceipt(RuntimeCapabilityFixture fixture, IReadOnlyList<JsonObject> documents, Dictionary<string, byte[]> documentBytes)
     {
-        var byCapability = documents.ToDictionary(
-            static document => document["capability"]!.GetValue<string>(),
-            StringComparer.Ordinal);
+        var byCapability = documents.ToDictionary(static document => document["capability"]!.GetValue<string>(), StringComparer.Ordinal);
         var runHelper = FindCapabilityArtifact(byCapability["run"], "helper");
-        var operations = new JsonObject
-        {
-            ["run"] = new JsonObject
-            {
-                ["implementation"] = fixture.Profile.Operations!.Run!.ImplementationId,
-                ["assemblyPath"] = runHelper["path"]!.GetValue<string>(),
-                ["assemblySha256"] = runHelper["sha256"]!.GetValue<string>()
-            }
-        };
+        var operations = new JsonObject { ["run"] = new JsonObject { ["implementation"] = fixture.Profile.Operations!.Run!.ImplementationId, ["assemblyPath"] = runHelper["path"]!.GetValue<string>(), ["assemblySha256"] = runHelper["sha256"]!.GetValue<string>() } };
         if (byCapability.TryGetValue("jit-asm", out var jitDocument))
         {
             var jitHelper = FindCapabilityArtifact(jitDocument, "helper");
             var profiler = FindCapabilityArtifact(jitDocument, "profiler");
-            operations["jit"] = new JsonObject
-            {
-                ["implementation"] = fixture.Profile.Operations.Jit!.ImplementationId,
-                ["assemblyPath"] = jitHelper["path"]!.GetValue<string>(),
-                ["assemblySha256"] = jitHelper["sha256"]!.GetValue<string>(),
-                ["profilerPath"] = profiler["path"]!.GetValue<string>(),
-                ["profilerSha256"] = profiler["sha256"]!.GetValue<string>()
-            };
+            operations["jit"] = new JsonObject { ["implementation"] = fixture.Profile.Operations.Jit!.ImplementationId, ["assemblyPath"] = jitHelper["path"]!.GetValue<string>(), ["assemblySha256"] = jitHelper["sha256"]!.GetValue<string>(), ["profilerPath"] = profiler["path"]!.GetValue<string>(), ["profilerSha256"] = profiler["sha256"]!.GetValue<string>() };
         }
 
         var checks = new JsonArray();
@@ -4597,11 +3053,9 @@ public sealed class RuntimeSupervisorTests
                 ["supervisorSandbox"] = true,
                 ["outputLimitValidated"] = true,
                 ["sourceMappingKind"] = isJit
-                    ? document["jit"]!["mapping"]!["kind"]!.GetValue<string>()
-                    : "not-applicable",
+                    ? document["jit"]!["mapping"]!["kind"]!.GetValue<string>() : "not-applicable",
                 ["mappingSource"] = isJit
-                    ? document["jit"]!["mapping"]!["source"]!.GetValue<string>()
-                    : "not-applicable",
+                    ? document["jit"]!["mapping"]!["source"]!.GetValue<string>() : "not-applicable",
                 ["evidencePath"] =
                     $"profiles/runtime-promotion-evidence/{fixture.Profile.Id}/{capability}.json",
                 ["evidenceSha256"] = ContentIdentity.Compute(documentBytes[capability]).Value
@@ -4618,35 +3072,11 @@ public sealed class RuntimeSupervisorTests
             ["platform"] = "linux",
             ["family"] = fixture.Profile.Family,
             ["resolvedVersion"] = fixture.Profile.RuntimeVersion,
-            ["image"] = new JsonObject
-            {
-                ["reference"] = image["reference"]!.GetValue<string>(),
-                ["imageId"] = image["imageId"]!.GetValue<string>(),
-                ["sizeBytes"] = 512L * 1024 * 1024
-            },
-            ["componentIdentity"] = new JsonObject
-            {
-                ["sourceUri"] = "https://example.invalid/runtime.tar.gz",
-                ["sourceDigest"] = $"sha512:{new string('2', 128)}"
-            },
-            ["runtimeIdentity"] = new JsonObject
-            {
-                ["runtimeCommit"] = fixture.Profile.RuntimeCommit,
-                ["jitVersion"] = fixture.Profile.JitVersion,
-                ["jitCommit"] = fixture.Profile.JitCommit
-            },
+            ["image"] = new JsonObject { ["reference"] = image["reference"]!.GetValue<string>(), ["imageId"] = image["imageId"]!.GetValue<string>(), ["sizeBytes"] = 512L * 1024 * 1024 },
+            ["componentIdentity"] = new JsonObject { ["sourceUri"] = "https://example.invalid/runtime.tar.gz", ["sourceDigest"] = $"sha512:{new string('2', 128)}" },
+            ["runtimeIdentity"] = new JsonObject { ["runtimeCommit"] = fixture.Profile.RuntimeCommit, ["jitVersion"] = fixture.Profile.JitVersion, ["jitCommit"] = fixture.Profile.JitCommit },
             ["operations"] = operations,
-            ["performance"] = new JsonObject
-            {
-                ["result"] = "passed",
-                ["policyId"] = "runtime-capability-unit-test",
-                ["policyPath"] =
-                    "profiles/runtime-performance-policies/runtime-capability-unit-test.json",
-                ["policySha256"] = $"sha256:{new string('3', 64)}",
-                ["evidencePath"] =
-                    $"profiles/runtime-promotion-evidence/{fixture.Profile.Id}/performance.json",
-                ["evidenceSha256"] = $"sha256:{new string('4', 64)}"
-            },
+            ["performance"] = new JsonObject { ["result"] = "passed", ["policyId"] = "runtime-capability-unit-test", ["policyPath"] = "profiles/runtime-performance-policies/runtime-capability-unit-test.json", ["policySha256"] = $"sha256:{new string('3', 64)}", ["evidencePath"] = $"profiles/runtime-promotion-evidence/{fixture.Profile.Id}/performance.json", ["evidenceSha256"] = $"sha256:{new string('4', 64)}" },
             ["sourceRevision"] = fixture.CreateRequest().SourceRevision,
             ["checks"] = checks
         };
@@ -4654,35 +3084,16 @@ public sealed class RuntimeSupervisorTests
     }
 
     private static JsonObject FindCapabilityArtifact(JsonObject document, string role) =>
-        document["artifacts"]!.AsArray()
-            .Select(static artifact => artifact!.AsObject())
-            .Single(artifact => StringComparer.Ordinal.Equals(
-                artifact["role"]!.GetValue<string>(),
-                role));
+        document["artifacts"]!.AsArray().Select(static artifact => artifact!.AsObject()).Single(artifact => StringComparer.Ordinal.Equals(artifact["role"]!.GetValue<string>(), role));
 
-    private static ArtifactBundleDescriptor CreateCapabilityDescriptor(
-        byte[] assemblyBytes,
-        byte[] pdbBytes,
-        string sourceRevision,
-        string planSha256,
-        string preflightProfileSha256,
-        RuntimeProfileOptions profile,
-        ArtifactRef? parentArtifactRef)
+    private static ArtifactBundleDescriptor CreateCapabilityDescriptor(byte[] assemblyBytes, byte[] pdbBytes, string sourceRevision, string planSha256, string preflightProfileSha256, RuntimeProfileOptions profile, ArtifactRef? parentArtifactRef)
     {
         var assemblyDigest = ContentIdentity.Compute(assemblyBytes).Value;
         var pdbDigest = ContentIdentity.Compute(pdbBytes).Value;
         var files = new[]
         {
-            new ArtifactFileDescriptor(
-                "managed-pe",
-                "SharpLabNext.RuntimeCapabilityProbe.dll",
-                assemblyBytes.LongLength,
-                assemblyDigest),
-            new ArtifactFileDescriptor(
-                "portable-pdb",
-                "SharpLabNext.RuntimeCapabilityProbe.pdb",
-                pdbBytes.LongLength,
-                pdbDigest)
+            new ArtifactFileDescriptor("managed-pe", "SharpLabNext.RuntimeCapabilityProbe.dll", assemblyBytes.LongLength, assemblyDigest),
+            new ArtifactFileDescriptor("portable-pdb", "SharpLabNext.RuntimeCapabilityProbe.pdb", pdbBytes.LongLength, pdbDigest)
         };
         var placeholder = new ArtifactRef($"sha256:{new string('0', 64)}");
         var framework = Assert.Single(profile.AcceptedFrameworks);
@@ -4707,42 +3118,20 @@ public sealed class RuntimeSupervisorTests
         var manifest = ArtifactIdentity.WithComputedId(new ArtifactManifest(
             ArtifactStoreProtocol.ArtifactManifestVersion,
             placeholder,
-            new ArtifactProducer(
-                RuntimeCapabilityProbeContract.ReleaseId,
-                RuntimeCapabilityProbeContract.LanguageId,
-                RuntimeCapabilityProbeContract.ToolchainId,
-                RuntimeCapabilityProbeContract.CompilerVersion,
-                sourceRevision,
-                $"source-revision:{sourceRevision}"),
+            new ArtifactProducer(RuntimeCapabilityProbeContract.ReleaseId, RuntimeCapabilityProbeContract.LanguageId, RuntimeCapabilityProbeContract.ToolchainId, RuntimeCapabilityProbeContract.CompilerVersion, sourceRevision, $"source-revision:{sourceRevision}"),
             "runtime-capability-probe-netcoreapp2.0-ref",
             "netcoreapp2.0",
             "dotnet-managed-pe-v1",
-            new ArtifactRuntimeRequirement(
-                profile.Family,
-                [new FrameworkRequirement(framework.Name, framework.ExactVersion!)],
-                "anycpu",
-                []),
+            new ArtifactRuntimeRequirement(profile.Family, [new FrameworkRequirement(framework.Name, framework.ExactVersion!)], "anycpu", []),
             [],
             BuildOutputKind.Console,
             "SharpLabNext.RuntimeCapabilityProbe.dll",
             RuntimeCapabilityProbeContract.EntryPoint,
             files,
             parentArtifactRef is not null
-                ? new ArtifactDerivation(
-                    parentArtifactRef.Value,
-                    RuntimeCapabilityProbeContract.ExecutionFlowProcessorId,
-                    RuntimeCapabilityProbeContract.ExecutionFlowProcessorVersion,
-                    RuntimeCapabilityProbeContract.ExecutionFlowOptionsDigest)
-                : null,
+                ? new ArtifactDerivation(parentArtifactRef.Value, RuntimeCapabilityProbeContract.ExecutionFlowProcessorId, RuntimeCapabilityProbeContract.ExecutionFlowProcessorVersion, RuntimeCapabilityProbeContract.ExecutionFlowOptionsDigest) : null,
             metadata));
-        return new ArtifactBundleDescriptor(
-            manifest,
-            files.Select(static file => new ArtifactBundleEntry(
-                file.Path,
-                file.Size,
-                file.Digest,
-                file.Role,
-                new ContentRef(file.Digest))).ToArray());
+        return new ArtifactBundleDescriptor(manifest, files.Select(static file => new ArtifactBundleEntry(file.Path, file.Size, file.Digest, file.Role, new ContentRef(file.Digest))).ToArray());
     }
 
     private static CapabilityPdbIdentity ReadCapabilityPdbIdentity(byte[] assemblyBytes, byte[] pdbBytes)
@@ -4751,85 +3140,35 @@ public sealed class RuntimeSupervisorTests
         using var peReader = new PEReader(peStream, PEStreamOptions.PrefetchEntireImage);
         var peMetadata = peReader.GetMetadataReader(MetadataReaderOptions.ApplyWindowsRuntimeProjections);
         using var pdbStream = new MemoryStream(pdbBytes, writable: false);
-        using var provider = MetadataReaderProvider.FromPortablePdbStream(
-            pdbStream,
-            MetadataStreamOptions.PrefetchMetadata);
+        using var provider = MetadataReaderProvider.FromPortablePdbStream(pdbStream, MetadataStreamOptions.PrefetchMetadata);
         var reader = provider.GetMetadataReader(MetadataReaderOptions.ApplyWindowsRuntimeProjections);
         var header = Assert.IsType<DebugMetadataHeader>(reader.DebugMetadataHeader);
-        var type = peMetadata.TypeDefinitions
-            .Select(handle => peMetadata.GetTypeDefinition(handle))
-            .Single(type =>
-                peMetadata.GetString(type.Namespace) == "SharpLabNext.RuntimeCapabilityProbe" &&
-                peMetadata.GetString(type.Name) == "Program");
-        var methodHandle = type.GetMethods()
-            .Single(handle => peMetadata.GetString(peMetadata.GetMethodDefinition(handle).Name) ==
-                "MultipleSequencePoints");
+        var type = peMetadata.TypeDefinitions.Select(handle => peMetadata.GetTypeDefinition(handle)).Single(type => peMetadata.GetString(type.Namespace) == "SharpLabNext.RuntimeCapabilityProbe" && peMetadata.GetString(type.Name) == "Program");
+        var methodHandle = type.GetMethods().Single(handle => peMetadata.GetString(peMetadata.GetMethodDefinition(handle).Name) == "MultipleSequencePoints");
         var row = MetadataTokens.GetRowNumber(methodHandle);
-        var information = reader.GetMethodDebugInformation(
-            MetadataTokens.MethodDebugInformationHandle(row));
-        var ranges = information.GetSequencePoints()
-            .Where(static point => !point.IsHidden)
-            .Select(point =>
+        var information = reader.GetMethodDebugInformation(MetadataTokens.MethodDebugInformationHandle(row));
+        var ranges = information.GetSequencePoints().Where(static point => !point.IsHidden).Select(point =>
             {
                 var documentHandle = point.Document.IsNil ? information.Document : point.Document;
                 var document = reader.GetString(reader.GetDocument(documentHandle).Name);
-                return new CapabilityPdbRange(
-                    point.Offset,
-                    SanitizeCapabilityDocument(document),
-                    point.StartLine,
-                    point.StartColumn,
-                    point.EndLine,
-                    point.EndColumn);
-            })
-            .DistinctBy(static range => (
-                range.Document,
-                range.StartLine,
-                range.StartColumn,
-                range.EndLine,
-                range.EndColumn))
-            .Take(3)
-            .ToArray();
+                return new CapabilityPdbRange(point.Offset, SanitizeCapabilityDocument(document), point.StartLine, point.StartColumn, point.EndLine, point.EndColumn);
+            }).DistinctBy(static range => (range.Document, range.StartLine, range.StartColumn, range.EndLine, range.EndColumn)).Take(3).ToArray();
         Assert.InRange(ranges.Length, 2, 3);
-        return new CapabilityPdbIdentity(
-            ContentIdentity.Compute(pdbBytes).Value,
-            Convert.ToHexStringLower(header.Id.AsSpan()),
-            $"0x{MetadataTokens.GetToken(methodHandle):x8}",
-            ranges);
+        return new CapabilityPdbIdentity(ContentIdentity.Compute(pdbBytes).Value, Convert.ToHexStringLower(header.Id.AsSpan()), $"0x{MetadataTokens.GetToken(methodHandle):x8}", ranges);
     }
 
     private static string SanitizeCapabilityDocument(string path)
     {
-        var segments = path.Replace('\\', '/')
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Where(static segment => segment is not ("." or "..") && !segment.EndsWith(':'))
-            .TakeLast(8)
-            .ToArray();
+        var segments = path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries).Where(static segment => segment is not ("." or "..") && !segment.EndsWith(':')).TakeLast(8).ToArray();
         var sanitized = segments.Length == 0 ? "source" : string.Join('/', segments);
         return sanitized.Length <= 512 ? sanitized : sanitized[^512..];
     }
 
-    private static async Task<IReadOnlyDictionary<string, byte[]>> CreateCapabilityFramesAsync(
-        CapabilityPdbIdentity pdb,
-        bool mappedJit,
-        int maximumOutputBytes)
+    private static async Task<IReadOnlyDictionary<string, byte[]>> CreateCapabilityFramesAsync(CapabilityPdbIdentity pdb, bool mappedJit, int maximumOutputBytes)
     {
-        var graph = new RuntimeGraphDocument(
-            [new RuntimeGraphRoot("value", 1)],
-            [new RuntimeGraphNode(1, "System.Int32", "scalar", "42", [])],
-            false,
-            null);
+        var graph = new RuntimeGraphDocument([new RuntimeGraphRoot("value", 1)], [new RuntimeGraphNode(1, "System.Int32", "scalar", "42", [])], false, null);
         var evidenceRanges = mappedJit
-            ? pdb.Ranges.Select((range, index) => new
-            {
-                range.IlOffset,
-                NativeStartOffset = index * 8,
-                NativeEndOffset = (index + 1) * 8,
-                range.Document,
-                range.StartLine,
-                range.StartColumn,
-                range.EndLine,
-                range.EndColumn
-            }).ToArray<object>()
+            ? pdb.Ranges.Select((range, index) => new { range.IlOffset, NativeStartOffset = index * 8, NativeEndOffset = (index + 1) * 8, range.Document, range.StartLine, range.StartColumn, range.EndLine, range.EndColumn }).ToArray<object>()
             : [];
         var jitSummary = RuntimeStructuredPayloadCodec.Serialize(new
         {
@@ -4838,83 +3177,38 @@ public sealed class RuntimeSupervisorTests
             MethodFilter = "RuntimeSupervisorTests.CapabilityPdbProbe",
             Methods = new[]
             {
-                new
-                {
-                    Method = pdb.MethodToken,
-                    DisplayName = "RuntimeSupervisorTests.CapabilityPdbProbe",
-                    Status = "prepared",
-                    Address = "0x00007ff800001000",
-                    Error = (string?)null,
-                    NativeCodeSize = 48,
-                    InstructionCount = 12,
-                    LinkedRanges = Array.Empty<object>(),
-                    MappingSource = mappedJit ? "ordinary" : "method",
-                    EvidenceRanges = evidenceRanges
-                }
+                new { Method = pdb.MethodToken, DisplayName = "RuntimeSupervisorTests.CapabilityPdbProbe", Status = "prepared", Address = "0x00007ff800001000", Error = (string?)null, NativeCodeSize = 48, InstructionCount = 12, LinkedRanges = Array.Empty<object>(), MappingSource = mappedJit ? "ordinary" : "method", EvidenceRanges = evidenceRanges }
             }
         });
         var completed = """{"Status":"completed","ExitCode":0,"ElapsedMilliseconds":1}"""u8.ToArray();
-        var userException = RuntimeStructuredPayloadCodec.Serialize(new
-        {
-            TypeName = "System.InvalidOperationException",
-            Message = "capability user exception",
-            StackTrace = "at CapabilityProbe.Throw()",
-            InnerException = (object?)null,
-            ElapsedMilliseconds = 1
-        });
+        var userException = RuntimeStructuredPayloadCodec.Serialize(new { TypeName = "System.InvalidOperationException", Message = "capability user exception", StackTrace = "at CapabilityProbe.Throw()", InnerException = (object?)null, ElapsedMilliseconds = 1 });
         var userExceptionExit =
             """{"Status":"user-exception","ExitCode":1,"ElapsedMilliseconds":1}"""u8.ToArray();
 
         return new Dictionary<string, byte[]>(StringComparer.Ordinal)
         {
-            ["success-security"] = await CreateRuntimeFramesAsync(
-                (RuntimeFrameKind.Stdout, Encoding.UTF8.GetBytes(
-                    "SLN-CAPABILITY-STDOUT-V1\nSLN-CAPABILITY-NETWORK-BLOCKED-V1\n" +
-                    "SLN-CAPABILITY-ROOTFS-READONLY-V1\n")),
-                (RuntimeFrameKind.Stderr, "SLN-CAPABILITY-STDERR-V1\n"u8.ToArray()),
-                (RuntimeFrameKind.Exit, completed)),
-            ["user-exception"] = await CreateRuntimeFramesAsync(
-                (RuntimeFrameKind.Exception, userException),
-                (RuntimeFrameKind.Exit, userExceptionExit)),
-            ["output-overflow"] = await CreateRuntimeFramesAsync(
-                (RuntimeFrameKind.Stdout, Enumerable.Repeat((byte)'x', maximumOutputBytes + 1).ToArray())),
-            ["hang"] = await CreateRuntimeFramesAsync(
-                (RuntimeFrameKind.Stdout, Encoding.UTF8.GetBytes(
-                    RuntimeJobExecutor.CapabilityHangReadyMarker[..12])),
-                (RuntimeFrameKind.Stdout, Encoding.UTF8.GetBytes(
-                    RuntimeJobExecutor.CapabilityHangReadyMarker[12..] + "\n"))),
+            ["success-security"] = await CreateRuntimeFramesAsync((RuntimeFrameKind.Stdout, Encoding.UTF8.GetBytes("SLN-CAPABILITY-STDOUT-V1\nSLN-CAPABILITY-NETWORK-BLOCKED-V1\n" + "SLN-CAPABILITY-ROOTFS-READONLY-V1\n")), (RuntimeFrameKind.Stderr, "SLN-CAPABILITY-STDERR-V1\n"u8.ToArray()), (RuntimeFrameKind.Exit, completed)),
+            ["user-exception"] = await CreateRuntimeFramesAsync((RuntimeFrameKind.Exception, userException), (RuntimeFrameKind.Exit, userExceptionExit)),
+            ["output-overflow"] = await CreateRuntimeFramesAsync((RuntimeFrameKind.Stdout, Enumerable.Repeat((byte)'x', maximumOutputBytes + 1).ToArray())),
+            ["hang"] = await CreateRuntimeFramesAsync((RuntimeFrameKind.Stdout, Encoding.UTF8.GetBytes(RuntimeJobExecutor.CapabilityHangReadyMarker[..12])), (RuntimeFrameKind.Stdout, Encoding.UTF8.GetBytes(RuntimeJobExecutor.CapabilityHangReadyMarker[12..] + "\n"))),
             ["process-tree"] = await CreateRuntimeFramesAsync((RuntimeFrameKind.Exit, completed)),
-            ["inspection"] = await CreateRuntimeFramesAsync(
-                (RuntimeFrameKind.Inspection, RuntimeStructuredPayloadCodec.Serialize(
-                    new RuntimeInspectionPayload("Value", "value", graph))),
-                (RuntimeFrameKind.MemoryGraph, RuntimeStructuredPayloadCodec.Serialize(
-                    new RuntimeInspectionPayload("MemoryGraph", "memory", graph))),
-                (RuntimeFrameKind.Exit, completed)),
+            ["inspection"] = await CreateRuntimeFramesAsync((RuntimeFrameKind.Inspection, RuntimeStructuredPayloadCodec.Serialize(new RuntimeInspectionPayload("Value", "value", graph))), (RuntimeFrameKind.MemoryGraph, RuntimeStructuredPayloadCodec.Serialize(new RuntimeInspectionPayload("MemoryGraph", "memory", graph))), (RuntimeFrameKind.Exit, completed)),
             ["execution-flow"] = await CreateRuntimeFramesAsync(
-                (RuntimeFrameKind.Flow, RuntimeStructuredPayloadCodec.Serialize(new RuntimeFlowPayload(
-                    "sequence-point", "Program.cs", new RuntimeSourceRange(1, 1, 1, 8), 1, null, null, null, false))),
-                (RuntimeFrameKind.Flow, RuntimeStructuredPayloadCodec.Serialize(new RuntimeFlowPayload(
-                    "branch", "Program.cs", new RuntimeSourceRange(2, 1, 2, 8), 1, null, null, null, false))),
-                (RuntimeFrameKind.Flow, RuntimeStructuredPayloadCodec.Serialize(new RuntimeFlowPayload(
-                    "sequence-point", "Program.cs", new RuntimeSourceRange(3, 1, 3, 8), 1, null, null, null, false))),
+                (RuntimeFrameKind.Flow, RuntimeStructuredPayloadCodec.Serialize(new RuntimeFlowPayload("sequence-point", "Program.cs", new RuntimeSourceRange(1, 1, 1, 8), 1, null, null, null, false))),
+                (RuntimeFrameKind.Flow, RuntimeStructuredPayloadCodec.Serialize(new RuntimeFlowPayload("branch", "Program.cs", new RuntimeSourceRange(2, 1, 2, 8), 1, null, null, null, false))),
+                (RuntimeFrameKind.Flow, RuntimeStructuredPayloadCodec.Serialize(new RuntimeFlowPayload("sequence-point", "Program.cs", new RuntimeSourceRange(3, 1, 3, 8), 1, null, null, null, false))),
                 (RuntimeFrameKind.Exit, completed)),
-            ["jit"] = await CreateRuntimeFramesAsync(
-                (RuntimeFrameKind.JitAssembly, "CapabilityPdbProbe():\n    ret\n"u8.ToArray()),
-                (RuntimeFrameKind.JitSummary, jitSummary),
-                (RuntimeFrameKind.Exit, completed)),
+            ["jit"] = await CreateRuntimeFramesAsync((RuntimeFrameKind.JitAssembly, "CapabilityPdbProbe():\n    ret\n"u8.ToArray()), (RuntimeFrameKind.JitSummary, jitSummary), (RuntimeFrameKind.Exit, completed)),
             ["empty"] = []
         };
     }
 
-    private static async Task<byte[]> CreateRuntimeFramesAsync(
-        params (RuntimeFrameKind Kind, byte[] Payload)[] frames)
+    private static async Task<byte[]> CreateRuntimeFramesAsync(params (RuntimeFrameKind Kind, byte[] Payload)[] frames)
     {
         await using var stream = new MemoryStream();
         await using var writer = new RuntimeFrameWriter(stream, RuntimeFrameTransport.Base64Line);
         foreach (var (kind, payload) in frames)
-        {
             await writer.WriteAsync(kind, payload, TestContext.Current.CancellationToken);
-        }
         return stream.ToArray();
     }
 
@@ -4931,27 +3225,7 @@ public sealed class RuntimeSupervisorTests
 
     private static async Task<byte[]> CompletedJitFramesAsync(int sequencePointRangeCount)
     {
-        var linkedRanges = Enumerable.Range(0, sequencePointRangeCount)
-            .Select(static index => new
-            {
-                SourceFilePath = "Program.cs",
-                SourceRange = new
-                {
-                    StartLine = index + 1,
-                    StartCharacter = 4,
-                    EndLine = index + 1,
-                    EndCharacter = 12
-                },
-                OutputRange = new
-                {
-                    StartLine = index + 1,
-                    StartCharacter = 0,
-                    EndLine = index + 1,
-                    EndCharacter = 8
-                },
-                Precision = "sequence-point"
-            })
-            .ToArray();
+        var linkedRanges = Enumerable.Range(0, sequencePointRangeCount).Select(static index => new { SourceFilePath = "Program.cs", SourceRange = new { StartLine = index + 1, StartCharacter = 4, EndLine = index + 1, EndCharacter = 12 }, OutputRange = new { StartLine = index + 1, StartCharacter = 0, EndLine = index + 1, EndCharacter = 8 }, Precision = "sequence-point" }).ToArray();
         var summary = RuntimeStructuredPayloadCodec.Serialize(new
         {
             RuntimeVersion = "10.0.9",
@@ -4959,31 +3233,14 @@ public sealed class RuntimeSupervisorTests
             MethodFilter = "Program.Main",
             Methods = new[]
             {
-                new
-                {
-                    Method = "0x06000001",
-                    DisplayName = "Program.Main",
-                    Status = "prepared",
-                    Address = "0x00007FF800001000",
-                    Error = (string?)null,
-                    NativeCodeSize = 16,
-                    InstructionCount = 4,
-                    LinkedRanges = linkedRanges,
-                    MappingSource = sequencePointRangeCount > 0 ? "sequence-points" : "none"
-                }
+                new { Method = "0x06000001", DisplayName = "Program.Main", Status = "prepared", Address = "0x00007FF800001000", Error = (string?)null, NativeCodeSize = 16, InstructionCount = 4, LinkedRanges = linkedRanges, MappingSource = sequencePointRangeCount > 0 ? "sequence-points" : "none" }
             }
         });
 
         await using var stream = new MemoryStream();
         await using var writer = new RuntimeFrameWriter(stream, RuntimeFrameTransport.Base64Line);
-        await writer.WriteAsync(
-            RuntimeFrameKind.JitAssembly,
-            "Program.Main():\n    ret\n"u8.ToArray(),
-            TestContext.Current.CancellationToken);
-        await writer.WriteAsync(
-            RuntimeFrameKind.JitSummary,
-            summary,
-            TestContext.Current.CancellationToken);
+        await writer.WriteAsync(RuntimeFrameKind.JitAssembly, "Program.Main():\n    ret\n"u8.ToArray(), TestContext.Current.CancellationToken);
+        await writer.WriteAsync(RuntimeFrameKind.JitSummary, summary, TestContext.Current.CancellationToken);
         await writer.WriteAsync(
             RuntimeFrameKind.Exit,
             """{"Status":"completed","ExitCode":0,"ElapsedMilliseconds":1}"""u8.ToArray(),
@@ -4991,10 +3248,7 @@ public sealed class RuntimeSupervisorTests
         return stream.ToArray();
     }
 
-    private static RuntimePerformanceFixture CreateRuntimePerformanceFixture(
-        SessionDockerClient fakeDocker,
-        string sourceMappingKind = RuntimeJitSourceMappingKinds.None,
-        bool wine = false)
+    private static RuntimePerformanceFixture CreateRuntimePerformanceFixture(SessionDockerClient fakeDocker, string sourceMappingKind = RuntimeJitSourceMappingKinds.None, bool wine = false)
     {
         var options = ValidOptions();
         options.PromotionPreflightPlanSha256 = $"sha256:{new string('f', 64)}";
@@ -5038,8 +3292,7 @@ public sealed class RuntimeSupervisorTests
                 PathStyle = RuntimeOperationPathStyles.Unix,
                 SourceMappingKind = sourceMappingKind,
                 ProfilerPath = sourceMappingKind == RuntimeJitSourceMappingKinds.LinuxProfiler
-                    ? "/opt/sharplabnext/SharpLabNext.JitProfiler.so"
-                    : null,
+                    ? "/opt/sharplabnext/SharpLabNext.JitProfiler.so" : null,
                 Command = new RuntimeOperationCommandDefinition
                 {
                     Executable = "/usr/share/dotnet/dotnet",
@@ -5054,88 +3307,28 @@ public sealed class RuntimeSupervisorTests
         };
         var root = FindRepositoryRoot();
         var sandbox = RuntimeSandboxPolicy.Load(
-            new RuntimeSandboxOptions
-            {
-                SeccompProfilePath = Path.Combine(
-                    root,
-                    "src",
-                    "Supervisor",
-                    "SharpLabNext.RuntimeSupervisor",
-                    "security",
-                    "runtime-job-seccomp.v1.json")
-            },
+            new RuntimeSandboxOptions { SeccompProfilePath = Path.Combine(root, "src", "Supervisor", "SharpLabNext.RuntimeSupervisor", "security", "runtime-job-seccomp.v1.json") },
             root);
-        var sessions = new RuntimeSessionRegistry(
-            fakeDocker,
-            Options.Create(options),
-            sandbox,
-            NullLogger<RuntimeSessionRegistry>.Instance);
-        var artifactStore = new RuntimeArtifactStoreClient(new ArtifactBundleDescriptor(
-            Manifest(metadata: null, derived: false),
-            []));
+        var sessions = new RuntimeSessionRegistry(fakeDocker, Options.Create(options), sandbox, NullLogger<RuntimeSessionRegistry>.Instance);
+        var artifactStore = new RuntimeArtifactStoreClient(new ArtifactBundleDescriptor(Manifest(metadata: null, derived: false), []));
         var operations = new OperationStore();
         var scheduler = new BoundedOperationScheduler(
             operations,
-            new OperationExecutionOptions
-            {
-                QueueCapacity = 4,
-                WorkerConcurrency = 1,
-                ExecutorId = "runtime-performance-test"
-            });
-        var executor = new RuntimeJobExecutor(
-            operations,
-            scheduler,
-            artifactStore,
-            fakeDocker,
-            sessions,
-            Options.Create(options),
-            new ServiceIdentity(
-                "runtime-supervisor",
-                ServiceKind.RuntimeSupervisor,
-                "release-1",
-                ProtocolVersion.WorkerV1,
-                [],
-                "ready"),
-            NullLogger<RuntimeJobExecutor>.Instance);
-        var coordinator = new RuntimePerformancePreflightCoordinator(
-            operations,
-            executor,
-            fakeDocker,
-            Options.Create(options));
-        return new RuntimePerformanceFixture(
-            coordinator,
-            scheduler,
-            artifactStore,
-            operations,
-            executor,
-            options);
+            new OperationExecutionOptions { QueueCapacity = 4, WorkerConcurrency = 1, ExecutorId = "runtime-performance-test" });
+        var executor = new RuntimeJobExecutor(operations, scheduler, artifactStore, fakeDocker, sessions, Options.Create(options), new ServiceIdentity("runtime-supervisor", ServiceKind.RuntimeSupervisor, "release-1", ProtocolVersion.WorkerV1, [], "ready"), NullLogger<RuntimeJobExecutor>.Instance);
+        var coordinator = new RuntimePerformancePreflightCoordinator(operations, executor, fakeDocker, Options.Create(options));
+        return new RuntimePerformanceFixture(coordinator, scheduler, artifactStore, operations, executor, options);
     }
 
-    private static (RuntimeSessionRegistry Sessions, RuntimeSessionRequest Request) CreateRuntimeSessionFixture(
-        SessionDockerClient fakeDocker,
-        string sessionId,
-        bool sessionReuseEnabled = true)
+    private static (RuntimeSessionRegistry Sessions, RuntimeSessionRequest Request) CreateRuntimeSessionFixture(SessionDockerClient fakeDocker, string sessionId, bool sessionReuseEnabled = true)
     {
         var root = FindRepositoryRoot();
         var options = ValidOptions();
         options.SessionReuseEnabled = sessionReuseEnabled;
         var sandbox = RuntimeSandboxPolicy.Load(
-            new RuntimeSandboxOptions
-            {
-                SeccompProfilePath = Path.Combine(
-                    root,
-                    "src",
-                    "Supervisor",
-                    "SharpLabNext.RuntimeSupervisor",
-                    "security",
-                    "runtime-job-seccomp.v1.json")
-            },
+            new RuntimeSandboxOptions { SeccompProfilePath = Path.Combine(root, "src", "Supervisor", "SharpLabNext.RuntimeSupervisor", "security", "runtime-job-seccomp.v1.json") },
             root);
-        var sessions = new RuntimeSessionRegistry(
-            fakeDocker,
-            Options.Create(options),
-            sandbox,
-            NullLogger<RuntimeSessionRegistry>.Instance);
+        var sessions = new RuntimeSessionRegistry(fakeDocker, Options.Create(options), sandbox, NullLogger<RuntimeSessionRegistry>.Instance);
         var request = new RuntimeSessionRequest(
             sessionId,
             "release-1",
@@ -5150,10 +3343,7 @@ public sealed class RuntimeSupervisorTests
         return (sessions, request);
     }
 
-    private static async Task WriteDockerFrameAsync(
-        Stream destination,
-        byte streamKind,
-        ReadOnlyMemory<byte> payload)
+    private static async Task WriteDockerFrameAsync(Stream destination, byte streamKind, ReadOnlyMemory<byte> payload)
     {
         var header = new byte[8];
         header[0] = streamKind;
@@ -5162,14 +3352,11 @@ public sealed class RuntimeSupervisorTests
         await destination.WriteAsync(payload, TestContext.Current.CancellationToken);
     }
 
-    private static async Task<OperationState> WaitForTerminalAsync(
-        OperationStore operations,
-        string operationId)
+    private static async Task<OperationState> WaitForTerminalAsync(OperationStore operations, string operationId)
     {
         for (var attempt = 0; attempt < 200; attempt++)
         {
-            var state = operations.Get(operationId)
-                ?? throw new InvalidOperationException("Runtime operation was not found.");
+            var state = operations.Get(operationId) ?? throw new InvalidOperationException("Runtime operation was not found.");
             if (state.Status is OperationStatus.Completed or OperationStatus.Failed or OperationStatus.Cancelled)
                 return state;
             await Task.Delay(10, TestContext.Current.CancellationToken);
@@ -5191,20 +3378,9 @@ public sealed class RuntimeSupervisorTests
         throw new InvalidOperationException("Repository root was not found.");
     }
 
-    private sealed record RecordedDockerRequest(
-        HttpMethod Method,
-        string Path,
-        string? Body,
-        string? ContentType,
-        byte[]? BodyBytes = null);
+    private sealed record RecordedDockerRequest(HttpMethod Method, string Path, string? Body, string? ContentType, byte[]? BodyBytes = null);
 
-    private sealed class PromotionPreflightProfileFixture(
-        string root,
-        string profileId,
-        string planSha256,
-        string profileSha256,
-        string sourceRevision,
-        IConfiguration configuration) : IDisposable
+    private sealed class PromotionPreflightProfileFixture(string root, string profileId, string planSha256, string profileSha256, string sourceRevision, IConfiguration configuration) : IDisposable
     {
         public string ProfileId { get; } = profileId;
         public string PlanSha256 { get; } = planSha256;
@@ -5219,13 +3395,7 @@ public sealed class RuntimeSupervisorTests
         }
     }
 
-    private sealed class RuntimePerformanceFixture(
-        RuntimePerformancePreflightCoordinator coordinator,
-        BoundedOperationScheduler scheduler,
-        RuntimeArtifactStoreClient artifactStore,
-        OperationStore operations,
-        RuntimeJobExecutor executor,
-        RuntimeSupervisorOptions options) : IAsyncDisposable
+    private sealed class RuntimePerformanceFixture(RuntimePerformancePreflightCoordinator coordinator, BoundedOperationScheduler scheduler, RuntimeArtifactStoreClient artifactStore, OperationStore operations, RuntimeJobExecutor executor, RuntimeSupervisorOptions options) : IAsyncDisposable
     {
         public RuntimePerformancePreflightCoordinator Coordinator { get; } = coordinator;
         public BoundedOperationScheduler Scheduler { get; } = scheduler;
@@ -5238,38 +3408,11 @@ public sealed class RuntimeSupervisorTests
         {
             var nonce = Guid.NewGuid().ToString("N");
             var requestId = $"perf-test-{nonce}";
-            var operation = Operations.Start(
-                requestId,
-                $"runtime-performance-test-{nonce}",
-                OperationKind.Run,
-                requestId,
-                DateTimeOffset.UtcNow);
+            var operation = Operations.Start(requestId, $"runtime-performance-test-{nonce}", OperationKind.Run, requestId, DateTimeOffset.UtcNow);
             var measurement = new RuntimeJobMeasurementRegistration(new RuntimeJobMeasurementContext(
                 "/opt/sharplabnext/runtime-entrypoint.sh",
-                new RuntimePerformanceMeasurementHelperIdentity(
-                    RuntimePerformancePreflightCoordinator.MeasurementHelperImplementation,
-                    new RuntimePerformanceImageIdentity(
-                        RuntimeMeasurementHelperReference,
-                        RuntimeMeasurementHelperImageId,
-                        128L * 1024 * 1024),
-                    RuntimePerformancePreflightCoordinator.MeasurementHelperEntrypoint,
-                    RuntimePreflightSourceRevision,
-                    RuntimePerformancePreflightCoordinator.MeasurementHelperContentSha256)));
-            var queued = executor.QueueRunForMeasurement(
-                operation,
-                new RunRequest(
-                    requestId,
-                    $"runtime-performance-test-{nonce}",
-                    "runtime-performance-preflight",
-                    ArtifactStore.Descriptor.Manifest.ArtifactId,
-                    Options.Profiles[0].Id,
-                    new RunOptions(
-                        [],
-                        null,
-                        RunInstrumentation.None,
-                        Options.SecurityPolicies[0].Id),
-                    deadlineUtc),
-                measurement);
+                new RuntimePerformanceMeasurementHelperIdentity(RuntimePerformancePreflightCoordinator.MeasurementHelperImplementation, new RuntimePerformanceImageIdentity(RuntimeMeasurementHelperReference, RuntimeMeasurementHelperImageId, 128L * 1024 * 1024), RuntimePerformancePreflightCoordinator.MeasurementHelperEntrypoint, RuntimePreflightSourceRevision, RuntimePerformancePreflightCoordinator.MeasurementHelperContentSha256)));
+            var queued = executor.QueueRunForMeasurement(operation, new RunRequest(requestId, $"runtime-performance-test-{nonce}", "runtime-performance-preflight", ArtifactStore.Descriptor.Manifest.ArtifactId, Options.Profiles[0].Id, new RunOptions([], null, RunInstrumentation.None, Options.SecurityPolicies[0].Id), deadlineUtc), measurement);
             Assert.True(queued);
             return (operation, measurement);
         }
@@ -5277,29 +3420,11 @@ public sealed class RuntimeSupervisorTests
         public ValueTask DisposeAsync() => Scheduler.DisposeAsync();
     }
 
-    private sealed record CapabilityPdbRange(
-        int IlOffset,
-        string Document,
-        int StartLine,
-        int StartColumn,
-        int EndLine,
-        int EndColumn);
+    private sealed record CapabilityPdbRange(int IlOffset, string Document, int StartLine, int StartColumn, int EndLine, int EndColumn);
 
-    private sealed record CapabilityPdbIdentity(
-        string Digest,
-        string ContentId,
-        string MethodToken,
-        IReadOnlyList<CapabilityPdbRange> Ranges);
+    private sealed record CapabilityPdbIdentity(string Digest, string ContentId, string MethodToken, IReadOnlyList<CapabilityPdbRange> Ranges);
 
-    private sealed class RuntimeCapabilityFixture(
-        RuntimeCapabilityPreflightCoordinator coordinator,
-        BoundedOperationScheduler scheduler,
-        CapabilityDockerClient docker,
-        RuntimeProfileOptions profile,
-        RuntimeSecurityPolicyOptions policy,
-        ArtifactRef probeArtifactRef,
-        ArtifactRef flowArtifactRef,
-        CapabilityPdbIdentity pdbIdentity) : IAsyncDisposable
+    private sealed class RuntimeCapabilityFixture(RuntimeCapabilityPreflightCoordinator coordinator, BoundedOperationScheduler scheduler, CapabilityDockerClient docker, RuntimeProfileOptions profile, RuntimeSecurityPolicyOptions policy, ArtifactRef probeArtifactRef, ArtifactRef flowArtifactRef, CapabilityPdbIdentity pdbIdentity) : IAsyncDisposable
     {
         public RuntimeCapabilityPreflightCoordinator Coordinator { get; } = coordinator;
         public CapabilityDockerClient Docker { get; } = docker;
@@ -5319,38 +3444,28 @@ public sealed class RuntimeSupervisorTests
             PreflightProfileSha256,
             ProbeArtifactRef,
             Profile.Capabilities.Contains("execution-flow", StringComparer.Ordinal)
-                ? FlowArtifactRef
-                : null,
+                ? FlowArtifactRef : null,
             Profile.Capabilities.Contains("jit-asm", StringComparer.Ordinal)
-                ? "RuntimeSupervisorTests.CapabilityPdbProbe"
-                : null,
+                ? "RuntimeSupervisorTests.CapabilityPdbProbe" : null,
             Profile.Capabilities.Contains("jit-asm", StringComparer.Ordinal)
-                ? "/usr/share/dotnet/shared/Microsoft.NETCore.App/10.0.9/libclrjit.so"
-                : null);
+                ? "/usr/share/dotnet/shared/Microsoft.NETCore.App/10.0.9/libclrjit.so" : null);
 
         public ValueTask DisposeAsync() => scheduler.DisposeAsync();
     }
 
-    private sealed class CapabilityArtifactStoreClient(
-        IReadOnlyList<ArtifactBundleDescriptor> descriptors,
-        IReadOnlyDictionary<(ArtifactRef ArtifactRef, string Path), byte[]> files) : IArtifactStoreClient
+    private sealed class CapabilityArtifactStoreClient(IReadOnlyList<ArtifactBundleDescriptor> descriptors, IReadOnlyDictionary<(ArtifactRef ArtifactRef, string Path), byte[]> files) : IArtifactStoreClient
     {
         private readonly Dictionary<ArtifactRef, ArtifactBundleDescriptor> _descriptors =
             descriptors.ToDictionary(static descriptor => descriptor.Manifest.ArtifactId);
 
-        public Task<ArtifactBundleDescriptor?> GetArtifactAsync(
-            ArtifactRef artifactRef,
-            CancellationToken cancellationToken = default)
+        public Task<ArtifactBundleDescriptor?> GetArtifactAsync(ArtifactRef artifactRef, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             _descriptors.TryGetValue(artifactRef, out var descriptor);
             return Task.FromResult(descriptor);
         }
 
-        public Task<ArtifactContentResponse> OpenArtifactFileReadAsync(
-            ArtifactRef artifactRef,
-            string path,
-            CancellationToken cancellationToken = default)
+        public Task<ArtifactContentResponse> OpenArtifactFileReadAsync(ArtifactRef artifactRef, string path, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var bytes = files[(artifactRef, ArtifactPath.Normalize(path))];
@@ -5358,75 +3473,40 @@ public sealed class RuntimeSupervisorTests
             {
                 Content = new ByteArrayContent(bytes)
             };
-            return Task.FromResult(new ArtifactContentResponse(
-                response,
-                new MemoryStream(bytes, writable: false)));
+            return Task.FromResult(new ArtifactContentResponse(response, new MemoryStream(bytes, writable: false)));
         }
 
-        public Task<ArtifactLeaseResponse> AcquireLeaseAsync(
-            ArtifactRef artifactRef,
-            string owner,
-            TimeSpan duration,
-            CancellationToken cancellationToken = default)
+        public Task<ArtifactLeaseResponse> AcquireLeaseAsync(ArtifactRef artifactRef, string owner, TimeSpan duration, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(new ArtifactLeaseResponse(
-                $"lease-{Guid.NewGuid():N}",
-                artifactRef,
-                owner,
-                DateTimeOffset.UtcNow.Add(duration)));
+            return Task.FromResult(new ArtifactLeaseResponse($"lease-{Guid.NewGuid():N}", artifactRef, owner, DateTimeOffset.UtcNow.Add(duration)));
         }
 
-        public Task ReleaseLeaseAsync(
-            string leaseToken,
-            CancellationToken cancellationToken = default)
+        public Task ReleaseLeaseAsync(string leaseToken, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.CompletedTask;
         }
 
-        public async Task<PutContentResponse> PutContentAsync(
-            ContentRef contentRef,
-            Stream content,
-            long? declaredSize = null,
-            TimeSpan? timeToLive = null,
-            CancellationToken cancellationToken = default)
+        public async Task<PutContentResponse> PutContentAsync(ContentRef contentRef, Stream content, long? declaredSize = null, TimeSpan? timeToLive = null, CancellationToken cancellationToken = default)
         {
             using var output = new MemoryStream();
             await content.CopyToAsync(output, cancellationToken);
             Assert.Equal(declaredSize, output.Length);
             Assert.Equal(contentRef, ContentIdentity.Compute(output.ToArray()));
-            return new PutContentResponse(
-                contentRef,
-                output.Length,
-                DateTimeOffset.UtcNow.Add(timeToLive ?? TimeSpan.FromMinutes(5)),
-                AlreadyExisted: false);
+            return new PutContentResponse(contentRef, output.Length, DateTimeOffset.UtcNow.Add(timeToLive ?? TimeSpan.FromMinutes(5)), AlreadyExisted: false);
         }
 
-        public Task<ArtifactContentResponse> OpenContentReadAsync(
-            ContentRef contentRef,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<ArtifactContentResponse> OpenContentReadAsync(ContentRef contentRef, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<PutArtifactResponse> PutArtifactAsync(
-            ArtifactManifest manifest,
-            IReadOnlyList<ArtifactFileUpload> files,
-            TimeSpan? timeToLive = null,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PutArtifactResponse> PutArtifactAsync(ArtifactManifest manifest, IReadOnlyList<ArtifactFileUpload> files, TimeSpan? timeToLive = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<ArtifactLeaseResponse> RenewLeaseAsync(
-            string leaseToken,
-            TimeSpan duration,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<ArtifactLeaseResponse> RenewLeaseAsync(string leaseToken, TimeSpan duration, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<GarbageCollectionResponse> CollectGarbageAsync(
-            int maxArtifacts = 1000,
-            int maxContents = 5000,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<GarbageCollectionResponse> CollectGarbageAsync(int maxArtifacts = 1000, int maxContents = 5000, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
-    private sealed class CapabilityDockerClient(
-        RuntimeProfileOptions profile,
-        IReadOnlyDictionary<string, byte[]> frames) : IDockerEngineClient
+    private sealed class CapabilityDockerClient(RuntimeProfileOptions profile, IReadOnlyDictionary<string, byte[]> frames) : IDockerEngineClient
     {
         private readonly Dictionary<string, RuntimeContainerSpec> _specs = new(StringComparer.Ordinal);
         private readonly HashSet<string> _activeContainers = new(StringComparer.Ordinal);
@@ -5445,21 +3525,10 @@ public sealed class RuntimeSupervisorTests
 
         public Task<bool> PingAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
 
-        public Task<RuntimeImageInspection> InspectImageAsync(
-            string immutableReference,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new RuntimeImageInspection(
-                immutableReference,
-                profile.RuntimeImageId,
-                512L * 1024 * 1024,
-                "linux",
-                "amd64",
-                [immutableReference]));
+        public Task<RuntimeImageInspection> InspectImageAsync(string immutableReference, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new RuntimeImageInspection(immutableReference, profile.RuntimeImageId, 512L * 1024 * 1024, "linux", "amd64", [immutableReference]));
 
-        public Task<IReadOnlyList<RuntimeImageFileInspection>> InspectImageFilesAsync(
-            string imageId,
-            IReadOnlyList<RuntimeImageFileRequest> requestedFiles,
-            CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<RuntimeImageFileInspection>> InspectImageFilesAsync(string imageId, IReadOnlyList<RuntimeImageFileRequest> requestedFiles, CancellationToken cancellationToken = default)
         {
             Assert.Equal(profile.RuntimeImageId, imageId);
             ImageFileRequests.Add(requestedFiles.ToArray());
@@ -5471,41 +3540,21 @@ public sealed class RuntimeSupervisorTests
                     _ => ("elf", "x64")
                 };
                 var path = file.Role == CorruptInspectedRole ? file.Path + ".wrong" : file.Path;
-                return new RuntimeImageFileInspection(
-                    file.Role,
-                    path,
-                    $"sha256:{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(file.Path)))}",
-                    65_536,
-                    format,
-                    architecture);
+                return new RuntimeImageFileInspection(file.Role, path, $"sha256:{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(file.Path)))}", 65_536, format, architecture);
             }).ToArray();
             return Task.FromResult<IReadOnlyList<RuntimeImageFileInspection>>(result);
         }
 
-        public Task<RuntimeWorkspaceMaterialization> MaterializeWorkspaceAsync(
-            string jobId,
-            string releaseId,
-            string image,
-            Stream archive,
-            RuntimeSecurityPolicyOptions securityPolicy,
-            RuntimeContainerIsolationKind isolationKind,
-            string managementLabel,
-            string resourceScope,
-            bool createMeasurementControl = false,
-            CancellationToken cancellationToken = default)
+        public Task<RuntimeWorkspaceMaterialization> MaterializeWorkspaceAsync(string jobId, string releaseId, string image, Stream archive, RuntimeSecurityPolicyOptions securityPolicy, RuntimeContainerIsolationKind isolationKind, string managementLabel, string resourceScope, bool createMeasurementControl = false, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Assert.False(createMeasurementControl);
             var materializerId = NextContainerId();
             _activeContainers.Add(materializerId);
-            return Task.FromResult(new RuntimeWorkspaceMaterialization(
-                $"workspace-{materializerId}",
-                materializerId));
+            return Task.FromResult(new RuntimeWorkspaceMaterialization($"workspace-{materializerId}", materializerId));
         }
 
-        public Task<string> CreateContainerAsync(
-            RuntimeContainerSpec spec,
-            CancellationToken cancellationToken = default)
+        public Task<string> CreateContainerAsync(RuntimeContainerSpec spec, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var id = NextContainerId();
@@ -5516,42 +3565,21 @@ public sealed class RuntimeSupervisorTests
             return Task.FromResult(id);
         }
 
-        public Task UploadArchiveAsync(
-            string containerId,
-            Stream archive,
-            string destinationPath = "/workspace",
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task UploadArchiveAsync(string containerId, Stream archive, string destinationPath = "/workspace", CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task<RuntimeRunningContainerInspection> InspectRunningContainerAsync(
-            string containerId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<RuntimeRunningContainerInspection> InspectRunningContainerAsync(string containerId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<string> CreateRuntimeMeasurementSidecarAsync(
-            RuntimeMeasurementSidecarSpec spec,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<string> CreateRuntimeMeasurementSidecarAsync(RuntimeMeasurementSidecarSpec spec, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<string> CreateContainerExecAsync(
-            string containerId,
-            RuntimeExecSpec spec,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<string> CreateContainerExecAsync(string containerId, RuntimeExecSpec spec, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<Stream> StartContainerExecAsync(
-            string execId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Stream> StartContainerExecAsync(string execId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<RuntimeContainerExecInspection> InspectContainerExecAsync(
-            string execId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<RuntimeContainerExecInspection> InspectContainerExecAsync(string execId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task WaitForRuntimeMeasurementArmedAsync(
-            string sidecarContainerId,
-            string token,
-            string targetContainerId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task WaitForRuntimeMeasurementArmedAsync(string sidecarContainerId, string token, string targetContainerId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<Stream> AttachContainerOutputAsync(
-            string containerId,
-            CancellationToken cancellationToken = default)
+        public Task<Stream> AttachContainerOutputAsync(string containerId, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Assert.Contains(containerId, _activeContainers);
@@ -5563,9 +3591,7 @@ public sealed class RuntimeSupervisorTests
             return Task.FromResult(stream);
         }
 
-        public async Task StartContainerAsync(
-            string containerId,
-            CancellationToken cancellationToken = default)
+        public async Task StartContainerAsync(string containerId, CancellationToken cancellationToken = default)
         {
             Assert.Contains(containerId, _activeContainers);
             Assert.True(_attachedContainers.Remove(containerId));
@@ -5573,31 +3599,15 @@ public sealed class RuntimeSupervisorTests
                 await Task.Delay(StartupDelay, cancellationToken);
         }
 
-        public Task<IRuntimeContainerResourceMonitor> StartContainerResourceMonitorAsync(
-            string containerId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IRuntimeContainerResourceMonitor> StartContainerResourceMonitorAsync(string containerId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<RuntimeContainerMeasurement> WaitForRuntimeMeasurementAsync(
-            string sidecarContainerId,
-            string token,
-            string targetContainerId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<RuntimeContainerMeasurement> WaitForRuntimeMeasurementAsync(string sidecarContainerId, string token, string targetContainerId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task UploadRuntimeMeasurementSignalAsync(
-            string sidecarContainerId,
-            string token,
-            string targetContainerId,
-            RuntimeMeasurementSignalKind signalKind,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task UploadRuntimeMeasurementSignalAsync(string sidecarContainerId, string token, string targetContainerId, RuntimeMeasurementSignalKind signalKind, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task StopContainerAsync(
-            string containerId,
-            TimeSpan timeout,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task StopContainerAsync(string containerId, TimeSpan timeout, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public async Task<RuntimeContainerExit> WaitContainerAsync(
-            string containerId,
-            CancellationToken cancellationToken = default)
+        public async Task<RuntimeContainerExit> WaitContainerAsync(string containerId, CancellationToken cancellationToken = default)
         {
             var spec = _specs[containerId];
             if (spec.Command.Contains("hang", StringComparer.Ordinal))
@@ -5613,43 +3623,26 @@ public sealed class RuntimeSupervisorTests
                 }
             }
             return spec.Command.Contains("user-exception", StringComparer.Ordinal)
-                ? new RuntimeContainerExit(1, false, null)
-                : new RuntimeContainerExit(0, false, null);
+                ? new RuntimeContainerExit(1, false, null) : new RuntimeContainerExit(0, false, null);
         }
 
-        public Task KillContainerAsync(
-            string containerId,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task KillContainerAsync(string containerId, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task RemoveContainerAsync(
-            string containerId,
-            CancellationToken cancellationToken = default)
+        public Task RemoveContainerAsync(string containerId, CancellationToken cancellationToken = default)
         {
             _activeContainers.Remove(containerId);
             return Task.CompletedTask;
         }
 
-        public Task RemoveWorkspaceVolumeAsync(
-            string volumeName,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task RemoveWorkspaceVolumeAsync(string volumeName, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task<IReadOnlyList<ManagedRuntimeContainer>> ListManagedContainersAsync(
-            string managementLabel,
-            string resourceScope,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<ManagedRuntimeContainer>>(_activeContainers
-                .Select(static id => new ManagedRuntimeContainer(id, DateTimeOffset.UtcNow, "running"))
-                .ToArray());
+        public Task<IReadOnlyList<ManagedRuntimeContainer>> ListManagedContainersAsync(string managementLabel, string resourceScope, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ManagedRuntimeContainer>>(_activeContainers.Select(static id => new ManagedRuntimeContainer(id, DateTimeOffset.UtcNow, "running")).ToArray());
 
-        public Task<IReadOnlyList<ManagedWorkspaceVolume>> ListManagedWorkspaceVolumesAsync(
-            string managementLabel,
-            string resourceScope,
-            CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<ManagedWorkspaceVolume>> ListManagedWorkspaceVolumesAsync(string managementLabel, string resourceScope, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ManagedWorkspaceVolume>>([]);
 
-        private string NextContainerId() => Interlocked.Increment(ref _nextId).ToString(
-            "x64",
-            System.Globalization.CultureInfo.InvariantCulture);
+        private string NextContainerId() => Interlocked.Increment(ref _nextId).ToString("x64", System.Globalization.CultureInfo.InvariantCulture);
 
         private byte[] SelectFrames(RuntimeContainerSpec spec)
         {
@@ -5694,9 +3687,7 @@ public sealed class RuntimeSupervisorTests
             public override int Read(byte[] buffer, int offset, int count) =>
                 ReadAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
 
-            public override async ValueTask<int> ReadAsync(
-                Memory<byte> buffer,
-                CancellationToken cancellationToken = default)
+            public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
             {
                 if (Interlocked.Exchange(ref _delayed, 1) == 0)
                     await Task.Delay(delay, cancellationToken);
@@ -5751,20 +3742,12 @@ public sealed class RuntimeSupervisorTests
 
         public string? ManagedVolumesPayload { get; set; }
 
-        protected override async Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var bodyBytes = request.Content is null
-                ? null
-                : await request.Content.ReadAsByteArrayAsync(cancellationToken);
+                ? null : await request.Content.ReadAsByteArrayAsync(cancellationToken);
             var body = bodyBytes is null ? null : Encoding.UTF8.GetString(bodyBytes);
-            Requests.Add(new RecordedDockerRequest(
-                request.Method,
-                request.RequestUri!.PathAndQuery,
-                body,
-                request.Content?.Headers.ContentType?.MediaType,
-                bodyBytes));
+            Requests.Add(new RecordedDockerRequest(request.Method, request.RequestUri!.PathAndQuery, body, request.Content?.Headers.ContentType?.MediaType, bodyBytes));
 
             if (request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath.EndsWith("/volumes/create", StringComparison.Ordinal))
                 return new HttpResponseMessage(HttpStatusCode.Created) { Content = new StringContent("{}") };
@@ -5780,17 +3763,13 @@ public sealed class RuntimeSupervisorTests
             {
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new ByteArrayContent(CreateDockerMultiplexedFrame(
-                        1,
-                        "runtime output"u8.ToArray()))
+                    Content = new ByteArrayContent(CreateDockerMultiplexedFrame(1, "runtime output"u8.ToArray()))
                 };
             }
-            if (request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath.Contains("/exec/", StringComparison.Ordinal) &&
-                request.RequestUri.AbsolutePath.EndsWith("/start", StringComparison.Ordinal))
+            if (request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath.Contains("/exec/", StringComparison.Ordinal) && request.RequestUri.AbsolutePath.EndsWith("/start", StringComparison.Ordinal))
             {
                 var payload = ExecStartResponses.Count > 0
-                    ? ExecStartResponses.Dequeue()
-                    : ""u8.ToArray();
+                    ? ExecStartResponses.Dequeue() : ""u8.ToArray();
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent(payload)
@@ -5803,27 +3782,18 @@ public sealed class RuntimeSupervisorTests
                     Content = new StringContent($"{{\"Id\":\"{RuntimeExecId}\"}}", Encoding.UTF8, "application/json")
                 };
             }
-            if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath.Contains("/exec/", StringComparison.Ordinal) &&
-                request.RequestUri.AbsolutePath.EndsWith("/json", StringComparison.Ordinal))
+            if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath.Contains("/exec/", StringComparison.Ordinal) && request.RequestUri.AbsolutePath.EndsWith("/json", StringComparison.Ordinal))
             {
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent(
-                        $"{{\"ID\":\"{RuntimeExecId}\",\"Running\":false,\"ExitCode\":{ExecExitCode}}}",
-                        Encoding.UTF8,
-                        "application/json")
+                    Content = new StringContent($"{{\"ID\":\"{RuntimeExecId}\",\"Running\":false,\"ExitCode\":{ExecExitCode}}}", Encoding.UTF8, "application/json")
                 };
             }
-            if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath.EndsWith("/json", StringComparison.Ordinal) &&
-                request.RequestUri.AbsolutePath.Contains("/containers/", StringComparison.Ordinal) &&
-                !request.RequestUri.AbsolutePath.EndsWith("/containers/json", StringComparison.Ordinal))
+            if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath.EndsWith("/json", StringComparison.Ordinal) && request.RequestUri.AbsolutePath.Contains("/containers/", StringComparison.Ordinal) && !request.RequestUri.AbsolutePath.EndsWith("/containers/json", StringComparison.Ordinal))
             {
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent(
-                        $"{{\"Id\":\"{ContainerId}\",\"State\":{{\"Running\":true,\"Pid\":4242}}}}",
-                        Encoding.UTF8,
-                        "application/json")
+                    Content = new StringContent($"{{\"Id\":\"{ContainerId}\",\"State\":{{\"Running\":true,\"Pid\":4242}}}}", Encoding.UTF8, "application/json")
                 };
             }
             if (request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath.EndsWith("/start", StringComparison.Ordinal))
@@ -5835,8 +3805,7 @@ public sealed class RuntimeSupervisorTests
             if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath.EndsWith("/archive", StringComparison.Ordinal))
             {
                 return ArchiveReadResponses.Count > 0
-                    ? ArchiveReadResponses.Dequeue()
-                    : new HttpResponseMessage(HttpStatusCode.NotFound);
+                    ? ArchiveReadResponses.Dequeue() : new HttpResponseMessage(HttpStatusCode.NotFound);
             }
             if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath == "/v1.47/containers/json")
             {
@@ -5849,32 +3818,21 @@ public sealed class RuntimeSupervisorTests
             {
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent(
-                        ManagedVolumesPayload ?? "{\"Volumes\":[]}",
-                        Encoding.UTF8,
-                        "application/json")
+                    Content = new StringContent(ManagedVolumesPayload ?? "{\"Volumes\":[]}", Encoding.UTF8, "application/json")
                 };
             }
             if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath.EndsWith("/stats", StringComparison.Ordinal))
             {
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent(
-                        request.RequestUri.Query.Contains("one-shot=true", StringComparison.Ordinal)
-                            ? StatsOneShotPayload ?? StatsPayload ?? throw new InvalidOperationException("No Docker stats fixture was configured.")
-                            : StatsPayload ?? throw new InvalidOperationException("No Docker stats fixture was configured."),
-                        Encoding.UTF8,
-                        "application/json")
+                    Content = new StringContent(request.RequestUri.Query.Contains("one-shot=true", StringComparison.Ordinal) ? StatsOneShotPayload ?? StatsPayload ?? throw new InvalidOperationException("No Docker stats fixture was configured.") : StatsPayload ?? throw new InvalidOperationException("No Docker stats fixture was configured."), Encoding.UTF8, "application/json")
                 };
             }
             if (request.Method == HttpMethod.Get && request.RequestUri.AbsolutePath.Contains("/images/", StringComparison.Ordinal))
             {
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent(
-                        ImageInspectionPayload ?? throw new InvalidOperationException("No Docker image fixture was configured."),
-                        Encoding.UTF8,
-                        "application/json")
+                    Content = new StringContent(ImageInspectionPayload ?? throw new InvalidOperationException("No Docker image fixture was configured."), Encoding.UTF8, "application/json")
                 };
             }
 
@@ -5920,57 +3878,35 @@ public sealed class RuntimeSupervisorTests
 
         public bool FailLeaseRelease { get; set; }
 
-        public Task<ArtifactBundleDescriptor?> GetArtifactAsync(
-            ArtifactRef artifactRef,
-            CancellationToken cancellationToken = default)
+        public Task<ArtifactBundleDescriptor?> GetArtifactAsync(ArtifactRef artifactRef, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Assert.Equal(Descriptor.Manifest.ArtifactId, artifactRef);
             return Task.FromResult<ArtifactBundleDescriptor?>(Descriptor);
         }
 
-        public Task<ArtifactLeaseResponse> AcquireLeaseAsync(
-            ArtifactRef artifactRef,
-            string owner,
-            TimeSpan duration,
-            CancellationToken cancellationToken = default)
+        public Task<ArtifactLeaseResponse> AcquireLeaseAsync(ArtifactRef artifactRef, string owner, TimeSpan duration, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(new ArtifactLeaseResponse(
-                "lease-runtime-session-test",
-                artifactRef,
-                owner,
-                DateTimeOffset.UtcNow.Add(duration)));
+            return Task.FromResult(new ArtifactLeaseResponse("lease-runtime-session-test", artifactRef, owner, DateTimeOffset.UtcNow.Add(duration)));
         }
 
-        public Task ReleaseLeaseAsync(
-            string leaseToken,
-            CancellationToken cancellationToken = default)
+        public Task ReleaseLeaseAsync(string leaseToken, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Assert.Equal("lease-runtime-session-test", leaseToken);
             return FailLeaseRelease
-                ? Task.FromException(new HttpRequestException("Lease release failed."))
-                : Task.CompletedTask;
+                ? Task.FromException(new HttpRequestException("Lease release failed.")) : Task.CompletedTask;
         }
 
-        public async Task<PutContentResponse> PutContentAsync(
-            ContentRef contentRef,
-            Stream content,
-            long? declaredSize = null,
-            TimeSpan? timeToLive = null,
-            CancellationToken cancellationToken = default)
+        public async Task<PutContentResponse> PutContentAsync(ContentRef contentRef, Stream content, long? declaredSize = null, TimeSpan? timeToLive = null, CancellationToken cancellationToken = default)
         {
             using var copy = new MemoryStream();
             await content.CopyToAsync(copy, cancellationToken);
             Assert.Equal(declaredSize, copy.Length);
             Assert.Equal(contentRef, ContentIdentity.Compute(copy.ToArray()));
             PublishedContentRefs.Add(contentRef);
-            return new PutContentResponse(
-                contentRef,
-                copy.Length,
-                DateTimeOffset.UtcNow.Add(timeToLive ?? TimeSpan.FromHours(1)),
-                AlreadyExisted: false);
+            return new PutContentResponse(contentRef, copy.Length, DateTimeOffset.UtcNow.Add(timeToLive ?? TimeSpan.FromHours(1)), AlreadyExisted: false);
         }
         public Task<ArtifactContentResponse> OpenContentReadAsync(ContentRef contentRef, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<PutArtifactResponse> PutArtifactAsync(ArtifactManifest manifest, IReadOnlyList<ArtifactFileUpload> files, TimeSpan? timeToLive = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -6077,16 +4013,13 @@ public sealed class RuntimeSupervisorTests
 
         public bool BlockResourceMonitorFirstSampleUntilCancellation { get; set; }
 
-        public TaskCompletionSource ResourceMonitorAttachEntered { get; } = new(
-            TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ResourceMonitorAttachEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public TaskCompletionSource ResourceMonitorFirstSampleEntered { get; } = new(
-            TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ResourceMonitorFirstSampleEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public RuntimeContainerResourceUsage ResourceUsage { get; set; } = new(4096, 1);
 
-        public RuntimeContainerMeasurement RuntimeMeasurement { get; set; } =
-            new("cgroup-v2", 8192);
+        public RuntimeContainerMeasurement RuntimeMeasurement { get; set; } = new("cgroup-v2", 8192);
 
         public RuntimeContainerExecInspection ExecInspection { get; set; } =
             new(RuntimeExecId, Running: false, ExitCode: 0);
@@ -6114,9 +4047,7 @@ public sealed class RuntimeSupervisorTests
 
         public Task<bool> PingAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
 
-        public Task<RuntimeImageInspection> InspectImageAsync(
-            string immutableReference,
-            CancellationToken cancellationToken = default)
+        public Task<RuntimeImageInspection> InspectImageAsync(string immutableReference, CancellationToken cancellationToken = default)
         {
             if (StringComparer.Ordinal.Equals(immutableReference, MeasurementHelperImageReference))
             {
@@ -6134,9 +4065,7 @@ public sealed class RuntimeSupervisorTests
                     }));
             }
 
-            Assert.True(
-                RuntimeImageReference is null ||
-                StringComparer.Ordinal.Equals(immutableReference, RuntimeImageReference));
+            Assert.True(RuntimeImageReference is null || StringComparer.Ordinal.Equals(immutableReference, RuntimeImageReference));
             return Task.FromResult(ImageInspection ?? new RuntimeImageInspection(
                 immutableReference,
                 $"sha256:{new string('a', 64)}",
@@ -6152,32 +4081,18 @@ public sealed class RuntimeSupervisorTests
                 ["/opt/sharplabnext/runtime-entrypoint.sh"]));
         }
 
-        public Task<IReadOnlyList<RuntimeImageFileInspection>> InspectImageFilesAsync(
-            string imageId,
-            IReadOnlyList<RuntimeImageFileRequest> requestedFiles,
-            CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<RuntimeImageFileInspection>> InspectImageFilesAsync(string imageId, IReadOnlyList<RuntimeImageFileRequest> requestedFiles, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<RuntimeImageFileInspection>>(
                 requestedFiles.Select(file =>
                 {
-                    var digest = StringComparer.Ordinal.Equals(
-                        file.Path,
-                        RuntimeMeasurementHelperContract.Entrypoint)
-                        ? MeasurementHelperContentSha256
-                        : $"sha256:{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(file.Path)))}";
-                    return new RuntimeImageFileInspection(
-                        file.Role,
-                        file.Path,
-                        digest,
-                        10_365,
-                        "script",
-                        "shell");
+                    var digest = StringComparer.Ordinal.Equals(file.Path, RuntimeMeasurementHelperContract.Entrypoint)
+                        ? MeasurementHelperContentSha256 : $"sha256:{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(file.Path)))}";
+                    return new RuntimeImageFileInspection(file.Role, file.Path, digest, 10_365, "script", "shell");
                 }).ToArray());
         }
 
-        public Task<string> CreateContainerAsync(
-            RuntimeContainerSpec spec,
-            CancellationToken cancellationToken = default)
+        public Task<string> CreateContainerAsync(RuntimeContainerSpec spec, CancellationToken cancellationToken = default)
         {
             RuntimeContainerCreates++;
             CreatedSpecs.Add(spec);
@@ -6191,34 +4106,17 @@ public sealed class RuntimeSupervisorTests
             return Task.FromResult($"runtime-{RuntimeContainerCreates}");
         }
 
-        public async Task<RuntimeWorkspaceMaterialization> MaterializeWorkspaceAsync(
-            string jobId,
-            string releaseId,
-            string image,
-            Stream archive,
-            RuntimeSecurityPolicyOptions securityPolicy,
-            RuntimeContainerIsolationKind isolationKind,
-            string managementLabel,
-            string resourceScope,
-            bool createMeasurementControl = false,
-            CancellationToken cancellationToken = default)
+        public async Task<RuntimeWorkspaceMaterialization> MaterializeWorkspaceAsync(string jobId, string releaseId, string image, Stream archive, RuntimeSecurityPolicyOptions securityPolicy, RuntimeContainerIsolationKind isolationKind, string managementLabel, string resourceScope, bool createMeasurementControl = false, CancellationToken cancellationToken = default)
         {
             MeasurementControlRequests.Add(createMeasurementControl);
             StartedContainers.Add("materializer-1");
             WorkspaceLifecycle.Add("start:materializer-1");
             UploadDestinations.Add("/workspace");
             await RecordArchiveAsync(archive, cancellationToken);
-            return new RuntimeWorkspaceMaterialization(
-                "workspace-1",
-                "materializer-1",
-                createMeasurementControl ? "measurement-1" : null);
+            return new RuntimeWorkspaceMaterialization("workspace-1", "materializer-1", createMeasurementControl ? "measurement-1" : null);
         }
 
-        public Task UploadArchiveAsync(
-            string containerId,
-            Stream archive,
-            string destinationPath = "/workspace",
-            CancellationToken cancellationToken = default)
+        public Task UploadArchiveAsync(string containerId, Stream archive, string destinationPath = "/workspace", CancellationToken cancellationToken = default)
         {
             UploadDestinations.Add(destinationPath);
             RuntimeLifecycle.Add($"upload:{containerId}");
@@ -6228,24 +4126,17 @@ public sealed class RuntimeSupervisorTests
             var exception = NextUploadArchiveException;
             NextUploadArchiveException = null;
             return exception is null
-                ? RecordArchiveAsync(archive, cancellationToken)
-                : Task.FromException(exception);
+                ? RecordArchiveAsync(archive, cancellationToken) : Task.FromException(exception);
         }
 
-        public Task<RuntimeRunningContainerInspection> InspectRunningContainerAsync(
-            string containerId,
-            CancellationToken cancellationToken = default)
+        public Task<RuntimeRunningContainerInspection> InspectRunningContainerAsync(string containerId, CancellationToken cancellationToken = default)
         {
             Assert.Equal(RuntimeTargetContainerId, containerId);
             RuntimeLifecycle.Add($"inspect-target:{containerId}");
-            return Task.FromResult(RunningInspections.Count > 0
-                ? RunningInspections.Dequeue()
-                : new RuntimeRunningContainerInspection(containerId, 4242, Running: true));
+            return Task.FromResult(RunningInspections.Count > 0 ? RunningInspections.Dequeue() : new RuntimeRunningContainerInspection(containerId, 4242, Running: true));
         }
 
-        public Task<string> CreateRuntimeMeasurementSidecarAsync(
-            RuntimeMeasurementSidecarSpec spec,
-            CancellationToken cancellationToken = default)
+        public Task<string> CreateRuntimeMeasurementSidecarAsync(RuntimeMeasurementSidecarSpec spec, CancellationToken cancellationToken = default)
         {
             Assert.Equal(RuntimeTargetContainerId, spec.TargetContainerId);
             Assert.Equal(4242, spec.TargetHostPid);
@@ -6259,10 +4150,7 @@ public sealed class RuntimeSupervisorTests
             return Task.FromResult(RuntimeMeasurementSidecarId);
         }
 
-        public Task<string> CreateContainerExecAsync(
-            string containerId,
-            RuntimeExecSpec spec,
-            CancellationToken cancellationToken = default)
+        public Task<string> CreateContainerExecAsync(string containerId, RuntimeExecSpec spec, CancellationToken cancellationToken = default)
         {
             Assert.Equal(RuntimeTargetContainerId, containerId);
             ContainerExecSpecs.Add((containerId, spec));
@@ -6270,13 +4158,10 @@ public sealed class RuntimeSupervisorTests
             var exception = NextContainerExecException;
             NextContainerExecException = null;
             return exception is null
-                ? Task.FromResult(RuntimeExecId)
-                : Task.FromException<string>(exception);
+                ? Task.FromResult(RuntimeExecId) : Task.FromException<string>(exception);
         }
 
-        public Task<Stream> StartContainerExecAsync(
-            string execId,
-            CancellationToken cancellationToken = default)
+        public Task<Stream> StartContainerExecAsync(string execId, CancellationToken cancellationToken = default)
         {
             Assert.Equal(RuntimeExecId, execId);
             RuntimeLifecycle.Add($"start-exec:{execId}");
@@ -6287,28 +4172,20 @@ public sealed class RuntimeSupervisorTests
             var exception = NextContainerExecStartException;
             NextContainerExecStartException = null;
             return exception is null
-                ? Task.FromResult<Stream>(new MemoryStream(ContainerLogBytes, writable: false))
-                : Task.FromException<Stream>(exception);
+                ? Task.FromResult<Stream>(new MemoryStream(ContainerLogBytes, writable: false)) : Task.FromException<Stream>(exception);
         }
 
-        public Task<RuntimeContainerExecInspection> InspectContainerExecAsync(
-            string execId,
-            CancellationToken cancellationToken = default)
+        public Task<RuntimeContainerExecInspection> InspectContainerExecAsync(string execId, CancellationToken cancellationToken = default)
         {
             Assert.Equal(RuntimeExecId, execId);
             RuntimeLifecycle.Add($"inspect-exec:{execId}");
             var exception = NextContainerExecInspectException;
             NextContainerExecInspectException = null;
             return exception is null
-                ? Task.FromResult(ExecInspection)
-                : Task.FromException<RuntimeContainerExecInspection>(exception);
+                ? Task.FromResult(ExecInspection) : Task.FromException<RuntimeContainerExecInspection>(exception);
         }
 
-        public Task WaitForRuntimeMeasurementArmedAsync(
-            string sidecarContainerId,
-            string token,
-            string targetContainerId,
-            CancellationToken cancellationToken = default)
+        public Task WaitForRuntimeMeasurementArmedAsync(string sidecarContainerId, string token, string targetContainerId, CancellationToken cancellationToken = default)
         {
             AssertMeasurementBinding(sidecarContainerId, token, targetContainerId);
             RuntimeLifecycle.Add($"armed:{sidecarContainerId}");
@@ -6317,11 +4194,7 @@ public sealed class RuntimeSupervisorTests
             return exception is null ? Task.CompletedTask : Task.FromException(exception);
         }
 
-        public Task<RuntimeContainerMeasurement> WaitForRuntimeMeasurementAsync(
-            string sidecarContainerId,
-            string token,
-            string targetContainerId,
-            CancellationToken cancellationToken = default)
+        public Task<RuntimeContainerMeasurement> WaitForRuntimeMeasurementAsync(string sidecarContainerId, string token, string targetContainerId, CancellationToken cancellationToken = default)
         {
             AssertMeasurementBinding(sidecarContainerId, token, targetContainerId);
             RuntimeLifecycle.Add($"completion:{sidecarContainerId}");
@@ -6330,16 +4203,10 @@ public sealed class RuntimeSupervisorTests
             var exception = NextRuntimeMeasurementException;
             NextRuntimeMeasurementException = null;
             return exception is null
-                ? Task.FromResult(RuntimeMeasurement)
-                : Task.FromException<RuntimeContainerMeasurement>(exception);
+                ? Task.FromResult(RuntimeMeasurement) : Task.FromException<RuntimeContainerMeasurement>(exception);
         }
 
-        public Task UploadRuntimeMeasurementSignalAsync(
-            string sidecarContainerId,
-            string token,
-            string targetContainerId,
-            RuntimeMeasurementSignalKind signalKind,
-            CancellationToken cancellationToken = default)
+        public Task UploadRuntimeMeasurementSignalAsync(string sidecarContainerId, string token, string targetContainerId, RuntimeMeasurementSignalKind signalKind, CancellationToken cancellationToken = default)
         {
             AssertMeasurementBinding(sidecarContainerId, token, targetContainerId);
             MeasurementSignals.Add((sidecarContainerId, token, targetContainerId, signalKind));
@@ -6349,19 +4216,14 @@ public sealed class RuntimeSupervisorTests
             return Task.CompletedTask;
         }
 
-        private void AssertMeasurementBinding(
-            string sidecarContainerId,
-            string token,
-            string targetContainerId)
+        private void AssertMeasurementBinding(string sidecarContainerId, string token, string targetContainerId)
         {
             Assert.Equal(RuntimeMeasurementSidecarId, sidecarContainerId);
             Assert.Equal(RuntimeTargetContainerId, targetContainerId);
             Assert.Equal(_measurementToken, token);
         }
 
-        public Task<Stream> AttachContainerOutputAsync(
-            string containerId,
-            CancellationToken cancellationToken = default)
+        public Task<Stream> AttachContainerOutputAsync(string containerId, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Assert.True(_attachedContainers.Add(containerId));
@@ -6375,8 +4237,7 @@ public sealed class RuntimeSupervisorTests
                 Assert.True(_attachedContainers.Remove(containerId));
             RuntimeLifecycle.Add($"start-attempt:{containerId}");
             var exception = containerId == RuntimeMeasurementSidecarId
-                ? NextSidecarStartException
-                : NextStartContainerException;
+                ? NextSidecarStartException : NextStartContainerException;
             if (containerId == RuntimeMeasurementSidecarId)
                 NextSidecarStartException = null;
             else
@@ -6391,9 +4252,7 @@ public sealed class RuntimeSupervisorTests
             return Task.CompletedTask;
         }
 
-        public async Task<IRuntimeContainerResourceMonitor> StartContainerResourceMonitorAsync(
-            string containerId,
-            CancellationToken cancellationToken = default)
+        public async Task<IRuntimeContainerResourceMonitor> StartContainerResourceMonitorAsync(string containerId, CancellationToken cancellationToken = default)
         {
             RuntimeLifecycle.Add($"monitor:{containerId}");
             var exception = NextResourceMonitorStartException;
@@ -6435,10 +4294,7 @@ public sealed class RuntimeSupervisorTests
                 });
         }
 
-        public Task StopContainerAsync(
-            string containerId,
-            TimeSpan timeout,
-            CancellationToken cancellationToken = default)
+        public Task StopContainerAsync(string containerId, TimeSpan timeout, CancellationToken cancellationToken = default)
         {
             Assert.InRange(timeout, TimeSpan.FromMilliseconds(1), TimeSpan.FromSeconds(10));
             var exception = NextStopContainerException;
@@ -6453,9 +4309,7 @@ public sealed class RuntimeSupervisorTests
             return Task.CompletedTask;
         }
 
-        public Task<RuntimeContainerExit> WaitContainerAsync(
-            string containerId,
-            CancellationToken cancellationToken = default)
+        public Task<RuntimeContainerExit> WaitContainerAsync(string containerId, CancellationToken cancellationToken = default)
         {
             if (containerId == RuntimeTargetContainerId && _measuredTargetExit is not null)
             {
@@ -6496,10 +4350,7 @@ public sealed class RuntimeSupervisorTests
         public Task RemoveContainerAsync(string containerId, CancellationToken cancellationToken = default)
         {
             RemoveContainerAttempts.Add(containerId);
-            if (FailRuntimeContainerRemoval &&
-                (containerId.StartsWith("runtime-", StringComparison.Ordinal) ||
-                 StringComparer.Ordinal.Equals(containerId, RuntimeTargetContainerId) ||
-                 StringComparer.Ordinal.Equals(containerId, RuntimeMeasurementSidecarId)))
+            if (FailRuntimeContainerRemoval && (containerId.StartsWith("runtime-", StringComparison.Ordinal) || StringComparer.Ordinal.Equals(containerId, RuntimeTargetContainerId) || StringComparer.Ordinal.Equals(containerId, RuntimeMeasurementSidecarId)))
             {
                 CleanupLifecycle.Add($"remove-failed:{containerId}");
                 return Task.FromException(new HttpRequestException("Runtime container removal failed."));
@@ -6524,16 +4375,10 @@ public sealed class RuntimeSupervisorTests
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyList<ManagedRuntimeContainer>> ListManagedContainersAsync(
-            string managementLabel,
-            string resourceScope,
-            CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<ManagedRuntimeContainer>> ListManagedContainersAsync(string managementLabel, string resourceScope, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ManagedRuntimeContainer>>([]);
 
-        public Task<IReadOnlyList<ManagedWorkspaceVolume>> ListManagedWorkspaceVolumesAsync(
-            string managementLabel,
-            string resourceScope,
-            CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<ManagedWorkspaceVolume>> ListManagedWorkspaceVolumesAsync(string managementLabel, string resourceScope, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ManagedWorkspaceVolume>>([]);
 
         private async Task RecordArchiveAsync(Stream archive, CancellationToken cancellationToken)
@@ -6544,16 +4389,7 @@ public sealed class RuntimeSupervisorTests
             WorkspaceLifecycle.Add($"upload:{content}");
         }
 
-        private sealed class SessionResourceMonitor(
-            RuntimeContainerResourceUsage usage,
-            Exception? firstSampleException,
-            Exception? stopException,
-            bool blockFirstSampleUntilCancellation,
-            bool suppressPostCompletionSample,
-            Action onFirstSample,
-            Action onPostSample,
-            Action onStop,
-            Action onDispose) : IRuntimeContainerResourceMonitor
+        private sealed class SessionResourceMonitor(RuntimeContainerResourceUsage usage, Exception? firstSampleException, Exception? stopException, bool blockFirstSampleUntilCancellation, bool suppressPostCompletionSample, Action onFirstSample, Action onPostSample, Action onStop, Action onDispose) : IRuntimeContainerResourceMonitor
         {
             private int _sampleWaited;
             private int _sampleCount;
@@ -6562,9 +4398,7 @@ public sealed class RuntimeSupervisorTests
 
             public int SampleCount => Volatile.Read(ref _sampleCount);
 
-            public async Task WaitForSampleAfterAsync(
-                int checkpoint,
-                CancellationToken cancellationToken = default)
+            public async Task WaitForSampleAfterAsync(int checkpoint, CancellationToken cancellationToken = default)
             {
                 ArgumentOutOfRangeException.ThrowIfNegative(checkpoint);
                 if (checkpoint == 0 && Interlocked.Exchange(ref _sampleWaited, 1) == 0)
@@ -6573,8 +4407,7 @@ public sealed class RuntimeSupervisorTests
                     if (blockFirstSampleUntilCancellation)
                     {
                         await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-                        throw new InvalidOperationException(
-                            "The blocked first stats sample completed without cancellation.");
+                        throw new InvalidOperationException("The blocked first stats sample completed without cancellation.");
                     }
                     if (firstSampleException is not null)
                         throw firstSampleException;
@@ -6594,16 +4427,12 @@ public sealed class RuntimeSupervisorTests
                 await WaitForSampleAfterAsync(0, cancellationToken);
             }
 
-            public Task<RuntimeContainerResourceUsage> StopAsync(
-                CancellationToken cancellationToken = default)
+            public Task<RuntimeContainerResourceUsage> StopAsync(CancellationToken cancellationToken = default)
             {
                 if (Interlocked.Exchange(ref _stopped, 1) == 0)
                     onStop();
                 return stopException is null
-                    ? Task.FromResult(usage with
-                    {
-                        SampleCount = Math.Max(usage.SampleCount, SampleCount)
-                    })
+                    ? Task.FromResult(usage with { SampleCount = Math.Max(usage.SampleCount, SampleCount) })
                     : Task.FromException<RuntimeContainerResourceUsage>(stopException);
             }
 

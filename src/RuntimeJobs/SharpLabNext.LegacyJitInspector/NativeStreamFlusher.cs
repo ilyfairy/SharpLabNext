@@ -11,9 +11,7 @@ namespace SharpLabNext.LegacyJitInspector
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                FlushWindows(
-                    () => FlushUcrt(IntPtr.Zero),
-                    () => FlushMsvcrt(IntPtr.Zero));
+                FlushWindows(() => FlushUcrt(IntPtr.Zero), () => FlushMsvcrt(IntPtr.Zero));
                 return;
             }
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
@@ -39,15 +37,10 @@ namespace SharpLabNext.LegacyJitInspector
             if (ucrtFlushed || msvcrtFlushed)
                 return;
 
-            throw new AggregateException(
-                "CoreCLR JIT output could not be flushed through ucrtbase or msvcrt.",
-                failures);
+            throw new AggregateException("CoreCLR JIT output could not be flushed through ucrtbase or msvcrt.", failures);
         }
 
-        private static bool TryFlush(
-            Func<int> flush,
-            string libraryName,
-            List<Exception> failures)
+        private static bool TryFlush(Func<int> flush, string libraryName, List<Exception> failures)
         {
             try
             {
@@ -56,10 +49,7 @@ namespace SharpLabNext.LegacyJitInspector
                     return true;
                 failures.Add(new IOException(libraryName + "!fflush(NULL) returned " + result + "."));
             }
-            catch (Exception exception) when (
-                exception is DllNotFoundException ||
-                exception is EntryPointNotFoundException ||
-                exception is BadImageFormatException)
+            catch (Exception exception) when (exception is DllNotFoundException || exception is EntryPointNotFoundException || exception is BadImageFormatException)
             {
                 failures.Add(exception);
             }

@@ -8,7 +8,7 @@ import test from 'node:test'
 import {
   runRuntimeFrameworkSupervisorSmoke,
   runRuntimeFrameworkSupervisorSmokeCli,
-} from './runtime-framework-supervisor-smoke.mjs'
+} from '../smoke/runtime-framework-supervisor-smoke.mjs'
 
 const hash = value => `sha256:${crypto.createHash('sha256').update(value).digest('hex')}`
 const profileId = 'wine-netfx48-linux-x64'
@@ -19,9 +19,7 @@ const consoleRef = hash('console-artifact')
 const fixedNow = () => new Date('2026-08-13T08:00:00.000Z')
 const protocol = { Major: 1, Minor: 0 }
 
-function response(value, status = 200, headers = {}) {
-  return new Response(typeof value === 'string' ? value : JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json', ...headers } })
-}
+function response(value, status = 200, headers = {}) { return new Response(typeof value === 'string' ? value : JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json', ...headers } }); }
 function profile() {
   return {
     schemaVersion: 1, id: profileId, image: 'sharplabnext/runtime-wine-netfx48-linux-x64:candidate', family: 'netfx-clr-wine', runtimeVersion: '4.8', runtimeCommit: 'not-applicable', jitVersion: 'not-applicable', jitCommit: 'not-applicable', runtimeImageId: 'sharplabnext/runtime-wine-netfx48-linux-x64:candidate', rid: 'linux-x64', architecture: 'x64', cpuFeatureProfile: 'x64-v2', acceptedRuntimeFamilies: ['netfx-clr-wine'], acceptedFrameworks: [{ name: '.NETFramework', exactVersion: '4.8' }], acceptedArtifactFormats: ['dotnet-framework-managed-pe-v1'], capabilities: ['run'], providedRuntimeFeatureTags: ['runtime.netfx48-wine'], providedMetadataFeatureTags: [], allowedSecurityPolicyIds: ['runtime-job-wine-netfx'], container: { isolationKind: 'wine', environmentKind: 'wine', executionUser: '0:0', winePrefixPath: '/opt/wine-netfx-clr4' }, operations: { run: { implementationId: 'sharplabnext-target-runtime-runner-v1', pathStyle: 'wine-z', command: { executable: '/usr/lib/wine/wine64', argv: ['runner', 'run', '{entryAssembly}', '--', '{arguments}'] } } }, securityPolicies: [{ id: 'runtime-job-wine-netfx', memoryBytes: 1, nanoCpus: 1, pidsLimit: 1, maximumDurationSeconds: 30, maximumArtifactBytes: 1, maximumOutputBytes: 1, tmpfsBytes: 1 }],

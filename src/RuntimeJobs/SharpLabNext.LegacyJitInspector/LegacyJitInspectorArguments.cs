@@ -21,9 +21,7 @@ namespace SharpLabNext.LegacyJitInspector
                 throw new ArgumentNullException(nameof(args));
             if (args.Length == 0 || args.Length > 2)
             {
-                throw new ArgumentException(
-                    "Usage: SharpLabNext.LegacyJitInspector <absolute-assembly-path> [method-filter]",
-                    nameof(args));
+                throw new ArgumentException("Usage: SharpLabNext.LegacyJitInspector <absolute-assembly-path> [method-filter]", nameof(args));
             }
 
             string assemblyPath = Path.GetFullPath(args[0]);

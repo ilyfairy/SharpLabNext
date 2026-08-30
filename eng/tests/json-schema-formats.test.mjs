@@ -4,7 +4,7 @@ import test from 'node:test'
 import {
   isSupportedJsonSchemaFormat,
   isValidJsonSchemaFormat,
-} from './json-schema-formats.mjs'
+} from '../release/json-schema-formats.mjs'
 
 test('the schema gate supports every format used by maintained schemas', () => {
   assert.equal(isSupportedJsonSchemaFormat('date'), true)

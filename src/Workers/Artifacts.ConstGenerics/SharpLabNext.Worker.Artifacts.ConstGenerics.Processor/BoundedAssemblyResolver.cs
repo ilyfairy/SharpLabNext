@@ -18,14 +18,11 @@ internal sealed class BoundedAssemblyResolver : IAssemblyResolver, IDisposable
 
     public MetadataFile? Resolve(IAssemblyReference reference) => ResolveName(reference.Name);
 
-    public Task<MetadataFile?> ResolveAsync(IAssemblyReference reference) =>
-        Task.FromResult(Resolve(reference));
+    public Task<MetadataFile?> ResolveAsync(IAssemblyReference reference) => Task.FromResult(Resolve(reference));
 
-    public MetadataFile? ResolveModule(MetadataFile mainModule, string moduleName) =>
-        ResolveName(Path.GetFileNameWithoutExtension(moduleName));
+    public MetadataFile? ResolveModule(MetadataFile mainModule, string moduleName) => ResolveName(Path.GetFileNameWithoutExtension(moduleName));
 
-    public Task<MetadataFile?> ResolveModuleAsync(MetadataFile mainModule, string moduleName) =>
-        Task.FromResult(ResolveModule(mainModule, moduleName));
+    public Task<MetadataFile?> ResolveModuleAsync(MetadataFile mainModule, string moduleName) => Task.FromResult(ResolveModule(mainModule, moduleName));
 
     internal IReadOnlyDictionary<string, string> Paths => _paths;
 
@@ -55,8 +52,7 @@ internal sealed class BoundedAssemblyResolver : IAssemblyResolver, IDisposable
     private void Index(string root, SearchOption searchOption, bool replaceExisting)
     {
         var normalizedRoot = Path.GetFullPath(root);
-        foreach (var path in Directory.EnumerateFiles(normalizedRoot, "*", searchOption)
-                     .Where(static path => Path.GetExtension(path).ToLowerInvariant() is ".dll" or ".exe" or ".winmd"))
+        foreach (var path in Directory.EnumerateFiles(normalizedRoot, "*", searchOption).Where(static path => Path.GetExtension(path).ToLowerInvariant() is ".dll" or ".exe" or ".winmd"))
         {
             if (_paths.Count >= MaximumIndexedAssemblies)
                 throw new ProcessorLimitExceededException();

@@ -17,37 +17,15 @@ public static class RuntimePerformanceScenarios
     public const string NotApplicableMapping = "not-applicable";
 }
 
-public sealed record RuntimePerformanceSampleRequest(
-    string RuntimeProfileId,
-    string PlanSha256,
-    ArtifactRef ArtifactRef,
-    string SecurityPolicyId,
-    string Scenario,
-    string? MethodFilter = null);
+public sealed record RuntimePerformanceSampleRequest(string RuntimeProfileId, string PlanSha256, ArtifactRef ArtifactRef, string SecurityPolicyId, string Scenario, string? MethodFilter = null);
 
-public sealed record RuntimePerformanceImageIdentity(
-    string Reference,
-    string ImageId,
-    long SizeBytes);
+public sealed record RuntimePerformanceImageIdentity(string Reference, string ImageId, long SizeBytes);
 
-public sealed record RuntimePerformanceMeasurementHelperIdentity(
-    string Implementation,
-    RuntimePerformanceImageIdentity Image,
-    string Entrypoint,
-    string SourceRevision,
-    string ContentSha256);
+public sealed record RuntimePerformanceMeasurementHelperIdentity(string Implementation, RuntimePerformanceImageIdentity Image, string Entrypoint, string SourceRevision, string ContentSha256);
 
-public sealed record RuntimePerformanceSampleEnvironment(
-    string RunnerId,
-    string OperatingSystem,
-    string Architecture,
-    long NanoCpus,
-    long MemoryLimitBytes);
+public sealed record RuntimePerformanceSampleEnvironment(string RunnerId, string OperatingSystem, string Architecture, long NanoCpus, long MemoryLimitBytes);
 
-public sealed record RuntimePerformanceSampleValue(
-    double LatencyMilliseconds,
-    long PeakMemoryBytes,
-    long CompletionPeakMemoryBytes);
+public sealed record RuntimePerformanceSampleValue(double LatencyMilliseconds, long PeakMemoryBytes, long CompletionPeakMemoryBytes);
 
 public sealed record RuntimePerformanceSampleResponse(
     string ProfileId,
@@ -74,29 +52,11 @@ internal sealed record RuntimeJobMeasurementCompletion(
     bool CleanupSucceeded,
     RuntimeJobAudit? Audit);
 
-internal sealed record RuntimeObservedException(
-    string TypeName,
-    string Message,
-    string? StackTrace,
-    RuntimeObservedException? InnerException);
+internal sealed record RuntimeObservedException(string TypeName, string Message, string? StackTrace, RuntimeObservedException? InnerException);
 
-internal sealed record RuntimeJitEvidenceRange(
-    int IlOffset,
-    int NativeStartOffset,
-    int NativeEndOffset,
-    string Document,
-    int StartLine,
-    int StartColumn,
-    int EndLine,
-    int EndColumn);
+internal sealed record RuntimeJitEvidenceRange(int IlOffset, int NativeStartOffset, int NativeEndOffset, string Document, int StartLine, int StartColumn, int EndLine, int EndColumn);
 
-internal sealed record RuntimeJitAuditMethod(
-    string MetadataToken,
-    string DisplayName,
-    int NativeCodeBytes,
-    int InstructionCount,
-    IReadOnlyList<RuntimeJitEvidenceRange> EvidenceRanges,
-    string MappingSource);
+internal sealed record RuntimeJitAuditMethod(string MetadataToken, string DisplayName, int NativeCodeBytes, int InstructionCount, IReadOnlyList<RuntimeJitEvidenceRange> EvidenceRanges, string MappingSource);
 
 internal sealed record RuntimeJobAudit(
     string ContainerId,
@@ -117,9 +77,7 @@ internal sealed record RuntimeJobAudit(
     bool ContainerRemoved,
     bool ProcessTreeRemoved);
 
-internal sealed record RuntimeJobMeasurementContext(
-    string RuntimeEntrypoint,
-    RuntimePerformanceMeasurementHelperIdentity MeasurementHelper);
+internal sealed record RuntimeJobMeasurementContext(string RuntimeEntrypoint, RuntimePerformanceMeasurementHelperIdentity MeasurementHelper);
 
 internal sealed class RuntimeJobMeasurementRegistration
 {
@@ -158,9 +116,7 @@ internal sealed class RuntimeJobMeasurementRegistration
 
     public void BindCancellation(CancellationToken cancellationToken)
     {
-        var registration = cancellationToken.Register(
-            static state => ((RuntimeJobMeasurementRegistration)state!).CancelBeforeExecution(),
-            this);
+        var registration = cancellationToken.Register(static state => ((RuntimeJobMeasurementRegistration)state!).CancelBeforeExecution(), this);
         lock (_gate)
         {
             if (!_completed)
@@ -188,13 +144,7 @@ internal sealed class RuntimeJobMeasurementRegistration
     public void Reject(string code, string message) =>
         CompleteCore(code, message, resourceUsage: null, result: null, cleanupSucceeded: false, audit: null);
 
-    public void Complete(
-        string? failureCode,
-        string? failureMessage,
-        RuntimeContainerResourceUsage? resourceUsage,
-        OperationResult? result,
-        bool cleanupSucceeded,
-        RuntimeJobAudit? audit) =>
+    public void Complete(string? failureCode, string? failureMessage, RuntimeContainerResourceUsage? resourceUsage, OperationResult? result, bool cleanupSucceeded, RuntimeJobAudit? audit) =>
         CompleteCore(failureCode, failureMessage, resourceUsage, result, cleanupSucceeded, audit);
 
     private void CancelBeforeExecution()
@@ -205,22 +155,10 @@ internal sealed class RuntimeJobMeasurementRegistration
                 return;
         }
 
-        CompleteCore(
-            "operation-cancelled-before-execution",
-            "The preflight operation was cancelled before execution started.",
-            resourceUsage: null,
-            result: null,
-            cleanupSucceeded: false,
-            audit: null);
+        CompleteCore("operation-cancelled-before-execution", "The preflight operation was cancelled before execution started.", resourceUsage: null, result: null, cleanupSucceeded: false, audit: null);
     }
 
-    private void CompleteCore(
-        string? failureCode,
-        string? failureMessage,
-        RuntimeContainerResourceUsage? resourceUsage,
-        OperationResult? result,
-        bool cleanupSucceeded,
-        RuntimeJobAudit? audit)
+    private void CompleteCore(string? failureCode, string? failureMessage, RuntimeContainerResourceUsage? resourceUsage, OperationResult? result, bool cleanupSucceeded, RuntimeJobAudit? audit)
     {
         RuntimeJobMeasurementCompletion completion;
         lock (_gate)
@@ -228,15 +166,7 @@ internal sealed class RuntimeJobMeasurementRegistration
             if (_completed)
                 return;
             _completed = true;
-            completion = new RuntimeJobMeasurementCompletion(
-                _executionStarted,
-                failureCode,
-                failureMessage,
-                Stopwatch.GetElapsedTime(_startedTimestamp),
-                resourceUsage,
-                result,
-                cleanupSucceeded,
-                audit);
+            completion = new RuntimeJobMeasurementCompletion(_executionStarted, failureCode, failureMessage, Stopwatch.GetElapsedTime(_startedTimestamp), resourceUsage, result, cleanupSucceeded, audit);
         }
 
         _containerStarted.TrySetCanceled();
@@ -246,11 +176,7 @@ internal sealed class RuntimeJobMeasurementRegistration
     }
 }
 
-public sealed class RuntimePerformancePreflightCoordinator(
-    OperationStore operations,
-    RuntimeJobExecutor executor,
-    IDockerEngineClient docker,
-    IOptions<RuntimeSupervisorOptions> configuredOptions)
+public sealed class RuntimePerformancePreflightCoordinator(OperationStore operations, RuntimeJobExecutor executor, IDockerEngineClient docker, IOptions<RuntimeSupervisorOptions> configuredOptions)
 {
     public const string RunnerId = "runtime-preflight-linux-x64-v2";
     public const string MeasurementHelperImplementation = RuntimeMeasurementHelperContract.Implementation;
@@ -263,20 +189,12 @@ public sealed class RuntimePerformancePreflightCoordinator(
     ];
     private readonly RuntimeSupervisorOptions _options = configuredOptions.Value;
 
-    public async Task<RuntimePerformanceSampleResponse> MeasureAsync(
-        RuntimePerformanceSampleRequest request,
-        CancellationToken cancellationToken = default)
+    public async Task<RuntimePerformanceSampleResponse> MeasureAsync(RuntimePerformanceSampleRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (!RuntimeProfileValidation.IsSha256(request.PlanSha256) ||
-            _options.PromotionPreflightPlanSha256 is null ||
-            !StringComparer.Ordinal.Equals(
-                _options.PromotionPreflightPlanSha256,
-                request.PlanSha256))
+        if (!RuntimeProfileValidation.IsSha256(request.PlanSha256) || _options.PromotionPreflightPlanSha256 is null || !StringComparer.Ordinal.Equals(_options.PromotionPreflightPlanSha256, request.PlanSha256))
         {
-            throw Invalid(
-                "performance-plan-not-installed",
-                "The requested promotion plan is not installed in the local Supervisor preflight profile.");
+            throw Invalid("performance-plan-not-installed", "The requested promotion plan is not installed in the local Supervisor preflight profile.");
         }
         ValidateStableId(request.RuntimeProfileId, nameof(request.RuntimeProfileId));
         ValidateStableId(request.SecurityPolicyId, nameof(request.SecurityPolicyId));
@@ -288,10 +206,7 @@ public sealed class RuntimePerformancePreflightCoordinator(
         {
             throw Invalid("invalid-performance-artifact-ref", "The artifact reference is malformed.");
         }
-        if (request.Scenario is not (
-            RuntimePerformanceScenarios.Run or
-            RuntimePerformanceScenarios.Jit or
-            RuntimePerformanceScenarios.Mapping))
+        if (request.Scenario is not (RuntimePerformanceScenarios.Run or RuntimePerformanceScenarios.Jit or RuntimePerformanceScenarios.Mapping))
         {
             throw Invalid("invalid-performance-scenario", "The performance scenario is not supported.");
         }
@@ -299,86 +214,34 @@ public sealed class RuntimePerformancePreflightCoordinator(
         var profile = GetProfile(request.RuntimeProfileId);
         var policy = GetPolicy(request.SecurityPolicyId);
         ValidateSelection(profile, policy, request);
-        var (inspection, runtimeEntrypoint) = await InspectRuntimeImageAsync(
-            profile,
-            cancellationToken).ConfigureAwait(false);
-        var helperInspection = await InspectMeasurementHelperImageAsync(cancellationToken)
-            .ConfigureAwait(false);
+        var (inspection, runtimeEntrypoint) = await InspectRuntimeImageAsync(profile, cancellationToken).ConfigureAwait(false);
+        var helperInspection = await InspectMeasurementHelperImageAsync(cancellationToken).ConfigureAwait(false);
         if (StringComparer.Ordinal.Equals(helperInspection.ImageId, inspection.ImageId))
         {
-            throw Failed(
-                "performance-helper-image-not-distinct",
-                "The measurement helper and measured runtime must use distinct immutable images.");
+            throw Failed("performance-helper-image-not-distinct", "The measurement helper and measured runtime must use distinct immutable images.");
         }
-        var helperIdentity = new RuntimePerformanceMeasurementHelperIdentity(
-            MeasurementHelperImplementation,
-            new RuntimePerformanceImageIdentity(
-                helperInspection.ImmutableReference,
-                helperInspection.ImageId,
-            helperInspection.SizeBytes),
-            MeasurementHelperEntrypoint,
-            _options.PromotionPreflightSourceRevision!,
-            MeasurementHelperContentSha256);
+        var helperIdentity = new RuntimePerformanceMeasurementHelperIdentity(MeasurementHelperImplementation, new RuntimePerformanceImageIdentity(helperInspection.ImmutableReference, helperInspection.ImageId, helperInspection.SizeBytes), MeasurementHelperEntrypoint, _options.PromotionPreflightSourceRevision!, MeasurementHelperContentSha256);
 
         var nonce = Guid.NewGuid().ToString("N");
         var requestId = $"perf_{nonce}";
         var deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(policy.MaximumDurationSeconds);
         var operationKind = request.Scenario == RuntimePerformanceScenarios.Run
-            ? OperationKind.Run
-            : OperationKind.Jit;
-        var operation = operations.Start(
-            requestId,
-            $"runtime-performance-{nonce}",
-            operationKind,
-            requestId,
-            DateTimeOffset.UtcNow);
-        var measurement = new RuntimeJobMeasurementRegistration(new RuntimeJobMeasurementContext(
-            runtimeEntrypoint,
-            helperIdentity));
+            ? OperationKind.Run : OperationKind.Jit;
+        var operation = operations.Start(requestId, $"runtime-performance-{nonce}", operationKind, requestId, DateTimeOffset.UtcNow);
+        var measurement = new RuntimeJobMeasurementRegistration(new RuntimeJobMeasurementContext(runtimeEntrypoint, helperIdentity));
         var queued = request.Scenario == RuntimePerformanceScenarios.Run
             ? executor.QueueRunForMeasurement(
                 operation,
-                new RunRequest(
-                    requestId,
-                    $"runtime-performance-run-{nonce}",
-                    "runtime-performance-preflight",
-                    request.ArtifactRef,
-                    profile.Id,
-                    new RunOptions([], null, RunInstrumentation.None, policy.Id),
-                    deadlineUtc),
-                measurement)
-            : executor.QueueJitForMeasurement(
-                operation,
-                new JitRequest(
-                    requestId,
-                    $"runtime-performance-jit-{nonce}",
-                    "runtime-performance-preflight",
-                    request.ArtifactRef,
-                    profile.Id,
-                    new JitOptions(
-                        request.MethodFilter,
-                        "tier0-diffable",
-                        "disabled",
-                        "coreclr-jitdisasm",
-                        policy.Id),
-                    deadlineUtc),
-                measurement);
-        if (!queued)
-        {
-            throw Unavailable(
-                "performance-queue-rejected",
-                "The runtime operation queue rejected the performance sample.");
-        }
+                new RunRequest(requestId, $"runtime-performance-run-{nonce}", "runtime-performance-preflight", request.ArtifactRef, profile.Id, new RunOptions([], null, RunInstrumentation.None, policy.Id), deadlineUtc),
+                measurement) : executor.QueueJitForMeasurement(operation, new JitRequest(requestId, $"runtime-performance-jit-{nonce}", "runtime-performance-preflight", request.ArtifactRef, profile.Id, new JitOptions(request.MethodFilter, "tier0-diffable", "disabled", "coreclr-jitdisasm", policy.Id), deadlineUtc), measurement);
+        if (!queued) throw Unavailable("performance-queue-rejected", "The runtime operation queue rejected the performance sample.");
 
         RuntimeJobMeasurementCompletion completion;
         try
         {
             var cleanupBudget = TimeSpan.FromSeconds(45);
-            using var timeout = new CancellationTokenSource(
-                TimeSpan.FromSeconds(policy.MaximumDurationSeconds) + cleanupBudget);
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken,
-                timeout.Token);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(policy.MaximumDurationSeconds) + cleanupBudget);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
             completion = await measurement.Completion.WaitAsync(linked.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -389,95 +252,51 @@ public sealed class RuntimePerformancePreflightCoordinator(
 
         ValidateCompletion(completion, request.Scenario, policy);
         var distinctSequencePoints = CountDistinctSequencePointRanges(completion.Result);
-        if (request.Scenario == RuntimePerformanceScenarios.Mapping && distinctSequencePoints < 2)
-        {
-            throw Failed(
-                "performance-mapping-unavailable",
-                "The mapping sample did not produce at least two distinct sequence-point ranges.");
-        }
+        if (request.Scenario == RuntimePerformanceScenarios.Mapping && distinctSequencePoints < 2) throw Failed("performance-mapping-unavailable", "The mapping sample did not produce at least two distinct sequence-point ranges.");
 
         var mappingKind = profile.Capabilities.Contains("jit-asm", StringComparer.Ordinal)
-            ? profile.Operations?.Jit?.SourceMappingKind ?? RuntimeJitSourceMappingKinds.None
-            : RuntimePerformanceScenarios.NotApplicableMapping;
+            ? profile.Operations?.Jit?.SourceMappingKind ?? RuntimeJitSourceMappingKinds.None : RuntimePerformanceScenarios.NotApplicableMapping;
         return new RuntimePerformanceSampleResponse(
             profile.Id,
             request.Scenario,
             operation.Handle.OperationId,
-            new RuntimePerformanceImageIdentity(
-                inspection.ImmutableReference,
-                inspection.ImageId,
-                inspection.SizeBytes),
+            new RuntimePerformanceImageIdentity(inspection.ImmutableReference, inspection.ImageId, inspection.SizeBytes),
             helperIdentity,
             profile.Capabilities.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(),
             mappingKind,
-            new RuntimePerformanceSampleEnvironment(
-                RunnerId,
-                "linux",
-                "x64",
-                policy.NanoCpus,
-                policy.MemoryBytes),
-            new RuntimePerformanceSampleValue(
-                completion.Latency.TotalMilliseconds,
-                completion.ResourceUsage!.PeakMemoryBytes,
-                completion.ResourceUsage.CompletionPeakMemoryBytes),
+            new RuntimePerformanceSampleEnvironment(RunnerId, "linux", "x64", policy.NanoCpus, policy.MemoryBytes),
+            new RuntimePerformanceSampleValue(completion.Latency.TotalMilliseconds, completion.ResourceUsage!.PeakMemoryBytes, completion.ResourceUsage.CompletionPeakMemoryBytes),
             completion.ResourceUsage.SampleCount,
             completion.ResourceUsage.PostCompletionSampleCount,
             distinctSequencePoints,
             DateTimeOffset.UtcNow);
     }
 
-    private async Task<(RuntimeImageInspection Inspection, string Entrypoint)> InspectRuntimeImageAsync(
-        RuntimeProfileOptions profile,
-        CancellationToken cancellationToken)
+    private async Task<(RuntimeImageInspection Inspection, string Entrypoint)> InspectRuntimeImageAsync(RuntimeProfileOptions profile, CancellationToken cancellationToken)
     {
-        var inspection = await InspectImageCoreAsync(
-            profile.Image,
-            "performance-image-not-immutable",
-            "performance-image-inspection-failed",
-            cancellationToken).ConfigureAwait(false);
+        var inspection = await InspectImageCoreAsync(profile.Image, "performance-image-not-immutable", "performance-image-inspection-failed", cancellationToken).ConfigureAwait(false);
 
-        if (!string.Equals(profile.RuntimeImageId, inspection.ImageId, StringComparison.Ordinal) ||
-            !string.Equals(inspection.OperatingSystem, "linux", StringComparison.Ordinal) ||
-            !string.Equals(inspection.Architecture, "amd64", StringComparison.Ordinal) ||
-            !HasExpectedSourceRevision(inspection))
+        if (!string.Equals(profile.RuntimeImageId, inspection.ImageId, StringComparison.Ordinal) || !string.Equals(inspection.OperatingSystem, "linux", StringComparison.Ordinal) || !string.Equals(inspection.Architecture, "amd64", StringComparison.Ordinal) || !HasExpectedSourceRevision(inspection))
         {
-            throw Failed(
-                "performance-image-identity-mismatch",
-                "The inspected Linux x64 image identity or source revision does not match the selected Runtime Profile.");
+            throw Failed("performance-image-identity-mismatch", "The inspected Linux x64 image identity or source revision does not match the selected Runtime Profile.");
         }
         if (inspection.Entrypoint is not { Count: 1 } ||
             !AllowedRuntimeEntrypoints.Contains(inspection.Entrypoint[0]))
         {
-            throw Failed(
-                "performance-image-entrypoint-not-trusted",
-                "The measured runtime image must declare exactly one approved shell entrypoint.");
+            throw Failed("performance-image-entrypoint-not-trusted", "The measured runtime image must declare exactly one approved shell entrypoint.");
         }
         return (inspection, inspection.Entrypoint[0]);
     }
 
-    private async Task<RuntimeImageInspection> InspectMeasurementHelperImageAsync(
-        CancellationToken cancellationToken)
+    private async Task<RuntimeImageInspection> InspectMeasurementHelperImageAsync(CancellationToken cancellationToken)
     {
-        var reference = _options.MeasurementHelperImage
-            ?? throw Failed(
-                "performance-helper-not-configured",
-                "The runtime measurement helper image is not configured.");
-        var inspection = await InspectImageCoreAsync(
-            reference,
-            "performance-helper-image-not-immutable",
-            "performance-helper-image-inspection-failed",
-            cancellationToken).ConfigureAwait(false);
+        var reference = _options.MeasurementHelperImage ?? throw Failed("performance-helper-not-configured", "The runtime measurement helper image is not configured.");
+        var inspection = await InspectImageCoreAsync(reference, "performance-helper-image-not-immutable", "performance-helper-image-inspection-failed", cancellationToken).ConfigureAwait(false);
         // The helper path is a fixed sidecar override; this shared image's default
         // entrypoint remains the Runtime Supervisor service and the probe verifies the helper file.
-        if (!IsRuntimeSupervisorRepository(inspection.ImmutableReference) ||
-            !StringComparer.Ordinal.Equals(_options.MeasurementHelperImageId, inspection.ImageId) ||
-            !StringComparer.Ordinal.Equals(inspection.OperatingSystem, "linux") ||
-            !StringComparer.Ordinal.Equals(inspection.Architecture, "amd64") ||
-            !HasExpectedSourceRevision(inspection))
+        if (!IsRuntimeSupervisorRepository(inspection.ImmutableReference) || !StringComparer.Ordinal.Equals(_options.MeasurementHelperImageId, inspection.ImageId) || !StringComparer.Ordinal.Equals(inspection.OperatingSystem, "linux") || !StringComparer.Ordinal.Equals(inspection.Architecture, "amd64") || !HasExpectedSourceRevision(inspection))
         {
-            throw Failed(
-                "performance-helper-image-identity-mismatch",
-                "The inspected Linux x64 measurement helper identity or source revision is not trusted.");
+            throw Failed("performance-helper-image-identity-mismatch", "The inspected Linux x64 measurement helper identity or source revision is not trusted.");
         }
 
         IReadOnlyList<RuntimeImageFileInspection> files;
@@ -508,16 +327,9 @@ public sealed class RuntimePerformancePreflightCoordinator(
 
         var helperFile = files?.FirstOrDefault(static file => file.Role == "helper");
         var controlHostFile = files?.FirstOrDefault(static file => file.Role == "control-host");
-        if (files is null || files.Count != 2 || helperFile is null || controlHostFile is null ||
-            !StringComparer.Ordinal.Equals(helperFile.Path, MeasurementHelperEntrypoint) ||
-            !StringComparer.Ordinal.Equals(helperFile.Sha256, MeasurementHelperContentSha256) ||
-            helperFile.SizeBytes <= 0 ||
-            !StringComparer.Ordinal.Equals(controlHostFile.Path, "/usr/local/bin/sharplabnext-service") ||
-            controlHostFile.SizeBytes <= 0)
+        if (files is null || files.Count != 2 || helperFile is null || controlHostFile is null || !StringComparer.Ordinal.Equals(helperFile.Path, MeasurementHelperEntrypoint) || !StringComparer.Ordinal.Equals(helperFile.Sha256, MeasurementHelperContentSha256) || helperFile.SizeBytes <= 0 || !StringComparer.Ordinal.Equals(controlHostFile.Path, "/usr/local/bin/sharplabnext-service") || controlHostFile.SizeBytes <= 0)
         {
-            throw Failed(
-                "performance-helper-content-mismatch",
-                "The inspected measurement helper entrypoint bytes do not match the pinned helper contract.");
+            throw Failed("performance-helper-content-mismatch", "The inspected measurement helper entrypoint bytes do not match the pinned helper contract.");
         }
         return inspection;
     }
@@ -534,11 +346,7 @@ public sealed class RuntimePerformancePreflightCoordinator(
         return StringComparer.Ordinal.Equals(name, "runtime-supervisor");
     }
 
-    private async Task<RuntimeImageInspection> InspectImageCoreAsync(
-        string reference,
-        string immutableFailureCode,
-        string inspectionFailureCode,
-        CancellationToken cancellationToken)
+    private async Task<RuntimeImageInspection> InspectImageCoreAsync(string reference, string immutableFailureCode, string inspectionFailureCode, CancellationToken cancellationToken)
     {
         try
         {
@@ -562,67 +370,39 @@ public sealed class RuntimePerformancePreflightCoordinator(
         StringComparer.Ordinal.Equals(observed, expected) &&
         StringComparer.Ordinal.Equals(sourceObserved, expected);
 
-    private static void ValidateSelection(
-        RuntimeProfileOptions profile,
-        RuntimeSecurityPolicyOptions policy,
-        RuntimePerformanceSampleRequest request)
+    private static void ValidateSelection(RuntimeProfileOptions profile, RuntimeSecurityPolicyOptions policy, RuntimePerformanceSampleRequest request)
     {
-        if (!profile.AllowedSecurityPolicyIds.Contains(policy.Id, StringComparer.Ordinal))
+        if (!profile.AllowedSecurityPolicyIds.Contains(policy.Id, StringComparer.Ordinal)) throw Invalid("performance-policy-not-allowed", "The selected Runtime Profile does not allow this security policy.");
+        if (!string.Equals(profile.Architecture, "x64", StringComparison.Ordinal) || !string.Equals(profile.Rid, "linux-x64", StringComparison.Ordinal))
         {
-            throw Invalid(
-                "performance-policy-not-allowed",
-                "The selected Runtime Profile does not allow this security policy.");
+            throw Invalid("performance-platform-not-supported", "The current performance policy only supports Linux x64 runtime profiles.");
         }
-        if (!string.Equals(profile.Architecture, "x64", StringComparison.Ordinal) ||
-            !string.Equals(profile.Rid, "linux-x64", StringComparison.Ordinal))
-        {
-            throw Invalid(
-                "performance-platform-not-supported",
-                "The current performance policy only supports Linux x64 runtime profiles.");
-        }
-        if (!profile.Capabilities.Contains("run", StringComparer.Ordinal))
-        {
-            throw Invalid("performance-run-not-supported", "The Runtime Profile does not support Run.");
-        }
+        if (!profile.Capabilities.Contains("run", StringComparer.Ordinal)) throw Invalid("performance-run-not-supported", "The Runtime Profile does not support Run.");
         if (request.Scenario is RuntimePerformanceScenarios.Jit or RuntimePerformanceScenarios.Mapping)
         {
             if (!profile.Capabilities.Contains("jit-asm", StringComparer.Ordinal))
                 throw Invalid("performance-jit-not-supported", "The Runtime Profile does not support JIT.");
-            if (string.IsNullOrWhiteSpace(request.MethodFilter) ||
-                request.MethodFilter.Length > 256 ||
-                request.MethodFilter.Any(char.IsControl))
+            if (string.IsNullOrWhiteSpace(request.MethodFilter) || request.MethodFilter.Length > 256 || request.MethodFilter.Any(char.IsControl))
             {
-                throw Invalid(
-                    "invalid-performance-method-filter",
-                    "JIT performance samples require one concrete method filter.");
+                throw Invalid("invalid-performance-method-filter", "JIT performance samples require one concrete method filter.");
             }
         }
         else if (request.MethodFilter is not null)
         {
-            throw Invalid(
-                "unexpected-performance-method-filter",
-                "Run performance samples cannot declare a method filter.");
+            throw Invalid("unexpected-performance-method-filter", "Run performance samples cannot declare a method filter.");
         }
         var mappingKind = profile.Operations?.Jit?.SourceMappingKind;
-        if (request.Scenario == RuntimePerformanceScenarios.Mapping &&
-            mappingKind is null or RuntimeJitSourceMappingKinds.None or RuntimePerformanceScenarios.NotApplicableMapping)
+        if (request.Scenario == RuntimePerformanceScenarios.Mapping && mappingKind is null or RuntimeJitSourceMappingKinds.None or RuntimePerformanceScenarios.NotApplicableMapping)
         {
-            throw Invalid(
-                "performance-mapping-not-supported",
-                "The Runtime Profile does not declare a source-mapped JIT implementation.");
+            throw Invalid("performance-mapping-not-supported", "The Runtime Profile does not declare a source-mapped JIT implementation.");
         }
     }
 
-    private static void ValidateCompletion(
-        RuntimeJobMeasurementCompletion completion,
-        string scenario,
-        RuntimeSecurityPolicyOptions policy)
+    private static void ValidateCompletion(RuntimeJobMeasurementCompletion completion, string scenario, RuntimeSecurityPolicyOptions policy)
     {
         if (!completion.ExecutionStarted || completion.FailureCode is not null)
         {
-            throw Failed(
-                completion.FailureCode ?? "performance-execution-not-started",
-                completion.FailureMessage ?? "The performance sample did not complete execution.");
+            throw Failed(completion.FailureCode ?? "performance-execution-not-started", completion.FailureMessage ?? "The performance sample did not complete execution.");
         }
         if (!completion.CleanupSucceeded)
             throw Failed("performance-cleanup-failed", "The one-shot runtime resources were not fully cleaned up.");
@@ -636,9 +416,7 @@ public sealed class RuntimePerformancePreflightCoordinator(
             completion.ResourceUsage.PeakMemoryBytes < completion.ResourceUsage.CompletionPeakMemoryBytes ||
             completion.ResourceUsage.SampleCount < completion.ResourceUsage.PostCompletionSampleCount)
         {
-            throw Failed(
-                "performance-resource-sample-missing",
-                "The runtime did not produce complete streamed and post-execution cgroup memory evidence.");
+            throw Failed("performance-resource-sample-missing", "The runtime did not produce complete streamed and post-execution cgroup memory evidence.");
         }
         if (completion.ResourceUsage.PeakMemoryBytes > policy.MemoryBytes)
             throw Failed("performance-memory-limit-exceeded", "Peak memory exceeded the selected container limit.");
@@ -660,18 +438,9 @@ public sealed class RuntimePerformancePreflightCoordinator(
     {
         if (result is not JitResult jit)
             return 0;
-        return jit.Methods
-            .SelectMany(static method => method.LinkedRanges)
-            .Where(static range =>
-                range.Precision == "sequence-point" &&
-                range.SourceRange is not null &&
-                !string.IsNullOrWhiteSpace(range.SourceFilePath))
-            .Select(static range =>
-                $"{range.SourceFilePath}\0{range.SourceRange!.StartLine}\0" +
-                $"{range.SourceRange.StartCharacter}\0{range.SourceRange.EndLine}\0" +
-                $"{range.SourceRange.EndCharacter}")
-            .Distinct(StringComparer.Ordinal)
-            .Count();
+        return jit.Methods.SelectMany(static method => method.LinkedRanges).Where(static range => range.Precision == "sequence-point" && range.SourceRange is not null && !string.IsNullOrWhiteSpace(range.SourceFilePath))
+            .Select(static range => $"{range.SourceFilePath}\0{range.SourceRange!.StartLine}\0" + $"{range.SourceRange.StartCharacter}\0{range.SourceRange.EndLine}\0" + $"{range.SourceRange.EndCharacter}")
+            .Distinct(StringComparer.Ordinal).Count();
     }
 
     private RuntimeProfileOptions GetProfile(string id)
@@ -682,10 +451,7 @@ public sealed class RuntimePerformancePreflightCoordinator(
         }
         catch (KeyNotFoundException)
         {
-            throw new RuntimePerformancePreflightException(
-                "performance-profile-not-installed",
-                "The selected Runtime Profile is not installed.",
-                StatusCodes.Status404NotFound);
+            throw new RuntimePerformancePreflightException("performance-profile-not-installed", "The selected Runtime Profile is not installed.", StatusCodes.Status404NotFound);
         }
     }
 
@@ -697,18 +463,13 @@ public sealed class RuntimePerformancePreflightCoordinator(
         }
         catch (KeyNotFoundException)
         {
-            throw new RuntimePerformancePreflightException(
-                "performance-policy-not-installed",
-                "The selected security policy is not installed.",
-                StatusCodes.Status404NotFound);
+            throw new RuntimePerformancePreflightException("performance-policy-not-installed", "The selected security policy is not installed.", StatusCodes.Status404NotFound);
         }
     }
 
     private static void ValidateStableId(string value, string parameterName)
     {
-        if (string.IsNullOrWhiteSpace(value) || value.Length > 128 ||
-            value.Any(static character =>
-                !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.')))
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 128 || value.Any(static character => !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.')))
         {
             throw new ArgumentException("The identifier is malformed.", parameterName);
         }
@@ -724,10 +485,7 @@ public sealed class RuntimePerformancePreflightCoordinator(
         new(code, message, StatusCodes.Status503ServiceUnavailable);
 }
 
-public sealed class RuntimePerformancePreflightException(
-    string code,
-    string publicMessage,
-    int statusCode) : Exception(publicMessage)
+public sealed class RuntimePerformancePreflightException(string code, string publicMessage, int statusCode) : Exception(publicMessage)
 {
     public string Code { get; } = code;
     public string PublicMessage { get; } = publicMessage;

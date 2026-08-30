@@ -57,10 +57,7 @@ public sealed class GitHubGistClientTests
         var client = new GitHubGistClient(
             new HttpClient(handler) { BaseAddress = new Uri("https://api.github.test/") });
 
-        var exception = await Assert.ThrowsAsync<GitHubApiException>(() => client.GetAsync(
-            "abcde1",
-            null,
-            TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<GitHubApiException>(() => client.GetAsync("abcde1", null, TestContext.Current.CancellationToken));
 
         Assert.Equal(HttpStatusCode.BadGateway, exception.StatusCode);
         Assert.Single(handler.RequestUris);
@@ -71,15 +68,12 @@ public sealed class GitHubGistClientTests
         Content = new StringContent(json, Encoding.UTF8, "application/json")
     };
 
-    private sealed class GistRecordingHandler(
-        Func<HttpRequestMessage, HttpResponseMessage> responseFactory) : HttpMessageHandler
+    private sealed class GistRecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> responseFactory) : HttpMessageHandler
     {
         public List<Uri> RequestUris { get; } = [];
         public List<AuthenticationHeaderValue?> Authorization { get; } = [];
 
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             RequestUris.Add(request.RequestUri!);

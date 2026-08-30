@@ -28,9 +28,7 @@ internal static class ConstGenericsTestInfrastructure
             if (Directory.Exists(path))
                 Directory.Delete(path, recursive: true);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
     }
 
     public static ArtifactWorkerCapabilityManifest CapabilityManifest() => new()
@@ -44,33 +42,15 @@ internal static class ConstGenericsTestInfrastructure
         TransformIds = [],
         RenderOutputIds = ["il", "decompiled-csharp"],
         VerificationProfileIds = ["il-verify"],
-        Limits = new ArtifactWorkerLimits(
-            64 * 1024 * 1024,
-            8 * 1024 * 1024,
-            2,
-            15_000,
-            256,
-            16)
+        Limits = new ArtifactWorkerLimits(64 * 1024 * 1024, 8 * 1024 * 1024, 2, 15_000, 256, 16)
     };
 
     public static ConstGenericsArtifactWorkerSettings Settings(string root)
     {
-        var configuration = Directory.GetParent(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar))?
-            .Name ?? "Debug";
-        var buildOutput = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            "..",
-            "SharpLabNext.Worker.Artifacts.ConstGenerics.Processor",
-            "bin",
-            configuration,
-            "net8.0",
-            "SharpLabNext.Worker.Artifacts.ConstGenerics.Processor.dll"));
+        var configuration = Directory.GetParent(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar))?.Name ?? "Debug";
+        var buildOutput = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "SharpLabNext.Worker.Artifacts.ConstGenerics.Processor", "bin", configuration, "net8.0", "SharpLabNext.Worker.Artifacts.ConstGenerics.Processor.dll"));
         var processorPath = File.Exists(buildOutput)
-            ? buildOutput
-            : throw new FileNotFoundException("The ConstGenerics processor test build output is unavailable.", buildOutput);
+            ? buildOutput : throw new FileNotFoundException("The ConstGenerics processor test build output is unavailable.", buildOutput);
         return new ConstGenericsArtifactWorkerSettings(
             "test-release",
             $"sha256:{new string('a', ArtifactStoreProtocol.Sha256HexLength)}",
@@ -95,27 +75,9 @@ internal static class ConstGenericsTestInfrastructure
         BaseAddress = new Uri("http://artifact-store.test")
     });
 
-    public static RenderArtifactRequest RenderRequest(ArtifactRef artifactRef, string outputId) => new(
-        $"request-{outputId}",
-        $"key-{outputId}",
-        "pipeline-const-generics",
-        artifactRef,
-        "artifacts-const-generics",
-        outputId,
-        new RenderArtifactOptions(
-            IncludeSequencePoints: false,
-            IncludeCompilerGeneratedMembers: true,
-            MaxCharacters: 1_000_000),
-        DateTimeOffset.UtcNow.AddSeconds(30));
+    public static RenderArtifactRequest RenderRequest(ArtifactRef artifactRef, string outputId) => new($"request-{outputId}", $"key-{outputId}", "pipeline-const-generics", artifactRef, "artifacts-const-generics", outputId, new RenderArtifactOptions(IncludeSequencePoints: false, IncludeCompilerGeneratedMembers: true, MaxCharacters: 1_000_000), DateTimeOffset.UtcNow.AddSeconds(30));
 
-    public static VerifyArtifactRequest VerifyRequest(ArtifactRef artifactRef) => new(
-        "request-verify",
-        "key-verify",
-        "pipeline-const-generics",
-        artifactRef,
-        "artifacts-const-generics",
-        new VerifyArtifactOptions("il-verify", IncludeMetadataTokens: true, MaxFindings: 1_000),
-        DateTimeOffset.UtcNow.AddSeconds(30));
+    public static VerifyArtifactRequest VerifyRequest(ArtifactRef artifactRef) => new("request-verify", "key-verify", "pipeline-const-generics", artifactRef, "artifacts-const-generics", new VerifyArtifactOptions("il-verify", IncludeMetadataTokens: true, MaxFindings: 1_000), DateTimeOffset.UtcNow.AddSeconds(30));
 }
 
 internal sealed class ConstGenericsArtifactStoreHandler : HttpMessageHandler
@@ -127,12 +89,9 @@ internal sealed class ConstGenericsArtifactStoreHandler : HttpMessageHandler
     private int _leaseReleaseCount;
     private int _fileDownloadCount;
 
-    public ConstGenericsArtifactStoreHandler(
-        Func<ArtifactManifest, ArtifactManifest>? mutateManifest = null,
-        bool corruptContent = false)
+    public ConstGenericsArtifactStoreHandler(Func<ArtifactManifest, ArtifactManifest>? mutateManifest = null, bool corruptContent = false)
     {
-        var expectedAssembly = File.ReadAllBytes(
-            typeof(SharpLabNext.ArtifactProcessing.Fixture.Program).Assembly.Location);
+        var expectedAssembly = File.ReadAllBytes(typeof(SharpLabNext.ArtifactProcessing.Fixture.Program).Assembly.Location);
         _servedAssembly = expectedAssembly.ToArray();
         if (corruptContent)
             _servedAssembly[^1] ^= 0xff;
@@ -141,21 +100,11 @@ internal sealed class ConstGenericsArtifactStoreHandler : HttpMessageHandler
         var manifest = new ArtifactManifest(
             ArtifactStoreProtocol.ArtifactManifestVersion,
             placeholder,
-            new ArtifactProducer(
-                "test-release",
-                "csharp",
-                "roslyn-const-generics",
-                "4.8.0",
-                "bcd209abd947ac1bc71ef1ee29bd8a02d8e78ffc",
-                $"sha256:{new string('b', ArtifactStoreProtocol.Sha256HexLength)}"),
+            new ArtifactProducer("test-release", "csharp", "roslyn-const-generics", "4.8.0", "bcd209abd947ac1bc71ef1ee29bd8a02d8e78ffc", $"sha256:{new string('b', ArtifactStoreProtocol.Sha256HexLength)}"),
             "const-generics-ref",
             "net9.0",
             "dotnet-managed-pe-v1",
-            new ArtifactRuntimeRequirement(
-                "coreclr-const-generics",
-                [new FrameworkRequirement("Microsoft.NETCore.App", "9.0.0-constgenerics.1.23470.1")],
-                "anycpu",
-                [ConstGenericsProcessorProtocol.RuntimeFeatureTag]),
+            new ArtifactRuntimeRequirement("coreclr-const-generics", [new FrameworkRequirement("Microsoft.NETCore.App", "9.0.0-constgenerics.1.23470.1")], "anycpu", [ConstGenericsProcessorProtocol.RuntimeFeatureTag]),
             [ConstGenericsProcessorProtocol.MetadataFeatureTag],
             BuildOutputKind.Library,
             "app.dll",
@@ -167,14 +116,7 @@ internal sealed class ConstGenericsArtifactStoreHandler : HttpMessageHandler
             });
         manifest = mutateManifest?.Invoke(manifest) ?? manifest;
         manifest = ArtifactIdentity.WithComputedId(manifest);
-        _bundle = new ArtifactBundleDescriptor(
-            manifest,
-            [new ArtifactBundleEntry(
-                "app.dll",
-                expectedAssembly.LongLength,
-                contentRef.Value,
-                "primary-assembly",
-                contentRef)]);
+        _bundle = new ArtifactBundleDescriptor(manifest, [new ArtifactBundleEntry("app.dll", expectedAssembly.LongLength, contentRef.Value, "primary-assembly", contentRef)]);
     }
 
     public ArtifactRef ArtifactRef => _bundle.Manifest.ArtifactId;
@@ -189,9 +131,7 @@ internal sealed class ConstGenericsArtifactStoreHandler : HttpMessageHandler
 
     public byte[] GetUploadedContent(ContentRef contentRef) => _uploadedContent[contentRef];
 
-    protected override async Task<HttpResponseMessage> SendAsync(
-        HttpRequestMessage request,
-        CancellationToken cancellationToken)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var path = request.RequestUri?.AbsolutePath ?? string.Empty;
         var artifactPath = $"{ArtifactStoreProtocol.ApiPrefix}/artifacts/sha256/{ArtifactStoreProtocol.GetDigest(ArtifactRef)}";
@@ -200,11 +140,7 @@ internal sealed class ConstGenericsArtifactStoreHandler : HttpMessageHandler
         if (request.Method == HttpMethod.Post && path == $"{artifactPath}/leases")
         {
             Interlocked.Increment(ref _leaseAcquisitionCount);
-            return Json(new ArtifactLeaseResponse(
-                "lease_const",
-                ArtifactRef,
-                "artifacts-const-generics:test",
-                DateTimeOffset.UtcNow.AddMinutes(1)));
+            return Json(new ArtifactLeaseResponse("lease_const", ArtifactRef, "artifacts-const-generics:test", DateTimeOffset.UtcNow.AddMinutes(1)));
         }
         if (request.Method == HttpMethod.Get && path == $"{artifactPath}/files/app.dll")
         {
@@ -214,8 +150,7 @@ internal sealed class ConstGenericsArtifactStoreHandler : HttpMessageHandler
                 Content = new ByteArrayContent(_servedAssembly)
             };
         }
-        if (request.Method == HttpMethod.Delete &&
-            path == $"{ArtifactStoreProtocol.ApiPrefix}/leases/lease_const")
+        if (request.Method == HttpMethod.Delete && path == $"{ArtifactStoreProtocol.ApiPrefix}/leases/lease_const")
         {
             Interlocked.Increment(ref _leaseReleaseCount);
             return new HttpResponseMessage(HttpStatusCode.NoContent);
@@ -223,17 +158,12 @@ internal sealed class ConstGenericsArtifactStoreHandler : HttpMessageHandler
         var contentPrefix = $"{ArtifactStoreProtocol.ApiPrefix}/contents/sha256/";
         if (request.Method == HttpMethod.Put && path.StartsWith(contentPrefix, StringComparison.Ordinal))
         {
-            var bytes = await (request.Content ?? throw new InvalidOperationException("Content is required."))
-                .ReadAsByteArrayAsync(cancellationToken);
+            var bytes = await (request.Content ?? throw new InvalidOperationException("Content is required.")).ReadAsByteArrayAsync(cancellationToken);
             var contentRef = ArtifactStoreProtocol.ContentRefFromDigest(path[contentPrefix.Length..]);
             if (ContentIdentity.Compute(bytes) != contentRef)
                 return new HttpResponseMessage(HttpStatusCode.BadRequest);
             _uploadedContent.Add(contentRef, bytes);
-            return Json(new PutContentResponse(
-                contentRef,
-                bytes.LongLength,
-                DateTimeOffset.UtcNow.AddHours(1),
-                false));
+            return Json(new PutContentResponse(contentRef, bytes.LongLength, DateTimeOffset.UtcNow.AddHours(1), false));
         }
         return new HttpResponseMessage(HttpStatusCode.NotFound);
     }

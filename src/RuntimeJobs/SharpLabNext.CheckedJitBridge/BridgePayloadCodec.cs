@@ -4,27 +4,13 @@ using System.Text.Json;
 
 namespace SharpLabNext.CheckedJitBridge;
 
-internal sealed record JitSummaryPayload(
-    string RuntimeVersion,
-    string Assembly,
-    string? MethodFilter,
-    IReadOnlyList<JitMethodResult> Methods);
+internal sealed record JitSummaryPayload(string RuntimeVersion, string Assembly, string? MethodFilter, IReadOnlyList<JitMethodResult> Methods);
 
-internal sealed record ExitPayload(
-    string Status,
-    int ExitCode,
-    double ElapsedMilliseconds);
+internal sealed record ExitPayload(string Status, int ExitCode, double ElapsedMilliseconds);
 
-internal sealed record ProtocolErrorPayload(
-    string Code,
-    string Message);
+internal sealed record ProtocolErrorPayload(string Code, string Message);
 
-internal sealed record ExceptionPayload(
-    string TypeName,
-    string Message,
-    string? StackTrace,
-    object? InnerException,
-    double ElapsedMilliseconds);
+internal sealed record ExceptionPayload(string TypeName, string Message, string? StackTrace, object? InnerException, double ElapsedMilliseconds);
 
 internal static class BridgePayloadCodec
 {

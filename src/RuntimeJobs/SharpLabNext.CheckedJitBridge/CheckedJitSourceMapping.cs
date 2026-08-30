@@ -17,9 +17,7 @@ internal static class CheckedJitSourceMapping
     private static readonly Regex RootOffsetMarker = new(
         @"\bINLRT\s+@\s+(?:(?:0x)?(?<offset>[0-9A-Fa-f]+)(?:\[[^\]]*\])?|(?<unknown>\?{3}))",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex AnyInlineMarker = new(
-        @"^\s*;\s*INL\d+\s+@\s+",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex AnyInlineMarker = new(@"^\s*;\s*INL\d+\s+@\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex UnknownDebugMarker = new(
         @"^\s*;\s*(?:(?:INL\d+|INLRT)\s+@\s+)?\?{3}",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -33,27 +31,19 @@ internal static class CheckedJitSourceMapping
         @"^(?<indent>\s*)(?<bytes>(?:[0-9A-Fa-f]{2})+)(?<spacing>\s{2,})(?<instruction>\S.*)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    public static IReadOnlyDictionary<int, CheckedMethodSourceMap> LoadForDeclaredKind(
-        string assemblyPath,
-        string? declaredSourceMappingKind)
+    public static IReadOnlyDictionary<int, CheckedMethodSourceMap> LoadForDeclaredKind(string assemblyPath, string? declaredSourceMappingKind)
     {
         if (declaredSourceMappingKind is "" or "none")
             return new Dictionary<int, CheckedMethodSourceMap>();
-        if (declaredSourceMappingKind is not null &&
-            !string.Equals(
-                declaredSourceMappingKind,
-                CheckedJitBridgeContract.SourceMappingKind,
-                StringComparison.Ordinal))
+        if (declaredSourceMappingKind is not null && !string.Equals(declaredSourceMappingKind, CheckedJitBridgeContract.SourceMappingKind, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException(
-                $"Unsupported Checked JIT source mapping kind '{declaredSourceMappingKind}'.");
+            throw new InvalidOperationException($"Unsupported Checked JIT source mapping kind '{declaredSourceMappingKind}'.");
         }
 
         return LoadSiblingPortablePdb(assemblyPath);
     }
 
-    public static IReadOnlyDictionary<int, CheckedMethodSourceMap> LoadSiblingPortablePdb(
-        string assemblyPath)
+    public static IReadOnlyDictionary<int, CheckedMethodSourceMap> LoadSiblingPortablePdb(string assemblyPath)
     {
         var pdbPath = Path.ChangeExtension(assemblyPath, ".pdb");
         if (!File.Exists(pdbPath))
@@ -67,15 +57,11 @@ internal static class CheckedJitSourceMapping
                 return new Dictionary<int, CheckedMethodSourceMap>();
             var peMetadata = peReader.GetMetadataReader(MetadataReaderOptions.ApplyWindowsRuntimeProjections);
             using var pdbStream = new FileStream(pdbPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            using var pdbProvider = MetadataReaderProvider.FromPortablePdbStream(
-                pdbStream,
-                MetadataStreamOptions.PrefetchMetadata);
+            using var pdbProvider = MetadataReaderProvider.FromPortablePdbStream(pdbStream, MetadataStreamOptions.PrefetchMetadata);
             var pdbReader = pdbProvider.GetMetadataReader(MetadataReaderOptions.ApplyWindowsRuntimeProjections);
             if (!PortablePdbMatchesPe(peReader, pdbReader))
                 return new Dictionary<int, CheckedMethodSourceMap>();
-            var methodCount = Math.Min(
-                peMetadata.GetTableRowCount(TableIndex.MethodDef),
-                pdbReader.GetTableRowCount(TableIndex.MethodDebugInformation));
+            var methodCount = Math.Min(peMetadata.GetTableRowCount(TableIndex.MethodDef), pdbReader.GetTableRowCount(TableIndex.MethodDebugInformation));
             var result = new Dictionary<int, CheckedMethodSourceMap>();
             for (var row = 1; row <= methodCount; row++)
             {
@@ -88,8 +74,7 @@ internal static class CheckedJitSourceMapping
                 if (ilLength <= 0)
                     continue;
 
-                var debug = pdbReader.GetMethodDebugInformation(
-                    MetadataTokens.MethodDebugInformationHandle(row));
+                var debug = pdbReader.GetMethodDebugInformation(MetadataTokens.MethodDebugInformationHandle(row));
                 var points = new List<CheckedSourcePoint>();
                 foreach (var point in debug.GetSequencePoints())
                 {
@@ -103,39 +88,23 @@ internal static class CheckedJitSourceMapping
                     }
 
                     var document = pdbReader.GetDocument(documentHandle);
-                    points.Add(new CheckedSourcePoint(
-                        point.Offset,
-                        SanitizeDocumentPath(pdbReader.GetString(document.Name)),
-                        new JitTextRange(
-                            ToZeroBased(point.StartLine),
-                            ToZeroBased(point.StartColumn),
-                            ToZeroBased(point.EndLine),
-                            ToZeroBased(point.EndColumn))));
+                    points.Add(new CheckedSourcePoint(point.Offset, SanitizeDocumentPath(pdbReader.GetString(document.Name)), new JitTextRange(ToZeroBased(point.StartLine), ToZeroBased(point.StartColumn), ToZeroBased(point.EndLine), ToZeroBased(point.EndColumn))));
                 }
 
                 if (points.Count > 0)
                 {
-                    result[MetadataTokens.GetToken(methodHandle)] = new CheckedMethodSourceMap(
-                        ilLength,
-                        points.OrderBy(point => point.IlOffset).ToArray());
+                    result[MetadataTokens.GetToken(methodHandle)] = new CheckedMethodSourceMap(ilLength, points.OrderBy(point => point.IlOffset).ToArray());
                 }
             }
             return result;
         }
-        catch (Exception exception) when (exception is
-            IOException or
-            UnauthorizedAccessException or
-            BadImageFormatException or
-            InvalidOperationException or
-            ArgumentException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException or ArgumentException)
         {
             return new Dictionary<int, CheckedMethodSourceMap>();
         }
     }
 
-    public static CheckedJitMappingSelection MapSection(
-        string sectionText,
-        CheckedMethodSourceMap sourceMap)
+    public static CheckedJitMappingSelection MapSection(string sectionText, CheckedMethodSourceMap sourceMap)
     {
         if (sectionText is null)
             throw new ArgumentNullException(nameof(sectionText));
@@ -145,20 +114,14 @@ internal static class CheckedJitSourceMapping
         var fallback = MapMethodFallback(sectionText, sourceMap.Points);
         if (TryMapTextMarkers(sectionText, sourceMap, out var checkedRanges))
         {
-            return new CheckedJitMappingSelection(
-                checkedRanges,
-                "checked-jit-debug-info");
+            return new CheckedJitMappingSelection(checkedRanges, "checked-jit-debug-info");
         }
 
         return fallback.Length > 0
-            ? new CheckedJitMappingSelection(fallback, "method")
-            : new CheckedJitMappingSelection(Array.Empty<JitLinkedRange>(), "none");
+            ? new CheckedJitMappingSelection(fallback, "method") : new CheckedJitMappingSelection(Array.Empty<JitLinkedRange>(), "none");
     }
 
-    private static bool TryMapTextMarkers(
-        string sectionText,
-        CheckedMethodSourceMap sourceMap,
-        out IReadOnlyList<JitLinkedRange> linkedRanges)
+    private static bool TryMapTextMarkers(string sectionText, CheckedMethodSourceMap sourceMap, out IReadOnlyList<JitLinkedRange> linkedRanges)
     {
         var lines = NormalizeLineEndings(sectionText).Split('\n');
         var ranges = new List<JitLinkedRange>();
@@ -175,31 +138,15 @@ internal static class CheckedJitSourceMapping
 
         void CompleteRange()
         {
-            if (currentPoint?.DocumentPath is not null &&
-                currentPoint.SourceRange is not null &&
-                firstInstructionLine >= 0 &&
-                lastInstructionLine >= firstInstructionLine)
+            if (currentPoint?.DocumentPath is not null && currentPoint.SourceRange is not null && firstInstructionLine >= 0 && lastInstructionLine >= firstInstructionLine)
             {
                 ranges.Add(new JitLinkedRange(
                     currentPoint.DocumentPath,
                     currentPoint.SourceRange,
-                    new JitTextRange(
-                        firstInstructionLine,
-                        0,
-                        lastInstructionLine,
-                        lines[lastInstructionLine].Length),
+                    new JitTextRange(firstInstructionLine, 0, lastInstructionLine, lines[lastInstructionLine].Length),
                     "sequence-point",
                     hasNativeRange && nativeRangeComplete && nativeEnd > nativeStart
-                        ? new JitEvidenceRange(
-                            currentPoint.IlOffset,
-                            checked((int)nativeStart),
-                            checked((int)nativeEnd),
-                            currentPoint.DocumentPath,
-                            checked(currentPoint.SourceRange.StartLine + 1),
-                            checked(currentPoint.SourceRange.StartCharacter + 1),
-                            checked(currentPoint.SourceRange.EndLine + 1),
-                            checked(currentPoint.SourceRange.EndCharacter + 1))
-                        : null));
+                        ? new JitEvidenceRange(currentPoint.IlOffset, checked((int)nativeStart), checked((int)nativeEnd), currentPoint.DocumentPath, checked(currentPoint.SourceRange.StartLine + 1), checked(currentPoint.SourceRange.StartCharacter + 1), checked(currentPoint.SourceRange.EndLine + 1), checked(currentPoint.SourceRange.EndCharacter + 1)) : null));
             }
             firstInstructionLine = -1;
             lastInstructionLine = -1;
@@ -213,12 +160,7 @@ internal static class CheckedJitSourceMapping
         {
             var line = lines[lineIndex];
             var nativeLabel = NativeOffsetLabel.Match(line);
-            if (nativeLabel.Success &&
-                uint.TryParse(
-                    nativeLabel.Groups["offset"].Value,
-                    NumberStyles.AllowHexSpecifier,
-                    CultureInfo.InvariantCulture,
-                    out var labelOffset))
+            if (nativeLabel.Success && uint.TryParse(nativeLabel.Groups["offset"].Value, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var labelOffset))
             {
                 CompleteRange();
                 currentPoint = null;
@@ -232,14 +174,7 @@ internal static class CheckedJitSourceMapping
                 sawRootMarker = true;
                 CompleteRange();
                 currentPoint = null;
-                if (rootMarker.Groups["unknown"].Success ||
-                    !int.TryParse(
-                        rootMarker.Groups["offset"].Value,
-                        NumberStyles.AllowHexSpecifier,
-                        CultureInfo.InvariantCulture,
-                        out var ilOffset) ||
-                    ilOffset < 0 ||
-                    ilOffset >= sourceMap.IlLength)
+                if (rootMarker.Groups["unknown"].Success || !int.TryParse(rootMarker.Groups["offset"].Value, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var ilOffset) || ilOffset < 0 || ilOffset >= sourceMap.IlLength)
                 {
                     invalid = true;
                     break;
@@ -254,9 +189,7 @@ internal static class CheckedJitSourceMapping
                 continue;
             }
 
-            if ((line.Contains("INLRT", StringComparison.Ordinal) &&
-                 line.Contains('@')) ||
-                UnknownDebugMarker.IsMatch(line))
+            if ((line.Contains("INLRT", StringComparison.Ordinal) && line.Contains('@')) || UnknownDebugMarker.IsMatch(line))
             {
                 invalid = true;
                 break;
@@ -311,26 +244,17 @@ internal static class CheckedJitSourceMapping
 
         CompleteRange();
         linkedRanges = invalid || !sawRootMarker || ranges.Count == 0
-            ? Array.Empty<JitLinkedRange>()
-            : ranges;
+            ? Array.Empty<JitLinkedRange>() : ranges;
         return !invalid && sawRootMarker && ranges.Count > 0;
     }
 
-    private static JitLinkedRange[] MapMethodFallback(
-        string sectionText,
-        IReadOnlyList<CheckedSourcePoint> sourcePoints)
+    private static JitLinkedRange[] MapMethodFallback(string sectionText, IReadOnlyList<CheckedSourcePoint> sourcePoints)
     {
-        var firstPoint = sourcePoints.FirstOrDefault(point =>
-            point.DocumentPath is not null && point.SourceRange is not null);
+        var firstPoint = sourcePoints.FirstOrDefault(point => point.DocumentPath is not null && point.SourceRange is not null);
         if (firstPoint?.DocumentPath is null || firstPoint.SourceRange is null)
             return Array.Empty<JitLinkedRange>();
 
-        var sourceRanges = sourcePoints
-            .Where(point =>
-                string.Equals(point.DocumentPath, firstPoint.DocumentPath, StringComparison.Ordinal) &&
-                point.SourceRange is not null)
-            .Select(point => point.SourceRange!)
-            .ToArray();
+        var sourceRanges = sourcePoints.Where(point => string.Equals(point.DocumentPath, firstPoint.DocumentPath, StringComparison.Ordinal) && point.SourceRange is not null).Select(point => point.SourceRange!).ToArray();
         if (sourceRanges.Length == 0)
             return Array.Empty<JitLinkedRange>();
 
@@ -348,35 +272,15 @@ internal static class CheckedJitSourceMapping
         if (firstInstruction < 0)
             return Array.Empty<JitLinkedRange>();
 
-        var start = sourceRanges
-            .OrderBy(range => range.StartLine)
-            .ThenBy(range => range.StartCharacter)
-            .First();
-        var end = sourceRanges
-            .OrderByDescending(range => range.EndLine)
-            .ThenByDescending(range => range.EndCharacter)
-            .First();
+        var start = sourceRanges.OrderBy(range => range.StartLine).ThenBy(range => range.StartCharacter).First();
+        var end = sourceRanges.OrderByDescending(range => range.EndLine).ThenByDescending(range => range.EndCharacter).First();
         return new[]
         {
-            new JitLinkedRange(
-                firstPoint.DocumentPath,
-                new JitTextRange(
-                    start.StartLine,
-                    start.StartCharacter,
-                    end.EndLine,
-                    end.EndCharacter),
-                new JitTextRange(
-                    firstInstruction,
-                    0,
-                    lastInstruction,
-                    lines[lastInstruction].Length),
-                "method")
+            new JitLinkedRange(firstPoint.DocumentPath, new JitTextRange(start.StartLine, start.StartCharacter, end.EndLine, end.EndCharacter), new JitTextRange(firstInstruction, 0, lastInstruction, lines[lastInstruction].Length), "method")
         };
     }
 
-    private static CheckedSourcePoint? FindSequencePoint(
-        IReadOnlyList<CheckedSourcePoint> sourcePoints,
-        int ilOffset)
+    private static CheckedSourcePoint? FindSequencePoint(IReadOnlyList<CheckedSourcePoint> sourcePoints, int ilOffset)
     {
         var low = 0;
         var high = sourcePoints.Count - 1;
@@ -437,17 +341,12 @@ internal static class CheckedJitSourceMapping
 
     private static string SanitizeDocumentPath(string path)
     {
-        var segments = path.Replace('\\', '/')
-            .Split(DocumentPathSeparators, StringSplitOptions.RemoveEmptyEntries)
-            .Where(segment => segment != "." && segment != ".." && !segment.EndsWith(':'))
-            .ToArray();
+        var segments = path.Replace('\\', '/').Split(DocumentPathSeparators, StringSplitOptions.RemoveEmptyEntries).Where(segment => segment != "." && segment != ".." && !segment.EndsWith(':')).ToArray();
         var start = Math.Max(0, segments.Length - 8);
         var sanitized = segments.Length == 0
-            ? "source"
-            : string.Join("/", segments, start, segments.Length - start);
+            ? "source" : string.Join("/", segments, start, segments.Length - start);
         return sanitized.Length <= 512
-            ? sanitized
-            : sanitized.Substring(sanitized.Length - 512);
+            ? sanitized : sanitized.Substring(sanitized.Length - 512);
     }
 
     private static string NormalizeLineEndings(string text) =>

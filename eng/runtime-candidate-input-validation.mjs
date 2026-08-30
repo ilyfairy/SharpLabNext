@@ -74,25 +74,15 @@ export function validateWineCoreClrUserspaceInputs(values) {
  * SHA-256 digest. Tags, bare digests, whitespace and alternate algorithms are
  * intentionally rejected.
  */
-export function isDigestPinnedImageReference(value) {
-  return typeof value === 'string' && digestPinnedImageReference.test(value)
-}
+export function isDigestPinnedImageReference(value) { return typeof value === 'string' && digestPinnedImageReference.test(value); }
 
-export function isSha256Digest(value) {
-  return typeof value === 'string' && sha256Digest.test(value)
-}
+export function isSha256Digest(value) { return typeof value === 'string' && sha256Digest.test(value); }
 
-export function isSha512HexDigest(value) {
-  return typeof value === 'string' && sha512HexDigest.test(value)
-}
+export function isSha512HexDigest(value) { return typeof value === 'string' && sha512HexDigest.test(value); }
 
-export function isGitCommitIdentity(value) {
-  return typeof value === 'string' && gitCommitIdentity.test(value)
-}
+export function isGitCommitIdentity(value) { return typeof value === 'string' && gitCommitIdentity.test(value); }
 
-export function isDotNetSdkVersion(value) {
-  return typeof value === 'string' && dotNetSdkVersion.test(value)
-}
+export function isDotNetSdkVersion(value) { return typeof value === 'string' && dotNetSdkVersion.test(value); }
 
 export function isHttpsUri(value) {
   if (typeof value !== 'string' || value.length === 0 || value !== value.trim()) return false

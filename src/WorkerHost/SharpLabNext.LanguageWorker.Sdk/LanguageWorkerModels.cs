@@ -4,14 +4,9 @@ using Microsoft.AspNetCore.Http;
 
 namespace SharpLabNext.LanguageWorker.Sdk;
 
-public sealed record LanguageWorkerBuildExecution(
-    OperationResult Result,
-    LanguageWorkerArtifactEnvelope? Artifact = null);
+public sealed record LanguageWorkerBuildExecution(OperationResult Result, LanguageWorkerArtifactEnvelope? Artifact = null);
 
-public sealed record LanguageWorkerBuildHttpResponse(
-    string RequestId,
-    OperationResult Result,
-    LanguageWorkerArtifactEnvelope? DevelopmentArtifact);
+public sealed record LanguageWorkerBuildHttpResponse(string RequestId, OperationResult Result, LanguageWorkerArtifactEnvelope? DevelopmentArtifact);
 
 public sealed record LanguageWorkerArtifactEnvelope(
     ArtifactRef ArtifactRef,
@@ -25,10 +20,7 @@ public sealed record LanguageWorkerArtifactEnvelope(
     IReadOnlyList<ArtifactFileDescriptor> Files,
     IReadOnlyDictionary<string, string>? FileContentsBase64 = null);
 
-public sealed record LanguageArtifactFile(
-    string Role,
-    string Path,
-    ReadOnlyMemory<byte> Content);
+public sealed record LanguageArtifactFile(string Role, string Path, ReadOnlyMemory<byte> Content);
 
 public sealed record LanguageArtifactDefinition(
     string ArtifactFormat,
@@ -64,40 +56,19 @@ public sealed record LanguageWorkerCapabilityManifest
     public required LanguageWorkerLimits Limits { get; init; }
 }
 
-public sealed record LanguageWorkerLimits(
-    int MaximumFiles,
-    int MaximumSourceUtf8Bytes,
-    int MaximumArtifactBytes,
-    int MaximumConcurrentBuilds,
-    int MaximumBuildMilliseconds,
-    int MaximumLspMessageBytes);
+public sealed record LanguageWorkerLimits(int MaximumFiles, int MaximumSourceUtf8Bytes, int MaximumArtifactBytes, int MaximumConcurrentBuilds, int MaximumBuildMilliseconds, int MaximumLspMessageBytes);
 
-public sealed record LanguageWorkerHostMetadata(
-    string WorkerImageId,
-    string InstanceId,
-    DateTimeOffset StartedAtUtc,
-    IReadOnlyList<ReferenceSetAttestation>? ReferenceSets = null)
+public sealed record LanguageWorkerHostMetadata(string WorkerImageId, string InstanceId, DateTimeOffset StartedAtUtc, IReadOnlyList<ReferenceSetAttestation>? ReferenceSets = null)
 {
-    public static LanguageWorkerHostMetadata Create(
-        string workerId,
-        string workerImageId,
-        IReadOnlyList<ReferenceSetAttestation>? referenceSets = null)
+    public static LanguageWorkerHostMetadata Create(string workerId, string workerImageId, IReadOnlyList<ReferenceSetAttestation>? referenceSets = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workerId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workerImageId);
-        return new LanguageWorkerHostMetadata(
-            workerImageId,
-            $"{workerId}-{Guid.NewGuid():N}",
-            DateTimeOffset.UtcNow,
-            referenceSets);
+        return new LanguageWorkerHostMetadata(workerImageId, $"{workerId}-{Guid.NewGuid():N}", DateTimeOffset.UtcNow, referenceSets);
     }
 }
 
-public sealed class LanguageWorkerRequestException(
-    string code,
-    string publicMessage,
-    int statusCode = StatusCodes.Status400BadRequest,
-    Exception? innerException = null) : Exception(publicMessage, innerException)
+public sealed class LanguageWorkerRequestException(string code, string publicMessage, int statusCode = StatusCodes.Status400BadRequest, Exception? innerException = null) : Exception(publicMessage, innerException)
 {
     public string Code { get; } = code;
 

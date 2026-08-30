@@ -12,29 +12,17 @@ internal static class FSharpTestSettings
     public static string Net11PreviewVersion => TestReferenceSets.Net11.Version;
 
     public static FSharpWorkerSettings Create(string workRoot, FSharpAstLimits? astLimits = null) => new(
-        new FSharpWorkerIdentity(
-            "test-release",
-            "fsharp-stable",
-            FSharpCompilerFacade.CompilerVersion,
-            FSharpCompilerFacade.FSharpCorePackageVersion,
-            null,
-            $"sha256:{new string('a', 64)}"),
+        new FSharpWorkerIdentity("test-release", "fsharp-stable", FSharpCompilerFacade.CompilerVersion, FSharpCompilerFacade.FSharpCorePackageVersion, null, $"sha256:{new string('a', 64)}"),
         FSharpCompilationLimits.Default,
         astLimits ?? FSharpAstLimits.Default,
         FSharpLspLimits.Default,
         CompilerProcessIsolationOptions.Default with { Enabled = false },
         new FSharpDevelopmentArtifactEnvelopeOptions(true, 8 * 1024 * 1024),
-        new ArtifactBundlePublishingOptions(
-            new Uri("http://artifact-store:8080"),
-            TimeSpan.FromHours(1)),
+        new ArtifactBundlePublishingOptions(new Uri("http://artifact-store:8080"), TimeSpan.FromHours(1)),
         workRoot,
         [
             new FSharpReferenceSetDefinition("net10-ref", GetNet10ReferencePath(), "net10.0", Net10Version),
-            new FSharpReferenceSetDefinition(
-                "net11-preview-ref",
-                GetNet11PreviewReferencePath(),
-                "net11.0",
-                Net11PreviewVersion)
+            new FSharpReferenceSetDefinition("net11-preview-ref", GetNet11PreviewReferencePath(), "net11.0", Net11PreviewVersion)
         ]);
 
     public static string CreateRoot()
@@ -50,9 +38,7 @@ internal static class FSharpTestSettings
             Directory.Delete(root, recursive: true);
     }
 
-    public static string GetNet10ReferencePath()
-        => TestReferenceSets.Net10.Path;
+    public static string GetNet10ReferencePath() => TestReferenceSets.Net10.Path;
 
-    public static string GetNet11PreviewReferencePath()
-        => TestReferenceSets.Net11.Path;
+    public static string GetNet11PreviewReferencePath() => TestReferenceSets.Net11.Path;
 }

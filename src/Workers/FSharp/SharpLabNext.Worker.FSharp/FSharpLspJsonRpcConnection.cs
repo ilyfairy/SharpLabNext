@@ -5,11 +5,7 @@ using SharpLabNext.Contracts;
 
 namespace SharpLabNext.Worker.FSharp;
 
-internal sealed class FSharpLspJsonRpcConnection(
-    WebSocket socket,
-    FSharpLanguageSession session,
-    FSharpLspLimits limits,
-    CancellationToken requestAborted) : IAsyncDisposable
+internal sealed class FSharpLspJsonRpcConnection(WebSocket socket, FSharpLanguageSession session, FSharpLspLimits limits, CancellationToken requestAborted) : IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(ContractJson.CreateLspSerializerOptions())
     {
@@ -41,9 +37,7 @@ internal sealed class FSharpLspJsonRpcConnection(
             {
                 await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "LSP connection closed.", CancellationToken.None);
             }
-            catch (WebSocketException)
-            {
-            }
+            catch (WebSocketException) { }
         }
         _sendLock.Dispose();
         _connectionCancellation.Dispose();
@@ -51,8 +45,7 @@ internal sealed class FSharpLspJsonRpcConnection(
 
     private async Task DispatchAsync(JsonElement root, CancellationToken cancellationToken)
     {
-        if (!root.TryGetProperty("method", out var methodElement) || methodElement.ValueKind != JsonValueKind.String)
-            return;
+        if (!root.TryGetProperty("method", out var methodElement) || methodElement.ValueKind != JsonValueKind.String) return;
         var method = methodElement.GetString()!;
         if (root.TryGetProperty("id", out var id))
         {
@@ -62,34 +55,22 @@ internal sealed class FSharpLspJsonRpcConnection(
         await HandleNotificationAsync(method, root, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task HandleRequestAsync(
-        JsonElement id,
-        string method,
-        JsonElement root,
-        CancellationToken cancellationToken)
+    private async Task HandleRequestAsync(JsonElement id, string method, JsonElement root, CancellationToken cancellationToken)
     {
         try
         {
-            if (Volatile.Read(ref _initialized) == 0 && method != "initialize")
-                throw new FSharpLspSessionUnavailableException("The LSP connection has not been initialized.");
-            if (Volatile.Read(ref _shutdown) != 0 && method != "shutdown")
-                throw new FSharpLspSessionUnavailableException("The LSP connection has already shut down.");
+            if (Volatile.Read(ref _initialized) == 0 && method != "initialize") throw new FSharpLspSessionUnavailableException("The LSP connection has not been initialized.");
+            if (Volatile.Read(ref _shutdown) != 0 && method != "shutdown") throw new FSharpLspSessionUnavailableException("The LSP connection has already shut down.");
             object? result = method switch
             {
                 "initialize" => Initialize(),
                 "shutdown" => Shutdown(),
-                "textDocument/completion" => await session.GetCompletionsAsync(
-                    RequiredParams<FSharpLspCompletionParams>(root), cancellationToken).ConfigureAwait(false),
-                "textDocument/hover" => await session.GetHoverAsync(
-                    RequiredParams<FSharpLspTextDocumentPositionParams>(root), cancellationToken).ConfigureAwait(false),
-                "textDocument/signatureHelp" => await session.GetSignatureHelpAsync(
-                    RequiredParams<FSharpLspSignatureHelpParams>(root), cancellationToken).ConfigureAwait(false),
-                "textDocument/semanticTokens/full" => await session.GetSemanticTokensAsync(
-                    RequiredParams<FSharpLspSemanticTokensParams>(root), cancellationToken).ConfigureAwait(false),
-                "textDocument/documentSymbol" => await session.GetDocumentSymbolsAsync(
-                    RequiredParams<FSharpLspDocumentSymbolParams>(root), cancellationToken).ConfigureAwait(false),
-                "textDocument/codeAction" => await session.GetCodeActionsAsync(
-                    RequiredParams<FSharpLspCodeActionParams>(root), cancellationToken).ConfigureAwait(false),
+                "textDocument/completion" => await session.GetCompletionsAsync(RequiredParams<FSharpLspCompletionParams>(root), cancellationToken).ConfigureAwait(false),
+                "textDocument/hover" => await session.GetHoverAsync(RequiredParams<FSharpLspTextDocumentPositionParams>(root), cancellationToken).ConfigureAwait(false),
+                "textDocument/signatureHelp" => await session.GetSignatureHelpAsync(RequiredParams<FSharpLspSignatureHelpParams>(root), cancellationToken).ConfigureAwait(false),
+                "textDocument/semanticTokens/full" => await session.GetSemanticTokensAsync(RequiredParams<FSharpLspSemanticTokensParams>(root), cancellationToken).ConfigureAwait(false),
+                "textDocument/documentSymbol" => await session.GetDocumentSymbolsAsync(RequiredParams<FSharpLspDocumentSymbolParams>(root), cancellationToken).ConfigureAwait(false),
+                "textDocument/codeAction" => await session.GetCodeActionsAsync(RequiredParams<FSharpLspCodeActionParams>(root), cancellationToken).ConfigureAwait(false),
                 _ => throw new FSharpLspMethodNotFoundException(method)
             };
             await SendAsync(new { jsonrpc = "2.0", id, result }, cancellationToken).ConfigureAwait(false);
@@ -106,26 +87,19 @@ internal sealed class FSharpLspJsonRpcConnection(
                 OperationCanceledException => (-32800, "Request cancelled."),
                 _ => (-32603, "Internal LSP error.")
             };
-            await SendAsync(
-                new { jsonrpc = "2.0", id, error = new { code, message } },
-                CancellationToken.None).ConfigureAwait(false);
+            await SendAsync(new { jsonrpc = "2.0", id, error = new { code, message } }, CancellationToken.None).ConfigureAwait(false);
         }
     }
 
-    private async Task HandleNotificationAsync(
-        string method,
-        JsonElement root,
-        CancellationToken cancellationToken)
+    private async Task HandleNotificationAsync(string method, JsonElement root, CancellationToken cancellationToken)
     {
         if (method == "exit")
         {
             await _connectionCancellation.CancelAsync();
             return;
         }
-        if (Volatile.Read(ref _initialized) == 0)
-            return;
-        if (Volatile.Read(ref _shutdown) != 0)
-            return;
+        if (Volatile.Read(ref _initialized) == 0) return;
+        if (Volatile.Read(ref _shutdown) != 0) return;
         switch (method)
         {
             case "initialized":
@@ -133,28 +107,20 @@ internal sealed class FSharpLspJsonRpcConnection(
                 return;
             case "textDocument/didOpen":
                 {
-                    var state = await session.DidOpenAsync(
-                        RequiredParams<FSharpLspDidOpenParams>(root), cancellationToken).ConfigureAwait(false);
+                    var state = await session.DidOpenAsync(RequiredParams<FSharpLspDidOpenParams>(root), cancellationToken).ConfigureAwait(false);
                     await PublishDiagnosticsAsync(state.Uri, cancellationToken).ConfigureAwait(false);
                     return;
                 }
             case "textDocument/didChange":
                 {
-                    var state = await session.DidChangeAsync(
-                        RequiredParams<FSharpLspDidChangeParams>(root), cancellationToken).ConfigureAwait(false);
+                    var state = await session.DidChangeAsync(RequiredParams<FSharpLspDidChangeParams>(root), cancellationToken).ConfigureAwait(false);
                     await PublishDiagnosticsAsync(state.Uri, cancellationToken).ConfigureAwait(false);
                     return;
                 }
             case "textDocument/didClose":
                 {
-                    var state = await session.DidCloseAsync(
-                        RequiredParams<FSharpLspDidCloseParams>(root), cancellationToken).ConfigureAwait(false);
-                    await SendAsync(new
-                    {
-                        jsonrpc = "2.0",
-                        method = "textDocument/publishDiagnostics",
-                        @params = new { uri = state.Uri, version = state.Version, diagnostics = Array.Empty<object>() }
-                    }, cancellationToken).ConfigureAwait(false);
+                    var state = await session.DidCloseAsync(RequiredParams<FSharpLspDidCloseParams>(root), cancellationToken).ConfigureAwait(false);
+                    await SendAsync(new { jsonrpc = "2.0", method = "textDocument/publishDiagnostics", @params = new { uri = state.Uri, version = state.Version, diagnostics = Array.Empty<object>() } }, cancellationToken).ConfigureAwait(false);
                     return;
                 }
         }
@@ -162,8 +128,7 @@ internal sealed class FSharpLspJsonRpcConnection(
 
     private object Initialize()
     {
-        if (Interlocked.CompareExchange(ref _initialized, 1, 0) != 0)
-            throw new FSharpLspInvalidParamsException("initialize can only be called once.");
+        if (Interlocked.CompareExchange(ref _initialized, 1, 0) != 0) throw new FSharpLspInvalidParamsException("initialize can only be called once.");
         return new
         {
             capabilities = new
@@ -172,32 +137,12 @@ internal sealed class FSharpLspJsonRpcConnection(
                 textDocumentSync = new { openClose = true, change = 2 },
                 completionProvider = new { resolveProvider = false, triggerCharacters = new[] { "." } },
                 hoverProvider = true,
-                signatureHelpProvider = new
-                {
-                    triggerCharacters = new[] { "(", "," },
-                    retriggerCharacters = new[] { "," }
-                },
-                semanticTokensProvider = new
-                {
-                    legend = new
-                    {
-                        tokenTypes = FSharpLanguageSession.SemanticTokenTypes,
-                        tokenModifiers = FSharpLanguageSession.SemanticTokenModifiers
-                    },
-                    range = false,
-                    full = true
-                },
+                signatureHelpProvider = new { triggerCharacters = new[] { "(", "," }, retriggerCharacters = new[] { "," } },
+                semanticTokensProvider = new { legend = new { tokenTypes = FSharpLanguageSession.SemanticTokenTypes, tokenModifiers = FSharpLanguageSession.SemanticTokenModifiers }, range = false, full = true },
                 documentSymbolProvider = true,
-                codeActionProvider = new
-                {
-                    codeActionKinds = new[] { "quickfix", "source.organizeImports" }
-                }
+                codeActionProvider = new { codeActionKinds = new[] { "quickfix", "source.organizeImports" } }
             },
-            serverInfo = new
-            {
-                name = "SharpLabNext F# FCS adapter",
-                version = Worker.FSharp.Compiler.FSharpCompilerFacade.CompilerVersion
-            }
+            serverInfo = new { name = "SharpLabNext F# FCS adapter", version = Worker.FSharp.Compiler.FSharpCompilerFacade.CompilerVersion }
         };
     }
 
@@ -210,20 +155,13 @@ internal sealed class FSharpLspJsonRpcConnection(
     private async Task PublishDiagnosticsAsync(string uri, CancellationToken cancellationToken)
     {
         var report = await session.GetDiagnosticsAsync(uri, cancellationToken).ConfigureAwait(false);
-        await SendAsync(new
-        {
-            jsonrpc = "2.0",
-            method = "textDocument/publishDiagnostics",
-            @params = new { uri = report.Uri, version = report.Version, diagnostics = report.Diagnostics }
-        }, cancellationToken).ConfigureAwait(false);
+        await SendAsync(new { jsonrpc = "2.0", method = "textDocument/publishDiagnostics", @params = new { uri = report.Uri, version = report.Version, diagnostics = report.Diagnostics } }, cancellationToken).ConfigureAwait(false);
     }
 
     private static T RequiredParams<T>(JsonElement root)
     {
-        if (!root.TryGetProperty("params", out var parameters))
-            throw new FSharpLspInvalidParamsException("Request parameters are required.");
-        return parameters.Deserialize<T>(JsonOptions)
-            ?? throw new FSharpLspInvalidParamsException("Request parameters are invalid.");
+        if (!root.TryGetProperty("params", out var parameters)) throw new FSharpLspInvalidParamsException("Request parameters are required.");
+        return parameters.Deserialize<T>(JsonOptions) ?? throw new FSharpLspInvalidParamsException("Request parameters are invalid.");
     }
 
     private async Task<JsonDocument?> ReceiveAsync(CancellationToken cancellationToken)
@@ -233,15 +171,11 @@ internal sealed class FSharpLspJsonRpcConnection(
         while (true)
         {
             var result = await socket.ReceiveAsync(buffer, cancellationToken).ConfigureAwait(false);
-            if (result.MessageType == WebSocketMessageType.Close)
-                return null;
-            if (result.MessageType != WebSocketMessageType.Text)
-                throw new FSharpLspInvalidParamsException("LSP WebSocket frames must be UTF-8 text.");
+            if (result.MessageType == WebSocketMessageType.Close) return null;
+            if (result.MessageType != WebSocketMessageType.Text) throw new FSharpLspInvalidParamsException("LSP WebSocket frames must be UTF-8 text.");
             content.Write(buffer, 0, result.Count);
-            if (content.Length > limits.MaxMessageBytes)
-                throw new FSharpLspLimitExceededException("LSP message exceeds the configured size limit.");
-            if (result.EndOfMessage)
-                break;
+            if (content.Length > limits.MaxMessageBytes) throw new FSharpLspLimitExceededException("LSP message exceeds the configured size limit.");
+            if (result.EndOfMessage) break;
         }
         try
         {
@@ -256,13 +190,11 @@ internal sealed class FSharpLspJsonRpcConnection(
     private async Task SendAsync<T>(T payload, CancellationToken cancellationToken)
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(payload, JsonOptions);
-        if (bytes.Length > limits.MaxMessageBytes)
-            throw new FSharpLspLimitExceededException("LSP response exceeds the configured size limit.");
+        if (bytes.Length > limits.MaxMessageBytes) throw new FSharpLspLimitExceededException("LSP response exceeds the configured size limit.");
         await _sendLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (socket.State == WebSocketState.Open)
-                await socket.SendAsync(bytes, WebSocketMessageType.Text, true, cancellationToken).ConfigureAwait(false);
+            if (socket.State == WebSocketState.Open) await socket.SendAsync(bytes, WebSocketMessageType.Text, true, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -270,6 +202,5 @@ internal sealed class FSharpLspJsonRpcConnection(
         }
     }
 
-    private sealed class FSharpLspMethodNotFoundException(string method)
-        : FSharpWorkerException($"LSP method '{method}' is not implemented.");
+    private sealed class FSharpLspMethodNotFoundException(string method) : FSharpWorkerException($"LSP method '{method}' is not implemented.");
 }

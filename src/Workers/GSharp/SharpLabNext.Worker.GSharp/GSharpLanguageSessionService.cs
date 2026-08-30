@@ -6,16 +6,11 @@ using SharpLabNext.LanguageWorker.Sdk;
 
 namespace SharpLabNext.Worker.GSharp;
 
-public sealed class GSharpLanguageSessionService(
-    GSharpWorkerSettings settings,
-    LanguageWorkerCapabilityManifest manifest,
-    ILoggerFactory loggerFactory) : ILanguageWorkerSessionService
+public sealed class GSharpLanguageSessionService(GSharpWorkerSettings settings, LanguageWorkerCapabilityManifest manifest, ILoggerFactory loggerFactory) : ILanguageWorkerSessionService
 {
     private readonly ConcurrentDictionary<string, GSharpLanguageSessionState> _sessions = new(StringComparer.Ordinal);
 
-    public Task<LanguageSession> OpenAsync(
-        OpenLanguageSessionRequest request,
-        CancellationToken cancellationToken)
+    public Task<LanguageSession> OpenAsync(OpenLanguageSessionRequest request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var toolchain = settings.GetToolchain(request.ToolchainId);
@@ -23,15 +18,7 @@ public sealed class GSharpLanguageSessionService(
             throw new LanguageWorkerRequestException("wrong-toolchain", "The request does not target the G# worker.");
         GSharpWorkspaceValidator.ValidateOutputKind(request.Workspace.BuildOptions.OutputKind);
         var sessionId = $"gsharp_{Guid.NewGuid():N}";
-        var session = new LanguageSession(
-            sessionId,
-            GSharpToolchain.LanguageId,
-            toolchain.ToolchainId,
-            $"{toolchain.CompilerVersion}@{toolchain.CompilerCommit}",
-            ContractSchemaVersions.Lsp,
-            request.Workspace.Revision,
-            request.Workspace.SelectionRevision,
-            DateTimeOffset.UtcNow.Add(settings.ProcessLimits.SessionTtl));
+        var session = new LanguageSession(sessionId, GSharpToolchain.LanguageId, toolchain.ToolchainId, $"{toolchain.CompilerVersion}@{toolchain.CompilerCommit}", ContractSchemaVersions.Lsp, request.Workspace.Revision, request.Workspace.SelectionRevision, DateTimeOffset.UtcNow.Add(settings.ProcessLimits.SessionTtl));
         var state = new GSharpLanguageSessionState(session, request.Workspace, toolchain);
         if (!_sessions.TryAdd(sessionId, state))
             throw new InvalidOperationException("A unique G# language session ID could not be allocated.");
@@ -47,37 +34,23 @@ public sealed class GSharpLanguageSessionService(
         return Task.FromResult(true);
     }
 
-    public async Task RunAsync(
-        string sessionId,
-        WebSocket socket,
-        CancellationToken cancellationToken)
+    public async Task RunAsync(string sessionId, WebSocket socket, CancellationToken cancellationToken)
     {
         if (!_sessions.TryGetValue(sessionId, out var state) || state.Session.ExpiresAtUtc <= DateTimeOffset.UtcNow)
         {
             if (state is not null && _sessions.TryRemove(sessionId, out var expired))
                 expired.Dispose();
-            throw new LanguageWorkerRequestException(
-                "session-not-found",
-                "The G# language session does not exist or has expired.",
-                StatusCodes.Status404NotFound);
+            throw new LanguageWorkerRequestException("session-not-found", "The G# language session does not exist or has expired.", StatusCodes.Status404NotFound);
         }
         if (!state.TryAttach())
         {
-            throw new LanguageWorkerRequestException(
-                "session-in-use",
-                "The G# language session already has an LSP connection.",
-                StatusCodes.Status409Conflict);
+            throw new LanguageWorkerRequestException("session-in-use", "The G# language session already has an LSP connection.", StatusCodes.Status409Conflict);
         }
 
         try
         {
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken,
-                state.CancellationToken);
-            var bridge = new GSharpLspProcessBridge(
-                settings,
-                manifest.Limits.MaximumLspMessageBytes,
-                loggerFactory.CreateLogger<GSharpLspProcessBridge>());
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, state.CancellationToken);
+            var bridge = new GSharpLspProcessBridge(settings, manifest.Limits.MaximumLspMessageBytes, loggerFactory.CreateLogger<GSharpLspProcessBridge>());
             await bridge.RunAsync(socket, state, linked.Token).ConfigureAwait(false);
         }
         finally
@@ -92,10 +65,7 @@ internal sealed class GSharpLanguageSessionState : IDisposable
     private readonly CancellationTokenSource _closed = new();
     private int _attached;
 
-    public GSharpLanguageSessionState(
-        LanguageSession session,
-        WorkspaceSnapshot workspace,
-        GSharpToolchainProfile toolchain)
+    public GSharpLanguageSessionState(LanguageSession session, WorkspaceSnapshot workspace, GSharpToolchainProfile toolchain)
     {
         Session = session;
         Workspace = workspace;

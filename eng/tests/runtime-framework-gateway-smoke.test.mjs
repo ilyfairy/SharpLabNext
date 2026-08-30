@@ -5,16 +5,14 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { runRuntimeFrameworkGatewaySmoke } from './runtime-framework-gateway-smoke.mjs'
+import { runRuntimeFrameworkGatewaySmoke } from '../smoke/runtime-framework-gateway-smoke.mjs'
 
 const hash = value => `sha256:${crypto.createHash('sha256').update(value).digest('hex')}`
 const profileId = 'wine-netfx48-linux-x64'
 const imageId = hash('runtime-image')
 const marker = 'SLN-FRAMEWORK-GATEWAY-V1'
 
-function response(value, status = 200, contentType = 'application/json') {
-  return new Response(typeof value === 'string' ? value : JSON.stringify(value), { status, headers: { 'Content-Type': contentType } })
-}
+function response(value, status = 200, contentType = 'application/json') { return new Response(typeof value === 'string' ? value : JSON.stringify(value), { status, headers: { 'Content-Type': contentType } }); }
 
 function fixture(t, options = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-framework-gateway-')); t.after(() => fs.rmSync(directory, { recursive: true, force: true }))

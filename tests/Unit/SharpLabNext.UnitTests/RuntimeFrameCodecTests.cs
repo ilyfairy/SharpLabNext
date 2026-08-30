@@ -26,8 +26,7 @@ public sealed class RuntimeFrameCodecTests
     {
         await using var stream = new MemoryStream(new byte[18]);
 
-        await Assert.ThrowsAsync<InvalidDataException>(async () =>
-            await RuntimeFrameCodec.ReadAsync(stream, cancellationToken: TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidDataException>(async () => await RuntimeFrameCodec.ReadAsync(stream, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -55,10 +54,7 @@ public sealed class RuntimeFrameCodecTests
         await using (var writer = new RuntimeFrameWriter(stream))
         {
             writer.Write(RuntimeFrameKind.Stdout, "sync"u8.ToArray());
-            await writer.WriteAsync(
-                RuntimeFrameKind.Exit,
-                "async"u8.ToArray(),
-                TestContext.Current.CancellationToken);
+            await writer.WriteAsync(RuntimeFrameKind.Exit, "async"u8.ToArray(), TestContext.Current.CancellationToken);
         }
 
         stream.Position = 0;
@@ -79,10 +75,7 @@ public sealed class RuntimeFrameCodecTests
         await using var stream = new MemoryStream();
         await using (var writer = new RuntimeFrameWriter(stream, RuntimeFrameTransport.Base64Line))
         {
-            await writer.WriteAsync(
-                RuntimeFrameKind.JitAssembly,
-                payload,
-                TestContext.Current.CancellationToken);
+            await writer.WriteAsync(RuntimeFrameKind.JitAssembly, payload, TestContext.Current.CancellationToken);
         }
 
         Assert.All(stream.ToArray(), static value => Assert.True(value is (>= (byte)'+' and <= (byte)'z') or (byte)'=' or (byte)'\n'));
@@ -102,10 +95,7 @@ public sealed class RuntimeFrameCodecTests
         await using var stream = new MemoryStream();
         await using (var writer = new RuntimeFrameWriter(stream, RuntimeFrameTransport.Base64Line))
         {
-            await writer.WriteAsync(
-                RuntimeFrameKind.Stdout,
-                "first"u8.ToArray(),
-                TestContext.Current.CancellationToken);
+            await writer.WriteAsync(RuntimeFrameKind.Stdout, "first"u8.ToArray(), TestContext.Current.CancellationToken);
             await writer.WriteAsync(
                 RuntimeFrameKind.Stderr,
                 new byte[] { 0, 255, 128, 10 },
@@ -132,36 +122,25 @@ public sealed class RuntimeFrameCodecTests
     {
         await using var oversized = new MemoryStream(Encoding.ASCII.GetBytes(new string('A', 128) + "\n"));
         var oversizedReader = new RuntimeFrameLogReader(oversized);
-        await Assert.ThrowsAsync<InvalidDataException>(async () =>
-            await oversizedReader.ReadAsync(32, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidDataException>(async () => await oversizedReader.ReadAsync(32, TestContext.Current.CancellationToken));
 
         await using var invalid = new MemoryStream("not base64!\n"u8.ToArray());
         var invalidReader = new RuntimeFrameLogReader(invalid);
-        await Assert.ThrowsAsync<InvalidDataException>(async () =>
-            await invalidReader.ReadAsync(cancellationToken: TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidDataException>(async () => await invalidReader.ReadAsync(cancellationToken: TestContext.Current.CancellationToken));
 
         await using var unterminated = new MemoryStream("U0xOUg=="u8.ToArray());
         var unterminatedReader = new RuntimeFrameLogReader(unterminated);
-        await Assert.ThrowsAsync<EndOfStreamException>(async () =>
-            await unterminatedReader.ReadAsync(cancellationToken: TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<EndOfStreamException>(async () => await unterminatedReader.ReadAsync(cancellationToken: TestContext.Current.CancellationToken));
 
         await using var nonCanonical = new MemoryStream("AB==\n"u8.ToArray());
         var nonCanonicalReader = new RuntimeFrameLogReader(nonCanonical);
-        await Assert.ThrowsAsync<InvalidDataException>(async () =>
-            await nonCanonicalReader.ReadAsync(cancellationToken: TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidDataException>(async () => await nonCanonicalReader.ReadAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public void StructuredPayloadRoundTripsThroughTheWireCodec()
     {
-        var expected = new RuntimeInspectionPayload(
-            "MemoryGraph",
-            "Graph",
-            new RuntimeGraphDocument(
-                [new RuntimeGraphRoot("Root", 1)],
-                [new RuntimeGraphNode(1, "System.Int32", "value", "42", [])],
-                false,
-                null));
+        var expected = new RuntimeInspectionPayload("MemoryGraph", "Graph", new RuntimeGraphDocument([new RuntimeGraphRoot("Root", 1)], [new RuntimeGraphNode(1, "System.Int32", "value", "42", [])], false, null));
 
         var payload = RuntimeStructuredPayloadCodec.Serialize(expected);
         var actual = RuntimeStructuredPayloadCodec.DeserializeInspection(payload);

@@ -12,12 +12,10 @@ import {
   inspectMetadataImage,
   runParentBuild,
   validateParentInputs,
-} from './build-framework-matrix-parent.mjs'
+} from '../build-framework-matrix-parent.mjs'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const installerManifestSha256 = crypto.createHash('sha256').update(fs.readFileSync(
-  path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json'),
-)).digest('hex')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const installerManifestSha256 = crypto.createHash('sha256').update(fs.readFileSync(path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json'))).digest('hex');
 const rowDefinitions = [
   ['netfx20', '2.0', 'clr2'],
   ['netfx30', '3.0', 'clr2'],
@@ -79,9 +77,7 @@ function values(context) {
   }
 }
 
-function generatedDockerfile(context) {
-  return path.join(context.root, 'Dockerfile.generated')
-}
+function generatedDockerfile(context) { return path.join(context.root, 'Dockerfile.generated'); }
 
 function parentLabels(input, revision) {
   return {
@@ -175,10 +171,7 @@ test('shared parent accepts the exact metadata-only matrix and emits 14 target-p
   const context = makeContext()
   try {
     assert.deepEqual(validateParentInputs(values(context)), [])
-    const template = fs.readFileSync(
-      path.join(repositoryRoot, 'deploy/docker/Dockerfile.operator-wine-framework-matrix-parent'),
-      'utf8',
-    )
+    const template = fs.readFileSync(path.join(repositoryRoot, 'deploy/docker/Dockerfile.operator-wine-framework-matrix-parent'), 'utf8')
     const generated = createParentDockerfile(template, context.input.rows)
     assert.equal((generated.match(/--mount=type=bind,from=framework-row-/g) ?? []).length, 14)
     for (const row of context.input.rows) {
@@ -196,9 +189,7 @@ test('shared parent accepts the exact metadata-only matrix and emits 14 target-p
     assert.doesNotMatch(generated, /COPY --from=wine-source \/usr\/ \/usr\//)
     assert.match(generated, /--output \/opt\/sharplabnext/)
 
-    const args = createParentBuildArguments(
-      values(context), context.input, generatedDockerfile(context),
-    )
+    const args = createParentBuildArguments(values(context), context.input, generatedDockerfile(context));
     assert.ok(args.includes(`framework-matrix-metadata=${context.root}`))
     for (const row of context.input.rows) {
       assert.ok(args.includes(`framework-row-${row.id}=docker-image://${row.operatorImage}`))
@@ -221,9 +212,7 @@ test('shared parent push mode uses immutable metadata and row contexts', () => {
       metadataFile: 'C:\\Temp\\framework-parent-metadata.json',
     }
     assert.deepEqual(validateParentInputs(input), [])
-    const args = createParentBuildArguments(
-      input, context.input, generatedDockerfile(context),
-    )
+    const args = createParentBuildArguments(input, context.input, generatedDockerfile(context));
     assert.ok(args.includes('--push'))
     assert.equal(args.includes('--load'), false)
     assert.deepEqual(

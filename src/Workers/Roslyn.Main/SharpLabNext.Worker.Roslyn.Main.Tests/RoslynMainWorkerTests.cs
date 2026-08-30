@@ -19,19 +19,13 @@ public sealed class RoslynMainWorkerTests
         await using var factory = new RoslynMainWorkerFactory("Development");
         using var client = factory.CreateClient();
 
-        using var readyResponse = await client.GetAsync(
-            "/health/ready",
-            TestContext.Current.CancellationToken);
-        using var describeResponse = await client.GetAsync(
-            "/api/v1/worker/describe",
-            TestContext.Current.CancellationToken);
+        using var readyResponse = await client.GetAsync("/health/ready", TestContext.Current.CancellationToken);
+        using var describeResponse = await client.GetAsync("/api/v1/worker/describe", TestContext.Current.CancellationToken);
 
         var readyBody = await readyResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.True(readyResponse.IsSuccessStatusCode, readyBody);
         Assert.Equal(HttpStatusCode.OK, describeResponse.StatusCode);
-        var descriptor = await describeResponse.Content.ReadFromJsonAsync<WorkerDescriptor>(
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        var descriptor = await describeResponse.Content.ReadFromJsonAsync<WorkerDescriptor>(ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
         Assert.NotNull(descriptor);
         Assert.Equal("roslyn-main", descriptor.Service.Id);
         Assert.StartsWith("roslyn-main-", descriptor.InstanceId, StringComparison.Ordinal);
@@ -46,26 +40,16 @@ public sealed class RoslynMainWorkerTests
     [InlineData("csharp", "net11-preview-ref", "Program.cs", "System.Console.WriteLine(42);")]
     [InlineData("visual-basic", "net10-ref", "Program.vb", "Imports System\nModule Program\n Sub Main()\n  Console.WriteLine(42)\n End Sub\nEnd Module")]
     [InlineData("visual-basic", "net11-preview-ref", "Program.vb", "Imports System\nModule Program\n Sub Main()\n  Console.WriteLine(42)\n End Sub\nEnd Module")]
-    public async Task CompileCheckSupportsCSharpAndVisualBasicAcrossNet10AndNet11(
-        string languageId,
-        string referenceSetId,
-        string fileName,
-        string source)
+    public async Task CompileCheckSupportsCSharpAndVisualBasicAcrossNet10AndNet11(string languageId, string referenceSetId, string fileName, string source)
     {
         await using var factory = new RoslynMainWorkerFactory("Development");
         using var client = factory.CreateClient();
         var request = CreateBuildRequest(languageId, referenceSetId, fileName, source);
 
-        using var response = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            request,
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        using var response = await client.PostAsJsonAsync("/api/v1/build", request, ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<WorkerBuildHttpResponse>(
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadFromJsonAsync<WorkerBuildHttpResponse>(ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         var result = Assert.IsType<CompilationCheckResult>(body.Result);
         Assert.True(result.CompilationSucceeded);
@@ -95,27 +79,16 @@ public sealed class RoslynMainWorkerTests
             public sealed record Bird(string Name);
             """);
         var options = request.Workspace.BuildOptions with { LanguageVersion = null };
-        request = request with
-        {
-            Options = null,
-            Workspace = request.Workspace with { BuildOptions = options }
-        };
+        request = request with { Options = null, Workspace = request.Workspace with { BuildOptions = options } };
 
-        using var response = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            request,
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        using var response = await client.PostAsJsonAsync("/api/v1/build", request, ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
 
         var responseBody = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.True(response.IsSuccessStatusCode, responseBody);
-        var body = await response.Content.ReadFromJsonAsync<WorkerBuildHttpResponse>(
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadFromJsonAsync<WorkerBuildHttpResponse>(ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
         var result = Assert.IsType<CompilationCheckResult>(body!.Result);
         Assert.True(result.CompilationSucceeded);
-        Assert.DoesNotContain(result.Diagnostics, static diagnostic =>
-            diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.DoesNotContain(result.Diagnostics, static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
     }
 
     [Fact]
@@ -123,60 +96,33 @@ public sealed class RoslynMainWorkerTests
     {
         await using var factory = new RoslynMainWorkerFactory("Development");
         using var client = factory.CreateClient();
-        var request = CreateBuildRequest(
-            "csharp",
-            "net10-ref",
-            "Program.cs",
-            "unsafe class Program { static void Main() { int value = 42; int* pointer = &value; System.Console.WriteLine(*pointer); } }");
+        var request = CreateBuildRequest("csharp", "net10-ref", "Program.cs", "unsafe class Program { static void Main() { int value = 42; int* pointer = &value; System.Console.WriteLine(*pointer); } }");
         var options = request.EffectiveOptions with { AllowUnsafe = true };
-        request = request with
-        {
-            Options = options,
-            Workspace = request.Workspace with { BuildOptions = options }
-        };
+        request = request with { Options = options, Workspace = request.Workspace with { BuildOptions = options } };
 
-        using var response = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            request,
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        using var response = await client.PostAsJsonAsync("/api/v1/build", request, ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
 
         var responseBody = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.True(response.IsSuccessStatusCode, responseBody);
-        var body = await response.Content.ReadFromJsonAsync<WorkerBuildHttpResponse>(
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadFromJsonAsync<WorkerBuildHttpResponse>(ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
         var result = Assert.IsType<CompilationCheckResult>(body!.Result);
         Assert.True(result.CompilationSucceeded);
-        Assert.DoesNotContain(result.Diagnostics, static diagnostic =>
-            diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.DoesNotContain(result.Diagnostics, static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
     }
 
     [Theory]
     [InlineData("csharp", "Program.cs", "System.Console.WriteLine(42);")]
     [InlineData("visual-basic", "Program.vb", "Imports System\nModule Program\n Sub Main()\n  Console.WriteLine(42)\n End Sub\nEnd Module")]
-    public async Task ArtifactBuildUsesMainCompilerForCSharpAndVisualBasic(
-        string languageId,
-        string fileName,
-        string source)
+    public async Task ArtifactBuildUsesMainCompilerForCSharpAndVisualBasic(string languageId, string fileName, string source)
     {
         await using var factory = new RoslynMainWorkerFactory("Development");
         using var client = factory.CreateClient();
-        var request = CreateBuildRequest(languageId, "net11-preview-ref", fileName, source) with
-        {
-            Target = BuildTarget.Artifact
-        };
+        var request = CreateBuildRequest(languageId, "net11-preview-ref", fileName, source) with { Target = BuildTarget.Artifact };
 
-        using var response = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            request,
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        using var response = await client.PostAsJsonAsync("/api/v1/build", request, ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<WorkerBuildHttpResponse>(
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadFromJsonAsync<WorkerBuildHttpResponse>(ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         var result = Assert.IsType<BuildResult>(body.Result);
         Assert.Equal(BuildOutcome.Succeeded, result.Outcome);
@@ -191,28 +137,16 @@ public sealed class RoslynMainWorkerTests
     [Theory]
     [InlineData("csharp", "Program.cs", "namespace Demo { public class Sample { public int Value => 42; } }")]
     [InlineData("visual-basic", "Program.vb", "Public Class Sample\n Public ReadOnly Property Value As Integer = 42\nEnd Class")]
-    public async Task AstUsesMainParserForCSharpAndVisualBasic(
-        string languageId,
-        string fileName,
-        string source)
+    public async Task AstUsesMainParserForCSharpAndVisualBasic(string languageId, string fileName, string source)
     {
         await using var factory = new RoslynMainWorkerFactory("Development");
         using var client = factory.CreateClient();
-        var request = CreateBuildRequest(languageId, "net11-preview-ref", fileName, source) with
-        {
-            Target = BuildTarget.Ast
-        };
+        var request = CreateBuildRequest(languageId, "net11-preview-ref", fileName, source) with { Target = BuildTarget.Ast };
 
-        using var response = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            request,
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        using var response = await client.PostAsJsonAsync("/api/v1/build", request, ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<WorkerBuildHttpResponse>(
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadFromJsonAsync<WorkerBuildHttpResponse>(ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         var result = Assert.IsType<AstResult>(body.Result);
         Assert.Equal(languageId, result.Document.LanguageId);
@@ -226,41 +160,21 @@ public sealed class RoslynMainWorkerTests
     {
         await using var factory = new RoslynMainWorkerFactory("Development");
         using var client = factory.CreateClient();
-        var build = CreateBuildRequest(
-            "csharp",
-            "net11-preview-ref",
-            "Program.cs",
-            "System.Console.WriteLine(42);");
-        var request = new OpenLanguageSessionRequest(
-            "main-lsp-request",
-            build.PipelineResolutionId,
-            "csharp",
-            "roslyn-main",
-            "net11-preview-ref",
-            build.Workspace);
+        var build = CreateBuildRequest("csharp", "net11-preview-ref", "Program.cs", "System.Console.WriteLine(42);");
+        var request = new OpenLanguageSessionRequest("main-lsp-request", build.PipelineResolutionId, "csharp", "roslyn-main", "net11-preview-ref", build.Workspace);
 
-        using var response = await client.PostAsJsonAsync(
-            "/api/v1/language-sessions",
-            request,
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        using var response = await client.PostAsJsonAsync("/api/v1/language-sessions", request, ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var session = await response.Content.ReadFromJsonAsync<LanguageSession>(
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        var session = await response.Content.ReadFromJsonAsync<LanguageSession>(ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
         Assert.NotNull(session);
         Assert.Equal("roslyn-main", session.ToolchainId);
         Assert.Equal("roslyn-main/5.10.0", session.CompilerBuildIdentity);
 
-        using var nonWebSocket = await client.GetAsync(
-            $"/api/v1/language-sessions/{session.SessionId}/lsp",
-            TestContext.Current.CancellationToken);
+        using var nonWebSocket = await client.GetAsync($"/api/v1/language-sessions/{session.SessionId}/lsp", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.UpgradeRequired, nonWebSocket.StatusCode);
 
-        using var delete = await client.DeleteAsync(
-            $"/api/v1/language-sessions/{session.SessionId}",
-            TestContext.Current.CancellationToken);
+        using var delete = await client.DeleteAsync($"/api/v1/language-sessions/{session.SessionId}", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.NoContent, delete.StatusCode);
     }
 
@@ -269,23 +183,11 @@ public sealed class RoslynMainWorkerTests
     {
         await using var factory = new RoslynMainWorkerFactory("Production");
         using var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new(
-            "Bearer",
-            RoslynMainTestSettings.InternalServiceToken);
-        var request = CreateBuildRequest(
-            "csharp",
-            "net10-ref",
-            "Program.cs",
-            "System.Console.WriteLine(42);");
+        client.DefaultRequestHeaders.Authorization = new("Bearer", RoslynMainTestSettings.InternalServiceToken);
+        var request = CreateBuildRequest("csharp", "net10-ref", "Program.cs", "System.Console.WriteLine(42);");
 
-        using var readyResponse = await client.GetAsync(
-            "/health/ready",
-            TestContext.Current.CancellationToken);
-        using var buildResponse = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            request,
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken);
+        using var readyResponse = await client.GetAsync("/health/ready", TestContext.Current.CancellationToken);
+        using var buildResponse = await client.PostAsJsonAsync("/api/v1/build", request, ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
 
         if (RoslynMainTestSettings.IsSourceBuild)
         {
@@ -293,9 +195,7 @@ public sealed class RoslynMainWorkerTests
             var buildBody = await buildResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
             Assert.True(readyResponse.IsSuccessStatusCode, readyBody);
             Assert.True(buildResponse.IsSuccessStatusCode, buildBody);
-            var body = await buildResponse.Content.ReadFromJsonAsync<WorkerBuildHttpResponse>(
-                ContractJson.CreateSerializerOptions(),
-                TestContext.Current.CancellationToken);
+            var body = await buildResponse.Content.ReadFromJsonAsync<WorkerBuildHttpResponse>(ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken);
             var result = Assert.IsType<CompilationCheckResult>(body!.Result);
             Assert.Equal(RoslynMainTestSettings.LockedCommit, result.Identity.CompilerCommit);
         }
@@ -304,77 +204,34 @@ public sealed class RoslynMainWorkerTests
             Assert.Equal(HttpStatusCode.ServiceUnavailable, readyResponse.StatusCode);
             Assert.Equal(HttpStatusCode.ServiceUnavailable, buildResponse.StatusCode);
             var problem = await buildResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-            Assert.True(
-                problem.Contains(RoslynMainTestSettings.LockedCommit, StringComparison.OrdinalIgnoreCase),
-                problem);
+            Assert.True(problem.Contains(RoslynMainTestSettings.LockedCommit, StringComparison.OrdinalIgnoreCase), problem);
             Assert.Contains("roslyn-main", problem, StringComparison.Ordinal);
         }
     }
 
-    private static BuildRequest CreateBuildRequest(
-        string languageId,
-        string referenceSetId,
-        string fileName,
-        string source)
+    private static BuildRequest CreateBuildRequest(string languageId, string referenceSetId, string fileName, string source)
     {
-        var options = new BuildOptions(
-            BuildConfiguration.Release,
-            Optimize: true,
-            BuildOutputKind.Console,
-            AllowUnsafe: false,
-            EmitPortablePdb: true,
-            languageId == "csharp" ? NullableContextMode.Enable : NullableContextMode.Disable,
-            LanguageVersion: languageId == "csharp" ? "preview" : "latest");
-        var workspace = new WorkspaceSnapshot(
-            ContractSchemaVersions.WorkspaceSnapshot,
-            Revision: 17,
-            SelectionRevision: 9,
-            languageId,
-            [new WorkspaceFile(fileName, 3, source)],
-            fileName,
-            [fileName],
-            referenceSetId,
-            options);
-        return new BuildRequest(
-            $"main-{Guid.NewGuid():N}",
-            $"main-idempotency-{Guid.NewGuid():N}",
-            "main-pipeline",
-            "roslyn-main",
-            referenceSetId,
-            workspace,
-            DateTimeOffset.UtcNow.AddMinutes(1),
-            options,
-            BuildTarget.CompileCheck);
+        var options = new BuildOptions(BuildConfiguration.Release, Optimize: true, BuildOutputKind.Console, AllowUnsafe: false, EmitPortablePdb: true, languageId == "csharp" ? NullableContextMode.Enable : NullableContextMode.Disable, LanguageVersion: languageId == "csharp" ? "preview" : "latest");
+        var workspace = new WorkspaceSnapshot(ContractSchemaVersions.WorkspaceSnapshot, Revision: 17, SelectionRevision: 9, languageId, [new WorkspaceFile(fileName, 3, source)], fileName, [fileName], referenceSetId, options);
+        return new BuildRequest($"main-{Guid.NewGuid():N}", $"main-idempotency-{Guid.NewGuid():N}", "main-pipeline", "roslyn-main", referenceSetId, workspace, DateTimeOffset.UtcNow.AddMinutes(1), options, BuildTarget.CompileCheck);
     }
 }
 
-public sealed class RoslynMainWorkerFactory(
-    string environment,
-    int? maxCompletionItems = null) : WebApplicationFactory<global::Program>
+public sealed class RoslynMainWorkerFactory(string environment, int? maxCompletionItems = null) : WebApplicationFactory<global::Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(environment);
         if (string.Equals(environment, "Production", StringComparison.Ordinal))
         {
-            builder.UseSetting(
-                "InternalServiceAuth:TokenFile",
-                RoslynMainTestSettings.GetInternalServiceTokenFile());
+            builder.UseSetting("InternalServiceAuth:TokenFile", RoslynMainTestSettings.GetInternalServiceTokenFile());
             builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<ReferenceSetProvider>();
                 services.AddSingleton(new ReferenceSetProvider(
                 [
-                    new ReferenceSetDefinition(
-                        "net10-ref",
-                        RoslynMainTestSettings.Net10ReferenceSet.Path,
-                        "net10.0",
-                        RoslynMainTestSettings.Net10ReferenceSet.Version),
-                    new ReferenceSetDefinition(
-                        "net11-preview-ref",
-                        RoslynMainTestSettings.Net11ReferenceSet.Path,
-                        "net11.0",
-                        RoslynMainTestSettings.Net11ReferenceSet.Version)
+                    new ReferenceSetDefinition("net10-ref", RoslynMainTestSettings.Net10ReferenceSet.Path, "net10.0", RoslynMainTestSettings.Net10ReferenceSet.Version),
+                    new ReferenceSetDefinition("net11-preview-ref", RoslynMainTestSettings.Net11ReferenceSet.Path, "net11.0", RoslynMainTestSettings.Net11ReferenceSet.Version)
                 ]));
 
                 // TestServer runs under testhost, so its entry assembly cannot serve as the compiler child.
@@ -382,12 +239,8 @@ public sealed class RoslynMainWorkerFactory(
                 services.AddSingleton<IRoslynBuildExecutor, InProcessRoslynBuildExecutor>();
             });
         }
-        builder.UseSetting(
-            "ReferenceSets:net10-ref:Path",
-            RoslynMainTestSettings.Net10ReferenceSet.Path);
-        builder.UseSetting(
-            "ReferenceSets:net11-preview-ref:Path",
-            RoslynMainTestSettings.Net11ReferenceSet.Path);
+        builder.UseSetting("ReferenceSets:net10-ref:Path", RoslynMainTestSettings.Net10ReferenceSet.Path);
+        builder.UseSetting("ReferenceSets:net11-preview-ref:Path", RoslynMainTestSettings.Net11ReferenceSet.Path);
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
             var settings = new Dictionary<string, string?>
@@ -409,12 +262,9 @@ public sealed class RoslynMainWorkerFactory(
         });
     }
 
-    private sealed class InProcessRoslynBuildExecutor(RoslynBuildService buildService)
-        : IRoslynBuildExecutor
+    private sealed class InProcessRoslynBuildExecutor(RoslynBuildService buildService) : IRoslynBuildExecutor
     {
-        public Task<WorkerBuildExecution> ExecuteAsync(
-            BuildRequest request,
-            CancellationToken cancellationToken) =>
+        public Task<WorkerBuildExecution> ExecuteAsync(BuildRequest request, CancellationToken cancellationToken) =>
             buildService.ExecuteAsync(request, cancellationToken);
     }
 }

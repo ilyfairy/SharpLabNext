@@ -20,25 +20,14 @@ internal sealed record ChildMethodRecord(
     string? Address,
     string? Error);
 
-internal sealed record ChildErrorRecord(
-    string TypeName,
-    string Message,
-    string? StackTrace);
+internal sealed record ChildErrorRecord(string TypeName, string Message, string? StackTrace);
 
-internal sealed record ChildResultEnvelope(
-    string Magic,
-    string Nonce,
-    string AssemblyName,
-    IReadOnlyList<ChildMethodRecord> Methods,
-    ChildErrorRecord? FatalError)
+internal sealed record ChildResultEnvelope(string Magic, string Nonce, string AssemblyName, IReadOnlyList<ChildMethodRecord> Methods, ChildErrorRecord? FatalError)
 {
     public const string ProtocolMagic = "SLNCJ2";
 }
 
-internal sealed record ValidatedChildResult(
-    string AssemblyName,
-    IReadOnlyList<JitMethodResult> Methods,
-    ChildErrorRecord? FatalError);
+internal sealed record ValidatedChildResult(string AssemblyName, IReadOnlyList<JitMethodResult> Methods, ChildErrorRecord? FatalError);
 
 internal static class ChildResultCodec
 {
@@ -61,10 +50,7 @@ internal static class ChildResultCodec
         return JsonSerializer.SerializeToUtf8Bytes(envelope, JsonOptions);
     }
 
-    public static ValidatedChildResult ParseAndValidate(
-        byte[] payload,
-        string assemblyPath,
-        string expectedNonce)
+    public static ValidatedChildResult ParseAndValidate(byte[] payload, string assemblyPath, string expectedNonce)
     {
         if (payload is null)
             throw new ArgumentNullException(nameof(payload));
@@ -78,16 +64,14 @@ internal static class ChildResultCodec
         {
             using var document = JsonDocument.Parse(payload);
             ValidateJsonShape(document.RootElement);
-            envelope = JsonSerializer.Deserialize<ChildResultEnvelope>(payload, JsonOptions)
-                ?? throw new InvalidDataException("Checked JIT child metadata is empty.");
+            envelope = JsonSerializer.Deserialize<ChildResultEnvelope>(payload, JsonOptions) ?? throw new InvalidDataException("Checked JIT child metadata is empty.");
         }
         catch (JsonException exception)
         {
             throw new InvalidDataException("Checked JIT child metadata is not valid JSON.", exception);
         }
 
-        if (!string.Equals(envelope.Magic, ChildResultEnvelope.ProtocolMagic, StringComparison.Ordinal) ||
-            !string.Equals(envelope.Nonce, expectedNonce, StringComparison.Ordinal))
+        if (!string.Equals(envelope.Magic, ChildResultEnvelope.ProtocolMagic, StringComparison.Ordinal) || !string.Equals(envelope.Nonce, expectedNonce, StringComparison.Ordinal))
         {
             throw new InvalidDataException("Checked JIT child metadata identity is invalid.");
         }
@@ -111,20 +95,12 @@ internal static class ChildResultCodec
             tokenCounts.TryGetValue(record.MetadataToken, out var tokenCount);
             if (tokenCount >= MaximumGenericInstancesPerMethod)
             {
-                throw new InvalidDataException(
-                    "Checked JIT child method metadata exceeds the generic instance limit.");
+                throw new InvalidDataException("Checked JIT child method metadata exceeds the generic instance limit.");
             }
             tokenCounts[record.MetadataToken] = tokenCount + 1;
 
             var signatureIdentity = metadata.ValidateMethod(record);
-            methods.Add(new JitMethodResult(
-                record.Method,
-                record.MetadataToken,
-                record.DisplayName,
-                record.Status,
-                record.Address,
-                record.Error,
-                signatureIdentity));
+            methods.Add(new JitMethodResult(record.Method, record.MetadataToken, record.DisplayName, record.Status, record.Address, record.Error, signatureIdentity));
         }
 
         return new ValidatedChildResult(envelope.AssemblyName, methods, envelope.FatalError);
@@ -156,16 +132,7 @@ internal static class ChildResultCodec
             throw new InvalidDataException("Checked JIT child Methods must be an array.");
         foreach (var method in methods.EnumerateArray())
         {
-            ValidateObjectProperties(
-                method,
-                "Method",
-                "MetadataToken",
-                "DisplayName",
-                "DeclaringTypeArguments",
-                "MethodArguments",
-                "Status",
-                "Address",
-                "Error");
+            ValidateObjectProperties(method, "Method", "MetadataToken", "DisplayName", "DeclaringTypeArguments", "MethodArguments", "Status", "Address", "Error");
             ValidateGenericArgumentsShape(method.GetProperty("DeclaringTypeArguments"));
             ValidateGenericArgumentsShape(method.GetProperty("MethodArguments"));
         }
@@ -180,14 +147,7 @@ internal static class ChildResultCodec
         if (arguments.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException("Checked JIT child generic arguments must be an array.");
         foreach (var argument in arguments.EnumerateArray())
-        {
-            ValidateObjectProperties(
-                argument,
-                "AssemblyName",
-                "TypeName",
-                "IsValueType",
-                "JitName");
-        }
+            ValidateObjectProperties(argument, "AssemblyName", "TypeName", "IsValueType", "JitName");
     }
 
     private static void ValidateObjectProperties(JsonElement element, params string[] expected)
@@ -255,28 +215,16 @@ internal sealed class ManagedAssemblyMetadata : IDisposable
         var typeDefinition = _reader.GetTypeDefinition(typeHandle);
         var declaringTypeIsGeneric = typeDefinition.GetGenericParameters().Count > 0;
 
-        ValidateGenericArguments(
-            record.DeclaringTypeArguments,
-            typeDefinition.GetGenericParameters().Count,
-            "declaring type");
-        ValidateGenericArguments(
-            record.MethodArguments,
-            definition.GetGenericParameters().Count,
-            "method");
+        ValidateGenericArguments(record.DeclaringTypeArguments, typeDefinition.GetGenericParameters().Count, "declaring type");
+        ValidateGenericArguments(record.MethodArguments, definition.GetGenericParameters().Count, "method");
 
-        var expectedIdentity = JitMethodSignatures.CreateMethodIdentity(
-            record.MetadataToken,
-            record.DeclaringTypeArguments,
-            record.MethodArguments);
+        var expectedIdentity = JitMethodSignatures.CreateMethodIdentity(record.MetadataToken, record.DeclaringTypeArguments, record.MethodArguments);
         if (!string.Equals(record.Method, expectedIdentity, StringComparison.Ordinal) || record.Method.Length > 4_096)
             throw new InvalidDataException("Checked JIT child method identity does not match its MethodDef.");
 
         var expectedDisplayName = typeName + "." + methodName;
         var displayNameIsValid = string.Equals(record.DisplayName, expectedDisplayName, StringComparison.Ordinal) ||
-            (declaringTypeIsGeneric &&
-             record.DisplayName.StartsWith(typeName + "[", StringComparison.Ordinal) &&
-             record.DisplayName.EndsWith("." + methodName, StringComparison.Ordinal) &&
-             record.DisplayName.Length <= 2_048);
+            (declaringTypeIsGeneric && record.DisplayName.StartsWith(typeName + "[", StringComparison.Ordinal) && record.DisplayName.EndsWith("." + methodName, StringComparison.Ordinal) && record.DisplayName.Length <= 2_048);
         if (!displayNameIsValid)
             throw new InvalidDataException("Checked JIT child display name does not match its MethodDef.");
 
@@ -295,11 +243,7 @@ internal sealed class ManagedAssemblyMetadata : IDisposable
             throw new InvalidDataException("Checked JIT child method status is invalid.");
         }
 
-        return JitMethodSignatures.CreateFromMetadata(
-            _reader,
-            handle,
-            record.DeclaringTypeArguments,
-            record.MethodArguments);
+        return JitMethodSignatures.CreateFromMetadata(_reader, handle, record.DeclaringTypeArguments, record.MethodArguments);
     }
 
     public void Dispose()
@@ -308,29 +252,16 @@ internal sealed class ManagedAssemblyMetadata : IDisposable
         _stream.Dispose();
     }
 
-    private string GetTypeFullName(TypeDefinitionHandle handle) =>
-        JitMethodSignatures.GetTypeFullName(_reader, handle);
+    private string GetTypeFullName(TypeDefinitionHandle handle) => JitMethodSignatures.GetTypeFullName(_reader, handle);
 
-    private static void ValidateGenericArguments(
-        IReadOnlyList<ChildGenericArgument>? arguments,
-        int expectedCount,
-        string description)
+    private static void ValidateGenericArguments(IReadOnlyList<ChildGenericArgument>? arguments, int expectedCount, string description)
     {
         if (arguments is null || arguments.Count != expectedCount || arguments.Count > 32)
             throw new InvalidDataException($"Checked JIT child {description} arguments are invalid.");
 
         foreach (var argument in arguments)
         {
-            if (argument is null ||
-                !IsBoundedText(argument.AssemblyName, 256) ||
-                !IsBoundedText(argument.TypeName, 2_048) ||
-                !IsBoundedText(argument.JitName, 2_048) ||
-                argument.AssemblyName.Contains('/') ||
-                argument.AssemblyName.Contains('\\') ||
-                (!argument.IsValueType &&
-                 !string.Equals(argument.JitName, "System.__Canon", StringComparison.Ordinal)) ||
-                (argument.IsValueType &&
-                 string.Equals(argument.JitName, "System.__Canon", StringComparison.Ordinal)))
+            if (argument is null || !IsBoundedText(argument.AssemblyName, 256) || !IsBoundedText(argument.TypeName, 2_048) || !IsBoundedText(argument.JitName, 2_048) || argument.AssemblyName.Contains('/') || argument.AssemblyName.Contains('\\') || (!argument.IsValueType && !string.Equals(argument.JitName, "System.__Canon", StringComparison.Ordinal)) || (argument.IsValueType && string.Equals(argument.JitName, "System.__Canon", StringComparison.Ordinal)))
             {
                 throw new InvalidDataException($"Checked JIT child {description} argument identity is invalid.");
             }
@@ -344,17 +275,14 @@ internal sealed class ManagedAssemblyMetadata : IDisposable
 
     private static bool IsAddress(string? value)
     {
-        if (value is null || value.Length < 3 || value.Length > 34 ||
-            !value.StartsWith("0x", StringComparison.Ordinal))
+        if (value is null || value.Length < 3 || value.Length > 34 || !value.StartsWith("0x", StringComparison.Ordinal))
         {
             return false;
         }
         for (var index = 2; index < value.Length; index++)
         {
             var character = value[index];
-            if (!((character >= '0' && character <= '9') ||
-                  (character >= 'a' && character <= 'f') ||
-                  (character >= 'A' && character <= 'F')))
+            if (!((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f') || (character >= 'A' && character <= 'F')))
             {
                 return false;
             }

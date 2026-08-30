@@ -10,9 +10,7 @@ using SharpLabNext.Operations.Http;
 using SharpLabNext.RuntimeSupervisor;
 
 var builder = WebApplication.CreateBuilder(args);
-var internalServiceAuthentication = InternalServiceAuthenticationOptions.FromConfiguration(
-    builder.Configuration,
-    builder.Environment);
+var internalServiceAuthentication = InternalServiceAuthenticationOptions.FromConfiguration(builder.Configuration, builder.Environment);
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     ContractJson.ApplySerializerOptions(options.SerializerOptions);
@@ -24,26 +22,18 @@ operationStoreOptions.Validate();
 var operationExecutionOptions = new OperationExecutionOptions();
 builder.Configuration.GetSection(OperationExecutionOptions.SectionName).Bind(operationExecutionOptions);
 operationExecutionOptions.Validate();
-var descriptor = new ServiceIdentity(
-    "runtime-supervisor",
-    ServiceKind.RuntimeSupervisor,
-    builder.Configuration["ReleaseId"] ?? "development",
-    ProtocolVersion.WorkerV1,
-    RuntimeSupervisorServiceCapabilities.All,
-    "ready");
+var descriptor = new ServiceIdentity("runtime-supervisor", ServiceKind.RuntimeSupervisor, builder.Configuration["ReleaseId"] ?? "development", ProtocolVersion.WorkerV1, RuntimeSupervisorServiceCapabilities.All, "ready");
 builder.AddSharpLabNextObservability(descriptor.Id, descriptor.ReleaseId);
 builder.Services.AddSingleton(descriptor);
 var runtimeProfileOverlay = new RuntimeSupervisorProfileOverlayOptions();
 builder.Configuration.GetSection(RuntimeSupervisorProfileOverlayOptions.SectionName).Bind(runtimeProfileOverlay);
 var runtimePromotionPreflight = RuntimePromotionPreflightOptions.Load(builder.Configuration);
-builder.Services.AddOptions<RuntimeSupervisorOptions>()
-    .Bind(builder.Configuration.GetSection(RuntimeSupervisorOptions.SectionName))
-    .PostConfigure(options =>
+builder.Services.AddOptions<RuntimeSupervisorOptions>().Bind(builder.Configuration.GetSection(RuntimeSupervisorOptions.SectionName)).PostConfigure(options =>
     {
         runtimeProfileOverlay.ApplyTo(options);
         runtimePromotionPreflight.ApplyTo(options);
     })
-    .ValidateOnStart();
+.ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<RuntimeSupervisorOptions>, RuntimeSupervisorOptionsValidator>();
 builder.Services.AddSingleton(operationStoreOptions);
 builder.Services.AddSingleton(operationExecutionOptions);
@@ -69,38 +59,18 @@ _ = app.Services.GetRequiredService<RuntimeSandboxPolicy>();
 app.UseSharpLabNextOperationCapacityHandling();
 app.UseSharpLabNextInternalServiceAuthentication(internalServiceAuthentication);
 app.MapGet("/health/live", () => Results.Ok(new { Status = "live" }));
-app.MapGet("/health/ready", async (
-    ServiceIdentity service,
-    IDockerEngineClient docker,
-    IOptions<RuntimeSupervisorOptions> configuredOptions,
-    CancellationToken cancellationToken) =>
+app.MapGet("/health/ready", async (ServiceIdentity service, IDockerEngineClient docker, IOptions<RuntimeSupervisorOptions> configuredOptions, CancellationToken cancellationToken) =>
 {
     var dockerReady = await docker.PingAsync(cancellationToken);
     var status = dockerReady ? "ready" : "unavailable";
     return dockerReady
-        ? Results.Ok(new
-        {
-            Status = status,
-            service.Id,
-            service.ReleaseId,
-            DockerControl = true,
-            RuntimeSessionReuse = configuredOptions.Value.SessionReuseEnabled,
-            RuntimeProfiles = configuredOptions.Value.Profiles.Select(static profile => profile.Id)
-        })
+        ? Results.Ok(new { Status = status, service.Id, service.ReleaseId, DockerControl = true, RuntimeSessionReuse = configuredOptions.Value.SessionReuseEnabled, RuntimeProfiles = configuredOptions.Value.Profiles.Select(static profile => profile.Id) })
         : Results.Json(
-            new
-            {
-                Status = status,
-                service.Id,
-                service.ReleaseId,
-                DockerControl = false
-            },
+            new { Status = status, service.Id, service.ReleaseId, DockerControl = false },
             ContractJson.CreateSerializerOptions(),
             statusCode: StatusCodes.Status503ServiceUnavailable);
 });
-app.MapGet("/api/v1/runtime/status", (
-    ServiceIdentity service,
-    IOptions<RuntimeSupervisorOptions> options) => new
+app.MapGet("/api/v1/runtime/status", (ServiceIdentity service, IOptions<RuntimeSupervisorOptions> options) => new
 {
     service,
     Profiles = options.Value.Profiles.Select(profile => new
@@ -126,11 +96,7 @@ app.MapGet("/api/v1/runtime/status", (
     })
 });
 
-app.MapPost("/internal/v1/jobs/run", (
-    RunRequest request,
-    HttpContext context,
-    OperationStore operations,
-    RuntimeJobExecutor executor) =>
+app.MapPost("/internal/v1/jobs/run", (RunRequest request, HttpContext context, OperationStore operations, RuntimeJobExecutor executor) =>
 {
     var validation = RuntimeJobRequestValidator.Validate(request);
     if (validation is not null)
@@ -140,12 +106,7 @@ app.MapPost("/internal/v1/jobs/run", (
     if (!TryReadRuntimeSessionId(context, out var runtimeSessionId))
         return Results.BadRequest(new { Error = "invalid-runtime-session-id" });
 
-    var operation = operations.Start(
-        request.RequestId,
-        request.IdempotencyKey,
-        OperationKind.Run,
-        request.RequestId,
-        DateTimeOffset.UtcNow);
+    var operation = operations.Start(request.RequestId, request.IdempotencyKey, OperationKind.Run, request.RequestId, DateTimeOffset.UtcNow);
     if (!operation.Handle.IsExisting)
     {
         executor.QueueRun(operation, request, runtimeSessionId);
@@ -154,11 +115,7 @@ app.MapPost("/internal/v1/jobs/run", (
     return Results.Accepted($"/internal/v1/operations/{operation.Handle.OperationId}", operation.Handle);
 });
 
-app.MapPost("/internal/v1/jobs/jit", (
-    JitRequest request,
-    HttpContext context,
-    OperationStore operations,
-    RuntimeJobExecutor executor) =>
+app.MapPost("/internal/v1/jobs/jit", (JitRequest request, HttpContext context, OperationStore operations, RuntimeJobExecutor executor) =>
 {
     var validation = RuntimeJobRequestValidator.Validate(request);
     if (validation is not null)
@@ -168,12 +125,7 @@ app.MapPost("/internal/v1/jobs/jit", (
     if (!TryReadRuntimeSessionId(context, out var runtimeSessionId))
         return Results.BadRequest(new { Error = "invalid-runtime-session-id" });
 
-    var operation = operations.Start(
-        request.RequestId,
-        request.IdempotencyKey,
-        OperationKind.Jit,
-        request.RequestId,
-        DateTimeOffset.UtcNow);
+    var operation = operations.Start(request.RequestId, request.IdempotencyKey, OperationKind.Jit, request.RequestId, DateTimeOffset.UtcNow);
     if (!operation.Handle.IsExisting)
     {
         executor.QueueJit(operation, request, runtimeSessionId);
@@ -182,10 +134,7 @@ app.MapPost("/internal/v1/jobs/jit", (
     return Results.Accepted($"/internal/v1/operations/{operation.Handle.OperationId}", operation.Handle);
 });
 
-app.MapPost("/internal/v1/performance/samples", async (
-    RuntimePerformanceSampleRequest request,
-    RuntimePerformancePreflightCoordinator coordinator,
-    CancellationToken cancellationToken) =>
+app.MapPost("/internal/v1/performance/samples", async (RuntimePerformanceSampleRequest request, RuntimePerformancePreflightCoordinator coordinator, CancellationToken cancellationToken) =>
 {
     try
     {
@@ -205,14 +154,9 @@ app.MapPost("/internal/v1/performance/samples", async (
     }
 });
 
-app.MapPost(
-    "/internal/v1/capabilities/preflight",
-    RuntimeCapabilityPreflightEndpoint.HandleAsync);
+app.MapPost("/internal/v1/capabilities/preflight", RuntimeCapabilityPreflightEndpoint.HandleAsync);
 
-app.MapPost("/internal/v1/sessions/{sessionId}/release", async (
-    string sessionId,
-    RuntimeSessionRegistry sessions,
-    CancellationToken cancellationToken) =>
+app.MapPost("/internal/v1/sessions/{sessionId}/release", async (string sessionId, RuntimeSessionRegistry sessions, CancellationToken cancellationToken) =>
 {
     try
     {
@@ -233,10 +177,7 @@ app.MapGet("/internal/v1/operations/{operationId}", (string operationId, Operati
     return state is null ? Results.NotFound() : Results.Ok(state);
 });
 
-app.MapGet("/internal/v1/operations/{operationId}/events", async (
-    string operationId,
-    HttpContext context,
-    OperationStore operations) =>
+app.MapGet("/internal/v1/operations/{operationId}/events", async (string operationId, HttpContext context, OperationStore operations) =>
 {
     if (!PascalCaseQuery.TryGetOptionalInt64(context.Request, "FromSequence", out var fromSequence))
     {
@@ -253,23 +194,15 @@ app.MapGet("/internal/v1/operations/{operationId}/events", async (
     context.Response.Headers.ContentType = "text/event-stream";
     context.Response.Headers.CacheControl = "no-store";
     var serializerOptions = ContractJson.CreateSerializerOptions();
-    await foreach (var operationEvent in operations.WatchAsync(
-                       operationId,
-                       fromSequence ?? 0,
-                       context.RequestAborted))
+    await foreach (var operationEvent in operations.WatchAsync(operationId, fromSequence ?? 0, context.RequestAborted))
     {
         var json = JsonSerializer.Serialize(operationEvent, serializerOptions);
-        await context.Response.WriteAsync(
-            $"id: {operationEvent.Sequence}\nevent: operation\ndata: {json}\n\n",
-            context.RequestAborted);
+        await context.Response.WriteAsync($"id: {operationEvent.Sequence}\nevent: operation\ndata: {json}\n\n", context.RequestAborted);
         await context.Response.Body.FlushAsync(context.RequestAborted);
     }
 });
 
-app.MapPost("/internal/v1/operations/{operationId}/cancel", (
-    string operationId,
-    CancelOperationRequest request,
-    OperationStore operations) =>
+app.MapPost("/internal/v1/operations/{operationId}/cancel", (string operationId, CancelOperationRequest request, OperationStore operations) =>
 {
     if (!string.Equals(operationId, request.OperationId, StringComparison.Ordinal))
     {

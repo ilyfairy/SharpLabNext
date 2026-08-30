@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 
-export const paneSplitPreferenceStorageKey = 'sharplabnext.source-pane-percent'
-export const defaultSourcePanePercent = 50
-export const minimumSourcePanePercent = 20
-export const maximumSourcePanePercent = 80
+export const paneSplitPreferenceStorageKey = 'sharplabnext.source-pane-percent';
+export const defaultSourcePanePercent = 50;
+export const minimumSourcePanePercent = 20;
+export const maximumSourcePanePercent = 80;
 
 export interface PaneSplitPreferenceState {
   sourcePercent: number
@@ -12,24 +12,20 @@ export interface PaneSplitPreferenceState {
 }
 
 export function clampSourcePanePercent(percent: number): number {
-  if (!Number.isFinite(percent)) return defaultSourcePanePercent
+  if (!Number.isFinite(percent)) return defaultSourcePanePercent;
   const bounded = Math.min(maximumSourcePanePercent, Math.max(minimumSourcePanePercent, percent))
-  return Math.round(bounded * 10) / 10
+  return Math.round(bounded * 10) / 10;
 }
 
 export function readPaneSplitPreference(storage: Pick<Storage, 'getItem'>): number | null {
   try {
     const stored = storage.getItem(paneSplitPreferenceStorageKey)
-    if (stored === null || stored.trim() === '') return null
+    if (stored === null || stored.trim() === '') return null;
     const percent = Number(stored)
-    if (
-      !Number.isFinite(percent) ||
-      percent < minimumSourcePanePercent ||
-      percent > maximumSourcePanePercent
-    ) {
-      return null
+    if (!Number.isFinite(percent) || percent < minimumSourcePanePercent || percent > maximumSourcePanePercent) {
+      return null;
     }
-    return clampSourcePanePercent(percent)
+    return clampSourcePanePercent(percent);
   } catch {
     return null
   }
@@ -44,11 +40,7 @@ export function writePaneSplitPreference(storage: Pick<Storage, 'setItem'>, perc
 }
 
 export function usePaneSplitPreference(): PaneSplitPreferenceState {
-  const [sourcePercent, setSourcePercent] = useState(() =>
-    typeof localStorage === 'undefined'
-      ? defaultSourcePanePercent
-      : (readPaneSplitPreference(localStorage) ?? defaultSourcePanePercent),
-  )
+  const [sourcePercent, setSourcePercent] = useState(() => (typeof localStorage === 'undefined' ? defaultSourcePanePercent : (readPaneSplitPreference(localStorage) ?? defaultSourcePanePercent)))
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return

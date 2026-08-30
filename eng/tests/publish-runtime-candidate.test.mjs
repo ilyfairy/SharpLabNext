@@ -6,17 +6,17 @@ import { fileURLToPath } from 'node:url'
 import {
   candidateExpectedImageLabels,
   candidateOperationHelpers,
-} from './build-runtime-candidate.mjs'
+} from '../build-runtime-candidate.mjs'
 import {
   deriveRuntimeCandidateEnvironment,
   readRuntimeMatrix,
-} from './runtime-candidate-environment.mjs'
+} from '../runtime-candidate-environment.mjs'
 import {
   publishRuntimeCandidate,
   runRuntimeCandidatePublish,
-} from './publish-runtime-candidate.mjs'
+} from '../release/publish-runtime-candidate.mjs'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const matrix = readRuntimeMatrix(path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'))
 const target = 'runtime-dotnet-matrix-candidate'
 const profileId = 'dotnet-5-linux-x64'
@@ -28,9 +28,7 @@ const manifestDigest = `sha256:${'d'.repeat(64)}`
 const destination = `registry.example/sharplabnext/runtime-${profileId}:${releaseId}`
 const destinationRepository = destination.slice(0, destination.lastIndexOf(':'))
 const pinnedReference = `${destinationRepository}@${manifestDigest}`
-function pinnedImage(name, character) {
-  return `registry.example/${name}@sha256:${character.repeat(64)}`
-}
+function pinnedImage(name, character) { return `registry.example/${name}@sha256:${character.repeat(64)}`; }
 
 function environment() {
   return {

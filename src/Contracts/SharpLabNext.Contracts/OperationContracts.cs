@@ -2,26 +2,15 @@ using System.Text.Json.Serialization;
 
 namespace SharpLabNext.Contracts;
 
-public sealed record OperationHandle(
-    string OperationId,
-    string RequestId,
-    DateTimeOffset CreatedAtUtc,
-    bool IsExisting);
+public sealed record OperationHandle(string OperationId, string RequestId, DateTimeOffset CreatedAtUtc, bool IsExisting);
 
-public sealed record WatchOperationRequest(
-    string OperationId,
-    long FromSequence = 0);
+public sealed record WatchOperationRequest(string OperationId, long FromSequence = 0);
 
 public sealed record GetOperationRequest(string OperationId);
 
-public sealed record CancelOperationRequest(
-    string OperationId,
-    string? Reason = null);
+public sealed record CancelOperationRequest(string OperationId, string? Reason = null);
 
-public sealed record CancelResult(
-    string OperationId,
-    CancelDisposition Disposition,
-    long LastSequence);
+public sealed record CancelResult(string OperationId, CancelDisposition Disposition, long LastSequence);
 
 public sealed record OperationState(
     string OperationId,
@@ -35,12 +24,7 @@ public sealed record OperationState(
     string TraceId,
     WorkerError? Error);
 
-public sealed record OperationEvent(
-    string OperationId,
-    long Sequence,
-    DateTimeOffset TimestampUtc,
-    string TraceId,
-    OperationEventPayload Payload);
+public sealed record OperationEvent(string OperationId, long Sequence, DateTimeOffset TimestampUtc, string TraceId, OperationEventPayload Payload);
 
 [JsonConverter(typeof(OperationEventPayloadJsonConverter))]
 public record OperationEventPayload
@@ -49,70 +33,37 @@ public record OperationEventPayload
     public virtual bool IsTerminal => false;
 }
 
-public sealed record AcceptedOperationEventPayload(
-    string RequestId,
-    OperationKind OperationKind) : OperationEventPayload;
+public sealed record AcceptedOperationEventPayload(string RequestId, OperationKind OperationKind) : OperationEventPayload;
 
-public sealed record ProgressOperationEventPayload(
-    string Stage,
-    string? Message,
-    double? Fraction) : OperationEventPayload;
+public sealed record ProgressOperationEventPayload(string Stage, string? Message, double? Fraction) : OperationEventPayload;
 
-public sealed record DiagnosticOperationEventPayload(
-    Diagnostic Diagnostic) : OperationEventPayload;
+public sealed record DiagnosticOperationEventPayload(Diagnostic Diagnostic) : OperationEventPayload;
 
-public sealed record OutputChunkOperationEventPayload(
-    OutputChunk Chunk) : OperationEventPayload;
+public sealed record OutputChunkOperationEventPayload(OutputChunk Chunk) : OperationEventPayload;
 
-public sealed record ArtifactProducedOperationEventPayload(
-    ArtifactRef ArtifactRef,
-    string ArtifactFormat,
-    string Role) : OperationEventPayload;
+public sealed record ArtifactProducedOperationEventPayload(ArtifactRef ArtifactRef, string ArtifactFormat, string Role) : OperationEventPayload;
 
-public sealed record ContentProducedOperationEventPayload(
-    ContentRef ContentRef,
-    string MediaType,
-    long Size) : OperationEventPayload;
+public sealed record ContentProducedOperationEventPayload(ContentRef ContentRef, string MediaType, long Size) : OperationEventPayload;
 
-public sealed record TypedResultOperationEventPayload(
-    OperationResult Result) : OperationEventPayload;
+public sealed record TypedResultOperationEventPayload(OperationResult Result) : OperationEventPayload;
 
-public sealed record OutputTruncatedOperationEventPayload(
-    OutputChannel Channel,
-    string Reason,
-    long ObservedBytes,
-    long LimitBytes) : OperationEventPayload;
+public sealed record OutputTruncatedOperationEventPayload(OutputChannel Channel, string Reason, long ObservedBytes, long LimitBytes) : OperationEventPayload;
 
-public sealed record CompletedOperationEventPayload(
-    OperationCompletionStatus Status,
-    TimeSpan Elapsed) : OperationEventPayload
+public sealed record CompletedOperationEventPayload(OperationCompletionStatus Status, TimeSpan Elapsed) : OperationEventPayload
 {
     [JsonIgnore]
     public override bool IsTerminal => true;
 }
 
-public sealed record FailedOperationEventPayload(
-    WorkerError Error) : OperationEventPayload
+public sealed record FailedOperationEventPayload(WorkerError Error) : OperationEventPayload
 {
     [JsonIgnore]
     public override bool IsTerminal => true;
 }
 
-public sealed record OutputChunk(
-    OutputChannel Channel,
-    OutputEncoding Encoding,
-    string Data,
-    bool Truncated);
+public sealed record OutputChunk(OutputChannel Channel, OutputEncoding Encoding, string Data, bool Truncated);
 
-public sealed record WorkerError(
-    string Code,
-    WorkerErrorCategory Category,
-    string PublicMessage,
-    bool Retryable,
-    bool SafeToRetry,
-    string TraceId,
-    string WorkerId,
-    string WorkerImageId);
+public sealed record WorkerError(string Code, WorkerErrorCategory Category, string PublicMessage, bool Retryable, bool SafeToRetry, string TraceId, string WorkerId, string WorkerImageId);
 
 public static class OperationEventStreamContract
 {

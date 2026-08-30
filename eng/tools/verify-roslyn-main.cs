@@ -1,4 +1,5 @@
 #:property TargetFramework=net10.0
+#:property RestorePackagesWithLockFile=false
 #:property PublishAot=false
 #:property NoWarn=IL2026
 
@@ -43,13 +44,8 @@ foreach (var name in new[] { "Microsoft.CodeAnalysis.CSharp", "Microsoft.CodeAna
 {
     var assembly = context.LoadFromAssemblyPath(Path.Combine(assemblyDirectory, $"{name}.dll"));
     var version = assembly.GetName().Version is { } assemblyVersion
-        ? $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{assemblyVersion.Build}"
-        : "unknown";
-    var commit = assembly.GetCustomAttributesData()
-        .Where(static attribute => attribute.AttributeType.FullName == "Microsoft.CodeAnalysis.CommitHashAttribute")
-        .SelectMany(static attribute => attribute.ConstructorArguments)
-        .Select(static argument => argument.Value as string)
-        .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
+        ? $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{assemblyVersion.Build}" : "unknown";
+    var commit = assembly.GetCustomAttributesData().Where(static attribute => attribute.AttributeType.FullName == "Microsoft.CodeAnalysis.CommitHashAttribute").SelectMany(static attribute => attribute.ConstructorArguments).Select(static argument => argument.Value as string).FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
 
     if (!string.Equals(version, expectedVersion, StringComparison.Ordinal))
         throw new InvalidDataException($"{name} version '{version}' does not match '{expectedVersion}'.");

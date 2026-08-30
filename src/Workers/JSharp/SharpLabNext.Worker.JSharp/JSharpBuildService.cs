@@ -17,27 +17,16 @@ public sealed class JSharpBuildService : ILanguageWorkerBuildService
     private readonly JSharpWorkerSettings _settings;
     private readonly LanguageWorkerCapabilityManifest _manifest;
 
-    public JSharpBuildService(
-        JSharpCompilerProcess compiler,
-        JSharpWorkerSettings settings,
-        LanguageWorkerCapabilityManifest manifest)
-        : this((IJSharpCompilerProcess)compiler, settings, manifest)
-    {
-    }
+    public JSharpBuildService(JSharpCompilerProcess compiler, JSharpWorkerSettings settings, LanguageWorkerCapabilityManifest manifest) : this((IJSharpCompilerProcess)compiler, settings, manifest) { }
 
-    internal JSharpBuildService(
-        IJSharpCompilerProcess compiler,
-        JSharpWorkerSettings settings,
-        LanguageWorkerCapabilityManifest manifest)
+    internal JSharpBuildService(IJSharpCompilerProcess compiler, JSharpWorkerSettings settings, LanguageWorkerCapabilityManifest manifest)
     {
         _compiler = compiler;
         _settings = settings;
         _manifest = manifest;
     }
 
-    public async Task<LanguageWorkerBuildExecution> BuildAsync(
-        BuildRequest request,
-        CancellationToken cancellationToken)
+    public async Task<LanguageWorkerBuildExecution> BuildAsync(BuildRequest request, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var telemetryOutcome = SharpLabNextTelemetryOutcome.Failed;
@@ -55,8 +44,7 @@ public sealed class JSharpBuildService : ILanguageWorkerBuildService
                 telemetryOutcome = TelemetryOutcome(execution.Result);
                 return execution;
             }
-            catch (OperationCanceledException) when (
-                deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
                 telemetryOutcome = SharpLabNextTelemetryOutcome.TimedOut;
                 throw;
@@ -67,14 +55,12 @@ public sealed class JSharpBuildService : ILanguageWorkerBuildService
             telemetryOutcome = SharpLabNextTelemetryOutcome.Cancelled;
             throw;
         }
-        catch (LanguageWorkerRequestException exception) when (
-            exception.StatusCode == StatusCodes.Status429TooManyRequests)
+        catch (LanguageWorkerRequestException exception) when (exception.StatusCode == StatusCodes.Status429TooManyRequests)
         {
             telemetryOutcome = SharpLabNextTelemetryOutcome.Overloaded;
             throw;
         }
-        catch (LanguageWorkerRequestException exception) when (
-            exception.StatusCode == StatusCodes.Status503ServiceUnavailable)
+        catch (LanguageWorkerRequestException exception) when (exception.StatusCode == StatusCodes.Status503ServiceUnavailable)
         {
             telemetryOutcome = SharpLabNextTelemetryOutcome.Crashed;
             throw;
@@ -82,54 +68,28 @@ public sealed class JSharpBuildService : ILanguageWorkerBuildService
         finally
         {
             stopwatch.Stop();
-            SharpLabNextTelemetry.Metrics.RecordBuild(
-                JSharpToolchain.LanguageId,
-                JSharpToolchain.ToolchainId,
-                stopwatch.Elapsed,
-                telemetryOutcome,
-                cacheHit: false);
+            SharpLabNextTelemetry.Metrics.RecordBuild(JSharpToolchain.LanguageId, JSharpToolchain.ToolchainId, stopwatch.Elapsed, telemetryOutcome, cacheHit: false);
         }
     }
 
-    private async Task<LanguageWorkerBuildExecution> BuildCoreAsync(
-        BuildRequest request,
-        CancellationToken cancellationToken)
+    private async Task<LanguageWorkerBuildExecution> BuildCoreAsync(BuildRequest request, CancellationToken cancellationToken)
     {
-        var workspace = JSharpWorkspaceValidator.Validate(
-            request,
-            _manifest,
-            _settings.Identity.CompilerVersion);
+        var workspace = JSharpWorkspaceValidator.Validate(request, _manifest, _settings.Identity.CompilerVersion);
         var invocation = await _compiler.CompileAsync(workspace, cancellationToken).ConfigureAwait(false);
         var identity = _settings.Identity.CreateBuildIdentity();
         if (!invocation.Succeeded)
         {
             if (request.Target == BuildTarget.CompileCheck)
             {
-                return new LanguageWorkerBuildExecution(new CompilationCheckResult(
-                    false,
-                    invocation.Diagnostics,
-                    identity,
-                    workspace.Snapshot.Revision,
-                    workspace.Snapshot.SelectionRevision));
+                return new LanguageWorkerBuildExecution(new CompilationCheckResult(false, invocation.Diagnostics, identity, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision));
             }
-            return new LanguageWorkerBuildExecution(new BuildResult(
-                BuildOutcome.CompilationFailed,
-                null,
-                invocation.Diagnostics,
-                identity,
-                workspace.Snapshot.Revision,
-                workspace.Snapshot.SelectionRevision));
+            return new LanguageWorkerBuildExecution(new BuildResult(BuildOutcome.CompilationFailed, null, invocation.Diagnostics, identity, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision));
         }
 
         var inspection = InspectManagedClr2Pe(invocation.PeImage);
         if (request.Target == BuildTarget.CompileCheck)
         {
-            return new LanguageWorkerBuildExecution(new CompilationCheckResult(
-                true,
-                invocation.Diagnostics,
-                identity,
-                workspace.Snapshot.Revision,
-                workspace.Snapshot.SelectionRevision));
+            return new LanguageWorkerBuildExecution(new CompilationCheckResult(true, invocation.Diagnostics, identity, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision));
         }
 
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -139,8 +99,7 @@ public sealed class JSharpBuildService : ILanguageWorkerBuildService
             ["deterministic"] = "false",
             ["portablePdb"] = "false",
             ["clrMetadataVersion"] = inspection.MetadataVersion,
-            ["sourceSha256"] = Convert.ToHexStringLower(
-                SHA256.HashData(Encoding.UTF8.GetBytes(workspace.SourceFile.Text)))
+            ["sourceSha256"] = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(workspace.SourceFile.Text)))
         };
         if (_settings.Identity.CompilerCommit is { } compilerCommit)
             metadata["compilerCommit"] = compilerCommit;
@@ -150,30 +109,15 @@ public sealed class JSharpBuildService : ILanguageWorkerBuildService
             JSharpToolchain.AssemblyName,
             JSharpToolchain.ReferenceSetId,
             JSharpToolchain.TargetFramework,
-            new ArtifactRuntimeRequirement(
-                JSharpToolchain.RuntimeFamily,
-                [new FrameworkRequirement(JSharpToolchain.FrameworkName, JSharpToolchain.FrameworkVersion)],
-                JSharpToolchain.Architecture,
-                [JSharpToolchain.RuntimeFeatureTag]),
+            new ArtifactRuntimeRequirement(JSharpToolchain.RuntimeFamily, [new FrameworkRequirement(JSharpToolchain.FrameworkName, JSharpToolchain.FrameworkVersion)], JSharpToolchain.Architecture, [JSharpToolchain.RuntimeFeatureTag]),
             [],
             workspace.Options.OutputKind,
             JSharpToolchain.OutputFileName,
             inspection.EntryPoint,
             [new LanguageArtifactFile("primary-assembly", JSharpToolchain.OutputFileName, invocation.PeImage)],
             metadata);
-        var envelope = LanguageArtifactBuilder.CreateGenericEnvelope(
-            definition,
-            identity,
-            _manifest.Limits.MaximumArtifactBytes);
-        return new LanguageWorkerBuildExecution(
-            new BuildResult(
-                BuildOutcome.Succeeded,
-                envelope.ArtifactRef,
-                invocation.Diagnostics,
-                identity,
-                workspace.Snapshot.Revision,
-                workspace.Snapshot.SelectionRevision),
-            envelope);
+        var envelope = LanguageArtifactBuilder.CreateGenericEnvelope(definition, identity, _manifest.Limits.MaximumArtifactBytes);
+        return new LanguageWorkerBuildExecution(new BuildResult(BuildOutcome.Succeeded, envelope.ArtifactRef, invocation.Diagnostics, identity, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision), envelope);
     }
 
     internal static JSharpPeInspection InspectManagedClr2Pe(byte[] image)
@@ -182,14 +126,7 @@ public sealed class JSharpBuildService : ILanguageWorkerBuildService
         {
             using var peReader = new PEReader(new MemoryStream(image, writable: false));
             var headers = peReader.PEHeaders;
-            if (headers.CoffHeader.Machine != Machine.Amd64 ||
-                headers.PEHeader?.Magic != PEMagic.PE32Plus ||
-                headers.CorHeader is null ||
-                (headers.CorHeader.Flags & CorFlags.ILOnly) == 0 ||
-                (headers.CorHeader.Flags & CorFlags.NativeEntryPoint) != 0 ||
-                (headers.CorHeader.Flags & CorFlags.Requires32Bit) != 0 ||
-                (headers.CorHeader.Flags & CorFlags.Prefers32Bit) != 0 ||
-                !peReader.HasMetadata)
+            if (headers.CoffHeader.Machine != Machine.Amd64 || headers.PEHeader?.Magic != PEMagic.PE32Plus || headers.CorHeader is null || (headers.CorHeader.Flags & CorFlags.ILOnly) == 0 || (headers.CorHeader.Flags & CorFlags.NativeEntryPoint) != 0 || (headers.CorHeader.Flags & CorFlags.Requires32Bit) != 0 || (headers.CorHeader.Flags & CorFlags.Prefers32Bit) != 0 || !peReader.HasMetadata)
             {
                 throw new BadImageFormatException("The image is not an x64 IL-only CLR assembly.");
             }
@@ -209,17 +146,12 @@ public sealed class JSharpBuildService : ILanguageWorkerBuildService
             var typeNamespace = metadata.GetString(declaringType.Namespace);
             var methodName = metadata.GetString(method.Name);
             var entryPoint = string.IsNullOrEmpty(typeNamespace)
-                ? $"{typeName}::{methodName}"
-                : $"{typeNamespace}.{typeName}::{methodName}";
+                ? $"{typeName}::{methodName}" : $"{typeNamespace}.{typeName}::{methodName}";
             return new JSharpPeInspection(metadata.MetadataVersion, entryPoint);
         }
         catch (BadImageFormatException exception)
         {
-            throw new LanguageWorkerRequestException(
-                "compiler-invalid-output",
-                "The J# compiler returned an invalid x64 CLR 2.0 managed executable.",
-                StatusCodes.Status503ServiceUnavailable,
-                exception);
+            throw new LanguageWorkerRequestException("compiler-invalid-output", "The J# compiler returned an invalid x64 CLR 2.0 managed executable.", StatusCodes.Status503ServiceUnavailable, exception);
         }
     }
 

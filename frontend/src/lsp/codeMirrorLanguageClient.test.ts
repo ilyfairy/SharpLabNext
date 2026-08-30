@@ -10,10 +10,7 @@ import {
   lspSemanticTokenTypes,
   readOnlyIlOutputLanguageClientFeatureProfile,
 } from './codeMirrorLanguageClient'
-import type {
-  LanguageSessionConnectionPlan,
-  LanguageSessionTransportError,
-} from './languageSessionLifecycle'
+import type { LanguageSessionConnectionPlan, LanguageSessionTransportError } from './languageSessionLifecycle'
 
 describe('CodeMirror language client', () => {
   it('appends shared semantic token types and modifiers without changing established indexes', () => {
@@ -46,31 +43,15 @@ describe('CodeMirror language client', () => {
       'stringEscapeCharacter',
     ])
     expect(lspSemanticTokenTypes.slice(26)).toEqual(['identifier', 'invalid'])
-    expect(lspSemanticTokenModifiers).toEqual([
-      'static',
-      'deprecated',
-      'readonly',
-      'abstract',
-      'async',
-      'declaration',
-      'definition',
-    ])
+    expect(lspSemanticTokenModifiers).toEqual(['static', 'deprecated', 'readonly', 'abstract', 'async', 'declaration', 'definition'])
   })
 
   it('encodes stable workspace document URIs', () => {
-    expect(codeMirrorDocumentUri('sharplabnext://workspace/', 'src/My File.cs')).toBe(
-      'sharplabnext://workspace/src/My%20File.cs',
-    )
+    expect(codeMirrorDocumentUri('sharplabnext://workspace/', 'src/My File.cs')).toBe('sharplabnext://workspace/src/My%20File.cs')
   })
 
   it('decodes relative semantic token positions and modifiers', () => {
-    expect(
-      decodeSemanticTokens(
-        [0, 4, 3, 1, 1, 0, 5, 2, 0, 0, 2, 1, 4, 1, 0],
-        ['variable', 'method'],
-        ['static'],
-      ),
-    ).toEqual([
+    expect(decodeSemanticTokens([0, 4, 3, 1, 1, 0, 5, 2, 0, 0, 2, 1, 4, 1, 0], ['variable', 'method'], ['static'])).toEqual([
       {
         line: 0,
         character: 4,
@@ -108,12 +89,7 @@ describe('CodeMirror language client', () => {
       clearDocument: vi.fn(),
     }
     const dependencies = createCodeMirrorLanguageSessionDependencies(bridge, sink)
-    const client = dependencies.createClient(
-      plan(),
-      descriptor(),
-      socket as unknown as WebSocket,
-      () => true,
-    )
+    const client = dependencies.createClient(plan(), descriptor(), socket as unknown as WebSocket, () => true)
 
     await client.start()
     await vi.waitFor(() => expect(sink.publishDiagnostics).toHaveBeenCalledTimes(2))
@@ -130,9 +106,7 @@ describe('CodeMirror language client', () => {
         }),
       ]),
     )
-    expect(sink.publishSemanticTokens).toHaveBeenCalledWith('Program.cs', 1, [
-      expect.objectContaining({ tokenType: 'method', line: 0, character: 0 }),
-    ])
+    expect(sink.publishSemanticTokens).toHaveBeenCalledWith('Program.cs', 1, [expect.objectContaining({ tokenType: 'method', line: 0, character: 0 })])
 
     const completions = await bridge.completion('Program.cs', {
       line: 0,
@@ -144,7 +118,9 @@ describe('CodeMirror language client', () => {
       items: [expect.objectContaining({ label: 'WriteLine' })],
     })
     expect(await bridge.hover('Program.cs', { line: 0, character: 1 })).toEqual(
-      expect.objectContaining({ contents: expect.objectContaining({ value: 'method docs' }) }),
+      expect.objectContaining({
+        contents: expect.objectContaining({ value: 'method docs' }),
+      }),
     )
     expect(await bridge.signatureHelp('Program.cs', { line: 0, character: 4 }, '(')).toEqual({
       signatures: [
@@ -167,19 +143,9 @@ describe('CodeMirror language client', () => {
       { triggerKind: 2, triggerCharacter: '<', isRetrigger: false },
       { triggerKind: 2, triggerCharacter: ')', isRetrigger: true },
     ])
-    expect(sink.publishDocumentSymbols).toHaveBeenCalledWith('Program.cs', 1, [
-      expect.objectContaining({ name: 'Bad', kind: 6 }),
-    ])
-    expect(sink.publishFoldingRanges).toHaveBeenCalledWith('Program.cs', 1, [
-      expect.objectContaining({ startLine: 0, endLine: 1 }),
-    ])
-    expect(socket.sent.map(requestMethod)).toEqual(
-      expect.arrayContaining([
-        'textDocument/didOpen',
-        'textDocument/documentSymbol',
-        'textDocument/foldingRange',
-      ]),
-    )
+    expect(sink.publishDocumentSymbols).toHaveBeenCalledWith('Program.cs', 1, [expect.objectContaining({ name: 'Bad', kind: 6 })])
+    expect(sink.publishFoldingRanges).toHaveBeenCalledWith('Program.cs', 1, [expect.objectContaining({ startLine: 0, endLine: 1 })])
+    expect(socket.sent.map(requestMethod)).toEqual(expect.arrayContaining(['textDocument/didOpen', 'textDocument/documentSymbol', 'textDocument/foldingRange']))
 
     await client.dispose()
     expect(sink.clearDocument).toHaveBeenCalledWith('Program.cs')
@@ -190,10 +156,7 @@ describe('CodeMirror language client', () => {
     try {
       const openSocket = new FakeWebSocket()
       openSocket.readyState = WebSocket.CONNECTING
-      const openClient = createCodeMirrorLanguageSessionDependencies(
-        new CodeMirrorLanguageBridge(),
-        emptySink(),
-      ).createClient(plan(), descriptor(), openSocket as unknown as WebSocket, () => true)
+      const openClient = createCodeMirrorLanguageSessionDependencies(new CodeMirrorLanguageBridge(), emptySink()).createClient(plan(), descriptor(), openSocket as unknown as WebSocket, () => true)
       const openFailure = expect(openClient.start()).rejects.toMatchObject({
         name: 'LanguageSessionTransportError',
         kind: 'websocket-open-failed',
@@ -203,10 +166,7 @@ describe('CodeMirror language client', () => {
       await openClient.dispose()
 
       const closeSocket = new FakeWebSocket(true, false, 'none')
-      const closeClient = createCodeMirrorLanguageSessionDependencies(
-        new CodeMirrorLanguageBridge(),
-        emptySink(),
-      ).createClient(plan(), descriptor(), closeSocket as unknown as WebSocket, () => true)
+      const closeClient = createCodeMirrorLanguageSessionDependencies(new CodeMirrorLanguageBridge(), emptySink()).createClient(plan(), descriptor(), closeSocket as unknown as WebSocket, () => true)
       const closeFailure = expect(closeClient.start()).rejects.toMatchObject({
         name: 'LanguageSessionTransportError',
         kind: 'websocket-closed',
@@ -217,10 +177,7 @@ describe('CodeMirror language client', () => {
       await closeClient.dispose()
 
       const timeoutSocket = new FakeWebSocket(true, false, 'none')
-      const timeoutClient = createCodeMirrorLanguageSessionDependencies(
-        new CodeMirrorLanguageBridge(),
-        emptySink(),
-      ).createClient(plan(), descriptor(), timeoutSocket as unknown as WebSocket, () => true)
+      const timeoutClient = createCodeMirrorLanguageSessionDependencies(new CodeMirrorLanguageBridge(), emptySink()).createClient(plan(), descriptor(), timeoutSocket as unknown as WebSocket, () => true)
       const timeoutFailure = expect(timeoutClient.start()).rejects.toMatchObject({
         name: 'LanguageSessionTransportError',
         kind: 'initialize-timeout',
@@ -244,12 +201,7 @@ describe('CodeMirror language client', () => {
       publishFoldingRanges: vi.fn(),
       clearDocument: vi.fn(),
     }
-    const client = createCodeMirrorLanguageSessionDependencies(bridge, sink).createClient(
-      plan(),
-      descriptor(),
-      socket as unknown as WebSocket,
-      () => true,
-    )
+    const client = createCodeMirrorLanguageSessionDependencies(bridge, sink).createClient(plan(), descriptor(), socket as unknown as WebSocket, () => true)
 
     await client.start()
     expect(socket.sent.find((message) => requestMethod(message) === 'initialize')).toMatchObject({
@@ -259,13 +211,7 @@ describe('CodeMirror language client', () => {
             completion: {
               completionItem: {
                 resolveSupport: {
-                  properties: [
-                    'detail',
-                    'documentation',
-                    'insertTextFormat',
-                    'textEdit',
-                    'additionalTextEdits',
-                  ],
+                  properties: ['detail', 'documentation', 'insertTextFormat', 'textEdit', 'additionalTextEdits'],
                 },
               },
             },
@@ -292,9 +238,7 @@ describe('CodeMirror language client', () => {
     if (!item) throw new Error('Completion item was not returned.')
 
     const resolved = await bridge.resolveCompletion('Program.cs', item)
-    expect(
-      socket.sent.filter((message) => requestMethod(message) === 'completionItem/resolve'),
-    ).toEqual([expect.objectContaining({ params: item.raw })])
+    expect(socket.sent.filter((message) => requestMethod(message) === 'completionItem/resolve')).toEqual([expect.objectContaining({ params: item.raw })])
     expect(resolved).toMatchObject({
       label: 'WriteLine',
       detail: 'void Console.WriteLine(string value)',
@@ -331,34 +275,22 @@ describe('CodeMirror language client', () => {
     }
     const dependencies = createCodeMirrorLanguageSessionDependencies(bridge, sink)
     let firstIsCurrent = true
-    const firstClient = dependencies.createClient(
-      plan(),
-      descriptor(),
-      new FakeWebSocket() as unknown as WebSocket,
-      () => firstIsCurrent,
-    )
+    const firstClient = dependencies.createClient(plan(), descriptor(), new FakeWebSocket() as unknown as WebSocket, () => firstIsCurrent)
     await firstClient.start()
     bridge.setSessionStatus('ready')
 
     firstIsCurrent = false
     bridge.setSessionStatus('connecting')
     let settled = false
-    const completion = bridge
-      .completion('Program.cs', { line: 0, character: 3, triggerKind: 1 })
-      .then((result) => {
-        settled = true
-        return result
-      })
+    const completion = bridge.completion('Program.cs', { line: 0, character: 3, triggerKind: 1 }).then((result) => {
+      settled = true
+      return result
+    })
     await Promise.resolve()
     expect(settled).toBe(false)
 
     await firstClient.dispose()
-    const replacementClient = dependencies.createClient(
-      { ...plan(), key: 'replacement' },
-      descriptor(),
-      new FakeWebSocket() as unknown as WebSocket,
-      () => true,
-    )
+    const replacementClient = dependencies.createClient({ ...plan(), key: 'replacement' }, descriptor(), new FakeWebSocket() as unknown as WebSocket, () => true)
     await replacementClient.start()
     bridge.setSessionStatus('ready')
 
@@ -379,12 +311,7 @@ describe('CodeMirror language client', () => {
       publishFoldingRanges: vi.fn(),
       clearDocument: vi.fn(),
     }
-    const client = createCodeMirrorLanguageSessionDependencies(bridge, sink).createClient(
-      plan(),
-      descriptor(),
-      socket as unknown as WebSocket,
-      () => true,
-    )
+    const client = createCodeMirrorLanguageSessionDependencies(bridge, sink).createClient(plan(), descriptor(), socket as unknown as WebSocket, () => true)
 
     await client.start()
     const item = (
@@ -397,9 +324,7 @@ describe('CodeMirror language client', () => {
     if (!item) throw new Error('Completion item was not returned.')
 
     expect(await bridge.resolveCompletion('Program.cs', item)).toBe(item)
-    expect(socket.sent.some((message) => requestMethod(message) === 'completionItem/resolve')).toBe(
-      false,
-    )
+    expect(socket.sent.some((message) => requestMethod(message) === 'completionItem/resolve')).toBe(false)
 
     await client.dispose()
   })
@@ -416,12 +341,7 @@ describe('CodeMirror language client', () => {
         publishFoldingRanges: vi.fn(),
         clearDocument: vi.fn(),
       }
-      const client = createCodeMirrorLanguageSessionDependencies(bridge, sink).createClient(
-        plan(),
-        descriptor(),
-        socket as unknown as WebSocket,
-        () => true,
-      )
+      const client = createCodeMirrorLanguageSessionDependencies(bridge, sink).createClient(plan(), descriptor(), socket as unknown as WebSocket, () => true)
 
       await client.start()
       await vi.advanceTimersByTimeAsync(0)
@@ -434,9 +354,7 @@ describe('CodeMirror language client', () => {
       socket.respondSemanticTokens(1, [0, 0, 3, 1, 0])
       await vi.advanceTimersByTimeAsync(0)
       expect(sink.publishSemanticTokens).toHaveBeenCalledTimes(1)
-      expect(sink.publishSemanticTokens).toHaveBeenLastCalledWith('Program.cs', 2, [
-        expect.objectContaining({ tokenType: 'method' }),
-      ])
+      expect(sink.publishSemanticTokens).toHaveBeenLastCalledWith('Program.cs', 2, [expect.objectContaining({ tokenType: 'method' })])
 
       socket.respondSemanticTokens(0, [0, 0, 3, 0, 0])
       await vi.advanceTimersByTimeAsync(0)
@@ -458,11 +376,7 @@ describe('CodeMirror language client', () => {
       publishFoldingRanges: vi.fn(),
       clearDocument: vi.fn(),
     }
-    const client = createCodeMirrorLanguageSessionDependencies(
-      bridge,
-      sink,
-      readOnlyIlOutputLanguageClientFeatureProfile,
-    ).createClient(outputPlan(), descriptor(), socket as unknown as WebSocket, () => true)
+    const client = createCodeMirrorLanguageSessionDependencies(bridge, sink, readOnlyIlOutputLanguageClientFeatureProfile).createClient(outputPlan(), descriptor(), socket as unknown as WebSocket, () => true)
 
     await client.start()
     await vi.waitFor(() => expect(sink.publishSemanticTokens).toHaveBeenCalledTimes(1))
@@ -470,29 +384,23 @@ describe('CodeMirror language client', () => {
     const initialize = socket.sent.find((message) => requestMethod(message) === 'initialize') as {
       params?: { capabilities?: { textDocument?: Record<string, unknown> } }
     }
-    expect(Object.keys(initialize.params?.capabilities?.textDocument ?? {})).toEqual([
-      'hover',
-      'semanticTokens',
-    ])
-    expect(socket.sent.map(requestMethod)).not.toEqual(
-      expect.arrayContaining([
-        'textDocument/didOpen',
-        'textDocument/didChange',
-        'textDocument/documentSymbol',
-        'textDocument/foldingRange',
-      ]),
-    )
-    expect(sink.publishSemanticTokens).toHaveBeenCalledWith('Output.il', 1, [
-      expect.objectContaining({ tokenType: 'method', line: 0, character: 0 }),
-    ])
+    expect(Object.keys(initialize.params?.capabilities?.textDocument ?? {})).toEqual(['hover', 'semanticTokens'])
+    expect(socket.sent.map(requestMethod)).not.toEqual(expect.arrayContaining(['textDocument/didOpen', 'textDocument/didChange', 'textDocument/documentSymbol', 'textDocument/foldingRange']))
+    expect(sink.publishSemanticTokens).toHaveBeenCalledWith('Output.il', 1, [expect.objectContaining({ tokenType: 'method', line: 0, character: 0 })])
     expect(await bridge.hover('Output.il', { line: 0, character: 1 })).toEqual(
-      expect.objectContaining({ contents: expect.objectContaining({ value: 'method docs' }) }),
+      expect.objectContaining({
+        contents: expect.objectContaining({ value: 'method docs' }),
+      }),
     )
 
     bridge.changeDocument('Output.il', '.class Changed {}', 2)
     expect(socket.sent.map(requestMethod)).not.toContain('textDocument/didChange')
     expect(
-      await bridge.completion('Output.il', { line: 0, character: 1, triggerKind: 1 }),
+      await bridge.completion('Output.il', {
+        line: 0,
+        character: 1,
+        triggerKind: 1,
+      }),
     ).toBeNull()
     expect(await bridge.signatureHelp('Output.il', { line: 0, character: 1 }, '(')).toBeNull()
     expect(sink.publishDiagnostics).not.toHaveBeenCalled()
@@ -511,11 +419,7 @@ class FakeWebSocket extends EventTarget {
   private readonly completionResolveProvider: boolean
   private readonly initializeResponse: 'success' | 'none'
 
-  constructor(
-    autoRespondSemanticTokens = true,
-    completionResolveProvider = false,
-    initializeResponse: 'success' | 'none' = 'success',
-  ) {
+  constructor(autoRespondSemanticTokens = true, completionResolveProvider = false, initializeResponse: 'success' | 'none' = 'success') {
     super()
     this.autoRespondSemanticTokens = autoRespondSemanticTokens
     this.completionResolveProvider = completionResolveProvider
@@ -537,7 +441,10 @@ class FakeWebSocket extends EventTarget {
           documentSymbolProvider: true,
           foldingRangeProvider: true,
           semanticTokensProvider: {
-            legend: { tokenTypes: ['variable', 'method'], tokenModifiers: ['static'] },
+            legend: {
+              tokenTypes: ['variable', 'method'],
+              tokenModifiers: ['static'],
+            },
             full: true,
           },
         },
@@ -570,7 +477,10 @@ class FakeWebSocket extends EventTarget {
         {
           name: 'Bad',
           kind: 6,
-          range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } },
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 5 },
+          },
           selectionRange: {
             start: { line: 0, character: 0 },
             end: { line: 0, character: 3 },
@@ -646,7 +556,9 @@ class FakeWebSocket extends EventTarget {
         ],
       })
     } else if (method === 'textDocument/hover') {
-      this.respond(message.id, { contents: { kind: 'markdown', value: 'method docs' } })
+      this.respond(message.id, {
+        contents: { kind: 'markdown', value: 'method docs' },
+      })
     } else if (method === 'textDocument/signatureHelp') {
       this.respond(message.id, {
         signatures: [
@@ -693,9 +605,7 @@ class FakeWebSocket extends EventTarget {
 }
 
 function requestMethod(message: unknown): unknown {
-  return typeof message === 'object' && message !== null && 'method' in message
-    ? message.method
-    : undefined
+  return typeof message === 'object' && message !== null && 'method' in message ? message.method : undefined
 }
 
 function emptySink(): CodeMirrorLanguageSink {

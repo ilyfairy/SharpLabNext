@@ -20,10 +20,7 @@ internal sealed class TemporaryFSharpWorkspace : IAsyncDisposable
         return File.WriteAllTextAsync(fullPath, text, new UTF8Encoding(false), cancellationToken);
     }
 
-    public static async Task<TemporaryFSharpWorkspace> CreateAsync(
-        string configuredRoot,
-        IReadOnlyList<ValidatedFSharpWorkspaceFile> files,
-        CancellationToken cancellationToken)
+    public static async Task<TemporaryFSharpWorkspace> CreateAsync(string configuredRoot, IReadOnlyList<ValidatedFSharpWorkspaceFile> files, CancellationToken cancellationToken)
     {
         var baseRoot = Path.GetFullPath(configuredRoot);
         Directory.CreateDirectory(baseRoot);
@@ -71,8 +68,6 @@ internal sealed class TemporaryFSharpWorkspace : IAsyncDisposable
             if (Directory.Exists(path))
                 Directory.Delete(path, recursive: true);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
     }
 }

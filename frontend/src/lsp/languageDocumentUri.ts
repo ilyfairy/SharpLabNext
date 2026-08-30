@@ -8,7 +8,7 @@
  * exception here so both editor adapters make the same protocol decision.
  */
 export function createLanguageWorkspaceUri(languageId: string, workspaceId: string): string {
-  return languageId === 'il' ? 'sharplabnext:///' : `sharplabnext://${workspaceId}/`
+  return languageId === 'il' ? 'sharplabnext:///' : `sharplabnext://${workspaceId}/`;
 }
 
 /**
@@ -17,10 +17,7 @@ export function createLanguageWorkspaceUri(languageId: string, workspaceId: stri
  * punctuation cannot change the URI structure.
  */
 export function createLanguageDocumentUri(workspaceUri: string, path: string): string {
-  const root = workspaceUri.endsWith('/') ? workspaceUri : `${workspaceUri}/`
-  const encodedPath = path
-    .split('/')
-    .map((segment) => encodeURIComponent(segment))
-    .join('/')
-  return `${root}${encodedPath}`
+  const root = workspaceUri.endsWith('/') ? workspaceUri : `${workspaceUri}/`;
+  const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+  return `${root}${encodedPath}`;
 }

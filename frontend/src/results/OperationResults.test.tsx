@@ -5,14 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { OperationEvent, OperationResult, OutputChannel, OutputManifest } from '../api/types'
 import '../App.css'
 import { parseJitAssembly } from './jitAssemblyModel'
-import {
-  AstStatus,
-  createJitOutputSourceLinks,
-  JitStatus,
-  type OperationContentView,
-  OperationResults,
-  RunStatus,
-} from './OperationResults'
+import { AstStatus, createJitOutputSourceLinks, JitStatus, type OperationContentView, OperationResults, RunStatus } from './OperationResults'
 import type { SourceAssociation } from './sourceAssociationModel'
 
 afterEach(() => {
@@ -54,37 +47,17 @@ describe('OperationResults', () => {
       error: null,
     }
 
-    render(
-      <OperationResults
-        output={outputManifest('javascript', 'JavaScript (JSIL)', 'javascript')}
-        results={[]}
-        events={[]}
-        content={content}
-        pending={false}
-        editorKind="codemirror"
-      />,
-    )
+    render(<OperationResults output={outputManifest('javascript', 'JavaScript (JSIL)', 'javascript')} results={[]} events={[]} content={content} pending={false} editorKind="codemirror" />)
 
-    expect(screen.getByRole('tab', { name: 'JavaScript (JSIL)' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
-    expect(screen.getByRole('textbox', { name: 'JavaScript output' })).toHaveTextContent(
-      'JSIL.DeclareAssembly',
-    )
+    expect(screen.getByRole('tab', { name: 'JavaScript (JSIL)' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('textbox', { name: 'JavaScript output' })).toHaveTextContent('JSIL.DeclareAssembly')
   })
 
   it('confines Ctrl+A to the focused Run output', () => {
     render(
       <>
         <span>Outside result controls</span>
-        <OperationResults
-          output={outputManifest('run', 'Run', 'runtime-output')}
-          results={[]}
-          events={[chunk(1, 'stdout', 'first line\nsecond line')]}
-          content={null}
-          pending={false}
-        />
+        <OperationResults output={outputManifest('run', 'Run', 'runtime-output')} results={[]} events={[chunk(1, 'stdout', 'first line\nsecond line')]} content={null} pending={false} />
       </>,
     )
 
@@ -133,13 +106,7 @@ describe('OperationResults', () => {
     render(
       <>
         <RunStatus result={run.resultType === 'run' ? run : undefined} />
-        <OperationResults
-          output={outputManifest('run', 'Run', 'runtime-output')}
-          results={[run]}
-          events={[chunk(1, 'stdout', 'hello\n'), chunk(2, 'stderr', 'warning\n')]}
-          content={null}
-          pending={false}
-        />
+        <OperationResults output={outputManifest('run', 'Run', 'runtime-output')} results={[run]} events={[chunk(1, 'stdout', 'hello\n'), chunk(2, 'stderr', 'warning\n')]} content={null} pending={false} />
       </>,
     )
 
@@ -176,12 +143,7 @@ describe('OperationResults', () => {
       <OperationResults
         output={outputManifest('run', 'Run', 'runtime-output')}
         results={[run]}
-        events={[
-          chunk(1, 'stdout', '\u001b[1;4;38;2;18;'),
-          chunk(2, 'stdout', '52;86m<strong>safe</strong>\u001b[0m plain\u001b[7minverse\u001b[0m'),
-          chunk(3, 'stdout', unsupported),
-          chunk(4, 'stderr', '\u001b[31merror\u001b[0m'),
-        ]}
+        events={[chunk(1, 'stdout', '\u001b[1;4;38;2;18;'), chunk(2, 'stdout', '52;86m<strong>safe</strong>\u001b[0m plain\u001b[7minverse\u001b[0m'), chunk(3, 'stdout', unsupported), chunk(4, 'stderr', '\u001b[31merror\u001b[0m')]}
         content={null}
         pending={false}
       />,
@@ -201,12 +163,10 @@ describe('OperationResults', () => {
     expect(outputDocument?.querySelector('a')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy output' }))
-    await waitFor(() =>
-      expect(writeClipboard).toHaveBeenLastCalledWith(
-        '<strong>safe</strong> plaininversecursorerror',
-      ),
-    )
-    expect(screen.getByText('error')).toHaveStyle({ color: 'rgb(197, 15, 31)' })
+    await waitFor(() => expect(writeClipboard).toHaveBeenLastCalledWith('<strong>safe</strong> plaininversecursorerror'))
+    expect(screen.getByText('error')).toHaveStyle({
+      color: 'rgb(197, 15, 31)',
+    })
   })
 
   it('keeps a successful Run status compact outside stdout', () => {
@@ -228,13 +188,7 @@ describe('OperationResults', () => {
     render(
       <>
         <RunStatus result={run.resultType === 'run' ? run : undefined} />
-        <OperationResults
-          output={outputManifest('run', 'Run', 'runtime-output')}
-          results={[run]}
-          events={[chunk(1, 'stdout', 'done\n')]}
-          content={null}
-          pending={false}
-        />
+        <OperationResults output={outputManifest('run', 'Run', 'runtime-output')} results={[run]} events={[chunk(1, 'stdout', 'done\n')]} content={null} pending={false} />
       </>,
     )
 
@@ -265,24 +219,14 @@ describe('OperationResults', () => {
     render(
       <div className="workbench" style={{ '--code-font-size': '18px' } as CSSProperties}>
         <RunStatus result={run.resultType === 'run' ? run : undefined} />
-        <OperationResults
-          output={outputManifest('run', 'Run', 'runtime-output')}
-          results={[run]}
-          events={[chunk(1, 'stdout', 'scaled output\n')]}
-          content={null}
-          pending={false}
-        />
+        <OperationResults output={outputManifest('run', 'Run', 'runtime-output')} results={[run]} events={[chunk(1, 'stdout', 'scaled output\n')]} content={null} pending={false} />
       </div>,
     )
 
     const workbench = document.querySelector('.workbench')
     expect(workbench).toHaveStyle({ '--code-font-size': '18px' })
-    expect(getComputedStyle(screen.getByText('scaled output')).fontSize).toBe(
-      'var(--code-font-size)',
-    )
-    expect(
-      getComputedStyle(screen.getByText('Exit 0').closest('.run-status') as Element).fontSize,
-    ).toBe('9px')
+    expect(getComputedStyle(screen.getByText('scaled output')).fontSize).toBe('var(--code-font-size)')
+    expect(getComputedStyle(screen.getByText('Exit 0').closest('.run-status') as Element).fontSize).toBe('9px')
   })
 
   it('scales diagnostics without exposing raw operation events as a result tab', () => {
@@ -299,7 +243,12 @@ describe('OperationResults', () => {
           severity: 'error',
           message: '; expected',
           filePath: 'Program.cs',
-          range: { startLine: 0, startCharacter: 10, endLine: 0, endCharacter: 10 },
+          range: {
+            startLine: 0,
+            startCharacter: 10,
+            endLine: 0,
+            endCharacter: 10,
+          },
           relatedInformation: [],
           tags: [],
           workspaceRevision: 1,
@@ -310,23 +259,12 @@ describe('OperationResults', () => {
 
     render(
       <div className="workbench" style={{ '--code-font-size': '18px' } as CSSProperties}>
-        <OperationResults
-          output={undefined}
-          results={[]}
-          events={[]}
-          activityEvents={[diagnostic]}
-          content={null}
-          pending={false}
-        />
+        <OperationResults output={undefined} results={[]} events={[]} activityEvents={[diagnostic]} content={null} pending={false} />
       </div>,
     )
 
-    expect(getComputedStyle(document.querySelector('.diagnostics-view') as Element).fontSize).toBe(
-      'var(--code-font-size)',
-    )
-    const diagnosticsTabStyle = getComputedStyle(
-      screen.getByRole('tab', { name: 'Diagnostics (1)' }),
-    )
+    expect(getComputedStyle(document.querySelector('.diagnostics-view') as Element).fontSize).toBe('var(--code-font-size)')
+    const diagnosticsTabStyle = getComputedStyle(screen.getByRole('tab', { name: 'Diagnostics (1)' }))
     expect(diagnosticsTabStyle.fontSize).not.toBe('var(--code-font-size)')
     expect(diagnosticsTabStyle.width).toBe('max-content')
     expect(diagnosticsTabStyle.maxWidth).toBe('none')
@@ -372,15 +310,17 @@ describe('OperationResults', () => {
   })
 
   it('keeps exception details in a compact message slot beside the Run metrics', () => {
-    const exceptionText =
-      'The operation failed with a deliberately long message for a narrow result pane.'
+    const exceptionText = 'The operation failed with a deliberately long message for a narrow result pane.'
     render(
       <RunStatus
         result={{
           resultType: 'run',
           status: 'user-exception',
           exitCode: 134,
-          exception: { typeName: 'System.InvalidOperationException', message: exceptionText },
+          exception: {
+            typeName: 'System.InvalidOperationException',
+            message: exceptionText,
+          },
           elapsed: '00:00:01.2500000',
           outputTruncated: false,
           identity: {
@@ -428,17 +368,7 @@ describe('OperationResults', () => {
       },
     }
 
-    render(
-      <OperationResults
-        output={outputManifest('run', 'Run', 'runtime-output')}
-        results={[run]}
-        events={[]}
-        content={null}
-        pending={false}
-        failure={new Error('Run finished with user-exception.')}
-        attentionKey="run-exception"
-      />,
-    )
+    render(<OperationResults output={outputManifest('run', 'Run', 'runtime-output')} results={[run]} events={[]} content={null} pending={false} failure={new Error('Run finished with user-exception.')} attentionKey="run-exception" />)
 
     const exception = screen.getByRole('alert', { name: 'Runtime exception' })
     expect(exception).toHaveTextContent('System.InvalidOperationException: outer failure')
@@ -505,12 +435,8 @@ describe('OperationResults', () => {
     )
 
     expect(screen.getByRole('tab', { name: 'IL' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('textbox', { name: 'Intermediate language' })).toHaveTextContent(
-      '.method public static void Main()',
-    )
-    expect(
-      screen.getByRole('textbox', { name: 'Intermediate language' }).closest('.cm-editor'),
-    ).not.toHaveClass('cm-lineWrapping')
+    expect(screen.getByRole('textbox', { name: 'Intermediate language' })).toHaveTextContent('.method public static void Main()')
+    expect(screen.getByRole('textbox', { name: 'Intermediate language' }).closest('.cm-editor')).not.toHaveClass('cm-lineWrapping')
     expect(screen.queryByRole('tab', { name: 'Identity' })).not.toBeInTheDocument()
   })
 
@@ -566,9 +492,7 @@ describe('OperationResults', () => {
       />,
     )
 
-    const instruction = Array.from(document.querySelectorAll<HTMLElement>('.cm-line')).find(
-      (line) => line.textContent?.includes('IL_0000'),
-    )
+    const instruction = Array.from(document.querySelectorAll<HTMLElement>('.cm-line')).find((line) => line.textContent?.includes('IL_0000'))
     if (!instruction) throw new Error('The linked IL instruction was not rendered.')
     await waitFor(() => expect(instruction).toHaveClass('source-association'))
     const editorElement = instruction.closest<HTMLElement>('.cm-editor')
@@ -576,11 +500,7 @@ describe('OperationResults', () => {
     if (!editor) throw new Error('The linked IL CodeMirror editor was not available.')
     const linkedLine = editor.state.doc.line(2)
     act(() => activateHover(editor, linkedLine.from + 2, 1))
-    await waitFor(() =>
-      expect(document.querySelector('.code-document-source-tooltip')).toHaveTextContent(
-        'Program.cs:3:5',
-      ),
-    )
+    await waitFor(() => expect(document.querySelector('.code-document-source-tooltip')).toHaveTextContent('Program.cs:3:5'))
     fireEvent.click(instruction, { button: 0, detail: 1 })
     await waitFor(() =>
       expect(onNavigate).toHaveBeenCalledWith(
@@ -590,9 +510,7 @@ describe('OperationResults', () => {
         }),
       ),
     )
-    expect(onAssociationsChange).toHaveBeenCalledWith([
-      expect.objectContaining({ documentPath: 'Program.cs' }),
-    ])
+    expect(onAssociationsChange).toHaveBeenCalledWith([expect.objectContaining({ documentPath: 'Program.cs' })])
   })
 
   it('returns from Diagnostics and re-reveals the same linked IL association', async () => {
@@ -608,8 +526,18 @@ describe('OperationResults', () => {
             linkedRanges: [
               {
                 sourceFilePath: 'Program.cs',
-                sourceRange: { startLine: 0, startCharacter: 0, endLine: 0, endCharacter: 5 },
-                outputRange: { startLine: 0, startCharacter: 0, endLine: 0, endCharacter: 1 },
+                sourceRange: {
+                  startLine: 0,
+                  startCharacter: 0,
+                  endLine: 0,
+                  endCharacter: 5,
+                },
+                outputRange: {
+                  startLine: 0,
+                  startCharacter: 0,
+                  endLine: 0,
+                  endCharacter: 1,
+                },
               },
             ],
             diagnostics: [],
@@ -632,21 +560,14 @@ describe('OperationResults', () => {
     )
     const view = render(resultView(null, 0))
     await waitFor(() => expect(onAssociationsChange).toHaveBeenCalled())
-    const associations = onAssociationsChange.mock.calls.at(-1)?.[0] as
-      | SourceAssociation[]
-      | undefined
+    const associations = onAssociationsChange.mock.calls.at(-1)?.[0] as SourceAssociation[] | undefined
     const association = associations?.[0]
     if (!association) throw new Error('Expected an IL source association.')
 
     fireEvent.click(screen.getByRole('tab', { name: 'Diagnostics' }))
-    expect(screen.getByRole('tab', { name: 'Diagnostics' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    expect(screen.getByRole('tab', { name: 'Diagnostics' })).toHaveAttribute('aria-selected', 'true')
     view.rerender(resultView(association.key, 1))
-    await waitFor(() =>
-      expect(screen.getByRole('tab', { name: 'IL' })).toHaveAttribute('aria-selected', 'true'),
-    )
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'IL' })).toHaveAttribute('aria-selected', 'true'))
     view.rerender(resultView(association.key, 2))
     expect(screen.getByRole('tab', { name: 'IL' })).toHaveAttribute('aria-selected', 'true')
   })
@@ -659,44 +580,14 @@ describe('OperationResults', () => {
       loading: false,
       error: null,
     }
-    const view = render(
-      <OperationResults
-        output={outputManifest('decompiled-csharp', 'Decompiled C#', 'csharp')}
-        results={[]}
-        events={[]}
-        content={stableContent}
-        pending={false}
-      />,
-    )
+    const view = render(<OperationResults output={outputManifest('decompiled-csharp', 'Decompiled C#', 'csharp')} results={[]} events={[]} content={stableContent} pending={false} />)
     const resultTabs = screen.getByRole('tablist', { name: 'Result views' })
-    expect(
-      within(resultTabs)
-        .getAllByRole('tab')
-        .map((tab) => tab.textContent),
-    ).toEqual(['Diagnostics', 'Decompiled C#'])
-    expect(screen.getByRole('textbox', { name: 'Decompiled C sharp' })).toHaveTextContent(
-      'PreviousResult',
-    )
+    expect(within(resultTabs).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Diagnostics', 'Decompiled C#'])
+    expect(screen.getByRole('textbox', { name: 'Decompiled C sharp' })).toHaveTextContent('PreviousResult')
 
-    view.rerender(
-      <OperationResults
-        output={outputManifest('decompiled-csharp', 'Decompiled C#', 'csharp')}
-        results={[]}
-        events={[]}
-        activityResults={[]}
-        activityEvents={[]}
-        content={stableContent}
-        pending
-      />,
-    )
-    expect(screen.getByRole('textbox', { name: 'Decompiled C sharp' })).toHaveTextContent(
-      'PreviousResult',
-    )
-    expect(
-      within(resultTabs)
-        .getAllByRole('tab')
-        .map((tab) => tab.textContent),
-    ).toEqual(['Diagnostics', 'Decompiled C#'])
+    view.rerender(<OperationResults output={outputManifest('decompiled-csharp', 'Decompiled C#', 'csharp')} results={[]} events={[]} activityResults={[]} activityEvents={[]} content={stableContent} pending />)
+    expect(screen.getByRole('textbox', { name: 'Decompiled C sharp' })).toHaveTextContent('PreviousResult')
+    expect(within(resultTabs).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Diagnostics', 'Decompiled C#'])
 
     const diagnostic: OperationEvent = {
       operationId: 'op-latest',
@@ -711,7 +602,12 @@ describe('OperationResults', () => {
           severity: 'error',
           message: '; expected',
           filePath: 'Program.cs',
-          range: { startLine: 0, startCharacter: 10, endLine: 0, endCharacter: 10 },
+          range: {
+            startLine: 0,
+            startCharacter: 10,
+            endLine: 0,
+            endCharacter: 10,
+          },
           relatedInformation: [],
           tags: [],
           workspaceRevision: 4,
@@ -732,46 +628,17 @@ describe('OperationResults', () => {
         attentionKey="workflow-latest"
       />,
     )
-    expect(screen.getByRole('tab', { name: 'Diagnostics (1)' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    expect(screen.getByRole('tab', { name: 'Diagnostics (1)' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('; expected')).toBeVisible()
     expect(screen.getByText(/Compilation failed/)).toBeVisible()
 
-    view.rerender(
-      <OperationResults
-        output={outputManifest('decompiled-csharp', 'Decompiled C#', 'csharp')}
-        results={[]}
-        events={[]}
-        activityResults={[]}
-        activityEvents={[]}
-        content={stableContent}
-        pending
-        attentionKey="workflow-latest"
-      />,
-    )
-    expect(screen.getByRole('tab', { name: 'Diagnostics' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    view.rerender(<OperationResults output={outputManifest('decompiled-csharp', 'Decompiled C#', 'csharp')} results={[]} events={[]} activityResults={[]} activityEvents={[]} content={stableContent} pending attentionKey="workflow-latest" />)
+    expect(screen.getByRole('tab', { name: 'Diagnostics' })).toHaveAttribute('aria-selected', 'true')
 
     view.rerender(
-      <OperationResults
-        output={outputManifest('decompiled-csharp', 'Decompiled C#', 'csharp')}
-        results={[]}
-        events={[]}
-        activityResults={[]}
-        activityEvents={[]}
-        content={stableContent}
-        pending={false}
-        attentionKey="workflow-latest"
-      />,
+      <OperationResults output={outputManifest('decompiled-csharp', 'Decompiled C#', 'csharp')} results={[]} events={[]} activityResults={[]} activityEvents={[]} content={stableContent} pending={false} attentionKey="workflow-latest" />,
     )
-    expect(screen.getByRole('tab', { name: 'Diagnostics' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    expect(screen.getByRole('tab', { name: 'Diagnostics' })).toHaveAttribute('aria-selected', 'true')
 
     view.rerender(
       <OperationResults
@@ -786,27 +653,14 @@ describe('OperationResults', () => {
         recoveryKey="workflow-recovered"
       />,
     )
-    expect(screen.getByRole('textbox', { name: 'Decompiled C sharp' })).toHaveTextContent(
-      'PreviousResult',
-    )
-    expect(screen.getByRole('tab', { name: 'Decompiled C#' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    expect(screen.getByRole('textbox', { name: 'Decompiled C sharp' })).toHaveTextContent('PreviousResult')
+    expect(screen.getByRole('tab', { name: 'Decompiled C#' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('preserves a manually selected Diagnostics tab across successful refreshes', () => {
     const label = 'Diagnostics'
     const tabId = 'diagnostics'
-    const view = render(
-      <OperationResults
-        output={outputManifest('decompiled-csharp', 'Decompiled C#', 'csharp')}
-        results={[]}
-        events={[]}
-        content={null}
-        pending={false}
-      />,
-    )
+    const view = render(<OperationResults output={outputManifest('decompiled-csharp', 'Decompiled C#', 'csharp')} results={[]} events={[]} content={null} pending={false} />)
 
     fireEvent.click(screen.getByRole('tab', { name: label }))
     view.rerender(
@@ -852,7 +706,12 @@ describe('OperationResults', () => {
               truncated: false,
               root: {
                 kind: 'CompilationUnit',
-                range: { startLine: 0, startCharacter: 0, endLine: 0, endCharacter: 1 },
+                range: {
+                  startLine: 0,
+                  startCharacter: 0,
+                  endLine: 0,
+                  endCharacter: 1,
+                },
                 properties: {},
                 children: [],
               },
@@ -892,9 +751,7 @@ describe('OperationResults', () => {
       />,
     )
 
-    expect(getComputedStyle(document.querySelector('.ast-layout') as Element).fontSize).toBe(
-      'var(--code-font-size)',
-    )
+    expect(getComputedStyle(document.querySelector('.ast-layout') as Element).fontSize).toBe('var(--code-font-size)')
     expect(document.querySelector('.ast-toolbar')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Expand the AST' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Collapse the AST' })).not.toBeInTheDocument()
@@ -915,7 +772,12 @@ describe('OperationResults', () => {
           truncated: true,
           root: {
             kind: 'Workspace',
-            range: { startLine: 0, startCharacter: 0, endLine: 0, endCharacter: 0 },
+            range: {
+              startLine: 0,
+              startCharacter: 0,
+              endLine: 0,
+              endCharacter: 0,
+            },
             properties: {},
             children: [],
           },
@@ -947,18 +809,36 @@ describe('OperationResults', () => {
               truncated: false,
               root: {
                 kind: 'Workspace',
-                range: { startLine: 0, startCharacter: 0, endLine: 0, endCharacter: 0 },
+                range: {
+                  startLine: 0,
+                  startCharacter: 0,
+                  endLine: 0,
+                  endCharacter: 0,
+                },
                 properties: {},
                 children: [
                   {
                     kind: 'Document',
-                    range: { startLine: 0, startCharacter: 0, endLine: 0, endCharacter: 7 },
+                    range: {
+                      startLine: 0,
+                      startCharacter: 0,
+                      endLine: 0,
+                      endCharacter: 7,
+                    },
                     properties: { path: 'Program.cs' },
                     children: [
                       {
                         kind: 'IdentifierName',
-                        range: { startLine: 0, startCharacter: 0, endLine: 0, endCharacter: 7 },
-                        properties: { type: 'IdentifierNameSyntax', isNode: 'true' },
+                        range: {
+                          startLine: 0,
+                          startCharacter: 0,
+                          endLine: 0,
+                          endCharacter: 7,
+                        },
+                        properties: {
+                          type: 'IdentifierNameSyntax',
+                          isNode: 'true',
+                        },
                         children: [],
                       },
                     ],
@@ -1022,13 +902,8 @@ describe('OperationResults', () => {
       />,
     )
 
-    expect(screen.getByRole('tab', { name: 'Generated IL' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
-    expect(
-      screen.getByRole('textbox', { name: 'Generated intermediate language' }),
-    ).toHaveTextContent('.assembly MiniLang.Program {}')
+    expect(screen.getByRole('tab', { name: 'Generated IL' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('textbox', { name: 'Generated intermediate language' })).toHaveTextContent('.assembly MiniLang.Program {}')
   })
 
   it('renders downloaded generated source documents with their declared language', () => {
@@ -1093,23 +968,14 @@ describe('OperationResults', () => {
       />,
     )
 
-    expect(screen.getByRole('tab', { name: 'Generated Source' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
-    expect(screen.getByLabelText('Generated source document')).toHaveValue(
-      `${firstRef}:Generated/First.g.cs`,
-    )
-    expect(
-      screen.getByRole('textbox', { name: 'Generated source Generated/First.g.cs' }),
-    ).toHaveTextContent('FirstGenerated')
+    expect(screen.getByRole('tab', { name: 'Generated Source' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByLabelText('Generated source document')).toHaveValue(`${firstRef}:Generated/First.g.cs`)
+    expect(screen.getByRole('textbox', { name: 'Generated source Generated/First.g.cs' })).toHaveTextContent('FirstGenerated')
 
     fireEvent.change(screen.getByLabelText('Generated source document'), {
       target: { value: `${secondRef}:Generated/Second.g.cs` },
     })
-    expect(
-      screen.getByRole('textbox', { name: 'Generated source Generated/Second.g.cs' }),
-    ).toHaveTextContent('SecondGenerated')
+    expect(screen.getByRole('textbox', { name: 'Generated source Generated/Second.g.cs' })).toHaveTextContent('SecondGenerated')
   })
 
   it('renders structured verification findings', () => {
@@ -1142,24 +1008,12 @@ describe('OperationResults', () => {
     expect(screen.getByText('stack-unbalanced')).toBeVisible()
     expect(screen.getByText('Evaluation stack is not balanced.')).toBeVisible()
     expect(screen.getByText('0x06000001')).toBeVisible()
-    expect(getComputedStyle(document.querySelector('.verification-view') as Element).fontSize).toBe(
-      'var(--code-font-size)',
-    )
-    expect(
-      getComputedStyle(document.querySelector('.verification-summary') as Element).fontSize,
-    ).toBe('9px')
+    expect(getComputedStyle(document.querySelector('.verification-view') as Element).fontSize).toBe('var(--code-font-size)')
+    expect(getComputedStyle(document.querySelector('.verification-summary') as Element).fontSize).toBe('9px')
   })
 
   it('shows JIT assembly as SSE chunks arrive before canonical content', () => {
-    render(
-      <OperationResults
-        output={outputManifest('jit-asm', 'JIT ASM', 'asm')}
-        results={[]}
-        events={[chunk(1, 'jit', 'G_M000_IG01:\n  push rbp\n')]}
-        content={null}
-        pending
-      />,
-    )
+    render(<OperationResults output={outputManifest('jit-asm', 'JIT ASM', 'asm')} results={[]} events={[chunk(1, 'jit', 'G_M000_IG01:\n  push rbp\n')]} content={null} pending />)
 
     expect(screen.getByRole('tab', { name: 'JIT' })).toHaveAttribute('aria-selected', 'true')
     const assembly = screen.getByRole('textbox', { name: 'JIT assembly' })
@@ -1198,7 +1052,12 @@ describe('OperationResults', () => {
               endLine: index,
               endCharacter: 20,
             },
-            outputRange: { startLine: 1, startCharacter: 0, endLine: 1, endCharacter: 1 },
+            outputRange: {
+              startLine: 1,
+              startCharacter: 0,
+              endLine: 1,
+              endCharacter: 1,
+            },
             precision: 'sequence-point' as const,
           },
         ],
@@ -1206,9 +1065,7 @@ describe('OperationResults', () => {
       files,
     )
 
-    expect(createJitOutputSourceLinks(sections, files).map((link) => link.startLine)).toEqual([
-      2, 5, 8,
-    ])
+    expect(createJitOutputSourceLinks(sections, files).map((link) => link.startLine)).toEqual([2, 5, 8])
   })
 
   it('shows, copies, and source-navigates all user JIT methods without a filter toolbar', async () => {
@@ -1313,16 +1170,10 @@ G_M001_IG01:
     expect(screen.queryByLabelText('JIT method')).not.toBeInTheDocument()
     expect(document.querySelector('.jit-toolbar')).not.toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'JIT assembly' })).toHaveTextContent('add eax, 2')
-    expect(screen.getByRole('textbox', { name: 'JIT assembly' })).toHaveTextContent(
-      'call MyClass:Sum',
-    )
-    expect(screen.getByRole('textbox', { name: 'JIT assembly' })).not.toHaveTextContent(
-      'JitInspectorProgram:RunAsync',
-    )
+    expect(screen.getByRole('textbox', { name: 'JIT assembly' })).toHaveTextContent('call MyClass:Sum')
+    expect(screen.getByRole('textbox', { name: 'JIT assembly' })).not.toHaveTextContent('JitInspectorProgram:RunAsync')
     const selectedJitLines = Array.from(document.querySelectorAll<HTMLElement>('.cm-line'))
-    expect(selectedJitLines.find((line) => line.textContent?.includes('add eax, 2'))).toHaveClass(
-      'source-association',
-    )
+    expect(selectedJitLines.find((line) => line.textContent?.includes('add eax, 2'))).toHaveClass('source-association')
     const sumInstruction = selectedJitLines.find((line) => line.textContent?.includes('add eax, 2'))
     if (!sumInstruction) throw new Error('The linked Sum instruction was not rendered.')
     fireEvent.click(sumInstruction, { button: 0, detail: 1 })
@@ -1340,12 +1191,8 @@ G_M001_IG01:
     expect(writeClipboard.mock.calls[0]?.[0]).toContain('add eax, 2')
     expect(writeClipboard.mock.calls[0]?.[0]).toContain('call MyClass:Sum')
     expect(writeClipboard.mock.calls[0]?.[0]).not.toContain('JitInspectorProgram:RunAsync')
-    expect(screen.getByRole('textbox', { name: 'JIT assembly' })).not.toHaveTextContent(
-      'JitInspectorProgram:RunAsync',
-    )
-    const mainMethodLine = Array.from(document.querySelectorAll<HTMLElement>('.cm-line')).find(
-      (line) => line.textContent?.includes('Program:<Main>$'),
-    )
+    expect(screen.getByRole('textbox', { name: 'JIT assembly' })).not.toHaveTextContent('JitInspectorProgram:RunAsync')
+    const mainMethodLine = Array.from(document.querySelectorAll<HTMLElement>('.cm-line')).find((line) => line.textContent?.includes('Program:<Main>$'))
     if (!mainMethodLine) throw new Error('The main JIT method line was not rendered.')
     fireEvent.click(mainMethodLine, { button: 0, detail: 1 })
     await waitFor(() =>
@@ -1414,17 +1261,15 @@ G_M000_IG01:
     )
 
     expect(screen.queryByLabelText('JIT method')).not.toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'JIT assembly' })).not.toHaveTextContent(
-      'JIT environment',
-    )
+    expect(screen.getByRole('textbox', { name: 'JIT assembly' })).not.toHaveTextContent('JIT environment')
     await waitFor(() =>
       expect(onAssociationsChange).toHaveBeenCalledWith([
-        expect.objectContaining({ label: 'Approximate JIT source: Program.cs:1' }),
+        expect.objectContaining({
+          label: 'Approximate JIT source: Program.cs:1',
+        }),
       ]),
     )
-    expect(screen.getByRole('textbox', { name: 'JIT assembly' })).not.toHaveTextContent(
-      'JIT environment: tier0-diffable',
-    )
+    expect(screen.getByRole('textbox', { name: 'JIT assembly' })).not.toHaveTextContent('JIT environment: tier0-diffable')
   })
 
   it('always presents the complete user-method result without a toolbar', () => {
@@ -1513,21 +1358,11 @@ G_M000_IG01:
       Value: null,
       Truncated: false,
     }
-    render(
-      <OperationResults
-        output={outputManifest('execution-flow', 'Execution Flow', 'flow')}
-        results={[]}
-        events={[chunk(1, 'flow', JSON.stringify(flow))]}
-        content={null}
-        pending={false}
-      />,
-    )
+    render(<OperationResults output={outputManifest('execution-flow', 'Execution Flow', 'flow')} results={[]} events={[chunk(1, 'flow', JSON.stringify(flow))]} content={null} pending={false} />)
 
     expect(screen.getByRole('tab', { name: 'Flow' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('Program.cs:1:1')).toBeVisible()
-    expect(getComputedStyle(document.querySelector('.runtime-flow-list') as Element).fontSize).toBe(
-      'var(--code-font-size)',
-    )
+    expect(getComputedStyle(document.querySelector('.runtime-flow-list') as Element).fontSize).toBe('var(--code-font-size)')
   })
 
   it('renders Explain as a structured source-range view', () => {
@@ -1573,9 +1408,7 @@ G_M000_IG01:
 
     expect(screen.getByRole('tab', { name: 'Explain' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('Class declaration: Program')).toBeVisible()
-    expect(getComputedStyle(document.querySelector('.explanation-view') as Element).fontSize).toBe(
-      'var(--code-font-size)',
-    )
+    expect(getComputedStyle(document.querySelector('.explanation-view') as Element).fontSize).toBe('var(--code-font-size)')
     expect(screen.getByText('Declares a reference type.')).toBeVisible()
     expect(screen.getByText('1:1-1:17')).toBeVisible()
   })

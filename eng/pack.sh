@@ -8,4 +8,4 @@ export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_NOLOGO=1
 export NUGET_XMLDOC_MODE=skip
 
-dotnet run "$root/eng/pack-sdk.cs" -- "$@"
+dotnet run "$root/eng/tools/pack-sdk.cs" -- "$@"

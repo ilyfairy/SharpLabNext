@@ -5,30 +5,11 @@ using SharpLabNext.WorkerHost;
 
 namespace SharpLabNext.Worker.FSharp;
 
-public sealed record FSharpReferenceSetDefinition(
-    string Id,
-    string Path,
-    string TargetFramework,
-    string FrameworkVersion,
-    string? Digest = null,
-    string? AttestationPath = null);
+public sealed record FSharpReferenceSetDefinition(string Id, string Path, string TargetFramework, string FrameworkVersion, string? Digest = null, string? AttestationPath = null);
 
-public sealed record FSharpWorkerIdentity(
-    string ReleaseId,
-    string ToolchainId,
-    string CompilerVersion,
-    string FSharpCorePackageVersion,
-    string? CompilerCommit,
-    string WorkerImageId);
+public sealed record FSharpWorkerIdentity(string ReleaseId, string ToolchainId, string CompilerVersion, string FSharpCorePackageVersion, string? CompilerCommit, string WorkerImageId);
 
-public sealed record FSharpCompilationLimits(
-    int MaxFiles,
-    int MaxFileUtf8Bytes,
-    int MaxTotalSourceUtf8Bytes,
-    int MaxDiagnostics,
-    int MaxPeBytes,
-    int MaxPdbBytes,
-    int MaxBuildMilliseconds)
+public sealed record FSharpCompilationLimits(int MaxFiles, int MaxFileUtf8Bytes, int MaxTotalSourceUtf8Bytes, int MaxDiagnostics, int MaxPeBytes, int MaxPdbBytes, int MaxBuildMilliseconds)
 {
     public static FSharpCompilationLimits Default { get; } = new(
         MaxFiles: 32,
@@ -40,29 +21,12 @@ public sealed record FSharpCompilationLimits(
         MaxBuildMilliseconds: 20_000);
 }
 
-public sealed record FSharpAstLimits(
-    int MaxNodes,
-    int MaxDepth,
-    int MaxUtf8Bytes,
-    int MaxTextPreviewCharacters)
+public sealed record FSharpAstLimits(int MaxNodes, int MaxDepth, int MaxUtf8Bytes, int MaxTextPreviewCharacters)
 {
-    public static FSharpAstLimits Default { get; } = new(
-        MaxNodes: 25_000,
-        MaxDepth: 128,
-        MaxUtf8Bytes: 4 * 1024 * 1024,
-        MaxTextPreviewCharacters: 160);
+    public static FSharpAstLimits Default { get; } = new(MaxNodes: 25_000, MaxDepth: 128, MaxUtf8Bytes: 4 * 1024 * 1024, MaxTextPreviewCharacters: 160);
 }
 
-public sealed record FSharpLspLimits(
-    int MaxSessions,
-    int SessionTtlMinutes,
-    int MaxMessageBytes,
-    int MaxCompletionItems,
-    int MaxDiagnostics,
-    int MaxHoverCharacters,
-    int MaxDocumentSymbols,
-    int MaxSemanticTokens,
-    int MaxCodeActionEdits)
+public sealed record FSharpLspLimits(int MaxSessions, int SessionTtlMinutes, int MaxMessageBytes, int MaxCompletionItems, int MaxDiagnostics, int MaxHoverCharacters, int MaxDocumentSymbols, int MaxSemanticTokens, int MaxCodeActionEdits)
 {
     public static FSharpLspLimits Default { get; } = new(
         MaxSessions: 64,
@@ -96,15 +60,8 @@ public sealed record FSharpWorkerSettings(
     {
         ArgumentNullException.ThrowIfNull(configuration);
         var worker = configuration.GetSection("FSharpWorker");
-        var identity = new FSharpWorkerIdentity(
-            Required(worker["ReleaseId"], "FSharpWorker:ReleaseId"),
-            "fsharp-stable",
-            PinnedOrConfigured(worker["CompilerVersion"], FSharpCompilerFacade.CompilerVersion),
-            PinnedOrConfigured(worker["FSharpCorePackageVersion"], FSharpCompilerFacade.FSharpCorePackageVersion),
-            worker["CompilerCommit"],
-            Required(worker["WorkerImageId"], "FSharpWorker:WorkerImageId"));
-        if (!StringComparer.Ordinal.Equals(identity.CompilerVersion, FSharpCompilerFacade.CompilerVersion) ||
-            !StringComparer.Ordinal.Equals(identity.FSharpCorePackageVersion, FSharpCompilerFacade.FSharpCorePackageVersion))
+        var identity = new FSharpWorkerIdentity(Required(worker["ReleaseId"], "FSharpWorker:ReleaseId"), "fsharp-stable", PinnedOrConfigured(worker["CompilerVersion"], FSharpCompilerFacade.CompilerVersion), PinnedOrConfigured(worker["FSharpCorePackageVersion"], FSharpCompilerFacade.FSharpCorePackageVersion), worker["CompilerCommit"], Required(worker["WorkerImageId"], "FSharpWorker:WorkerImageId"));
+        if (!StringComparer.Ordinal.Equals(identity.CompilerVersion, FSharpCompilerFacade.CompilerVersion) || !StringComparer.Ordinal.Equals(identity.FSharpCorePackageVersion, FSharpCompilerFacade.FSharpCorePackageVersion))
         {
             throw new InvalidOperationException("Configured F# compiler identity does not match the pinned adapter packages.");
         }
@@ -122,11 +79,7 @@ public sealed record FSharpWorkerSettings(
 
         var astDefaults = FSharpAstLimits.Default;
         var ast = worker.GetSection("AstLimits");
-        var astLimits = new FSharpAstLimits(
-            PositiveInt(ast["MaxNodes"], astDefaults.MaxNodes, "MaxNodes"),
-            PositiveInt(ast["MaxDepth"], astDefaults.MaxDepth, "MaxDepth"),
-            PositiveInt(ast["MaxUtf8Bytes"], astDefaults.MaxUtf8Bytes, "MaxUtf8Bytes"),
-            PositiveInt(ast["MaxTextPreviewCharacters"], astDefaults.MaxTextPreviewCharacters, "MaxTextPreviewCharacters"));
+        var astLimits = new FSharpAstLimits(PositiveInt(ast["MaxNodes"], astDefaults.MaxNodes, "MaxNodes"), PositiveInt(ast["MaxDepth"], astDefaults.MaxDepth, "MaxDepth"), PositiveInt(ast["MaxUtf8Bytes"], astDefaults.MaxUtf8Bytes, "MaxUtf8Bytes"), PositiveInt(ast["MaxTextPreviewCharacters"], astDefaults.MaxTextPreviewCharacters, "MaxTextPreviewCharacters"));
 
         var lspDefaults = FSharpLspLimits.Default;
         var lsp = worker.GetSection("LspLimits");
@@ -145,96 +98,43 @@ public sealed record FSharpWorkerSettings(
         var process = worker.GetSection("BuildProcess");
         var buildProcess = new CompilerProcessIsolationOptions(
             Boolean(process["Enabled"], processDefaults.Enabled, "BuildProcess:Enabled"),
-            PositiveInt(
-                process["MaximumConcurrentProcesses"],
-                processDefaults.MaximumConcurrentProcesses,
-                "BuildProcess:MaximumConcurrentProcesses"),
-            PositiveLong(
-                process["MaximumWorkingSetBytes"],
-                processDefaults.MaximumWorkingSetBytes,
-                "BuildProcess:MaximumWorkingSetBytes"),
-            PositiveInt(
-                process["MaximumRequestBytes"],
-                processDefaults.MaximumRequestBytes,
-                "BuildProcess:MaximumRequestBytes"),
-            PositiveInt(
-                process["MaximumResponseBytes"],
-                processDefaults.MaximumResponseBytes,
-                "BuildProcess:MaximumResponseBytes"),
-            PositiveInt(
-                process["MaximumStandardErrorBytes"],
-                processDefaults.MaximumStandardErrorBytes,
-                "BuildProcess:MaximumStandardErrorBytes"),
-            PositiveInt(
-                process["MemoryPollIntervalMilliseconds"],
-                processDefaults.MemoryPollIntervalMilliseconds,
-                "BuildProcess:MemoryPollIntervalMilliseconds"));
+            PositiveInt(process["MaximumConcurrentProcesses"], processDefaults.MaximumConcurrentProcesses, "BuildProcess:MaximumConcurrentProcesses"),
+            PositiveLong(process["MaximumWorkingSetBytes"], processDefaults.MaximumWorkingSetBytes, "BuildProcess:MaximumWorkingSetBytes"),
+            PositiveInt(process["MaximumRequestBytes"], processDefaults.MaximumRequestBytes, "BuildProcess:MaximumRequestBytes"),
+            PositiveInt(process["MaximumResponseBytes"], processDefaults.MaximumResponseBytes, "BuildProcess:MaximumResponseBytes"),
+            PositiveInt(process["MaximumStandardErrorBytes"], processDefaults.MaximumStandardErrorBytes, "BuildProcess:MaximumStandardErrorBytes"),
+            PositiveInt(process["MemoryPollIntervalMilliseconds"], processDefaults.MemoryPollIntervalMilliseconds, "BuildProcess:MemoryPollIntervalMilliseconds"));
         buildProcess.Validate();
 
         var envelope = worker.GetSection("DevelopmentArtifactEnvelope");
-        var envelopeOptions = new FSharpDevelopmentArtifactEnvelopeOptions(
-            bool.TryParse(envelope["Enabled"], out var enabled) && enabled,
-            PositiveInt(envelope["MaxBytes"], FSharpDevelopmentArtifactEnvelopeOptions.Default.MaxBytes, "MaxBytes"));
+        var envelopeOptions = new FSharpDevelopmentArtifactEnvelopeOptions(bool.TryParse(envelope["Enabled"], out var enabled) && enabled, PositiveInt(envelope["MaxBytes"], FSharpDevelopmentArtifactEnvelopeOptions.Default.MaxBytes, "MaxBytes"));
         var artifactPublishing = CreateArtifactPublishingOptions(configuration, worker);
         var workRoot = worker["WorkRoot"];
         if (string.IsNullOrWhiteSpace(workRoot))
             workRoot = Path.Combine(Path.GetTempPath(), "SharpLabNext", "fsharp-worker");
 
-        var referenceSets = configuration.GetSection("ReferenceSets")
-            .GetChildren()
-            .Select(section => new FSharpReferenceSetDefinition(
-                section.Key,
-                Required(section["Path"], $"ReferenceSets:{section.Key}:Path"),
-                Required(section["TargetFramework"], $"ReferenceSets:{section.Key}:TargetFramework"),
-                Required(section["FrameworkVersion"], $"ReferenceSets:{section.Key}:FrameworkVersion"),
-                section["Digest"],
-                section["AttestationPath"]))
-            .ToArray();
+        var referenceSets = configuration.GetSection("ReferenceSets").GetChildren().Select(section => new FSharpReferenceSetDefinition(section.Key, Required(section["Path"], $"ReferenceSets:{section.Key}:Path"), Required(section["TargetFramework"], $"ReferenceSets:{section.Key}:TargetFramework"), Required(section["FrameworkVersion"], $"ReferenceSets:{section.Key}:FrameworkVersion"), section["Digest"], section["AttestationPath"])).ToArray();
 
-        return new FSharpWorkerSettings(
-            identity,
-            compilationLimits,
-            astLimits,
-            lspLimits,
-            buildProcess,
-            envelopeOptions,
-            artifactPublishing,
-            Path.GetFullPath(Environment.ExpandEnvironmentVariables(workRoot)),
-            referenceSets);
+        return new FSharpWorkerSettings(identity, compilationLimits, astLimits, lspLimits, buildProcess, envelopeOptions, artifactPublishing, Path.GetFullPath(Environment.ExpandEnvironmentVariables(workRoot)), referenceSets);
     }
 
     private static string PinnedOrConfigured(string? value, string pinned) =>
         string.IsNullOrWhiteSpace(value) || string.Equals(value, "__pinned__", StringComparison.Ordinal)
-            ? pinned
-            : value;
+            ? pinned : value;
 
-    private static ArtifactBundlePublishingOptions CreateArtifactPublishingOptions(
-        IConfiguration configuration,
-        IConfigurationSection worker)
+    private static ArtifactBundlePublishingOptions CreateArtifactPublishingOptions(IConfiguration configuration, IConfigurationSection worker)
     {
         var baseUrl = configuration["ArtifactStore:BaseUrl"] ?? "http://artifact-store:8080";
-        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseAddress) ||
-            (!string.Equals(baseAddress.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
-             !string.Equals(baseAddress.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) ||
-            !string.IsNullOrEmpty(baseAddress.UserInfo) ||
-            !string.IsNullOrEmpty(baseAddress.Query) ||
-            !string.IsNullOrEmpty(baseAddress.Fragment))
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseAddress) || (!string.Equals(baseAddress.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) && !string.Equals(baseAddress.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) || !string.IsNullOrEmpty(baseAddress.UserInfo) || !string.IsNullOrEmpty(baseAddress.Query) || !string.IsNullOrEmpty(baseAddress.Fragment))
         {
-            throw new InvalidOperationException(
-                "Configuration value 'ArtifactStore:BaseUrl' must be an absolute HTTP(S) URL without credentials, query, or fragment.");
+            throw new InvalidOperationException("Configuration value 'ArtifactStore:BaseUrl' must be an absolute HTTP(S) URL without credentials, query, or fragment.");
         }
-        return new ArtifactBundlePublishingOptions(
-            baseAddress,
-            TimeSpan.FromMinutes(PositiveInt(
-                worker["ArtifactTimeToLiveMinutes"],
-                60,
-                "ArtifactTimeToLiveMinutes")));
+        return new ArtifactBundlePublishingOptions(baseAddress, TimeSpan.FromMinutes(PositiveInt(worker["ArtifactTimeToLiveMinutes"], 60, "ArtifactTimeToLiveMinutes")));
     }
 
     private static string Required(string? value, string key) =>
         !string.IsNullOrWhiteSpace(value)
-            ? value
-            : throw new InvalidOperationException($"Configuration value '{key}' is required.");
+            ? value : throw new InvalidOperationException($"Configuration value '{key}' is required.");
 
     private static int PositiveInt(string? value, int fallback, string key)
     {

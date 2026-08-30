@@ -27,22 +27,14 @@ public sealed class FSharpBuildServiceTests
             {
                 File.Copy(Path.Combine(source, fileName), Path.Combine(referenceRoot, fileName));
             }
-            File.Copy(
-                typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location,
-                Path.Combine(referenceRoot, "SharpLab.Runtime.dll"));
-            using var provider = new FSharpReferenceSetProvider(
-                [new FSharpReferenceSetDefinition("net10-ref", referenceRoot, "net10.0", FSharpTestSettings.Net10Version)]);
+            File.Copy(typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location, Path.Combine(referenceRoot, "SharpLab.Runtime.dll"));
+            using var provider = new FSharpReferenceSetProvider([new FSharpReferenceSetDefinition("net10-ref", referenceRoot, "net10.0", FSharpTestSettings.Net10Version)]);
 
             var loaded = await provider.GetAsync("net10-ref", TestContext.Current.CancellationToken);
 
-            var attestedPaths = Directory.EnumerateFiles(referenceRoot, "*.dll", SearchOption.TopDirectoryOnly)
-                .Order(StringComparer.Ordinal)
-                .ToArray();
+            var attestedPaths = Directory.EnumerateFiles(referenceRoot, "*.dll", SearchOption.TopDirectoryOnly).Order(StringComparer.Ordinal).ToArray();
             Assert.Equal(attestedPaths, loaded.ReferenceAssemblyPaths);
-            Assert.DoesNotContain(
-                typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location,
-                loaded.ReferenceAssemblyPaths,
-                StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(typeof(SharpLab.Runtime.RuntimeServices).Assembly.Location, loaded.ReferenceAssemblyPaths, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
@@ -56,21 +48,11 @@ public sealed class FSharpBuildServiceTests
         var root = FSharpTestSettings.CreateRoot();
         try
         {
-            var execution = await CreateService(root).ExecuteAsync(
-                CreateRequest(
-                    BuildTarget.CompileCheck,
-                    [new WorkspaceFile(
-                        "Program.fs",
-                        1,
-                        "module Program\nInspect.Heap(box 42)\n")],
-                    ["Program.fs"],
-                    outputKind: BuildOutputKind.Library),
-                TestContext.Current.CancellationToken);
+            var execution = await CreateService(root).ExecuteAsync(CreateRequest(BuildTarget.CompileCheck, [new WorkspaceFile("Program.fs", 1, "module Program\nInspect.Heap(box 42)\n")], ["Program.fs"], outputKind: BuildOutputKind.Library), TestContext.Current.CancellationToken);
 
             var result = Assert.IsType<CompilationCheckResult>(execution.Result);
             Assert.True(result.CompilationSucceeded);
-            Assert.DoesNotContain(result.Diagnostics, static diagnostic =>
-                diagnostic.Severity == DiagnosticSeverity.Error);
+            Assert.DoesNotContain(result.Diagnostics, static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
         }
         finally
         {
@@ -88,14 +70,8 @@ public sealed class FSharpBuildServiceTests
             var request = CreateRequest(
                 BuildTarget.Artifact,
                 [
-                    new WorkspaceFile(
-                        "Domain/Message.fs",
-                        1,
-                        "namespace Demo\nmodule Message =\n    let text = \"Hello from F#\"\n"),
-                    new WorkspaceFile(
-                        "Program.fs",
-                        2,
-                        "module Program\nopen System\nopen Demo\n[<EntryPoint>]\nlet main _ = Console.WriteLine(Message.text); 0\n")
+                    new WorkspaceFile("Domain/Message.fs", 1, "namespace Demo\nmodule Message =\n    let text = \"Hello from F#\"\n"),
+                    new WorkspaceFile("Program.fs", 2, "module Program\nopen System\nopen Demo\n[<EntryPoint>]\nlet main _ = Console.WriteLine(Message.text); 0\n")
                 ],
                 ["Domain/Message.fs", "Program.fs"]);
 
@@ -113,14 +89,10 @@ public sealed class FSharpBuildServiceTests
             Assert.Equal(FSharpCompilerFacade.FSharpCorePackageVersion, execution.Artifact.Manifest.Metadata!["fsharpCorePackageVersion"]);
             Assert.Equal("bundled-support-assembly", execution.Artifact.Manifest.Metadata!["fsharpCoreLinkMode"]);
             Assert.Contains("FSharp.Core", GetAssemblyReferences(execution.Artifact.PeImage));
-            var supportAssembly = Assert.Single(
-                execution.Artifact.Manifest.Files,
-                static file => file.Role == "support-assembly");
+            var supportAssembly = Assert.Single(execution.Artifact.Manifest.Files, static file => file.Role == "support-assembly");
             Assert.Equal("FSharp.Core.dll", supportAssembly.Path);
             Assert.Equal(execution.Artifact.FSharpCoreImage.LongLength, supportAssembly.Size);
-            Assert.Equal(
-                ContentIdentity.Compute(execution.Artifact.FSharpCoreImage).Value,
-                supportAssembly.Digest);
+            Assert.Equal(ContentIdentity.Compute(execution.Artifact.FSharpCoreImage).Value, supportAssembly.Digest);
             var tamperedPe = execution.Artifact.PeImage.ToArray();
             tamperedPe[^1] ^= 0xff;
             var tampered = execution.Artifact with { PeImage = tamperedPe };
@@ -141,13 +113,7 @@ public sealed class FSharpBuildServiceTests
         try
         {
             var service = CreateService(root);
-            var request = CreateRequest(
-                BuildTarget.CompileCheck,
-                [new WorkspaceFile("Program.fs", 5, "module Program\nlet value: int = \"text\"\n")],
-                ["Program.fs"],
-                revision: 21,
-                selectionRevision: 8,
-                outputKind: BuildOutputKind.Library);
+            var request = CreateRequest(BuildTarget.CompileCheck, [new WorkspaceFile("Program.fs", 5, "module Program\nlet value: int = \"text\"\n")], ["Program.fs"], revision: 21, selectionRevision: 8, outputKind: BuildOutputKind.Library);
 
             var execution = await service.ExecuteAsync(request, TestContext.Current.CancellationToken);
 
@@ -175,12 +141,7 @@ public sealed class FSharpBuildServiceTests
         try
         {
             var service = CreateService(root);
-            var request = CreateRequest(
-                BuildTarget.Artifact,
-                [new WorkspaceFile("Program.fs", 1, "module Program\nlet value = System.Int128.One\n")],
-                ["Program.fs"],
-                outputKind: BuildOutputKind.Library,
-                referenceSetId: "net11-preview-ref");
+            var request = CreateRequest(BuildTarget.Artifact, [new WorkspaceFile("Program.fs", 1, "module Program\nlet value = System.Int128.One\n")], ["Program.fs"], outputKind: BuildOutputKind.Library, referenceSetId: "net11-preview-ref");
 
             var execution = await service.ExecuteAsync(request, TestContext.Current.CancellationToken);
 
@@ -189,8 +150,7 @@ public sealed class FSharpBuildServiceTests
             Assert.NotNull(execution.Artifact);
             Assert.Equal("net11-preview-ref", execution.Artifact.ReferenceSetId);
             Assert.Equal("net11.0", execution.Artifact.TargetFramework);
-            Assert.Equal(FSharpTestSettings.Net11PreviewVersion,
-                Assert.Single(execution.Artifact.Manifest.RuntimeRequirement.Frameworks).MinimumVersion);
+            Assert.Equal(FSharpTestSettings.Net11PreviewVersion, Assert.Single(execution.Artifact.Manifest.RuntimeRequirement.Frameworks).MinimumVersion);
         }
         finally
         {
@@ -205,12 +165,7 @@ public sealed class FSharpBuildServiceTests
         try
         {
             var service = CreateService(root);
-            var request = CreateRequest(
-                BuildTarget.CompileCheck,
-                [new WorkspaceFile("Program.fs", 1, "module Program\nlet value: int = System.Int128.One\n")],
-                ["Program.fs"],
-                outputKind: BuildOutputKind.Library,
-                referenceSetId: "net11-preview-ref");
+            var request = CreateRequest(BuildTarget.CompileCheck, [new WorkspaceFile("Program.fs", 1, "module Program\nlet value: int = System.Int128.One\n")], ["Program.fs"], outputKind: BuildOutputKind.Library, referenceSetId: "net11-preview-ref");
 
             var execution = await service.ExecuteAsync(request, TestContext.Current.CancellationToken);
 
@@ -237,21 +192,11 @@ public sealed class FSharpBuildServiceTests
                 new("Definitions.fs", 1, "namespace Demo\ntype Message = { Text: string }\n"),
                 new("Use.fs", 1, "namespace Demo\nmodule Use =\n    let value: Message = { Text = \"ok\" }\n")
             ];
-            var correct = CreateRequest(
-                BuildTarget.CompileCheck,
-                files,
-                ["Definitions.fs", "Use.fs"],
-                outputKind: BuildOutputKind.Library);
-            var reversed = CreateRequest(
-                BuildTarget.CompileCheck,
-                files,
-                ["Use.fs", "Definitions.fs"],
-                outputKind: BuildOutputKind.Library);
+            var correct = CreateRequest(BuildTarget.CompileCheck, files, ["Definitions.fs", "Use.fs"], outputKind: BuildOutputKind.Library);
+            var reversed = CreateRequest(BuildTarget.CompileCheck, files, ["Use.fs", "Definitions.fs"], outputKind: BuildOutputKind.Library);
 
-            var correctResult = Assert.IsType<CompilationCheckResult>(
-                (await service.ExecuteAsync(correct, TestContext.Current.CancellationToken)).Result);
-            var reversedResult = Assert.IsType<CompilationCheckResult>(
-                (await service.ExecuteAsync(reversed, TestContext.Current.CancellationToken)).Result);
+            var correctResult = Assert.IsType<CompilationCheckResult>((await service.ExecuteAsync(correct, TestContext.Current.CancellationToken)).Result);
+            var reversedResult = Assert.IsType<CompilationCheckResult>((await service.ExecuteAsync(reversed, TestContext.Current.CancellationToken)).Result);
 
             Assert.True(correctResult.CompilationSucceeded);
             Assert.False(reversedResult.CompilationSucceeded);
@@ -279,8 +224,7 @@ public sealed class FSharpBuildServiceTests
                 ["First.fs", "Second.fs"],
                 outputKind: BuildOutputKind.Library);
 
-            var result = Assert.IsType<AstResult>(
-                (await service.ExecuteAsync(request, TestContext.Current.CancellationToken)).Result);
+            var result = Assert.IsType<AstResult>((await service.ExecuteAsync(request, TestContext.Current.CancellationToken)).Result);
 
             Assert.Equal("Workspace", result.Document.Root.Kind);
             Assert.Equal("fsharp-stable", result.Identity?.ToolchainId);
@@ -305,14 +249,9 @@ public sealed class FSharpBuildServiceTests
         try
         {
             var service = CreateService(root);
-            var request = CreateRequest(
-                BuildTarget.CompileCheck,
-                [new WorkspaceFile("Program.fs", 1, "#load \"outside.fs\"\nmodule Program\n")],
-                ["Program.fs"],
-                outputKind: BuildOutputKind.Library);
+            var request = CreateRequest(BuildTarget.CompileCheck, [new WorkspaceFile("Program.fs", 1, "#load \"outside.fs\"\nmodule Program\n")], ["Program.fs"], outputKind: BuildOutputKind.Library);
 
-            var exception = await Assert.ThrowsAsync<FSharpBuildRequestValidationException>(
-                () => service.ExecuteAsync(request, TestContext.Current.CancellationToken));
+            var exception = await Assert.ThrowsAsync<FSharpBuildRequestValidationException>(() => service.ExecuteAsync(request, TestContext.Current.CancellationToken));
             Assert.Contains("#load", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Empty(Directory.EnumerateFileSystemEntries(root));
         }
@@ -330,14 +269,9 @@ public sealed class FSharpBuildServiceTests
         var root = FSharpTestSettings.CreateRoot();
         try
         {
-            var request = CreateRequest(
-                BuildTarget.CompileCheck,
-                [new WorkspaceFile("Program.fs", 1, "module Program\nlet value = 42\n")],
-                ["Program.fs"],
-                outputKind: outputKind);
+            var request = CreateRequest(BuildTarget.CompileCheck, [new WorkspaceFile("Program.fs", 1, "module Program\nlet value = 42\n")], ["Program.fs"], outputKind: outputKind);
 
-            await Assert.ThrowsAsync<FSharpBuildRequestValidationException>(() =>
-                CreateService(root).ExecuteAsync(request, TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<FSharpBuildRequestValidationException>(() => CreateService(root).ExecuteAsync(request, TestContext.Current.CancellationToken));
 
             Assert.Empty(Directory.EnumerateFileSystemEntries(root));
         }
@@ -350,51 +284,14 @@ public sealed class FSharpBuildServiceTests
     private static FSharpBuildService CreateService(string root, FSharpAstLimits? astLimits = null)
     {
         var settings = FSharpTestSettings.Create(root, astLimits);
-        return new FSharpBuildService(
-            new FSharpReferenceSetProvider(settings.ReferenceSets),
-            new FSharpCompilerFacade(),
-            settings);
+        return new FSharpBuildService(new FSharpReferenceSetProvider(settings.ReferenceSets), new FSharpCompilerFacade(), settings);
     }
 
-    internal static BuildRequest CreateRequest(
-        BuildTarget target,
-        IReadOnlyList<WorkspaceFile> files,
-        IReadOnlyList<string> sourceOrder,
-        long revision = 1,
-        long selectionRevision = 1,
-        BuildOutputKind outputKind = BuildOutputKind.Console,
-        string referenceSetId = "net10-ref")
+    internal static BuildRequest CreateRequest(BuildTarget target, IReadOnlyList<WorkspaceFile> files, IReadOnlyList<string> sourceOrder, long revision = 1, long selectionRevision = 1, BuildOutputKind outputKind = BuildOutputKind.Console, string referenceSetId = "net10-ref")
     {
-        var options = new BuildOptions(
-            BuildConfiguration.Release,
-            Optimize: true,
-            outputKind,
-            AllowUnsafe: false,
-            EmitPortablePdb: true,
-            NullableContextMode.Disable,
-            LanguageVersion: "9.0",
-            PreprocessorSymbols: ["SHARPLABNEXT"],
-            CheckOverflow: true);
-        var workspace = new WorkspaceSnapshot(
-            ContractSchemaVersions.WorkspaceSnapshot,
-            revision,
-            selectionRevision,
-            "fsharp",
-            files,
-            files[^1].Path,
-            sourceOrder,
-            referenceSetId,
-            options);
-        return new BuildRequest(
-            $"request-{Guid.NewGuid():N}",
-            $"idempotency-{Guid.NewGuid():N}",
-            "pipeline-test",
-            "fsharp-stable",
-            referenceSetId,
-            workspace,
-            DateTimeOffset.UtcNow.AddMinutes(1),
-            options,
-            target);
+        var options = new BuildOptions(BuildConfiguration.Release, Optimize: true, outputKind, AllowUnsafe: false, EmitPortablePdb: true, NullableContextMode.Disable, LanguageVersion: "9.0", PreprocessorSymbols: ["SHARPLABNEXT"], CheckOverflow: true);
+        var workspace = new WorkspaceSnapshot(ContractSchemaVersions.WorkspaceSnapshot, revision, selectionRevision, "fsharp", files, files[^1].Path, sourceOrder, referenceSetId, options);
+        return new BuildRequest($"request-{Guid.NewGuid():N}", $"idempotency-{Guid.NewGuid():N}", "pipeline-test", "fsharp-stable", referenceSetId, workspace, DateTimeOffset.UtcNow.AddMinutes(1), options, target);
     }
 
     private static IEnumerable<AstNode> Flatten(AstNode root)
@@ -414,8 +311,6 @@ public sealed class FSharpBuildServiceTests
         using var stream = new MemoryStream(peImage, writable: false);
         using var peReader = new PEReader(stream);
         var reader = peReader.GetMetadataReader();
-        return reader.AssemblyReferences
-            .Select(handle => reader.GetString(reader.GetAssemblyReference(handle).Name))
-            .ToArray();
+        return reader.AssemblyReferences.Select(handle => reader.GetString(reader.GetAssemblyReference(handle).Name)).ToArray();
     }
 }

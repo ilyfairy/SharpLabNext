@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { parseMonoFrameLog, runMonoSmokes, runRuntimeMonoSmokeCli } from './runtime-mono-smoke.mjs'
+import { parseMonoFrameLog, runMonoSmokes, runRuntimeMonoSmokeCli } from '../smoke/runtime-mono-smoke.mjs'
 
 const profileId = 'mono-6.12-linux-x64'
 const methodFilter = 'SharpLabNext.RuntimeCapabilityProbe.Program.MultipleSequencePoints'

@@ -99,10 +99,7 @@ public static class ContractJson
     /// Reads a named JSON property at a business protocol boundary. Property
     /// names are exact; dynamic dictionary keys are never normalized.
     /// </summary>
-    public static bool TryGetProperty(
-        JsonElement element,
-        string propertyName,
-        out JsonElement value)
+    public static bool TryGetProperty(JsonElement element, string propertyName, out JsonElement value)
     {
         if (element.ValueKind != JsonValueKind.Object)
         {
@@ -116,8 +113,7 @@ public static class ContractJson
     public static string? GetString(JsonElement element, string propertyName) =>
         TryGetProperty(element, propertyName, out var value) &&
         value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
+            ? value.GetString() : null;
 }
 
 /// <summary>
@@ -160,10 +156,7 @@ internal sealed class OperationEventPayloadJsonConverter : JsonConverter<Operati
     private static readonly Dictionary<Type, string> Names =
         Types.ToDictionary(static pair => pair.Value, static pair => pair.Key);
 
-    public override OperationEventPayload Read(
-        ref Utf8JsonReader reader,
-        Type typeToConvert,
-        JsonSerializerOptions options)
+    public override OperationEventPayload Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         using var document = JsonDocument.ParseValue(ref reader);
         var root = document.RootElement;
@@ -174,10 +167,7 @@ internal sealed class OperationEventPayloadJsonConverter : JsonConverter<Operati
         // particular, an older `kind` member must not silently turn into an
         // empty base payload. Unknown *values* remain forward-compatible and
         // intentionally use the ignorable base payload below.
-        ContractJsonDiscriminatorValidation.RejectLegacyDiscriminatorAlias(
-            root,
-            "Kind",
-            "operation event payload");
+        ContractJsonDiscriminatorValidation.RejectLegacyDiscriminatorAlias(root, "Kind", "operation event payload");
         if (!root.TryGetProperty("Kind", out var kind) ||
             kind.ValueKind != JsonValueKind.String ||
             kind.GetString() is not { } discriminator)
@@ -190,21 +180,15 @@ internal sealed class OperationEventPayloadJsonConverter : JsonConverter<Operati
 
         // `Kind` is the envelope discriminator, not a member of the concrete
         // payload record. Remove it before strict unmapped-member validation.
-        var payload = JsonNode.Parse(root.GetRawText())?.AsObject()
-            ?? throw new JsonException("Operation event payload is empty.");
+        var payload = JsonNode.Parse(root.GetRawText())?.AsObject() ?? throw new JsonException("Operation event payload is empty.");
         payload.Remove("Kind");
-        return (OperationEventPayload?)JsonSerializer.Deserialize(payload, type, options)
-            ?? throw new JsonException("Operation event payload is empty.");
+        return (OperationEventPayload?)JsonSerializer.Deserialize(payload, type, options) ?? throw new JsonException("Operation event payload is empty.");
     }
 
-    public override void Write(
-        Utf8JsonWriter writer,
-        OperationEventPayload value,
-        JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, OperationEventPayload value, JsonSerializerOptions options)
     {
         ArgumentNullException.ThrowIfNull(value);
-        var node = JsonSerializer.SerializeToNode(value, value.GetType(), options) as JsonObject
-            ?? throw new JsonException("Operation event payload must serialize as an object.");
+        var node = JsonSerializer.SerializeToNode(value, value.GetType(), options) as JsonObject ?? throw new JsonException("Operation event payload must serialize as an object.");
         if (Names.TryGetValue(value.GetType(), out var discriminator))
             node[GetWireName(options, "Kind")] = discriminator;
         node.WriteTo(writer, options);
@@ -236,10 +220,7 @@ internal sealed class OperationResultJsonConverter : JsonConverter<OperationResu
     private static readonly Dictionary<Type, string> Names =
         Types.ToDictionary(static pair => pair.Value, static pair => pair.Key);
 
-    public override OperationResult Read(
-        ref Utf8JsonReader reader,
-        Type typeToConvert,
-        JsonSerializerOptions options)
+    public override OperationResult Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         using var document = JsonDocument.ParseValue(ref reader);
         var root = document.RootElement;
@@ -249,10 +230,7 @@ internal sealed class OperationResultJsonConverter : JsonConverter<OperationResu
         // Keep unknown PascalCase values forward-compatible, but reject a
         // missing discriminator so legacy lower-camel `resultType` payloads
         // cannot be accepted as an empty result.
-        ContractJsonDiscriminatorValidation.RejectLegacyDiscriminatorAlias(
-            root,
-            "ResultType",
-            "operation result");
+        ContractJsonDiscriminatorValidation.RejectLegacyDiscriminatorAlias(root, "ResultType", "operation result");
         if (!root.TryGetProperty("ResultType", out var resultType) ||
             resultType.ValueKind != JsonValueKind.String ||
             resultType.GetString() is not { } discriminator)
@@ -265,21 +243,15 @@ internal sealed class OperationResultJsonConverter : JsonConverter<OperationResu
 
         // `ResultType` belongs to the polymorphic envelope, not the concrete
         // result record. Remove it before strict unmapped-member validation.
-        var result = JsonNode.Parse(root.GetRawText())?.AsObject()
-            ?? throw new JsonException("Operation result is empty.");
+        var result = JsonNode.Parse(root.GetRawText())?.AsObject() ?? throw new JsonException("Operation result is empty.");
         result.Remove("ResultType");
-        return (OperationResult?)JsonSerializer.Deserialize(result, type, options)
-            ?? throw new JsonException("Operation result is empty.");
+        return (OperationResult?)JsonSerializer.Deserialize(result, type, options) ?? throw new JsonException("Operation result is empty.");
     }
 
-    public override void Write(
-        Utf8JsonWriter writer,
-        OperationResult value,
-        JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, OperationResult value, JsonSerializerOptions options)
     {
         ArgumentNullException.ThrowIfNull(value);
-        var node = JsonSerializer.SerializeToNode(value, value.GetType(), options) as JsonObject
-            ?? throw new JsonException("Operation result must serialize as an object.");
+        var node = JsonSerializer.SerializeToNode(value, value.GetType(), options) as JsonObject ?? throw new JsonException("Operation result must serialize as an object.");
         if (Names.TryGetValue(value.GetType(), out var discriminator))
             node[GetWireName(options, "ResultType")] = discriminator;
         node.WriteTo(writer, options);
@@ -299,18 +271,13 @@ internal static class ContractJsonDiscriminatorValidation
     /// containing both <c>ResultType</c> and <c>resultType</c> could bypass the
     /// strict DTO converter simply by taking the unknown-value fallback path.
     /// </summary>
-    public static void RejectLegacyDiscriminatorAlias(
-        JsonElement root,
-        string wireName,
-        string contractName)
+    public static void RejectLegacyDiscriminatorAlias(JsonElement root, string wireName, string contractName)
     {
         foreach (var property in root.EnumerateObject())
         {
-            if (!StringComparer.Ordinal.Equals(property.Name, wireName) &&
-                StringComparer.OrdinalIgnoreCase.Equals(property.Name, wireName))
+            if (!StringComparer.Ordinal.Equals(property.Name, wireName) && StringComparer.OrdinalIgnoreCase.Equals(property.Name, wireName))
             {
-                throw new JsonException(
-                    $"{contractName} requires the PascalCase {wireName} discriminator.");
+                throw new JsonException($"{contractName} requires the PascalCase {wireName} discriminator.");
             }
         }
     }
@@ -319,20 +286,11 @@ internal static class ContractJsonDiscriminatorValidation
 public sealed class KebabCaseJsonStringEnumConverter<TEnum> : JsonConverter<TEnum>
     where TEnum : struct, Enum
 {
-    private static readonly Dictionary<TEnum, string> NamesByValue = typeof(TEnum)
-        .GetFields(BindingFlags.Public | BindingFlags.Static)
-        .ToDictionary(
-            static field => (TEnum)field.GetValue(null)!,
-            static field => field.GetCustomAttribute<EnumMemberAttribute>()?.Value
-                ?? JsonNamingPolicy.KebabCaseLower.ConvertName(field.Name));
+    private static readonly Dictionary<TEnum, string> NamesByValue = typeof(TEnum).GetFields(BindingFlags.Public | BindingFlags.Static).ToDictionary(static field => (TEnum)field.GetValue(null)!, static field => field.GetCustomAttribute<EnumMemberAttribute>()?.Value ?? JsonNamingPolicy.KebabCaseLower.ConvertName(field.Name));
 
-    private static readonly Dictionary<string, TEnum> ValuesByName = NamesByValue
-        .ToDictionary(static pair => pair.Value, static pair => pair.Key, StringComparer.Ordinal);
+    private static readonly Dictionary<string, TEnum> ValuesByName = NamesByValue.ToDictionary(static pair => pair.Value, static pair => pair.Key, StringComparer.Ordinal);
 
-    public override TEnum Read(
-        ref Utf8JsonReader reader,
-        Type typeToConvert,
-        JsonSerializerOptions options)
+    public override TEnum Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType != JsonTokenType.String ||
             reader.GetString() is not { } name ||
@@ -344,10 +302,7 @@ public sealed class KebabCaseJsonStringEnumConverter<TEnum> : JsonConverter<TEnu
         return value;
     }
 
-    public override void Write(
-        Utf8JsonWriter writer,
-        TEnum value,
-        JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, TEnum value, JsonSerializerOptions options)
     {
         if (!NamesByValue.TryGetValue(value, out var name))
             throw new JsonException($"The value is not a defined {typeof(TEnum).Name} member.");

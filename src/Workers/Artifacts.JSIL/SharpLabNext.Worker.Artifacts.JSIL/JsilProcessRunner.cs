@@ -4,54 +4,28 @@ using SharpLabNext.ArtifactWorker.Sdk;
 
 namespace SharpLabNext.Worker.Artifacts.JSIL;
 
-internal sealed record JsilTranslationResult(
-    bool Succeeded,
-    string? JavaScript,
-    string? PublicMessage,
-    string? Detail);
+internal sealed record JsilTranslationResult(bool Succeeded, string? JavaScript, string? PublicMessage, string? Detail);
 
 internal interface IJsilProcessRunner
 {
-    Task<JsilTranslationResult> TranslateAsync(
-        JsilMaterializedArtifact artifact,
-        int maximumCharacters,
-        DateTimeOffset deadlineUtc,
-        CancellationToken cancellationToken);
+    Task<JsilTranslationResult> TranslateAsync(JsilMaterializedArtifact artifact, int maximumCharacters, DateTimeOffset deadlineUtc, CancellationToken cancellationToken);
 }
 
-internal sealed class JsilProcessRunner(
-    JsilWorkerSettings settings,
-    ArtifactWorkerCapabilityManifest capabilityManifest) : IJsilProcessRunner
+internal sealed class JsilProcessRunner(JsilWorkerSettings settings, ArtifactWorkerCapabilityManifest capabilityManifest) : IJsilProcessRunner
 {
-    public async Task<JsilTranslationResult> TranslateAsync(
-        JsilMaterializedArtifact artifact,
-        int maximumCharacters,
-        DateTimeOffset deadlineUtc,
-        CancellationToken cancellationToken)
+    public async Task<JsilTranslationResult> TranslateAsync(JsilMaterializedArtifact artifact, int maximumCharacters, DateTimeOffset deadlineUtc, CancellationToken cancellationToken)
     {
         var outputDirectory = Path.Combine(artifact.RootPath, "javascript");
         Directory.CreateDirectory(outputDirectory);
-        using var process = new Process
-        {
-            StartInfo = CreateStartInfo(artifact.AssemblyPath, outputDirectory),
-            EnableRaisingEvents = true
-        };
-        if (!process.Start())
-            throw new ArtifactWorkerProcessorException("The isolated JSIL process could not be started.");
+        using var process = new Process { StartInfo = CreateStartInfo(artifact.AssemblyPath, outputDirectory), EnableRaisingEvents = true };
+        if (!process.Start()) throw new ArtifactWorkerProcessorException("The isolated JSIL process could not be started.");
 
-        var stdout = ReadBoundedAsync(
-            process.StandardOutput.BaseStream,
-            settings.MaximumProcessOutputBytes,
-            CancellationToken.None);
-        var stderr = ReadBoundedAsync(
-            process.StandardError.BaseStream,
-            settings.MaximumProcessOutputBytes,
-            CancellationToken.None);
+        var stdout = ReadBoundedAsync(process.StandardOutput.BaseStream, settings.MaximumProcessOutputBytes, CancellationToken.None);
+        var stderr = ReadBoundedAsync(process.StandardError.BaseStream, settings.MaximumProcessOutputBytes, CancellationToken.None);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var remaining = deadlineUtc - DateTimeOffset.UtcNow;
         var operationLimit = TimeSpan.FromMilliseconds(capabilityManifest.Limits.MaximumOperationMilliseconds);
-        if (remaining <= TimeSpan.Zero)
-            throw new ArtifactWorkerDeadlineExceededException("The JSIL translation deadline elapsed.");
+        if (remaining <= TimeSpan.Zero) throw new ArtifactWorkerDeadlineExceededException("The JSIL translation deadline elapsed.");
         deadline.CancelAfter(remaining < operationLimit ? remaining : operationLimit);
 
         var memoryExceeded = false;
@@ -89,17 +63,10 @@ internal sealed class JsilProcessRunner(
         if (stdoutResult.Truncated || stderrResult.Truncated)
             throw new ArtifactWorkerLimitExceededException("JSIL process diagnostics exceeded the output limit.");
 
-        var outputFiles = Directory.EnumerateFiles(outputDirectory, "*.js", SearchOption.TopDirectoryOnly)
-            .Where(static path => !path.EndsWith(".manifest.js", StringComparison.OrdinalIgnoreCase))
-            .Order(StringComparer.Ordinal)
-            .ToArray();
+        var outputFiles = Directory.EnumerateFiles(outputDirectory, "*.js", SearchOption.TopDirectoryOnly).Where(static path => !path.EndsWith(".manifest.js", StringComparison.OrdinalIgnoreCase)).Order(StringComparer.Ordinal).ToArray();
         if (process.ExitCode != 0 || outputFiles.Length != 1)
         {
-            return new JsilTranslationResult(
-                false,
-                null,
-                "JSIL could not translate this managed assembly.",
-                SanitizeDetail(stderrResult.Text, stdoutResult.Text));
+            return new JsilTranslationResult(false, null, "JSIL could not translate this managed assembly.", SanitizeDetail(stderrResult.Text, stdoutResult.Text));
         }
 
         var output = outputFiles[0];
@@ -114,15 +81,7 @@ internal sealed class JsilProcessRunner(
 
     private ProcessStartInfo CreateStartInfo(string assemblyPath, string outputDirectory)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = settings.MonoPath,
-            WorkingDirectory = Path.GetDirectoryName(settings.CompilerPath)!,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var startInfo = new ProcessStartInfo { FileName = settings.MonoPath, WorkingDirectory = Path.GetDirectoryName(settings.CompilerPath)!, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
         startInfo.ArgumentList.Add(settings.CompilerPath);
         startInfo.ArgumentList.Add("--quiet");
         startInfo.ArgumentList.Add("--nothreads");
@@ -136,10 +95,7 @@ internal sealed class JsilProcessRunner(
         return startInfo;
     }
 
-    private static async Task<BoundedText> ReadBoundedAsync(
-        Stream stream,
-        int maximumBytes,
-        CancellationToken cancellationToken)
+    private static async Task<BoundedText> ReadBoundedAsync(Stream stream, int maximumBytes, CancellationToken cancellationToken)
     {
         using var content = new MemoryStream(Math.Min(maximumBytes, 16 * 1024));
         var buffer = new byte[8 * 1024];
@@ -160,10 +116,7 @@ internal sealed class JsilProcessRunner(
 
     private static string? SanitizeDetail(params string[] values)
     {
-        var value = string.Join(' ', values)
-            .Replace('\r', ' ')
-            .Replace('\n', ' ')
-            .Trim();
+        var value = string.Join(' ', values).Replace('\r', ' ').Replace('\n', ' ').Trim();
         if (value.Length == 0)
             return null;
         return value.Length <= 2_048 ? value : value[..2_048];
@@ -176,9 +129,7 @@ internal sealed class JsilProcessRunner(
             if (!process.HasExited)
                 process.Kill(entireProcessTree: true);
         }
-        catch (InvalidOperationException)
-        {
-        }
+        catch (InvalidOperationException) { }
     }
 
     private sealed record BoundedText(string Text, bool Truncated);

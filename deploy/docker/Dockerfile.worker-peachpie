@@ -41,9 +41,9 @@ WORKDIR /source
 COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
 COPY profiles/versions.props ./profiles/versions.props
 COPY src/ ./src/
-COPY eng/extract-zip.cs /tools/extract-zip.cs
-COPY eng/create-reference-set-attestation.cs /tools/create-reference-set-attestation.cs
-COPY eng/copy-locked-package-files.cs /tools/copy-locked-package-files.cs
+COPY eng/tools/extract-zip.cs /tools/extract-zip.cs
+COPY eng/tools/create-reference-set-attestation.cs /tools/create-reference-set-attestation.cs
+COPY eng/tools/copy-locked-package-files.cs /tools/copy-locked-package-files.cs
 COPY --chmod=0555 deploy/docker/fetch-verified-reference-package.sh /tools/fetch-verified-reference-package
 COPY deploy/security/licenses/peachpie-componentace-BSD-3-Clause.txt /licenses/Peachpie.ComponentAce-BSD-3-Clause.txt
 COPY deploy/security/licenses/CC-BY-4.0.txt /licenses/CC-BY-4.0.txt

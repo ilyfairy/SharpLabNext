@@ -1,5 +1,6 @@
 #:sdk Microsoft.NET.Sdk
 #:property TargetFramework=net10.0
+#:property RestorePackagesWithLockFile=false
 #:property LangVersion=14.0
 #:property EnableTrimAnalyzer=false
 #:property EnableAotAnalyzer=false
@@ -18,24 +19,13 @@ using System.Xml.Linq;
 var options = VerifyOptions.Parse(args);
 var root = FindRepositoryRoot();
 var packageDirectory = Path.GetFullPath(options.Packages);
-var manifest = JsonSerializer.Deserialize(
-    File.ReadAllText(Path.Combine(root, "eng", "sdk-packages.json")),
-    VerifyJsonContext.Default.SdkPackageManifest)
-    ?? throw new InvalidOperationException("eng/sdk-packages.json is empty.");
+var manifest = JsonSerializer.Deserialize(File.ReadAllText(Path.Combine(root, "eng", "sdk-packages.json")), VerifyJsonContext.Default.SdkPackageManifest) ?? throw new InvalidOperationException("eng/sdk-packages.json is empty.");
 if (manifest.SchemaVersion != 1)
     throw new InvalidOperationException("Unsupported SDK package manifest schema.");
 
-var expectedNames = manifest.Packages
-    .Select(package => PackageFileName(package.Id, options.Version))
-    .Order(StringComparer.Ordinal)
-    .ToArray();
-var actualNames = Directory.GetFiles(packageDirectory, "*.nupkg", SearchOption.TopDirectoryOnly)
-    .Select(Path.GetFileName)
-    .OfType<string>()
-    .Order(StringComparer.Ordinal)
-    .ToArray();
-Require(expectedNames.SequenceEqual(actualNames, StringComparer.Ordinal),
-    $"Package set differs. Expected [{string.Join(", ", expectedNames)}], actual [{string.Join(", ", actualNames)}].");
+var expectedNames = manifest.Packages.Select(package => PackageFileName(package.Id, options.Version)).Order(StringComparer.Ordinal).ToArray();
+var actualNames = Directory.GetFiles(packageDirectory, "*.nupkg", SearchOption.TopDirectoryOnly).Select(Path.GetFileName).OfType<string>().Order(StringComparer.Ordinal).ToArray();
+Require(expectedNames.SequenceEqual(actualNames, StringComparer.Ordinal), $"Package set differs. Expected [{string.Join(", ", expectedNames)}], actual [{string.Join(", ", actualNames)}].");
 
 foreach (var package in manifest.Packages)
     VerifyPackage(Path.Combine(packageDirectory, PackageFileName(package.Id, options.Version)), package, options.Version);
@@ -50,29 +40,20 @@ static void VerifyPackage(string path, SdkPackageDefinition package, string vers
     using var archive = ZipFile.OpenRead(path);
     var entries = archive.Entries.Where(static entry => !entry.FullName.EndsWith('/')).ToArray();
     var names = entries.Select(static entry => entry.FullName).ToArray();
-    Require(names.Distinct(StringComparer.Ordinal).Count() == names.Length,
-        $"{package.Id} contains duplicate ZIP entries.");
-    Require(names.SequenceEqual(names.Order(StringComparer.Ordinal), StringComparer.Ordinal),
-        $"{package.Id} entries are not in canonical order.");
+    Require(names.Distinct(StringComparer.Ordinal).Count() == names.Length, $"{package.Id} contains duplicate ZIP entries.");
+    Require(names.SequenceEqual(names.Order(StringComparer.Ordinal), StringComparer.Ordinal), $"{package.Id} entries are not in canonical order.");
     foreach (var entry in entries)
     {
-        Require(!entry.FullName.StartsWith('/')
-            && !entry.FullName.Contains('\\')
-            && !entry.FullName.Split('/').Any(static segment => segment is "." or ".."),
-            $"{package.Id} contains unsafe entry '{entry.FullName}'.");
-        Require(entry.LastWriteTime.DateTime == new DateTime(2000, 1, 1),
-            $"{package.Id} entry '{entry.FullName}' does not use the reproducible timestamp.");
+        Require(!entry.FullName.StartsWith('/') && !entry.FullName.Contains('\\') && !entry.FullName.Split('/').Any(static segment => segment is "." or ".."), $"{package.Id} contains unsafe entry '{entry.FullName}'.");
+        Require(entry.LastWriteTime.DateTime == new DateTime(2000, 1, 1), $"{package.Id} entry '{entry.FullName}' does not use the reproducible timestamp.");
     }
 
-    var nuspecEntry = entries.SingleOrDefault(static entry =>
-        !entry.FullName.Contains('/')
-        && entry.FullName.EndsWith(".nuspec", StringComparison.Ordinal));
+    var nuspecEntry = entries.SingleOrDefault(static entry => !entry.FullName.Contains('/') && entry.FullName.EndsWith(".nuspec", StringComparison.Ordinal));
     Require(nuspecEntry is not null, $"{package.Id} must contain one root nuspec.");
     var nuspec = ReadXml(nuspecEntry!);
     var nuspecRoot = nuspec.Root ?? throw new InvalidDataException("Invalid nuspec XML.");
     var ns = nuspecRoot.Name.Namespace;
-    var metadata = nuspecRoot.Element(ns + "metadata")
-        ?? throw new InvalidDataException($"{package.Id} nuspec has no metadata.");
+    var metadata = nuspecRoot.Element(ns + "metadata") ?? throw new InvalidDataException($"{package.Id} nuspec has no metadata.");
     Require(Value(metadata, ns + "id") == package.Id, $"{package.Id} nuspec ID differs.");
     Require(Value(metadata, ns + "version") == version, $"{package.Id} version differs.");
     Require(Value(metadata, ns + "license") == "BSD-2-Clause", $"{package.Id} license differs.");
@@ -81,26 +62,14 @@ static void VerifyPackage(string path, SdkPackageDefinition package, string vers
     Require((string?)repository?.Attribute("url") == "https://github.com/sharplabnext/SharpLabNext",
         $"{package.Id} repository URL differs.");
 
-    var dependencies = metadata.Descendants(ns + "dependency").Select(dependency => new
-    {
-        Id = (string?)dependency.Attribute("id") ?? string.Empty,
-        Version = (string?)dependency.Attribute("version") ?? string.Empty
-    }).ToArray();
-    Require(dependencies.Select(static dependency => dependency.Id)
-        .Distinct(StringComparer.OrdinalIgnoreCase)
-        .Order(StringComparer.OrdinalIgnoreCase)
-        .SequenceEqual(package.Dependencies.Order(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase),
-        $"{package.Id} dependency set differs from eng/sdk-packages.json.");
+    var dependencies = metadata.Descendants(ns + "dependency").Select(dependency => new { Id = (string?)dependency.Attribute("id") ?? string.Empty, Version = (string?)dependency.Attribute("version") ?? string.Empty }).ToArray();
+    Require(dependencies.Select(static dependency => dependency.Id).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).SequenceEqual(package.Dependencies.Order(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase), $"{package.Id} dependency set differs from eng/sdk-packages.json.");
     foreach (var dependency in dependencies)
-    {
-        Require(dependency.Version == $"[{version}]",
-            $"{package.Id} dependency {dependency.Id} must use exact version [{version}], not {dependency.Version}.");
-    }
+        Require(dependency.Version == $"[{version}]", $"{package.Id} dependency {dependency.Id} must use exact version [{version}], not {dependency.Version}.");
 
     foreach (var requiredFile in package.RequiredFiles)
         Require(names.Contains(requiredFile, StringComparer.Ordinal), $"{package.Id} is missing {requiredFile}.");
-    Require(names.Contains("package/services/metadata/core-properties/core-properties.psmdcp", StringComparer.Ordinal),
-        $"{package.Id} does not use the canonical core-properties entry.");
+    Require(names.Contains("package/services/metadata/core-properties/core-properties.psmdcp", StringComparer.Ordinal), $"{package.Id} does not use the canonical core-properties entry.");
 
     var expectedAssemblyVersion = ParseAssemblyVersion(version);
     foreach (var framework in package.TargetFrameworks)
@@ -116,10 +85,8 @@ static void VerifyPackage(string path, SdkPackageDefinition package, string vers
         Require(peReader.HasMetadata, $"{assemblyPath} is not a managed assembly.");
         var metadataReader = peReader.GetMetadataReader();
         var definition = metadataReader.GetAssemblyDefinition();
-        Require(metadataReader.GetString(definition.Name) == package.Id,
-            $"{assemblyPath} assembly name differs.");
-        Require(definition.Version == expectedAssemblyVersion,
-            $"{assemblyPath} assembly version {definition.Version} differs from {expectedAssemblyVersion}.");
+        Require(metadataReader.GetString(definition.Name) == package.Id, $"{assemblyPath} assembly name differs.");
+        Require(definition.Version == expectedAssemblyVersion, $"{assemblyPath} assembly version {definition.Version} differs from {expectedAssemblyVersion}.");
     }
 }
 
@@ -142,8 +109,7 @@ static void VerifyConsumer(string root, string packageDirectory, string version)
     if (Directory.Exists(directory))
         Directory.Delete(directory, recursive: true);
     Directory.CreateDirectory(directory);
-    var escapedSource = SecurityElement.Escape(packageDirectory)
-        ?? throw new InvalidOperationException("Could not escape the package source path.");
+    var escapedSource = SecurityElement.Escape(packageDirectory) ?? throw new InvalidOperationException("Could not escape the package source path.");
     File.WriteAllText(Path.Combine(directory, "NuGet.config"), $$"""
         <?xml version="1.0" encoding="utf-8"?>
         <configuration>
@@ -224,8 +190,7 @@ static XDocument ReadXml(ZipArchiveEntry entry)
     return XDocument.Load(stream);
 }
 
-static string Value(XElement parent, XName name) => parent.Element(name)?.Value
-    ?? throw new InvalidDataException($"Missing nuspec element {name.LocalName}.");
+static string Value(XElement parent, XName name) => parent.Element(name)?.Value ?? throw new InvalidDataException($"Missing nuspec element {name.LocalName}.");
 
 static Version ParseAssemblyVersion(string packageVersion)
 {
@@ -251,8 +216,7 @@ static void Run(string workingDirectory, string fileName, IReadOnlyList<string> 
     };
     foreach (var argument in arguments)
         startInfo.ArgumentList.Add(argument);
-    using var process = Process.Start(startInfo)
-        ?? throw new InvalidOperationException($"Could not start {fileName}.");
+    using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Could not start {fileName}.");
     process.WaitForExit();
     if (process.ExitCode != 0)
         throw new InvalidOperationException($"{fileName} exited with code {process.ExitCode}.");
@@ -313,9 +277,7 @@ internal sealed record VerifyOptions(string Packages, string Version, bool SkipC
     }
 }
 
-internal sealed record SdkPackageManifest(
-    [property: JsonPropertyName("schemaVersion")] int SchemaVersion,
-    [property: JsonPropertyName("packages")] IReadOnlyList<SdkPackageDefinition> Packages);
+internal sealed record SdkPackageManifest([property: JsonPropertyName("schemaVersion")] int SchemaVersion, [property: JsonPropertyName("packages")] IReadOnlyList<SdkPackageDefinition> Packages);
 
 internal sealed record SdkPackageDefinition(
     [property: JsonPropertyName("id")] string Id,

@@ -14,18 +14,13 @@ if (FSharpBuildChild.IsInvocation(args))
 }
 
 var builder = WebApplication.CreateBuilder(args);
-var internalServiceAuthentication = InternalServiceAuthenticationOptions.FromConfiguration(
-    builder.Configuration,
-    builder.Environment);
+var internalServiceAuthentication = InternalServiceAuthenticationOptions.FromConfiguration(builder.Configuration, builder.Environment);
 var settings = FSharpWorkerSettings.FromConfiguration(builder.Configuration);
 if (!settings.BuildProcess.Enabled && !builder.Environment.IsDevelopment())
 {
-    throw new InvalidOperationException(
-        "FSharpWorker:BuildProcess:Enabled can only be false in Development.");
+    throw new InvalidOperationException("FSharpWorker:BuildProcess:Enabled can only be false in Development.");
 }
-builder.AddSharpLabNextObservability(
-    settings.Identity.ToolchainId,
-    settings.Identity.ReleaseId);
+builder.AddSharpLabNextObservability(settings.Identity.ToolchainId, settings.Identity.ReleaseId);
 builder.Services.AddSingleton(settings);
 builder.Services.AddSingleton(settings.Identity);
 builder.Services.AddSingleton(settings.CompilationLimits);
@@ -40,14 +35,10 @@ builder.Services.AddHttpClient<IArtifactStoreClient, ArtifactStoreClient>(client
     client.Timeout = Timeout.InfiniteTimeSpan;
     internalServiceAuthentication.ConfigureClient(client);
 });
-builder.Services.AddSingleton(new FSharpReferenceSetProvider(
-    settings.ReferenceSets,
-    builder.Environment.IsProduction() ||
-    builder.Configuration.GetValue("ReferenceSetAttestation:Required", false)));
+builder.Services.AddSingleton(new FSharpReferenceSetProvider(settings.ReferenceSets, builder.Environment.IsProduction() || builder.Configuration.GetValue("ReferenceSetAttestation:Required", false)));
 builder.Services.AddSingleton<FSharpCompilerFacade>();
 builder.Services.AddSingleton<FSharpBuildService>();
-builder.Services.AddSingleton<ICompilerProcessRunner>(
-    new CompilerProcessRunner(settings.BuildProcess));
+builder.Services.AddSingleton<ICompilerProcessRunner>(new CompilerProcessRunner(settings.BuildProcess));
 builder.Services.AddSingleton<IFSharpBuildExecutor, FSharpBuildProcessExecutor>();
 builder.Services.AddSingleton<FSharpArtifactPublisher>();
 builder.Services.AddSingleton<FSharpLanguageSessionManager>();
@@ -74,25 +65,16 @@ app.MapGet("/health/ready", async (FSharpWorkerHealthService health, Cancellatio
 {
     var result = await health.CheckAsync(cancellationToken);
     return result.Status == HealthStatus.Healthy
-        ? Results.Ok(result)
-        : Results.Json(
-            result,
-            ContractJson.CreateSerializerOptions(),
-            statusCode: StatusCodes.Status503ServiceUnavailable);
+        ? Results.Ok(result) : Results.Json(result, ContractJson.CreateSerializerOptions(), statusCode: StatusCodes.Status503ServiceUnavailable);
 });
-app.MapGet("/api/v1/worker/describe", async (
-    FSharpWorkerHealthService health,
-    CancellationToken cancellationToken) => await health.DescribeAsync(cancellationToken));
+app.MapGet("/api/v1/worker/describe", async (FSharpWorkerHealthService health, CancellationToken cancellationToken) => await health.DescribeAsync(cancellationToken));
 app.MapPost("/api/v1/build", HandleBuildAsync);
 app.MapPost("/api/v1/language-sessions", HandleOpenLanguageSessionAsync);
 app.MapDelete("/api/v1/language-sessions/{sessionId}", HandleCloseLanguageSessionAsync);
 app.MapGet("/api/v1/language-sessions/{sessionId}/lsp", HandleLanguageWebSocketAsync);
 app.Run();
 
-static async Task<IResult> HandleOpenLanguageSessionAsync(
-    OpenLanguageSessionRequest request,
-    FSharpLanguageSessionManager sessions,
-    HttpContext context)
+static async Task<IResult> HandleOpenLanguageSessionAsync(OpenLanguageSessionRequest request, FSharpLanguageSessionManager sessions, HttpContext context)
 {
     try
     {
@@ -112,19 +94,11 @@ static async Task<IResult> HandleOpenLanguageSessionAsync(
     }
 }
 
-static async Task<IResult> HandleCloseLanguageSessionAsync(
-    string sessionId,
-    FSharpLanguageSessionManager sessions,
-    HttpContext context) =>
+static async Task<IResult> HandleCloseLanguageSessionAsync(string sessionId, FSharpLanguageSessionManager sessions, HttpContext context) =>
     await sessions.CloseAsync(sessionId)
-        ? Results.NoContent()
-        : Problem(context, "not-found", "The F# language session does not exist.", StatusCodes.Status404NotFound);
+        ? Results.NoContent() : Problem(context, "not-found", "The F# language session does not exist.", StatusCodes.Status404NotFound);
 
-static async Task HandleLanguageWebSocketAsync(
-    string sessionId,
-    FSharpLanguageSessionManager sessions,
-    FSharpLspLimits limits,
-    HttpContext context)
+static async Task HandleLanguageWebSocketAsync(string sessionId, FSharpLanguageSessionManager sessions, FSharpLspLimits limits, HttpContext context)
 {
     if (!context.WebSockets.IsWebSocketRequest)
     {
@@ -142,28 +116,17 @@ static async Task HandleLanguageWebSocketAsync(
     {
         await connection.RunAsync();
     }
-    catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
-    {
-    }
+    catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested) { }
     catch (FSharpLspSessionUnavailableException)
     {
         if (socket.State == System.Net.WebSockets.WebSocketState.Open)
         {
-            await socket.CloseAsync(
-                System.Net.WebSockets.WebSocketCloseStatus.PolicyViolation,
-                "F# language session unavailable.",
-                CancellationToken.None);
+            await socket.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.PolicyViolation, "F# language session unavailable.", CancellationToken.None);
         }
     }
 }
 
-static async Task<IResult> HandleBuildAsync(
-    BuildRequest request,
-    IFSharpBuildExecutor buildService,
-    FSharpArtifactPublisher artifactPublisher,
-    FSharpDevelopmentArtifactEnvelopeOptions envelopeOptions,
-    HttpContext context,
-    ILogger<Program> logger)
+static async Task<IResult> HandleBuildAsync(BuildRequest request, IFSharpBuildExecutor buildService, FSharpArtifactPublisher artifactPublisher, FSharpDevelopmentArtifactEnvelopeOptions envelopeOptions, HttpContext context, ILogger<Program> logger)
 {
     try
     {
@@ -173,22 +136,15 @@ static async Task<IResult> HandleBuildAsync(
         {
             if (envelopeOptions.Enabled)
             {
-                envelope = FSharpDevelopmentArtifactEnvelope.FromArtifact(
-                    execution.Artifact,
-                    envelopeOptions);
+                envelope = FSharpDevelopmentArtifactEnvelope.FromArtifact(execution.Artifact, envelopeOptions);
             }
             else
             {
-                var publishedRef = await PublishArtifactAsync(
-                    request,
-                    execution.Artifact,
-                    artifactPublisher,
-                    context.RequestAborted);
+                var publishedRef = await PublishArtifactAsync(request, execution.Artifact, artifactPublisher, context.RequestAborted);
                 if (execution.Result is not BuildResult { ArtifactRef: { } resultRef } ||
                     resultRef != publishedRef)
                 {
-                    throw new InvalidOperationException(
-                        "The published F# artifact identity does not match the build result.");
+                    throw new InvalidOperationException("The published F# artifact identity does not match the build result.");
                 }
             }
         }
@@ -214,21 +170,9 @@ static async Task<IResult> HandleBuildAsync(
     {
         return exception.Failure switch
         {
-            ArtifactBundlePublicationFailure.ResourceExhausted => Problem(
-                context,
-                "resource-exhausted",
-                exception.Message,
-                StatusCodes.Status413PayloadTooLarge),
-            ArtifactBundlePublicationFailure.Unavailable => Problem(
-                context,
-                "artifact-store-unavailable",
-                exception.Message,
-                StatusCodes.Status503ServiceUnavailable),
-            _ => Problem(
-                context,
-                "artifact-store-rejected-artifact",
-                exception.Message,
-                StatusCodes.Status502BadGateway)
+            ArtifactBundlePublicationFailure.ResourceExhausted => Problem(context, "resource-exhausted", exception.Message, StatusCodes.Status413PayloadTooLarge),
+            ArtifactBundlePublicationFailure.Unavailable => Problem(context, "artifact-store-unavailable", exception.Message, StatusCodes.Status503ServiceUnavailable),
+            _ => Problem(context, "artifact-store-rejected-artifact", exception.Message, StatusCodes.Status502BadGateway)
         };
     }
     catch (FSharpBuildDeadlineExceededException exception)
@@ -246,11 +190,7 @@ static async Task<IResult> HandleBuildAsync(
     catch (CompilerProcessException exception)
     {
         FSharpWorkerLog.BuildFailed(logger, exception, request.RequestId);
-        return Problem(
-            context,
-            "compiler-process-unavailable",
-            "The isolated F# compiler process failed.",
-            StatusCodes.Status503ServiceUnavailable);
+        return Problem(context, "compiler-process-unavailable", "The isolated F# compiler process failed.", StatusCodes.Status503ServiceUnavailable);
     }
     catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
     {
@@ -263,17 +203,11 @@ static async Task<IResult> HandleBuildAsync(
     }
 }
 
-static async Task<ArtifactRef> PublishArtifactAsync(
-    BuildRequest request,
-    FSharpCompiledArtifact artifact,
-    FSharpArtifactPublisher publisher,
-    CancellationToken cancellationToken)
+static async Task<ArtifactRef> PublishArtifactAsync(BuildRequest request, FSharpCompiledArtifact artifact, FSharpArtifactPublisher publisher, CancellationToken cancellationToken)
 {
     var remaining = request.DeadlineUtc - DateTimeOffset.UtcNow;
     if (remaining <= TimeSpan.Zero)
-        throw new FSharpBuildDeadlineExceededException(
-            "The build deadline elapsed before artifact publication.",
-            cancellationToken);
+        throw new FSharpBuildDeadlineExceededException("The build deadline elapsed before artifact publication.", cancellationToken);
 
     using var deadline = new CancellationTokenSource(remaining);
     using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
@@ -281,13 +215,9 @@ static async Task<ArtifactRef> PublishArtifactAsync(
     {
         return await publisher.PublishAsync(artifact, linked.Token).ConfigureAwait(false);
     }
-    catch (OperationCanceledException) when (
-        deadline.IsCancellationRequested &&
-        !cancellationToken.IsCancellationRequested)
+    catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
     {
-        throw new FSharpBuildDeadlineExceededException(
-            "The build deadline elapsed while publishing the artifact.",
-            deadline.Token);
+        throw new FSharpBuildDeadlineExceededException("The build deadline elapsed while publishing the artifact.", deadline.Token);
     }
 }
 

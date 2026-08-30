@@ -3,14 +3,9 @@ using System.Text.RegularExpressions;
 
 internal static partial class JitSourceMapping
 {
-    internal static JitNativeMappedSection MapNativeSection(
-        string sectionText,
-        IReadOnlyList<JitSourcePoint> sequencePoints,
-        JitNativeMethodMap? methodMap)
+    internal static JitNativeMappedSection MapNativeSection(string sectionText, IReadOnlyList<JitSourcePoint> sequencePoints, JitNativeMethodMap? methodMap)
     {
-        var rawLines = sectionText.Split('\n')
-            .Select(static line => line.TrimEnd('\r'))
-            .ToArray();
+        var rawLines = sectionText.Split('\n').Select(static line => line.TrimEnd('\r')).ToArray();
         var cleanedLines = new string[rawLines.Length];
         var instructions = new List<JitNativeInstruction>();
         uint nativeOffset = 0;
@@ -19,11 +14,7 @@ internal static partial class JitSourceMapping
         {
             var line = rawLines[lineIndex];
             var label = NativeOffsetLabel().Match(line);
-            if (label.Success && uint.TryParse(
-                    label.Groups["offset"].Value,
-                    NumberStyles.AllowHexSpecifier,
-                    CultureInfo.InvariantCulture,
-                    out var labelOffset))
+            if (label.Success && uint.TryParse(label.Groups["offset"].Value, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var labelOffset))
             {
                 nativeOffset = labelOffset;
                 cleanedLines[lineIndex] = label.Groups["label"].Value;
@@ -31,8 +22,7 @@ internal static partial class JitSourceMapping
             }
 
             var instruction = CodeBytesInstruction().Match(line);
-            if (!instruction.Success ||
-                instruction.Groups["bytes"].Length + instruction.Groups["spacing"].Length < 16)
+            if (!instruction.Success || instruction.Groups["bytes"].Length + instruction.Groups["spacing"].Length < 16)
             {
                 cleanedLines[lineIndex] = line;
                 continue;
@@ -42,10 +32,7 @@ internal static partial class JitSourceMapping
             var byteCount = checked((uint)(codeBytes.Length / 2));
             var cleaned = $"{instruction.Groups["indent"].Value}{instruction.Groups["instruction"].Value}";
             cleanedLines[lineIndex] = cleaned;
-            instructions.Add(new JitNativeInstruction(
-                lineIndex,
-                nativeOffset,
-                checked(nativeOffset + byteCount)));
+            instructions.Add(new JitNativeInstruction(lineIndex, nativeOffset, checked(nativeOffset + byteCount)));
             nativeOffset = checked(nativeOffset + byteCount);
         }
 
@@ -53,19 +40,11 @@ internal static partial class JitSourceMapping
         if (methodMap is null || sequencePoints.Count == 0 || instructions.Count == 0)
             return new JitNativeMappedSection(cleanedText, []);
 
-        var linkedRanges = CreateNativeLinkedRanges(
-            instructions,
-            cleanedLines,
-            sequencePoints,
-            NormalizeNativeRanges(methodMap.Ranges));
+        var linkedRanges = CreateNativeLinkedRanges(instructions, cleanedLines, sequencePoints, NormalizeNativeRanges(methodMap.Ranges));
         return new JitNativeMappedSection(cleanedText, linkedRanges);
     }
 
-    private static List<JitSourceLinkedRange> CreateNativeLinkedRanges(
-        IReadOnlyList<JitNativeInstruction> instructions,
-        string[] cleanedLines,
-        IReadOnlyList<JitSourcePoint> sequencePoints,
-        IReadOnlyList<JitNativeIlRange> nativeRanges)
+    private static List<JitSourceLinkedRange> CreateNativeLinkedRanges(IReadOnlyList<JitNativeInstruction> instructions, string[] cleanedLines, IReadOnlyList<JitSourcePoint> sequencePoints, IReadOnlyList<JitNativeIlRange> nativeRanges)
     {
         var result = new List<JitSourceLinkedRange>();
         JitSourcePoint? currentPoint = null;
@@ -81,24 +60,7 @@ internal static partial class JitSourceMapping
                 firstLine >= 0 &&
                 lastLine >= firstLine)
             {
-                result.Add(new JitSourceLinkedRange(
-                    documentPath,
-                    sourceRange,
-                    new JitSourceTextRange(
-                        firstLine,
-                        0,
-                        lastLine,
-                        cleanedLines[lastLine].Length),
-                    SequencePointPrecision,
-                    new JitEvidenceRange(
-                        currentPoint.Offset,
-                        checked((int)nativeStart),
-                        checked((int)nativeEnd),
-                        documentPath,
-                        checked(sourceRange.StartLine + 1),
-                        checked(sourceRange.StartCharacter + 1),
-                        checked(sourceRange.EndLine + 1),
-                        checked(sourceRange.EndCharacter + 1))));
+                result.Add(new JitSourceLinkedRange(documentPath, sourceRange, new JitSourceTextRange(firstLine, 0, lastLine, cleanedLines[lastLine].Length), SequencePointPrecision, new JitEvidenceRange(currentPoint.Offset, checked((int)nativeStart), checked((int)nativeEnd), documentPath, checked(sourceRange.StartLine + 1), checked(sourceRange.StartCharacter + 1), checked(sourceRange.EndLine + 1), checked(sourceRange.EndCharacter + 1))));
             }
             firstLine = -1;
             lastLine = -1;
@@ -110,8 +72,7 @@ internal static partial class JitSourceMapping
         {
             var nativeRange = FindNativeRange(nativeRanges, instruction.NativeStart, instruction.NativeEnd);
             var point = nativeRange is null
-                ? null
-                : FindSequencePoint(sequencePoints, nativeRange.IlOffset);
+                ? null : FindSequencePoint(sequencePoints, nativeRange.IlOffset);
             if (!Equals(point, currentPoint))
             {
                 CompleteRange();
@@ -131,16 +92,9 @@ internal static partial class JitSourceMapping
         return result;
     }
 
-    private static JitNativeIlRange[] NormalizeNativeRanges(
-        IReadOnlyList<JitNativeIlRange> ranges)
+    private static JitNativeIlRange[] NormalizeNativeRanges(IReadOnlyList<JitNativeIlRange> ranges)
     {
-        var ordered = ranges
-            .Where(static range =>
-                range.IlOffset >= 0 &&
-                range.NativeEnd > range.NativeStart)
-            .OrderBy(static range => range.NativeStart)
-            .ThenBy(static range => range.NativeEnd)
-            .ToArray();
+        var ordered = ranges.Where(static range => range.IlOffset >= 0 && range.NativeEnd > range.NativeStart).OrderBy(static range => range.NativeStart).ThenBy(static range => range.NativeEnd).ToArray();
         if (ordered.Length <= 1)
             return ordered;
 
@@ -156,10 +110,7 @@ internal static partial class JitSourceMapping
         return normalized.ToArray();
     }
 
-    private static JitNativeIlRange? FindNativeRange(
-        IReadOnlyList<JitNativeIlRange> ranges,
-        uint instructionStart,
-        uint instructionEnd)
+    private static JitNativeIlRange? FindNativeRange(IReadOnlyList<JitNativeIlRange> ranges, uint instructionStart, uint instructionEnd)
     {
         var low = 0;
         var high = ranges.Count;
@@ -176,8 +127,7 @@ internal static partial class JitSourceMapping
 
         var candidate = ranges[low];
         return candidate.NativeStart < instructionEnd
-            ? candidate
-            : null;
+            ? candidate : null;
     }
 
     [GeneratedRegex(
@@ -191,11 +141,6 @@ internal static partial class JitSourceMapping
     private static partial Regex CodeBytesInstruction();
 }
 
-internal sealed record JitNativeMappedSection(
-    string Text,
-    IReadOnlyList<JitSourceLinkedRange> LinkedRanges);
+internal sealed record JitNativeMappedSection(string Text, IReadOnlyList<JitSourceLinkedRange> LinkedRanges);
 
-internal sealed record JitNativeInstruction(
-    int LineIndex,
-    uint NativeStart,
-    uint NativeEnd);
+internal sealed record JitNativeInstruction(int LineIndex, uint NativeStart, uint NativeEnd);

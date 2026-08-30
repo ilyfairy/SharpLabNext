@@ -16,9 +16,7 @@ internal sealed class PortablePdbDebugInfoProvider : IDebugInfoProvider, IDispos
         var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         try
         {
-            _provider = MetadataReaderProvider.FromPortablePdbStream(
-                stream,
-                MetadataStreamOptions.PrefetchMetadata);
+            _provider = MetadataReaderProvider.FromPortablePdbStream(stream, MetadataStreamOptions.PrefetchMetadata);
         }
         catch
         {
@@ -33,8 +31,7 @@ internal sealed class PortablePdbDebugInfoProvider : IDebugInfoProvider, IDispos
 
     public string SourceFileName { get; }
 
-    public static PortablePdbDebugInfoProvider? TryOpen(string? path) =>
-        string.IsNullOrWhiteSpace(path) ? null : new PortablePdbDebugInfoProvider(path);
+    public static PortablePdbDebugInfoProvider? TryOpen(string? path) => string.IsNullOrWhiteSpace(path) ? null : new PortablePdbDebugInfoProvider(path);
 
     public IList<SequencePoint> GetSequencePoints(MethodDefinitionHandle method)
     {
@@ -47,18 +44,8 @@ internal sealed class PortablePdbDebugInfoProvider : IDebugInfoProvider, IDispos
         {
             var documentHandle = point.Document.IsNil ? information.Document : point.Document;
             var document = documentHandle.IsNil
-                ? SourceFileName
-                : SanitizeDocumentPath(_reader.GetString(_reader.GetDocument(documentHandle).Name));
-            result.Add(new SequencePoint
-            {
-                Offset = point.Offset,
-                EndOffset = point.Offset,
-                StartLine = point.StartLine,
-                StartColumn = point.StartColumn,
-                EndLine = point.EndLine,
-                EndColumn = point.EndColumn,
-                DocumentUrl = document
-            });
+                ? SourceFileName : SanitizeDocumentPath(_reader.GetString(_reader.GetDocument(documentHandle).Name));
+            result.Add(new SequencePoint { Offset = point.Offset, EndOffset = point.Offset, StartLine = point.StartLine, StartColumn = point.StartColumn, EndLine = point.EndLine, EndColumn = point.EndColumn, DocumentUrl = document });
         }
         for (var index = 0; index + 1 < result.Count; index++)
             result[index].EndOffset = result[index + 1].Offset;
@@ -80,10 +67,7 @@ internal sealed class PortablePdbDebugInfoProvider : IDebugInfoProvider, IDispos
         return variables.Select(static pair => new Variable(pair.Key, pair.Value)).ToArray();
     }
 
-    public bool TryGetExtraTypeInfo(
-        MethodDefinitionHandle method,
-        int index,
-        out PdbExtraTypeInfo extraTypeInfo)
+    public bool TryGetExtraTypeInfo(MethodDefinitionHandle method, int index, out PdbExtraTypeInfo extraTypeInfo)
     {
         extraTypeInfo = default;
         return false;
@@ -100,11 +84,7 @@ internal sealed class PortablePdbDebugInfoProvider : IDebugInfoProvider, IDispos
 
     internal static string SanitizeDocumentPath(string path)
     {
-        var segments = path.Replace('\\', '/')
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Where(static segment => segment is not "." and not "..")
-            .TakeLast(8)
-            .ToArray();
+        var segments = path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries).Where(static segment => segment is not "." and not "..").TakeLast(8).ToArray();
         return segments.Length == 0 ? "source" : string.Join('/', segments);
     }
 }

@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { LanguageManifest } from '../api/types'
-import {
-  languageWorkspaceStorageKey,
-  readLanguageWorkspace,
-  writeLanguageWorkspace,
-} from './languageWorkspaceStorage'
+import { languageWorkspaceStorageKey, readLanguageWorkspace, writeLanguageWorkspace } from './languageWorkspaceStorage'
 
 const php: LanguageManifest = {
   id: 'php',

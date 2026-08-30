@@ -14,10 +14,10 @@ import {
   validateContextInputs,
   validateOperatorImageInspection,
   runContextBuild,
-} from './build-framework-matrix-context.mjs'
-import { pinnedDockerfileFrontendDirective } from './dockerfile-frontend.mjs'
+} from '../build-framework-matrix-context.mjs'
+import { pinnedDockerfileFrontendDirective } from '../dockerfile-frontend.mjs'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const rowDefinitions = [
   ['netfx20', '2.0', 'clr2'], ['netfx30', '3.0', 'clr2'],
   ['netfx35', '3.5', 'clr2'], ['netfx40', '4.0', 'clr4'],
@@ -29,9 +29,7 @@ const rowDefinitions = [
 ]
 const operatorBase = `registry.example/wine:development@sha256:${'b'.repeat(64)}`
 const operatorRoot = `registry.example/root:stable@sha256:${'a'.repeat(64)}`
-const installerManifestSha256 = crypto.createHash('sha256').update(fs.readFileSync(
-  path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json'),
-)).digest('hex')
+const installerManifestSha256 = crypto.createHash('sha256').update(fs.readFileSync(path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json'))).digest('hex');
 
 function matrix() {
   return {

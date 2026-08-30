@@ -88,9 +88,7 @@ public sealed class LegacyJitInspectorTests
     [Fact]
     public void WineCaptureDirectoryAcceptsOnlyTheFixedTmpfsPath()
     {
-        Assert.Equal(
-            @"z:\TMP",
-            RunOutputCapture.ResolveCaptureDirectory(@"z:\TMP", isWindows: true));
+        Assert.Equal(@"z:\TMP", RunOutputCapture.ResolveCaptureDirectory(@"z:\TMP", isWindows: true));
         Assert.Throws<InvalidOperationException>(() =>
             RunOutputCapture.ResolveCaptureDirectory(@"C:\users\root\Temp", isWindows: true));
         Assert.Throws<InvalidOperationException>(() =>
@@ -100,27 +98,17 @@ public sealed class LegacyJitInspectorTests
     [Fact]
     public void NativeCaptureDirectoryKeepsThePlatformDefaultWhenNotConfigured()
     {
-        Assert.Equal(
-            Path.GetTempPath(),
-            RunOutputCapture.ResolveCaptureDirectory(null!, OperatingSystem.IsWindows()));
+        Assert.Equal(Path.GetTempPath(), RunOutputCapture.ResolveCaptureDirectory(null!, OperatingSystem.IsWindows()));
     }
 
     [Fact]
     public void DisassemblySelectionCountsInstructionsAndLinksMethodSource()
     {
         const int token = 0x06000001;
-        var method = new JitMethodResult(
-            "0x06000001",
-            token,
-            "Sample.Type.Add",
-            "prepared",
-            "0x1234",
-            null);
+        var method = new JitMethodResult("0x06000001", token, "Sample.Type.Add", "prepared", "0x1234", null);
         var source = new Dictionary<int, MethodSourceSpan>
         {
-            [token] = new MethodSourceSpan(
-                "Sample.cs",
-                new JitTextRange(4, 0, 6, 1))
+            [token] = new MethodSourceSpan("Sample.cs", new JitTextRange(4, 0, 6, 1))
         };
         const string text =
             "; Assembly listing for method Sample.Type:Add(int,int):int\n" +

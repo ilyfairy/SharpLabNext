@@ -1,12 +1,12 @@
-import crypto from 'node:crypto'
-import fs from 'node:fs'
-import path from 'node:path'
-import { pipeline } from 'node:stream/promises'
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 
-const frameworkSeedBuildStrategy = 'framework-companion-seed-build-v1'
-const operatorImageBuildStrategy = 'source-built-operator-image-v1'
-const sha256Pattern = /^[0-9a-f]{64}$/
-const digestReferencePattern = /^[^@\s]+@sha256:[0-9a-f]{64}$/
+const frameworkSeedBuildStrategy = 'framework-companion-seed-build-v1';
+const operatorImageBuildStrategy = 'source-built-operator-image-v1';
+const sha256Pattern = /^[0-9a-f]{64}$/;
+const digestReferencePattern = /^[^@\s]+@sha256:[0-9a-f]{64}$/;
 
 const frameworkInputFiles = Object.freeze([
   '.dockerignore',
@@ -18,7 +18,7 @@ const frameworkInputFiles = Object.freeze([
   'deploy/docker/certificates/microsoft-tls-rsa-root-g2-xsign.crt',
   'deploy/docker/certificates/microsoft-tls-g2-rsa-ca-ocsp-04.crt',
   'profiles/runtime-framework-installers.json',
-  'eng/prepare-framework-runtime.cs',
+  'eng/tools/prepare-framework-runtime.cs',
   'eng/release-prerequisites.json',
   'eng/prerequisites/dotnet-framework-2.0/NetFx64.exe',
 ])
@@ -30,8 +30,8 @@ const operatorInputFiles = Object.freeze([
   'deploy/docker/Dockerfile.operator-cppcli-base',
   'deploy/docker/cppcli-netfx-env.sh',
   'deploy/docker/extract-netfx48-sdk.py',
-  'eng/prepare-jsharp-toolchain.cs',
-  'eng/prepare-cppcli-toolchain.cs',
+  'eng/tools/prepare-jsharp-toolchain.cs',
+  'eng/tools/prepare-cppcli-toolchain.cs',
   'eng/release-prerequisites.json',
 ])
 
@@ -59,13 +59,9 @@ export class ImageBuildInputError extends Error {
   }
 }
 
-function fail(message, options) {
-  throw new ImageBuildInputError(message, options)
-}
+function fail(message, options) { throw new ImageBuildInputError(message, options); }
 
-function isObject(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
+function isObject(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 
 async function fileSha256(filename) {
   const hash = crypto.createHash('sha256')
@@ -108,9 +104,7 @@ export async function createFrameworkSeedBuildSpec(repositoryRoot, wineImage, ro
     2 * 1024 * 1024 * 1024,
     'Framework seed build input',
   )
-  const manifestSha256 = files.find(
-    file => file.path === 'profiles/runtime-framework-installers.json',
-  )?.sha256
+  const manifestSha256 = files.find(file => file.path === 'profiles/runtime-framework-installers.json')?.sha256;
   if (!sha256Pattern.test(manifestSha256 ?? '')) {
     fail('Framework installer manifest digest is missing from the seed build input closure')
   }
@@ -124,9 +118,7 @@ export async function createFrameworkSeedBuildSpec(repositoryRoot, wineImage, ro
       id, generation, version, prefix,
     })),
   }
-  const inputSha256 = crypto.createHash('sha256')
-    .update(JSON.stringify(descriptor))
-    .digest('hex')
+  const inputSha256 = crypto.createHash('sha256').update(JSON.stringify(descriptor)).digest('hex')
   return Object.freeze({
     inputSha256,
     manifestSha256,
@@ -144,11 +136,7 @@ function requireSeedReference(value, name) {
   return value
 }
 
-export async function createOperatorImageBuildSpec(
-  repositoryRoot,
-  prerequisiteManifest,
-  frameworkSeeds,
-) {
+export async function createOperatorImageBuildSpec(repositoryRoot, prerequisiteManifest, frameworkSeeds) {
   const manifest = prerequisiteManifest?.value
   if (!isObject(manifest) || !sha256Pattern.test(prerequisiteManifest?.sha256 ?? '') ||
       !Array.isArray(manifest.generatedImages)) {
@@ -185,9 +173,7 @@ export async function createOperatorImageBuildSpec(
     frameworkSeeds: seeds,
     images,
   }
-  const inputSha256 = crypto.createHash('sha256')
-    .update(JSON.stringify(descriptor))
-    .digest('hex')
+  const inputSha256 = crypto.createHash('sha256').update(JSON.stringify(descriptor)).digest('hex')
   return Object.freeze({
     inputSha256,
     descriptor: Object.freeze(descriptor),

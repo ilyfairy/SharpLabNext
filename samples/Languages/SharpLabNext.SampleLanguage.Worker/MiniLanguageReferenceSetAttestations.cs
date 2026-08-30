@@ -6,10 +6,7 @@ namespace SharpLabNext.SampleLanguage.Worker;
 
 internal static class MiniLanguageReferenceSetAttestations
 {
-    public static IReadOnlyList<ReferenceSetAttestation> Load(
-        IConfiguration configuration,
-        IHostEnvironment environment,
-        IReadOnlyList<string> referenceSetIds)
+    public static IReadOnlyList<ReferenceSetAttestation> Load(IConfiguration configuration, IHostEnvironment environment, IReadOnlyList<string> referenceSetIds)
     {
         var requireManifest = environment.IsProduction() ||
             configuration.GetValue("ReferenceSetAttestation:Required", false);
@@ -22,29 +19,15 @@ internal static class MiniLanguageReferenceSetAttestations
             var root = Path.GetFullPath(Environment.ExpandEnvironmentVariables(configuredPath));
             if (!requireManifest && !Directory.Exists(root))
                 root = FindInstalledReferencePack(resolvedVersion, targetFramework);
-            return ReferenceSetAttestationReader.LoadAndVerify(
-                root,
-                id,
-                targetFramework,
-                resolvedVersion,
-                section["Digest"],
-                requireManifest,
-                section["AttestationPath"]);
+            return ReferenceSetAttestationReader.LoadAndVerify(root, id, targetFramework, resolvedVersion, section["Digest"], requireManifest, section["AttestationPath"]);
         }).ToArray();
     }
 
     private static string FindInstalledReferencePack(string version, string targetFramework)
     {
         var runtime = new DirectoryInfo(RuntimeEnvironment.GetRuntimeDirectory());
-        var dotnetRoot = runtime.Parent?.Parent?.Parent?.FullName
-            ?? throw new InvalidOperationException("The dotnet installation root could not be resolved.");
-        var path = Path.Combine(
-            dotnetRoot,
-            "packs",
-            "Microsoft.NETCore.App.Ref",
-            version,
-            "ref",
-            targetFramework);
+        var dotnetRoot = runtime.Parent?.Parent?.Parent?.FullName ?? throw new InvalidOperationException("The dotnet installation root could not be resolved.");
+        var path = Path.Combine(dotnetRoot, "packs", "Microsoft.NETCore.App.Ref", version, "ref", targetFramework);
         if (!Directory.Exists(path))
             throw new InvalidOperationException($"Reference pack '{version}/{targetFramework}' is not installed.");
         return path;
@@ -52,6 +35,5 @@ internal static class MiniLanguageReferenceSetAttestations
 
     private static string Required(string? value, string key) =>
         !string.IsNullOrWhiteSpace(value)
-            ? value
-            : throw new InvalidOperationException($"Configuration value '{key}' is required.");
+            ? value : throw new InvalidOperationException($"Configuration value '{key}' is required.");
 }

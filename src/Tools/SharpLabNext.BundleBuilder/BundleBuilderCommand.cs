@@ -143,8 +143,7 @@ public sealed record BundleBuilderCommand(
 
         if ((signingKeyPath is null) != (signingPublicKeyPath is null))
         {
-            throw new BundleBuilderUsageException(
-                "--signing-key and --signing-public-key must be supplied together.");
+            throw new BundleBuilderUsageException("--signing-key and --signing-public-key must be supplied together.");
         }
         if (signingKeyId is not null && signingKeyPath is null)
         {
@@ -214,23 +213,14 @@ public sealed record BundleBuilderCommand(
         }
     }
 
-    private static bool IsId(string value) =>
-        value.Length is > 0 and <= 128 &&
-        char.IsAsciiLetterOrDigit(value[0]) &&
-        value.All(static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-');
+    private static bool IsId(string value) => value.Length is > 0 and <= 128 && char.IsAsciiLetterOrDigit(value[0]) && value.All(static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-');
 
-    private static bool IsKeyId(string value) =>
-        value.Length is > 0 and <= 160 &&
-        char.IsAsciiLetterOrDigit(value[0]) &&
-        value.All(static character =>
-            char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-' or ':');
+    private static bool IsKeyId(string value) => value.Length is > 0 and <= 160 && char.IsAsciiLetterOrDigit(value[0]) && value.All(static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-' or ':');
 
     private static string NormalizeImagePrefix(string value)
     {
         var normalized = value.Trim().TrimEnd('/');
-        if (normalized.Length is 0 or > 240 ||
-            normalized.Any(static character => char.IsWhiteSpace(character) || character == '\0') ||
-            normalized.StartsWith('/') || normalized.EndsWith(':'))
+        if (normalized.Length is 0 or > 240 || normalized.Any(static character => char.IsWhiteSpace(character) || character == '\0') || normalized.StartsWith('/') || normalized.EndsWith(':'))
         {
             throw new BundleBuilderUsageException("--image-prefix is not a valid Docker repository prefix.");
         }
@@ -242,8 +232,7 @@ public sealed record BundleBuilderCommand(
     {
         index++;
         return index < args.Length && !string.IsNullOrWhiteSpace(args[index])
-            ? args[index]
-            : throw new BundleBuilderUsageException("An option value is missing.");
+            ? args[index] : throw new BundleBuilderUsageException("An option value is missing.");
     }
 
     private static string FindRepositoryRoot()

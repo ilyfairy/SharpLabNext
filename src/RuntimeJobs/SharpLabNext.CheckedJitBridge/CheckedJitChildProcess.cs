@@ -8,19 +8,11 @@ namespace SharpLabNext.CheckedJitBridge;
 
 internal static class CheckedJitChildProcess
 {
-    public static ProcessStartInfo CreateStartInfo(
-        CheckedJitBridgeArguments options,
-        string pipeHandle,
-        string nonce,
-        string userAssemblyName,
-        string? runtimeHostPath = null,
-        string? bridgeAssemblyPath = null)
+    public static ProcessStartInfo CreateStartInfo(CheckedJitBridgeArguments options, string pipeHandle, string nonce, string userAssemblyName, string? runtimeHostPath = null, string? bridgeAssemblyPath = null)
     {
         if (options is null)
             throw new ArgumentNullException(nameof(options));
-        if (string.IsNullOrWhiteSpace(pipeHandle) ||
-            pipeHandle.Length > 128 ||
-            pipeHandle.Any(char.IsControl))
+        if (string.IsNullOrWhiteSpace(pipeHandle) || pipeHandle.Length > 128 || pipeHandle.Any(char.IsControl))
         {
             throw new ArgumentException("The Checked JIT child pipe handle is invalid.", nameof(pipeHandle));
         }
@@ -28,10 +20,8 @@ internal static class CheckedJitChildProcess
             throw new ArgumentException("The Checked JIT child nonce is invalid.", nameof(nonce));
         ValidateAssemblyName(userAssemblyName);
 
-        runtimeHostPath = BridgePathValidation.ValidateRuntimeHostPath(
-            runtimeHostPath ?? GetCurrentRuntimeHostPath());
-        bridgeAssemblyPath = BridgePathValidation.ValidateBridgeAssemblyPath(
-            bridgeAssemblyPath ?? typeof(CheckedJitChildProcess).Assembly.Location);
+        runtimeHostPath = BridgePathValidation.ValidateRuntimeHostPath(runtimeHostPath ?? GetCurrentRuntimeHostPath());
+        bridgeAssemblyPath = BridgePathValidation.ValidateBridgeAssemblyPath(bridgeAssemblyPath ?? typeof(CheckedJitChildProcess).Assembly.Location);
 
         var startInfo = new ProcessStartInfo(runtimeHostPath)
         {
@@ -83,8 +73,7 @@ internal static class CheckedJitChildProcess
         {
             if (!(char.IsLetterOrDigit(character) || character is '.' or '_' or '-' or '+'))
             {
-                throw new InvalidDataException(
-                    "The user assembly name contains a character unsupported by Checked JIT filtering.");
+                throw new InvalidDataException("The user assembly name contains a character unsupported by Checked JIT filtering.");
             }
         }
     }
@@ -92,7 +81,6 @@ internal static class CheckedJitChildProcess
     private static string GetCurrentRuntimeHostPath()
     {
         using var current = Process.GetCurrentProcess();
-        return current.MainModule?.FileName
-            ?? throw new InvalidOperationException("The current target runtime host path is unavailable.");
+        return current.MainModule?.FileName ?? throw new InvalidOperationException("The current target runtime host path is unavailable.");
     }
 }

@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { parseWineFrameworkFrameLog, runWineFrameworkSmokes, runRuntimeWineFrameworkSmokeCli } from './runtime-wine-framework-smoke.mjs'
+import { parseWineFrameworkFrameLog, runWineFrameworkSmokes, runRuntimeWineFrameworkSmokeCli } from '../smoke/runtime-wine-framework-smoke.mjs'
 
 const imageId = `sha256:${'a'.repeat(64)}`
 const sourceRevision = '0123456789abcdef0123456789abcdef01234567'

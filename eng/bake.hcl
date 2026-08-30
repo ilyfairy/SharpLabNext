@@ -1120,11 +1120,14 @@ target "operator-wine-coreclr" {
 
 target "runtime-dotnet10" {
   inherits = ["common"]
-  dockerfile = "deploy/docker/Dockerfile.runtime-dotnet10"
+  dockerfile = "deploy/docker/Dockerfile.runtime-dotnet"
   tags = ["${required(IMAGE_PREFIX)}/runtime-dotnet10:${required(RELEASE_ID)}"]
   args = {
     VERSION = RELEASE_ID
     SOURCE_REVISION = SOURCE_REVISION
+    RUNTIME_PROFILE_ID = "dotnet-10-linux-x64"
+    RUNTIME_TITLE = "SharpLabNext .NET 10 Runtime Job"
+    DOTNET_ROLL_FORWARD = ""
     DOTNET_RUNTIME_VERSION = required(DOTNET10_RUNTIME_VERSION)
     DOTNET_RUNTIME_COMMIT = required(DOTNET10_RUNTIME_COMMIT)
     DOTNET_JIT_COMMIT = required(DOTNET10_JIT_COMMIT)
@@ -1148,11 +1151,14 @@ target "runtime-dotnet10" {
 
 target "runtime-dotnet11" {
   inherits = ["common"]
-  dockerfile = "deploy/docker/Dockerfile.runtime-dotnet11"
+  dockerfile = "deploy/docker/Dockerfile.runtime-dotnet"
   tags = ["${required(IMAGE_PREFIX)}/runtime-dotnet11:${required(RELEASE_ID)}"]
   args = {
     VERSION = RELEASE_ID
     SOURCE_REVISION = SOURCE_REVISION
+    RUNTIME_PROFILE_ID = "dotnet-11-preview-linux-x64"
+    RUNTIME_TITLE = "SharpLabNext .NET 11 Preview Runtime Job"
+    DOTNET_ROLL_FORWARD = "Major"
     DOTNET_RUNTIME_VERSION = required(DOTNET11_RUNTIME_VERSION)
     DOTNET_RUNTIME_COMMIT = required(DOTNET11_RUNTIME_COMMIT)
     DOTNET_JIT_COMMIT = required(DOTNET11_JIT_COMMIT)

@@ -22,20 +22,16 @@ namespace SharpLabNext.LegacyJitInspector
                 try
                 {
                     string expectedRuntimeVersion;
-                    string[] effectiveArgs = RuntimeVersionGuard.Extract(
-                        args ?? Array.Empty<string>(),
-                        out expectedRuntimeVersion);
+                    string[] effectiveArgs = RuntimeVersionGuard.Extract(args ?? Array.Empty<string>(), out expectedRuntimeVersion);
                     RuntimeVersionGuard.Validate(expectedRuntimeVersion);
 
-                    if (effectiveArgs.Length > 0 &&
-                        string.Equals(effectiveArgs[0], "run", StringComparison.Ordinal))
+                    if (effectiveArgs.Length > 0 && string.Equals(effectiveArgs[0], "run", StringComparison.Ordinal))
                     {
                         return RunUserAssembly(effectiveArgs, writer, started);
                     }
 
                     string[] jitArguments = effectiveArgs;
-                    if (effectiveArgs.Length > 0 &&
-                        string.Equals(effectiveArgs[0], "jit", StringComparison.Ordinal))
+                    if (effectiveArgs.Length > 0 && string.Equals(effectiveArgs[0], "jit", StringComparison.Ordinal))
                     {
                         jitArguments = new string[effectiveArgs.Length - 1];
                         Array.Copy(effectiveArgs, 1, jitArguments, 0, jitArguments.Length);
@@ -49,57 +45,32 @@ namespace SharpLabNext.LegacyJitInspector
                         NativeStreamFlusher.FlushAll();
                         string rawAssembly = JitDisassemblyDocument.ReadOutput();
                         var sourceSpans = PortablePdbMethodMap.Load(options.AssemblyPath);
-                        string assemblyText = JitDisassemblyDocument.SelectPreparedMethods(
-                            rawAssembly,
-                            methods,
-                            sourceSpans);
+                        string assemblyText = JitDisassemblyDocument.SelectPreparedMethods(rawAssembly, methods, sourceSpans);
 
                         WriteChunks(writer, RuntimeFrameKind.JitAssembly, Encoding.UTF8.GetBytes(assemblyText));
-                        writer.Write(
-                            RuntimeFrameKind.JitSummary,
-                            JsonPayloadWriter.WriteJitSummary(
-                                Environment.Version.ToString(),
-                                assembly.GetName().Name,
-                                options.MethodFilter,
-                                methods));
+                        writer.Write(RuntimeFrameKind.JitSummary, JsonPayloadWriter.WriteJitSummary(Environment.Version.ToString(), assembly.GetName().Name, options.MethodFilter, methods));
 
                         bool preparedAny = methods.Any(method => method.Status == "prepared");
                         int exitCode = preparedAny && assemblyText.Length > 0 ? 0 : preparedAny ? 1 : 2;
-                        writer.Write(
-                            RuntimeFrameKind.Exit,
-                            JsonPayloadWriter.WriteExit(
-                                exitCode == 0
-                                    ? "completed"
-                                    : exitCode == 2 ? "no-matching-methods" : "inspection-failed",
-                                exitCode,
-                                started.Elapsed.TotalMilliseconds));
+                        writer.Write(RuntimeFrameKind.Exit, JsonPayloadWriter.WriteExit(exitCode == 0 ? "completed" : exitCode == 2 ? "no-matching-methods" : "inspection-failed", exitCode, started.Elapsed.TotalMilliseconds));
                         return exitCode;
                     }
                 }
                 catch (OutOfMemoryException)
                 {
-                    writer.Write(
-                        RuntimeFrameKind.Exit,
-                        JsonPayloadWriter.WriteExit("out-of-memory", 137, started.Elapsed.TotalMilliseconds));
+                    writer.Write(RuntimeFrameKind.Exit, JsonPayloadWriter.WriteExit("out-of-memory", 137, started.Elapsed.TotalMilliseconds));
                     return 137;
                 }
                 catch (Exception exception)
                 {
-                    writer.Write(
-                        RuntimeFrameKind.Exception,
-                        JsonPayloadWriter.WriteException(exception, started.Elapsed.TotalMilliseconds));
-                    writer.Write(
-                        RuntimeFrameKind.Exit,
-                        JsonPayloadWriter.WriteExit("inspection-failed", 1, started.Elapsed.TotalMilliseconds));
+                    writer.Write(RuntimeFrameKind.Exception, JsonPayloadWriter.WriteException(exception, started.Elapsed.TotalMilliseconds));
+                    writer.Write(RuntimeFrameKind.Exit, JsonPayloadWriter.WriteExit("inspection-failed", 1, started.Elapsed.TotalMilliseconds));
                     return 1;
                 }
             }
         }
 
-        private static int RunUserAssembly(
-            string[] args,
-            RuntimeFrameWriter writer,
-            Stopwatch started)
+        private static int RunUserAssembly(string[] args, RuntimeFrameWriter writer, Stopwatch started)
         {
             var options = RunArguments.Parse(args);
             RunOutputCapture capture = null;
@@ -112,32 +83,21 @@ namespace SharpLabNext.LegacyJitInspector
                     ConfigureStandardInput();
                     int exitCode = UserEntryPointRunner.Run(assembly, options.UserArguments);
                     capture.Emit(writer);
-                    writer.Write(
-                        RuntimeFrameKind.Exit,
-                        JsonPayloadWriter.WriteExit(
-                            exitCode == 0 ? "completed" : "non-zero-exit",
-                            exitCode,
-                            started.Elapsed.TotalMilliseconds));
+                    writer.Write(RuntimeFrameKind.Exit, JsonPayloadWriter.WriteExit(exitCode == 0 ? "completed" : "non-zero-exit", exitCode, started.Elapsed.TotalMilliseconds));
                     return exitCode;
                 }
             }
             catch (OutOfMemoryException)
             {
                 TryEmit(capture, writer);
-                writer.Write(
-                    RuntimeFrameKind.Exit,
-                    JsonPayloadWriter.WriteExit("out-of-memory", 137, started.Elapsed.TotalMilliseconds));
+                writer.Write(RuntimeFrameKind.Exit, JsonPayloadWriter.WriteExit("out-of-memory", 137, started.Elapsed.TotalMilliseconds));
                 return 137;
             }
             catch (Exception exception)
             {
                 TryEmit(capture, writer);
-                writer.Write(
-                    RuntimeFrameKind.Exception,
-                    JsonPayloadWriter.WriteException(exception, started.Elapsed.TotalMilliseconds));
-                writer.Write(
-                    RuntimeFrameKind.Exit,
-                    JsonPayloadWriter.WriteExit("user-exception", 1, started.Elapsed.TotalMilliseconds));
+                writer.Write(RuntimeFrameKind.Exception, JsonPayloadWriter.WriteException(exception, started.Elapsed.TotalMilliseconds));
+                writer.Write(RuntimeFrameKind.Exit, JsonPayloadWriter.WriteExit("user-exception", 1, started.Elapsed.TotalMilliseconds));
                 return 1;
             }
             finally

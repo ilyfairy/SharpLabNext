@@ -18,12 +18,8 @@ public sealed class CheckedJitBridgeTests
     {
         Assert.Equal("sharplabnext-checked-jit-bridge-v1", CheckedJitBridgeContract.ImplementationId);
         Assert.Equal("checked-jit-debug-info", CheckedJitBridgeContract.SourceMappingKind);
-        Assert.Equal(
-            "SHARPLABNEXT_CHECKED_JIT_SOURCE_MAPPING_KIND",
-            CheckedJitBridgeContract.SourceMappingKindEnvironmentVariable);
-        Assert.Equal(
-            "/opt/sharplabnext/SharpLabNext.CheckedJitBridge.dll",
-            CheckedJitBridgeContract.InstalledAssemblyPath);
+        Assert.Equal("SHARPLABNEXT_CHECKED_JIT_SOURCE_MAPPING_KIND", CheckedJitBridgeContract.SourceMappingKindEnvironmentVariable);
+        Assert.Equal("/opt/sharplabnext/SharpLabNext.CheckedJitBridge.dll", CheckedJitBridgeContract.InstalledAssemblyPath);
     }
 
     [Fact]
@@ -31,20 +27,10 @@ public sealed class CheckedJitBridgeTests
     {
         using var error = new StringWriter();
 
-        Assert.Equal(
-            0,
-            RuntimeVersionVerifier.Run(
-                [RuntimeVersionVerifier.Switch, "7.0.20"],
-                error,
-                static () => "7.0.20"));
+        Assert.Equal(0, RuntimeVersionVerifier.Run([RuntimeVersionVerifier.Switch, "7.0.20"], error, static () => "7.0.20"));
         Assert.Empty(error.ToString());
 
-        Assert.Equal(
-            1,
-            RuntimeVersionVerifier.Run(
-                [RuntimeVersionVerifier.Switch, "7.0.20"],
-                error,
-                static () => "7.0.22"));
+        Assert.Equal(1, RuntimeVersionVerifier.Run([RuntimeVersionVerifier.Switch, "7.0.20"], error, static () => "7.0.22"));
         Assert.Contains("'7.0.22' does not match '7.0.20'", error.ToString(), StringComparison.Ordinal);
 
         error.GetStringBuilder().Clear();
@@ -65,10 +51,8 @@ public sealed class CheckedJitBridgeTests
         Assert.Equal(assemblyPath, parsedWithEmptyFilter.AssemblyPath);
         Assert.Null(parsedWithEmptyFilter.MethodFilter);
         Assert.Throws<ArgumentException>(() => CheckedJitBridgeArguments.Parse(["jit"]));
-        Assert.Throws<ArgumentException>(() =>
-            CheckedJitBridgeArguments.Parse(["jit", assemblyPath, "filter", "extra"]));
-        Assert.Throws<ArgumentException>(() =>
-            CheckedJitBridgeArguments.Parse(["jit", assemblyPath, "bad\nfilter"]));
+        Assert.Throws<ArgumentException>(() => CheckedJitBridgeArguments.Parse(["jit", assemblyPath, "filter", "extra"]));
+        Assert.Throws<ArgumentException>(() => CheckedJitBridgeArguments.Parse(["jit", assemblyPath, "bad\nfilter"]));
     }
 
     [Fact]
@@ -97,10 +81,7 @@ public sealed class CheckedJitBridgeTests
             }
         };
 
-        var command = RuntimeProfileCommandBuilder.CreateJitCommand(
-            profile,
-            "SharpLabNext.User.dll",
-            methodFilter: null);
+        var command = RuntimeProfileCommandBuilder.CreateJitCommand(profile, "SharpLabNext.User.dll", methodFilter: null);
 
         Assert.Equal(
             [
@@ -127,22 +108,14 @@ public sealed class CheckedJitBridgeTests
         Directory.CreateDirectory(directory);
         try
         {
-            var hostPath = Path.Combine(directory, RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                ? "dotnet.exe"
-                : "dotnet");
+            var hostPath = Path.Combine(directory, RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "dotnet.exe" : "dotnet");
             var bridgePath = Path.Combine(directory, "SharpLabNext.CheckedJitBridge.dll");
             File.WriteAllBytes(hostPath, []);
             File.WriteAllBytes(bridgePath, []);
             var assemblyPath = typeof(CheckedJitBridgeArguments).Assembly.Location;
             var options = new CheckedJitBridgeArguments(assemblyPath, "Type.Method");
 
-            var startInfo = CheckedJitChildProcess.CreateStartInfo(
-                options,
-                "pipe-handle",
-                "0123456789abcdef0123456789abcdef",
-                "SharpLabNext.CheckedJitBridge",
-                hostPath,
-                bridgePath);
+            var startInfo = CheckedJitChildProcess.CreateStartInfo(options, "pipe-handle", "0123456789abcdef0123456789abcdef", "SharpLabNext.CheckedJitBridge", hostPath, bridgePath);
 
             Assert.Equal(hostPath, startInfo.FileName);
             Assert.Equal(
@@ -160,9 +133,7 @@ public sealed class CheckedJitBridgeTests
             Assert.True(startInfo.RedirectStandardError);
             Assert.False(startInfo.RedirectStandardInput);
             Assert.Equal("*", startInfo.Environment["DOTNET_JitDisasm"]);
-            Assert.Equal(
-                "SharpLabNext.CheckedJitBridge",
-                startInfo.Environment["DOTNET_JitDisasmAssemblies"]);
+            Assert.Equal("SharpLabNext.CheckedJitBridge", startInfo.Environment["DOTNET_JitDisasmAssemblies"]);
             Assert.Equal("1", startInfo.Environment["DOTNET_JitDisasmWithDebugInfo"]);
             Assert.False(startInfo.Environment.ContainsKey("DOTNET_JitStdOutFile"));
             Assert.False(startInfo.Environment.ContainsKey("COMPlus_JitStdOutFile"));
@@ -201,15 +172,7 @@ public sealed class CheckedJitBridgeTests
         };
         startInfo.ArgumentList.Add("--info");
 
-        var result = await BoundedChildProcessRunner.RunAsync(
-            startInfo,
-            new BoundedChildProcessLimits(
-                standardOutputBytes: 1,
-                standardErrorBytes: 1,
-                totalOutputBytes: 1,
-                executionTimeout: TimeSpan.FromSeconds(10),
-                cleanupTimeout: TimeSpan.FromSeconds(2)),
-            CancellationToken.None);
+        var result = await BoundedChildProcessRunner.RunAsync(startInfo, new BoundedChildProcessLimits(standardOutputBytes: 1, standardErrorBytes: 1, totalOutputBytes: 1, executionTimeout: TimeSpan.FromSeconds(10), cleanupTimeout: TimeSpan.FromSeconds(2)), CancellationToken.None);
 
         Assert.Equal(ChildTerminationReason.OutputLimitExceeded, result.TerminationReason);
         Assert.True(result.StandardOutput.Length + result.StandardError.Length <= 1);
@@ -219,10 +182,7 @@ public sealed class CheckedJitBridgeTests
     [Fact]
     public async Task ProcessRunnerKillsAndWaitsAfterTimeout()
     {
-        var result = await BoundedChildProcessRunner.RunAsync(
-            CreateHangingFixtureStartInfo(),
-            CreateProcessLimits(TimeSpan.FromMilliseconds(150)),
-            CancellationToken.None);
+        var result = await BoundedChildProcessRunner.RunAsync(CreateHangingFixtureStartInfo(), CreateProcessLimits(TimeSpan.FromMilliseconds(150)), CancellationToken.None);
 
         Assert.Equal(ChildTerminationReason.TimedOut, result.TerminationReason);
         AssertProcessExited(result.ProcessId);
@@ -233,11 +193,7 @@ public sealed class CheckedJitBridgeTests
     {
         using var cancellation = new CancellationTokenSource();
 
-        var result = await BoundedChildProcessRunner.RunAsync(
-            CreateHangingFixtureStartInfo(),
-            CreateProcessLimits(TimeSpan.FromSeconds(10)),
-            cancellation.Token,
-            processStarted: cancellation.Cancel);
+        var result = await BoundedChildProcessRunner.RunAsync(CreateHangingFixtureStartInfo(), CreateProcessLimits(TimeSpan.FromSeconds(10)), cancellation.Token, processStarted: cancellation.Cancel);
 
         Assert.Equal(ChildTerminationReason.Cancelled, result.TerminationReason);
         AssertProcessExited(result.ProcessId);
@@ -249,8 +205,7 @@ public sealed class CheckedJitBridgeTests
         using var stream = new MemoryStream(new byte[17]);
         var failure = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        await Assert.ThrowsAsync<InvalidDataException>(() =>
-            BoundedStreamReader.ReadAsync(stream, maximumBytes: 16, failure));
+        await Assert.ThrowsAsync<InvalidDataException>(() => BoundedStreamReader.ReadAsync(stream, maximumBytes: 16, failure));
 
         Assert.True(failure.Task.IsCompletedSuccessfully);
     }
@@ -258,16 +213,11 @@ public sealed class CheckedJitBridgeTests
     [Fact]
     public async Task HeldOpenMetadataPipeCannotBlockCompletion()
     {
-        using var server = new AnonymousPipeServerStream(
-            PipeDirection.In,
-            HandleInheritability.Inheritable);
+        using var server = new AnonymousPipeServerStream(PipeDirection.In, HandleInheritability.Inheritable);
         var failure = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var metadataRead = BoundedStreamReader.ReadAsync(server, maximumBytes: 16, failure);
 
-        await Assert.ThrowsAsync<InvalidDataException>(() =>
-            CheckedJitBridgeProgram.AwaitMetadataAsync(
-                metadataRead,
-                TimeSpan.FromMilliseconds(100)));
+        await Assert.ThrowsAsync<InvalidDataException>(() => CheckedJitBridgeProgram.AwaitMetadataAsync(metadataRead, TimeSpan.FromMilliseconds(100)));
 
         server.DisposeLocalCopyOfClientHandle();
         Assert.Empty(await metadataRead);
@@ -278,77 +228,37 @@ public sealed class CheckedJitBridgeTests
     public void ChildResultValidationRejectsForgedMethodMetadata()
     {
         const string nonce = "0123456789abcdef0123456789abcdef";
-        var targetMethod = typeof(CheckedJitBridgeArguments).GetMethod(
-            nameof(CheckedJitBridgeArguments.Parse),
-            BindingFlags.Public | BindingFlags.Static)!;
-        var validMethod = new ChildMethodRecord(
-            $"0x{targetMethod.MetadataToken:x8}",
-            targetMethod.MetadataToken,
-            $"{typeof(CheckedJitBridgeArguments).FullName}.{targetMethod.Name}",
-            Array.Empty<ChildGenericArgument>(),
-            Array.Empty<ChildGenericArgument>(),
-            "prepared",
-            "0x1234",
-            null);
-        var envelope = new ChildResultEnvelope(
-            ChildResultEnvelope.ProtocolMagic,
-            nonce,
-            typeof(CheckedJitBridgeArguments).Assembly.GetName().Name!,
-            [validMethod],
-            null);
+        var targetMethod = typeof(CheckedJitBridgeArguments).GetMethod(nameof(CheckedJitBridgeArguments.Parse), BindingFlags.Public | BindingFlags.Static)!;
+        var validMethod = new ChildMethodRecord($"0x{targetMethod.MetadataToken:x8}", targetMethod.MetadataToken, $"{typeof(CheckedJitBridgeArguments).FullName}.{targetMethod.Name}", Array.Empty<ChildGenericArgument>(), Array.Empty<ChildGenericArgument>(), "prepared", "0x1234", null);
+        var envelope = new ChildResultEnvelope(ChildResultEnvelope.ProtocolMagic, nonce, typeof(CheckedJitBridgeArguments).Assembly.GetName().Name!, [validMethod], null);
 
-        var validated = ChildResultCodec.ParseAndValidate(
-            ChildResultCodec.Serialize(envelope),
-            typeof(CheckedJitBridgeArguments).Assembly.Location,
-            nonce);
+        var validated = ChildResultCodec.ParseAndValidate(ChildResultCodec.Serialize(envelope), typeof(CheckedJitBridgeArguments).Assembly.Location, nonce);
 
         Assert.Single(validated.Methods);
-        var forged = envelope with
-        {
-            Methods = [validMethod with { DisplayName = "System.String.Concat" }]
-        };
-        Assert.Throws<InvalidDataException>(() => ChildResultCodec.ParseAndValidate(
-            ChildResultCodec.Serialize(forged),
-            typeof(CheckedJitBridgeArguments).Assembly.Location,
-            nonce));
+        var forged = envelope with { Methods = [validMethod with { DisplayName = "System.String.Concat" }] };
+        Assert.Throws<InvalidDataException>(() => ChildResultCodec.ParseAndValidate(ChildResultCodec.Serialize(forged), typeof(CheckedJitBridgeArguments).Assembly.Location, nonce));
     }
 
     [Fact]
     public void ChildResultValidationAuthenticatesNonceAndRejectsUnknownJson()
     {
         const string nonce = "0123456789abcdef0123456789abcdef";
-        var targetMethod = typeof(CheckedJitBridgeArguments).GetMethod(
-            nameof(CheckedJitBridgeArguments.Parse),
-            BindingFlags.Public | BindingFlags.Static)!;
+        var targetMethod = typeof(CheckedJitBridgeArguments).GetMethod(nameof(CheckedJitBridgeArguments.Parse), BindingFlags.Public | BindingFlags.Static)!;
         var envelope = new ChildResultEnvelope(
             ChildResultEnvelope.ProtocolMagic,
             nonce,
             typeof(CheckedJitBridgeArguments).Assembly.GetName().Name!,
             [
-                new ChildMethodRecord(
-                    $"0x{targetMethod.MetadataToken:x8}",
-                    targetMethod.MetadataToken,
-                    $"{typeof(CheckedJitBridgeArguments).FullName}.{targetMethod.Name}",
-                    Array.Empty<ChildGenericArgument>(),
-                    Array.Empty<ChildGenericArgument>(),
-                    "prepared",
-                    "0x1234",
-                    null)
+                new ChildMethodRecord($"0x{targetMethod.MetadataToken:x8}", targetMethod.MetadataToken, $"{typeof(CheckedJitBridgeArguments).FullName}.{targetMethod.Name}", Array.Empty<ChildGenericArgument>(), Array.Empty<ChildGenericArgument>(), "prepared", "0x1234", null)
             ],
             null);
         var assemblyPath = typeof(CheckedJitBridgeArguments).Assembly.Location;
 
-        Assert.Throws<InvalidDataException>(() => ChildResultCodec.ParseAndValidate(
-            ChildResultCodec.Serialize(envelope),
-            assemblyPath,
-            "fedcba9876543210fedcba9876543210"));
+        Assert.Throws<InvalidDataException>(() => ChildResultCodec.ParseAndValidate(ChildResultCodec.Serialize(envelope), assemblyPath, "fedcba9876543210fedcba9876543210"));
 
         var json = JsonNode.Parse(ChildResultCodec.Serialize(envelope))!.AsObject();
         json["Unknown"] = true;
-        Assert.Throws<InvalidDataException>(() => ChildResultCodec.ParseAndValidate(
-            Encoding.UTF8.GetBytes(json.ToJsonString()),
-            assemblyPath,
-            nonce));
+        Assert.Throws<InvalidDataException>(() => ChildResultCodec.ParseAndValidate(Encoding.UTF8.GetBytes(json.ToJsonString()), assemblyPath, nonce));
     }
 
     [Fact]
@@ -357,57 +267,22 @@ public sealed class CheckedJitBridgeTests
         var integer = JitMethodSignatures.CreateGenericArgument(typeof(int));
         var reference = JitMethodSignatures.CreateGenericArgument(typeof(string));
         var genericType = typeof(SignatureGenericType<>);
-        var typeMethod = genericType.GetMethod(
-            nameof(SignatureGenericType<int>.Echo),
-            BindingFlags.Public | BindingFlags.Instance)!;
-        var genericMethod = typeof(CheckedJitBridgeTests).GetMethod(
-            nameof(SignatureGenericMethod),
-            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var typeMethod = genericType.GetMethod(nameof(SignatureGenericType<int>.Echo), BindingFlags.Public | BindingFlags.Instance)!;
+        var genericMethod = typeof(CheckedJitBridgeTests).GetMethod(nameof(SignatureGenericMethod), BindingFlags.NonPublic | BindingFlags.Static)!;
         using var metadata = ManagedAssemblyMetadata.Open(typeof(CheckedJitBridgeTests).Assembly.Location);
 
-        var typeIdentity = metadata.ValidateMethod(new ChildMethodRecord(
-            JitMethodSignatures.CreateMethodIdentity(typeMethod.MetadataToken, [integer], []),
-            typeMethod.MetadataToken,
-            $"{genericType.FullName}[System.Int32].{typeMethod.Name}",
-            [integer],
-            [],
-            "prepared",
-            "0x1234",
-            null));
-        var methodIdentity = metadata.ValidateMethod(new ChildMethodRecord(
-            JitMethodSignatures.CreateMethodIdentity(genericMethod.MetadataToken, [], [reference]),
-            genericMethod.MetadataToken,
-            $"{typeof(CheckedJitBridgeTests).FullName}.{genericMethod.Name}",
-            [],
-            [reference],
-            "prepared",
-            "0x1234",
-            null));
+        var typeIdentity = metadata.ValidateMethod(new ChildMethodRecord(JitMethodSignatures.CreateMethodIdentity(typeMethod.MetadataToken, [integer], []), typeMethod.MetadataToken, $"{genericType.FullName}[System.Int32].{typeMethod.Name}", [integer], [], "prepared", "0x1234", null));
+        var methodIdentity = metadata.ValidateMethod(new ChildMethodRecord(JitMethodSignatures.CreateMethodIdentity(genericMethod.MetadataToken, [], [reference]), genericMethod.MetadataToken, $"{typeof(CheckedJitBridgeTests).FullName}.{genericMethod.Name}", [], [reference], "prepared", "0x1234", null));
 
-        Assert.Equal(
-            $"{genericType.FullName}[int]:Echo(int):int:this",
-            typeIdentity.HeaderKey);
-        Assert.Equal(
-            $"{typeof(CheckedJitBridgeTests).FullName}:SignatureGenericMethod[System.__Canon]" +
-            "(System.__Canon):System.__Canon",
-            methodIdentity.HeaderKey);
+        Assert.Equal($"{genericType.FullName}[int]:Echo(int):int:this", typeIdentity.HeaderKey);
+        Assert.Equal($"{typeof(CheckedJitBridgeTests).FullName}:SignatureGenericMethod[System.__Canon]" + "(System.__Canon):System.__Canon", methodIdentity.HeaderKey);
     }
 
     [Fact]
     public void MetadataSignatureDecoderDistinguishesOverloads()
     {
-        var integer = typeof(CheckedJitBridgeTests).GetMethod(
-            nameof(SignatureOverload),
-            BindingFlags.NonPublic | BindingFlags.Static,
-            binder: null,
-            [typeof(int)],
-            modifiers: null)!;
-        var @long = typeof(CheckedJitBridgeTests).GetMethod(
-            nameof(SignatureOverload),
-            BindingFlags.NonPublic | BindingFlags.Static,
-            binder: null,
-            [typeof(long)],
-            modifiers: null)!;
+        var integer = typeof(CheckedJitBridgeTests).GetMethod(nameof(SignatureOverload), BindingFlags.NonPublic | BindingFlags.Static, binder: null, [typeof(int)], modifiers: null)!;
+        var @long = typeof(CheckedJitBridgeTests).GetMethod(nameof(SignatureOverload), BindingFlags.NonPublic | BindingFlags.Static, binder: null, [typeof(long)], modifiers: null)!;
         using var metadata = ManagedAssemblyMetadata.Open(typeof(CheckedJitBridgeTests).Assembly.Location);
 
         var integerIdentity = metadata.ValidateMethod(CreateChildMethodRecord(integer));
@@ -422,9 +297,7 @@ public sealed class CheckedJitBridgeTests
     public void PortablePdbMustMatchPeContentIdentity()
     {
         var assemblyPath = typeof(CheckedJitBridgeArguments).Assembly.Location;
-        var method = typeof(CheckedJitBridgeArguments).GetMethod(
-            nameof(CheckedJitBridgeArguments.Parse),
-            BindingFlags.Public | BindingFlags.Static)!;
+        var method = typeof(CheckedJitBridgeArguments).GetMethod(nameof(CheckedJitBridgeArguments.Parse), BindingFlags.Public | BindingFlags.Static)!;
         var valid = CheckedJitSourceMapping.LoadSiblingPortablePdb(assemblyPath);
         Assert.Contains(method.MetadataToken, valid.Keys);
 
@@ -464,9 +337,7 @@ public sealed class CheckedJitBridgeTests
     public void EnabledDeclaredSourceMappingLoadsPortablePdb(string? declaredKind)
     {
         var assemblyPath = typeof(CheckedJitBridgeArguments).Assembly.Location;
-        var method = typeof(CheckedJitBridgeArguments).GetMethod(
-            nameof(CheckedJitBridgeArguments.Parse),
-            BindingFlags.Public | BindingFlags.Static)!;
+        var method = typeof(CheckedJitBridgeArguments).GetMethod(nameof(CheckedJitBridgeArguments.Parse), BindingFlags.Public | BindingFlags.Static)!;
 
         var maps = CheckedJitSourceMapping.LoadForDeclaredKind(assemblyPath, declaredKind);
 
@@ -478,8 +349,7 @@ public sealed class CheckedJitBridgeTests
     {
         var assemblyPath = typeof(CheckedJitBridgeArguments).Assembly.Location;
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            CheckedJitSourceMapping.LoadForDeclaredKind(assemblyPath, "method"));
+        var exception = Assert.Throws<InvalidOperationException>(() => CheckedJitSourceMapping.LoadForDeclaredKind(assemblyPath, "method"));
 
         Assert.Contains("Unsupported Checked JIT source mapping kind", exception.Message);
     }
@@ -517,10 +387,7 @@ public sealed class CheckedJitBridgeTests
             "       90                   nop\n" +
             "; Total bytes of code 6\n";
 
-        var result = CreatePreparedResult(
-            "Sample.Type.Add",
-            0x06000001,
-            "Sample.Type:Add(int,int):int");
+        var result = CreatePreparedResult("Sample.Type.Add", 0x06000001, "Sample.Type:Add(int,int):int");
         CheckedJitDisassemblyDocument.SelectPreparedMethods(
             section,
             [result],
@@ -534,11 +401,8 @@ public sealed class CheckedJitBridgeTests
         Assert.Equal(new JitEvidenceRange(0, 0, 5, "Sample.cs", 2, 1, 2, 13), evidence[0]);
         Assert.Equal(new JitEvidenceRange(4, 5, 6, "Sample.cs", 3, 1, 3, 13), evidence[1]);
 
-        using var payload = JsonDocument.Parse(BridgePayloadCodec.Serialize(
-            new JitSummaryPayload("9.0.0", "Sample", null, [result])));
-        var serializedEvidence = payload.RootElement
-            .GetProperty("Methods")[0]
-            .GetProperty("EvidenceRanges");
+        using var payload = JsonDocument.Parse(BridgePayloadCodec.Serialize(new JitSummaryPayload("9.0.0", "Sample", null, [result])));
+        var serializedEvidence = payload.RootElement.GetProperty("Methods")[0].GetProperty("EvidenceRanges");
         Assert.Equal(2, serializedEvidence.GetArrayLength());
         Assert.Equal(5, serializedEvidence[0].GetProperty("NativeEndOffset").GetInt32());
     }
@@ -558,10 +422,7 @@ public sealed class CheckedJitBridgeTests
 
         var mapped = CheckedJitSourceMapping.MapSection(section, source);
 
-        var evidence = mapped.Ranges
-            .Select(static range => range.EvidenceRange)
-            .OfType<JitEvidenceRange>()
-            .ToArray();
+        var evidence = mapped.Ranges.Select(static range => range.EvidenceRange).OfType<JitEvidenceRange>().ToArray();
         Assert.Equal(2, evidence.Length);
         Assert.Equal(new JitEvidenceRange(0, 0, 1, "Sample.cs", 2, 1, 2, 13), evidence[0]);
         Assert.Equal(new JitEvidenceRange(4, 1, 5, "Sample.cs", 3, 1, 3, 13), evidence[1]);
@@ -585,10 +446,7 @@ public sealed class CheckedJitBridgeTests
 
         var mapped = CheckedJitSourceMapping.MapSection(section, source);
 
-        var evidence = mapped.Ranges
-            .Select(static range => range.EvidenceRange)
-            .OfType<JitEvidenceRange>()
-            .ToArray();
+        var evidence = mapped.Ranges.Select(static range => range.EvidenceRange).OfType<JitEvidenceRange>().ToArray();
         Assert.Equal(2, evidence.Length);
         Assert.Equal((1, 5), (evidence[0].NativeStartOffset, evidence[0].NativeEndOffset));
         Assert.Equal((6, 7), (evidence[1].NativeStartOffset, evidence[1].NativeEndOffset));
@@ -657,14 +515,8 @@ public sealed class CheckedJitBridgeTests
     [Fact]
     public void MultipleSectionsUseExactOutputLineOffsets()
     {
-        var first = CreatePreparedResult(
-            "Sample.Type.First",
-            0x06000001,
-            "Sample.Type:First():int");
-        var second = CreatePreparedResult(
-            "Sample.Type.Second",
-            0x06000002,
-            "Sample.Type:Second():int");
+        var first = CreatePreparedResult("Sample.Type.First", 0x06000001, "Sample.Type:First():int");
+        var second = CreatePreparedResult("Sample.Type.Second", 0x06000002, "Sample.Type:Second():int");
         const string assembly =
             "; Assembly listing for method Sample.Type:First():int\n" +
             "       mov      eax, 1\n" +
@@ -691,14 +543,8 @@ public sealed class CheckedJitBridgeTests
     [Fact]
     public void OverloadedSectionsBindByFullSignatureInsteadOfPreparationOrder()
     {
-        var integer = CreatePreparedResult(
-            "Sample.Type.Overload",
-            0x06000001,
-            "Sample.Type:Overload(int):int");
-        var @long = CreatePreparedResult(
-            "Sample.Type.Overload",
-            0x06000002,
-            "Sample.Type:Overload(long):long");
+        var integer = CreatePreparedResult("Sample.Type.Overload", 0x06000001, "Sample.Type:Overload(int):int");
+        var @long = CreatePreparedResult("Sample.Type.Overload", 0x06000002, "Sample.Type:Overload(long):long");
         const string assembly =
             "; Assembly listing for method Sample.Type:Overload(int):int\n" +
             "       mov      eax, ecx\n" +
@@ -729,22 +575,10 @@ public sealed class CheckedJitBridgeTests
     [Fact]
     public void NamespaceShortenedDeclaringTypeHeaderBindsUniqueMetadataSignature()
     {
-        var method = typeof(CheckedJitBridgeTests).GetMethod(
-            nameof(SignatureOverload),
-            BindingFlags.NonPublic | BindingFlags.Static,
-            binder: null,
-            [typeof(int)],
-            modifiers: null)!;
+        var method = typeof(CheckedJitBridgeTests).GetMethod(nameof(SignatureOverload), BindingFlags.NonPublic | BindingFlags.Static, binder: null, [typeof(int)], modifiers: null)!;
         using var metadata = ManagedAssemblyMetadata.Open(typeof(CheckedJitBridgeTests).Assembly.Location);
         var signatureIdentity = metadata.ValidateMethod(CreateChildMethodRecord(method));
-        var target = new JitMethodResult(
-            $"0x{method.MetadataToken:x8}",
-            method.MetadataToken,
-            $"{typeof(CheckedJitBridgeTests).FullName}.{method.Name}",
-            "prepared",
-            "0x1234",
-            null,
-            signatureIdentity);
+        var target = new JitMethodResult($"0x{method.MetadataToken:x8}", method.MetadataToken, $"{typeof(CheckedJitBridgeTests).FullName}.{method.Name}", "prepared", "0x1234", null, signatureIdentity);
         var assembly =
             $"; Assembly listing for method {nameof(CheckedJitBridgeTests)}:SignatureOverload(int):int\n" +
             "       mov      eax, ecx\n" +
@@ -768,27 +602,14 @@ public sealed class CheckedJitBridgeTests
     public void NamespaceShortenedDeclaringTypeCollisionRemainsVisibleButUnbound()
     {
         const string shortenedHeader = "SharedType:Target():int";
-        var first = CreatePreparedResult(
-            "First.Namespace.SharedType.Target",
-            0x06000001,
-            "First.Namespace.SharedType:Target():int",
-            namespaceShortenedNameKey: "SharedType:Target",
-            namespaceShortenedHeaderKey: shortenedHeader);
-        var second = CreatePreparedResult(
-            "Second.Namespace.SharedType.Target",
-            0x06000002,
-            "Second.Namespace.SharedType:Target():int",
-            namespaceShortenedNameKey: "SharedType:Target",
-            namespaceShortenedHeaderKey: shortenedHeader);
+        var first = CreatePreparedResult("First.Namespace.SharedType.Target", 0x06000001, "First.Namespace.SharedType:Target():int", namespaceShortenedNameKey: "SharedType:Target", namespaceShortenedHeaderKey: shortenedHeader);
+        var second = CreatePreparedResult("Second.Namespace.SharedType.Target", 0x06000002, "Second.Namespace.SharedType:Target():int", namespaceShortenedNameKey: "SharedType:Target", namespaceShortenedHeaderKey: shortenedHeader);
         var assembly =
             $"; Assembly listing for method {shortenedHeader}\n" +
             "       mov      eax, 1\n" +
             "; Total bytes of code 1\n";
 
-        var output = CheckedJitDisassemblyDocument.SelectPreparedMethods(
-            assembly,
-            [first, second],
-            new Dictionary<int, CheckedMethodSourceMap>());
+        var output = CheckedJitDisassemblyDocument.SelectPreparedMethods(assembly, [first, second], new Dictionary<int, CheckedMethodSourceMap>());
 
         Assert.Contains(shortenedHeader, output);
         Assert.Equal(0, first.NativeCodeSize);
@@ -800,21 +621,13 @@ public sealed class CheckedJitBridgeTests
     [Fact]
     public void NamespaceShortenedUnrelatedSignatureIsFilteredOut()
     {
-        var target = CreatePreparedResult(
-            "Sample.Namespace.SharedType.Target",
-            0x06000001,
-            "Sample.Namespace.SharedType:Target(int):int",
-            namespaceShortenedNameKey: "SharedType:Target",
-            namespaceShortenedHeaderKey: "SharedType:Target(int):int");
+        var target = CreatePreparedResult("Sample.Namespace.SharedType.Target", 0x06000001, "Sample.Namespace.SharedType:Target(int):int", namespaceShortenedNameKey: "SharedType:Target", namespaceShortenedHeaderKey: "SharedType:Target(int):int");
         const string assembly =
             "; Assembly listing for method SharedType:Target(long):int\n" +
             "       mov      rax, rcx\n" +
             "; Total bytes of code 1\n";
 
-        var output = CheckedJitDisassemblyDocument.SelectPreparedMethods(
-            assembly,
-            [target],
-            new Dictionary<int, CheckedMethodSourceMap>());
+        var output = CheckedJitDisassemblyDocument.SelectPreparedMethods(assembly, [target], new Dictionary<int, CheckedMethodSourceMap>());
 
         Assert.Empty(output);
         Assert.Equal(0, target.NativeCodeSize);
@@ -824,12 +637,7 @@ public sealed class CheckedJitBridgeTests
     [Fact]
     public void ExactHeaderTakesPriorityOverTheSameMethodsShortenedHeader()
     {
-        var target = CreatePreparedResult(
-            "Sample.Namespace.SharedType.Target",
-            0x06000001,
-            "Sample.Namespace.SharedType:Target():int",
-            namespaceShortenedNameKey: "SharedType:Target",
-            namespaceShortenedHeaderKey: "SharedType:Target():int");
+        var target = CreatePreparedResult("Sample.Namespace.SharedType.Target", 0x06000001, "Sample.Namespace.SharedType:Target():int", namespaceShortenedNameKey: "SharedType:Target", namespaceShortenedHeaderKey: "SharedType:Target():int");
         const string assembly =
             "; Assembly listing for method SharedType:Target():int\n" +
             "       mov      eax, 2\n" +
@@ -838,10 +646,7 @@ public sealed class CheckedJitBridgeTests
             "       mov      eax, 1\n" +
             "; Total bytes of code 1\n";
 
-        var output = CheckedJitDisassemblyDocument.SelectPreparedMethods(
-            assembly,
-            [target],
-            new Dictionary<int, CheckedMethodSourceMap>());
+        var output = CheckedJitDisassemblyDocument.SelectPreparedMethods(assembly, [target], new Dictionary<int, CheckedMethodSourceMap>());
 
         Assert.Contains("SharedType:Target():int", output);
         Assert.Contains("Sample.Namespace.SharedType:Target():int", output);
@@ -853,16 +658,8 @@ public sealed class CheckedJitBridgeTests
     public void ConstructedGenericDeclaringTypesBindByCanonicalHeader()
     {
         const int metadataToken = 0x06000001;
-        var integer = CreatePreparedResult(
-            "Sample.GenericType`1[[System.Int32]].Echo",
-            metadataToken,
-            "Sample.GenericType`1[int]:Echo(int):int",
-            "type-int");
-        var reference = CreatePreparedResult(
-            "Sample.GenericType`1[[System.String]].Echo",
-            metadataToken,
-            "Sample.GenericType`1[System.__Canon]:Echo(System.__Canon):System.__Canon",
-            "type-string");
+        var integer = CreatePreparedResult("Sample.GenericType`1[[System.Int32]].Echo", metadataToken, "Sample.GenericType`1[int]:Echo(int):int", "type-int");
+        var reference = CreatePreparedResult("Sample.GenericType`1[[System.String]].Echo", metadataToken, "Sample.GenericType`1[System.__Canon]:Echo(System.__Canon):System.__Canon", "type-string");
         const string assembly =
             "; Assembly listing for method Sample.GenericType`1[System.__Canon]:Echo(System.__Canon):System.__Canon (Tier0)\n" +
             "       mov      rax, rdx\n" +
@@ -891,16 +688,8 @@ public sealed class CheckedJitBridgeTests
     public void ConstructedGenericMethodsBindByCanonicalHeader()
     {
         const int metadataToken = 0x06000001;
-        var integer = CreatePreparedResult(
-            "Sample.Type.Generic",
-            metadataToken,
-            "Sample.Type:Generic[int](int):int",
-            "method-int");
-        var reference = CreatePreparedResult(
-            "Sample.Type.Generic",
-            metadataToken,
-            "Sample.Type:Generic[System.__Canon](System.__Canon):System.__Canon",
-            "method-string");
+        var integer = CreatePreparedResult("Sample.Type.Generic", metadataToken, "Sample.Type:Generic[int](int):int", "method-int");
+        var reference = CreatePreparedResult("Sample.Type.Generic", metadataToken, "Sample.Type:Generic[System.__Canon](System.__Canon):System.__Canon", "method-string");
         const string assembly =
             "; Assembly listing for method Sample.Type:Generic[int](int):int\n" +
             "       mov      eax, ecx\n" +
@@ -928,8 +717,7 @@ public sealed class CheckedJitBridgeTests
     [Fact]
     public void CanonicalReferenceCollisionRemainsVisibleButUnbound()
     {
-        const string header =
-            "Sample.Type:Generic[System.__Canon](System.__Canon):System.__Canon";
+        const string header = "Sample.Type:Generic[System.__Canon](System.__Canon):System.__Canon";
         var first = CreatePreparedResult("Sample.Type.Generic", 0x06000001, header, "method-string");
         var second = CreatePreparedResult("Sample.Type.Generic", 0x06000001, header, "method-object");
         var assembly =
@@ -984,10 +772,7 @@ public sealed class CheckedJitBridgeTests
     [Fact]
     public void UnrelatedJitSectionsAreFilteredOut()
     {
-        var target = CreatePreparedResult(
-            "Sample.Type.Target",
-            0x06000001,
-            "Sample.Type:Target():int");
+        var target = CreatePreparedResult("Sample.Type.Target", 0x06000001, "Sample.Type:Target():int");
         const string assembly =
             "; Assembly listing for method Sample.Type:Unrelated():int\n" +
             "       mov      eax, 0\n" +
@@ -996,10 +781,7 @@ public sealed class CheckedJitBridgeTests
             "       mov      eax, 1\n" +
             "; Total bytes of code 1\n";
 
-        var output = CheckedJitDisassemblyDocument.SelectPreparedMethods(
-            assembly,
-            [target],
-            new Dictionary<int, CheckedMethodSourceMap>());
+        var output = CheckedJitDisassemblyDocument.SelectPreparedMethods(assembly, [target], new Dictionary<int, CheckedMethodSourceMap>());
 
         Assert.DoesNotContain("Unrelated", output);
         Assert.Contains("Target():int", output);
@@ -1036,38 +818,13 @@ public sealed class CheckedJitBridgeTests
         ]);
 
     private static ChildMethodRecord CreateChildMethodRecord(MethodInfo method) =>
-        new(
-            JitMethodSignatures.CreateMethodIdentity(method.MetadataToken, [], []),
-            method.MetadataToken,
-            $"{method.DeclaringType!.FullName}.{method.Name}",
-            [],
-            [],
-            "prepared",
-            "0x1234",
-            null);
+        new(JitMethodSignatures.CreateMethodIdentity(method.MetadataToken, [], []), method.MetadataToken, $"{method.DeclaringType!.FullName}.{method.Name}", [], [], "prepared", "0x1234", null);
 
-    private static JitMethodResult CreatePreparedResult(
-        string displayName,
-        int metadataToken,
-        string headerKey,
-        string? methodIdentity = null,
-        string? namespaceShortenedNameKey = null,
-        string? namespaceShortenedHeaderKey = null)
+    private static JitMethodResult CreatePreparedResult(string displayName, int metadataToken, string headerKey, string? methodIdentity = null, string? namespaceShortenedNameKey = null, string? namespaceShortenedHeaderKey = null)
     {
         Assert.True(JitMethodSignatures.TryParseHeader(headerKey, out var signatureIdentity));
-        signatureIdentity = signatureIdentity with
-        {
-            NamespaceShortenedNameKey = namespaceShortenedNameKey,
-            NamespaceShortenedHeaderKey = namespaceShortenedHeaderKey
-        };
-        return new JitMethodResult(
-            methodIdentity ?? $"0x{metadataToken:x8}",
-            metadataToken,
-            displayName,
-            "prepared",
-            "0x1234",
-            null,
-            signatureIdentity);
+        signatureIdentity = signatureIdentity with { NamespaceShortenedNameKey = namespaceShortenedNameKey, NamespaceShortenedHeaderKey = namespaceShortenedHeaderKey };
+        return new JitMethodResult(methodIdentity ?? $"0x{metadataToken:x8}", metadataToken, displayName, "prepared", "0x1234", null, signatureIdentity);
     }
 
     private static int CountOccurrences(string value, string search)
@@ -1083,12 +840,7 @@ public sealed class CheckedJitBridgeTests
     }
 
     private static BoundedChildProcessLimits CreateProcessLimits(TimeSpan executionTimeout) =>
-        new(
-            standardOutputBytes: 1_024,
-            standardErrorBytes: 1_024,
-            totalOutputBytes: 2_048,
-            executionTimeout,
-            cleanupTimeout: TimeSpan.FromSeconds(5));
+        new(standardOutputBytes: 1_024, standardErrorBytes: 1_024, totalOutputBytes: 2_048, executionTimeout, cleanupTimeout: TimeSpan.FromSeconds(5));
 
     private static ProcessStartInfo CreateHangingFixtureStartInfo()
     {

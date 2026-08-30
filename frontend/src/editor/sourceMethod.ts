@@ -12,15 +12,13 @@ interface MethodPattern {
 const patternsByLanguage: Record<string, readonly MethodPattern[]> = {
   csharp: [
     {
-      expression:
-        /^\s*(?:(?:public|private|protected|internal|static|virtual|override|abstract|sealed|async|unsafe|extern|new|partial)\s+)*(?:[\w.<>[\],?]+\s+)+([A-Za-z_]\w*)\s*(?:<[^>{}]*>)?\s*\([^;{}]*\)\s*(?:=>|\{)?/,
+      expression: /^\s*(?:(?:public|private|protected|internal|static|virtual|override|abstract|sealed|async|unsafe|extern|new|partial)\s+)*(?:[\w.<>[\],?]+\s+)+([A-Za-z_]\w*)\s*(?:<[^>{}]*>)?\s*\([^;{}]*\)\s*(?:=>|\{)?/,
       nameGroup: 1,
     },
   ],
   'visual-basic': [
     {
-      expression:
-        /^\s*(?:(?:Public|Private|Protected|Friend|Shared|Async|Overrides|Overridable|MustOverride)\s+)*(?:Sub|Function)\s+([A-Za-z_]\w*)\b/i,
+      expression: /^\s*(?:(?:Public|Private|Protected|Friend|Shared|Async|Overrides|Overridable|MustOverride)\s+)*(?:Sub|Function)\s+([A-Za-z_]\w*)\b/i,
       nameGroup: 1,
     },
   ],
@@ -42,8 +40,7 @@ const patternsByLanguage: Record<string, readonly MethodPattern[]> = {
   ],
   gsharp: [
     {
-      expression:
-        /^\s*(?:(?:public|private|protected|internal|shared|static|async|unsafe|virtual|override)\s+)*func\s+([A-Za-z_]\w*)\b/,
+      expression: /^\s*(?:(?:public|private|protected|internal|shared|static|async|unsafe|virtual|override)\s+)*func\s+([A-Za-z_]\w*)\b/,
       nameGroup: 1,
     },
   ],
@@ -57,23 +54,9 @@ const patternsByLanguage: Record<string, readonly MethodPattern[]> = {
 
 const braceScopedLanguages = new Set(['csharp', 'gsharp', 'il', 'minilang'])
 
-const controlKeywords = new Set([
-  'if',
-  'for',
-  'foreach',
-  'while',
-  'switch',
-  'catch',
-  'using',
-  'lock',
-])
+const controlKeywords = new Set(['if', 'for', 'foreach', 'while', 'switch', 'catch', 'using', 'lock'])
 
-export function findSourceMethodAtLine(
-  text: string,
-  languageId: string,
-  lineNumber: number,
-  filePath?: string,
-): SourceMethodSelection | null {
+export function findSourceMethodAtLine(text: string, languageId: string, lineNumber: number, filePath?: string): SourceMethodSelection | null {
   if (languageId === 'php') return findPhpFunctionAtLine(text, lineNumber, filePath)
 
   const patterns = patternsByLanguage[languageId]
@@ -87,16 +70,10 @@ export function findSourceMethodAtLine(
       const match = pattern.expression.exec(line)
       const name = match?.[pattern.nameGroup]
       if (!name || isControlKeyword(name)) continue
-      if (
-        braceScopedLanguages.has(languageId) &&
-        !braceMethodContainsLine(lines, index, lastLine - 1)
-      ) {
+      if (braceScopedLanguages.has(languageId) && !braceMethodContainsLine(lines, index, lastLine - 1)) {
         continue
       }
-      if (
-        languageId === 'visual-basic' &&
-        !visualBasicMethodContainsLine(lines, index, lastLine - 1)
-      ) {
+      if (languageId === 'visual-basic' && !visualBasicMethodContainsLine(lines, index, lastLine - 1)) {
         continue
       }
       if (languageId === 'fsharp' && !fsharpMethodContainsLine(lines, index, lastLine - 1)) {
@@ -119,19 +96,14 @@ interface PhpFunctionCandidate {
   bodyEndLine: number
 }
 
-function findPhpFunctionAtLine(
-  text: string,
-  lineNumber: number,
-  _filePath: string | undefined,
-): SourceMethodSelection | null {
+function findPhpFunctionAtLine(text: string, lineNumber: number, _filePath: string | undefined): SourceMethodSelection | null {
   const normalized = text.replace(/\r\n?/g, '\n')
   const lines = normalized.split('\n')
   const cursorLine = Math.min(Math.max(lineNumber, 1), lines.length)
   const code = maskPhpStringsAndComments(normalized)
   const lineStarts = sourceLineStarts(code)
   const candidates: PhpFunctionCandidate[] = []
-  const declaration =
-    /\b(?:(?:abstract|final|public|protected|private|static|readonly)\s+)*function\s*&?\s*([A-Za-z_\x80-\uffff][A-Za-z0-9_\x80-\uffff]*)\s*\(/giu
+  const declaration = /\b(?:(?:abstract|final|public|protected|private|static|readonly)\s+)*function\s*&?\s*([A-Za-z_\x80-\uffff][A-Za-z0-9_\x80-\uffff]*)\s*\(/giu
 
   for (const match of code.matchAll(declaration)) {
     const name = match[1]
@@ -155,10 +127,7 @@ function findPhpFunctionAtLine(
     }
   }
 
-  candidates.sort(
-    (left, right) =>
-      right.bodyStartLine - left.bodyStartLine || right.declarationLine - left.declarationLine,
-  )
+  candidates.sort((left, right) => right.bodyStartLine - left.bodyStartLine || right.declarationLine - left.declarationLine)
   const selected = candidates[0]
   return selected
     ? {
@@ -182,12 +151,7 @@ function findPhpFunctionBodyStart(code: string, start: number): number {
   return -1
 }
 
-function findMatchingDelimiter(
-  code: string,
-  start: number,
-  open: '(' | '{',
-  close: ')' | '}',
-): number {
+function findMatchingDelimiter(code: string, start: number, open: '(' | '{', close: ')' | '}'): number {
   if (code[start] !== open) return -1
   let depth = 0
   for (let index = start; index < code.length; index += 1) {
@@ -337,10 +301,7 @@ function maskPhpStringsAndComments(value: string): string {
     if (value.startsWith('<<<', index)) {
       const lineEnd = value.indexOf('\n', index)
       const end = lineEnd < 0 ? value.length : lineEnd
-      const declaration =
-        /^<<<[ \\t]*(?:'([^']+)'|"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))[ \\t]*$/u.exec(
-          value.slice(index, end),
-        )
+      const declaration = /^<<<[ \\t]*(?:'([^']+)'|"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))[ \\t]*$/u.exec(value.slice(index, end))
       const label = declaration?.[1] ?? declaration?.[2] ?? declaration?.[3]
       if (label) {
         maskPhpRange(result, index, end)
@@ -360,11 +321,7 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function braceMethodContainsLine(
-  lines: readonly string[],
-  declarationIndex: number,
-  cursorIndex: number,
-): boolean {
+function braceMethodContainsLine(lines: readonly string[], declarationIndex: number, cursorIndex: number): boolean {
   const declaration = stripStringsAndLineComment(lines[declarationIndex] ?? '')
   if (declaration.includes('=>')) return declarationIndex === cursorIndex
 
@@ -372,8 +329,7 @@ function braceMethodContainsLine(
   let depth = 0
   for (let index = declarationIndex; index <= cursorIndex; index += 1) {
     const line = stripStringsAndLineComment(lines[index] ?? '')
-    if (!bodyStarted && line.includes(';') && !line.includes('{'))
-      return declarationIndex === cursorIndex
+    if (!bodyStarted && line.includes(';') && !line.includes('{')) return declarationIndex === cursorIndex
     for (const character of line) {
       if (character === '{') {
         bodyStarted = true
@@ -387,22 +343,14 @@ function braceMethodContainsLine(
   return bodyStarted
 }
 
-function visualBasicMethodContainsLine(
-  lines: readonly string[],
-  declarationIndex: number,
-  cursorIndex: number,
-): boolean {
+function visualBasicMethodContainsLine(lines: readonly string[], declarationIndex: number, cursorIndex: number): boolean {
   for (let index = declarationIndex + 1; index < cursorIndex; index += 1) {
     if (/^\s*End\s+(?:Sub|Function)\b/i.test(lines[index] ?? '')) return false
   }
   return true
 }
 
-function fsharpMethodContainsLine(
-  lines: readonly string[],
-  declarationIndex: number,
-  cursorIndex: number,
-): boolean {
+function fsharpMethodContainsLine(lines: readonly string[], declarationIndex: number, cursorIndex: number): boolean {
   if (cursorIndex === declarationIndex) return true
   const declarationIndent = leadingWhitespace(lines[declarationIndex] ?? '')
   for (let index = declarationIndex + 1; index <= cursorIndex; index += 1) {
@@ -426,9 +374,7 @@ function stripStringsAndLineComment(value: string): string {
 
 function cSharpTopLevelMethodLine(lines: readonly string[], cursorIndex: number): number | null {
   const structuralLines = stripCSharpBlockComments(lines)
-  const declarationIndex = structuralLines.findIndex((line) =>
-    isCSharpCompilationUnitDeclaration(stripStringsAndLineComment(line)),
-  )
+  const declarationIndex = structuralLines.findIndex((line) => isCSharpCompilationUnitDeclaration(stripStringsAndLineComment(line)))
   const boundary = declarationIndex < 0 ? structuralLines.length : declarationIndex
   if (cursorIndex >= boundary) return null
 
@@ -441,11 +387,7 @@ function cSharpTopLevelMethodLine(lines: readonly string[], cursorIndex: number)
       if (attributeDepth < 0) attributeDepth = 0
       continue
     }
-    if (
-      /^(?:global\s+)?using\b/.test(value) ||
-      /^extern\s+alias\b/.test(value) ||
-      /^#/.test(value)
-    ) {
+    if (/^(?:global\s+)?using\b/.test(value) || /^extern\s+alias\b/.test(value) || /^#/.test(value)) {
       continue
     }
     return cursorIndex >= index ? index : null
@@ -454,23 +396,15 @@ function cSharpTopLevelMethodLine(lines: readonly string[], cursorIndex: number)
 }
 
 function isCSharpCompilationUnitDeclaration(value: string): boolean {
-  return /(?:^|\]\s*)(?:(?:public|private|protected|internal|static|abstract|sealed|partial|file|readonly|ref|unsafe|new)\s+)*(?:namespace|class|struct|interface|record|enum|delegate)\b/.test(
-    value.trim(),
-  )
+  return /(?:^|\]\s*)(?:(?:public|private|protected|internal|static|abstract|sealed|partial|file|readonly|ref|unsafe|new)\s+)*(?:namespace|class|struct|interface|record|enum|delegate)\b/.test(value.trim())
 }
 
 function stripCSharpBlockComments(lines: readonly string[]): string[] {
-  return lines
-    .join('\n')
-    .replace(/\/\*[\s\S]*?(?:\*\/|$)/g, (comment) => comment.replace(/[^\n]/g, ' '))
-    .split('\n')
+  return lines.join('\n').replace(/\/\*[\s\S]*?(?:\*\/|$)/g, (comment) => comment.replace(/[^\n]/g, ' ')).split('\n')
 }
 
 function bracketDelta(value: string): number {
-  return [...value].reduce(
-    (depth, character) => depth + (character === '[' ? 1 : character === ']' ? -1 : 0),
-    0,
-  )
+  return [...value].reduce((depth, character) => depth + (character === '[' ? 1 : character === ']' ? -1 : 0), 0)
 }
 
 function isControlKeyword(value: string): boolean {

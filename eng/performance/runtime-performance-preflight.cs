@@ -23,8 +23,7 @@ return await RuntimePerformancePreflightApplication.RunAsync(args);
 static class RuntimePerformancePreflightApplication
 {
     private const long MaximumInputBytes = 1024 * 1024;
-    private static StringComparer PathComparer =>
-        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+    private static StringComparer PathComparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
     private static readonly JsonSerializerOptions PolicyJson = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = false,
@@ -56,16 +55,11 @@ static class RuntimePerformancePreflightApplication
             return 2;
         }
 
-        if (options.ShowHelp)
-        {
-            Console.WriteLine(PreflightOptions.Usage);
-            return 0;
-        }
+        if (options.ShowHelp) { Console.WriteLine(PreflightOptions.Usage); return 0; }
 
         try
         {
-            if (options.SelfTest)
-                return RunSelfTest();
+            if (options.SelfTest) return RunSelfTest();
             await RunLiveAsync(options).ConfigureAwait(false);
             return 0;
         }
@@ -90,142 +84,69 @@ static class RuntimePerformancePreflightApplication
     {
         var repositoryRoot = ResolveRepositoryRoot(options.RepositoryRoot!);
         var profilePath = ResolveConfinedInput(repositoryRoot, options.ProfilePath!, "Runtime Profile");
-        var preflightProfilePath = ResolveConfinedInput(
-            repositoryRoot,
-            options.PreflightProfilePath!,
-            "immutable preflight Runtime Profile");
-        var planPath = ResolveConfinedInput(
-            repositoryRoot,
-            options.PlanPath!,
-            "runtime promotion plan");
-        var policyPath = ResolveConfinedInput(
-            repositoryRoot,
-            options.PolicyPath!,
-            "performance policy");
+        var preflightProfilePath = ResolveConfinedInput(repositoryRoot, options.PreflightProfilePath!, "immutable preflight Runtime Profile");
+        var planPath = ResolveConfinedInput(repositoryRoot, options.PlanPath!, "runtime promotion plan");
+        var policyPath = ResolveConfinedInput(repositoryRoot, options.PolicyPath!, "performance policy");
         var profileBytes = ReadBoundedRegularFile(profilePath, "Runtime Profile");
-        var preflightProfileBytes = ReadBoundedRegularFile(
-            preflightProfilePath,
-            "immutable preflight Runtime Profile");
+        var preflightProfileBytes = ReadBoundedRegularFile(preflightProfilePath, "immutable preflight Runtime Profile");
         var planBytes = ReadBoundedRegularFile(planPath, "runtime promotion plan");
         var policyBytes = ReadBoundedRegularFile(policyPath, "performance policy");
         RuntimePromotionPlanContext context;
         try
         {
-            context = RuntimePromotionPlanWorkflow.CreateContext(
-                profileBytes,
-                preflightProfileBytes,
-                planBytes,
-                policyBytes);
+            context = RuntimePromotionPlanWorkflow.CreateContext(profileBytes, preflightProfileBytes, planBytes, policyBytes);
         }
         catch (BundleValidationException exception)
         {
             throw new PerformanceGateException(exception.Message, exception);
         }
-        RequireBoundInputPath(
-            repositoryRoot,
-            profilePath,
-            $"profiles/runtimes/candidates/{context.ProfileId}.json",
-            "Runtime Profile");
-        RequireBoundInputPath(
-            repositoryRoot,
-            preflightProfilePath,
-            $"profiles/runtime-promotion-plans/{context.ProfileId}.profile.json",
-            "immutable preflight Runtime Profile");
-        RequireBoundInputPath(
-            repositoryRoot,
-            planPath,
-            $"profiles/runtime-promotion-plans/{context.ProfileId}.json",
-            "runtime promotion plan");
-        RequireBoundInputPath(
-            repositoryRoot,
-            policyPath,
-            context.PerformancePolicyPath,
-            "performance policy");
+        RequireBoundInputPath(repositoryRoot, profilePath, $"profiles/runtimes/candidates/{context.ProfileId}.json", "Runtime Profile");
+        RequireBoundInputPath(repositoryRoot, preflightProfilePath, $"profiles/runtime-promotion-plans/{context.ProfileId}.profile.json", "immutable preflight Runtime Profile");
+        RequireBoundInputPath(repositoryRoot, planPath, $"profiles/runtime-promotion-plans/{context.ProfileId}.json", "runtime promotion plan");
+        RequireBoundInputPath(repositoryRoot, policyPath, context.PerformancePolicyPath, "performance policy");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(options.OverallTimeoutSeconds));
-        using var profileLock = await RuntimePromotionProfileLock.AcquireAsync(
-            repositoryRoot,
-            context.ProfileId,
-            TimeSpan.FromSeconds(options.OverallTimeoutSeconds),
-            timeout.Token).ConfigureAwait(false);
+        using var profileLock = await RuntimePromotionProfileLock.AcquireAsync(repositoryRoot, context.ProfileId, TimeSpan.FromSeconds(options.OverallTimeoutSeconds), timeout.Token).ConfigureAwait(false);
         VerifyUnchangedInputs(
             repositoryRoot,
             [
                 new PromotionInput(profilePath, "Runtime Profile", profileBytes),
-                new PromotionInput(
-                    preflightProfilePath,
-                    "immutable preflight Runtime Profile",
-                    preflightProfileBytes),
+                new PromotionInput(preflightProfilePath, "immutable preflight Runtime Profile", preflightProfileBytes),
                 new PromotionInput(planPath, "runtime promotion plan", planBytes),
                 new PromotionInput(policyPath, "performance policy", policyBytes)
             ]);
-        var receiptPath = Path.Combine(
-            repositoryRoot,
-            "profiles",
-            "runtime-promotion-receipts",
-            $"{context.ProfileId}.json");
+        var receiptPath = Path.Combine(repositoryRoot, "profiles", "runtime-promotion-receipts", $"{context.ProfileId}.json");
         EnsureNoReparsePoints(repositoryRoot, receiptPath, includeLeaf: true);
         if (File.Exists(receiptPath) || Directory.Exists(receiptPath))
         {
-            throw new PerformanceGateException(
-                $"Runtime '{context.ProfileId}' already has a promotion receipt; " +
-                "rerun capability preflight to bind a new performance evidence set.");
+            throw new PerformanceGateException($"Runtime '{context.ProfileId}' already has a promotion receipt; rerun capability preflight to bind a new performance evidence set.");
         }
-        var outputPath = ResolveCanonicalOutput(
-            repositoryRoot,
-            options.OutputPath!,
-            context.PerformanceEvidencePath);
+        var outputPath = ResolveCanonicalOutput(repositoryRoot, options.OutputPath!, context.PerformanceEvidencePath);
         var outputSnapshot = CaptureOutputSnapshot(repositoryRoot, outputPath);
-        var policy = JsonSerializer.Deserialize<PerformancePolicy>(policyBytes, PolicyJson)
-            ?? throw new InvalidDataException("The performance policy is empty.");
+        var policy = JsonSerializer.Deserialize<PerformancePolicy>(policyBytes, PolicyJson) ?? throw new InvalidDataException("The performance policy is empty.");
         ValidatePolicy(policy);
-        if (!StringComparer.Ordinal.Equals(policy.Id, context.PerformancePolicyId))
-            throw new InvalidDataException("The performance policy ID does not match the promotion plan.");
+        if (!StringComparer.Ordinal.Equals(policy.Id, context.PerformancePolicyId)) throw new InvalidDataException("The performance policy ID does not match the promotion plan.");
         if (context.RequiresJit != !string.IsNullOrWhiteSpace(options.MethodFilter))
         {
-            throw new InvalidDataException(context.RequiresJit
-                ? "--method-filter is required by the promotion plan's jit-asm capability."
-                : "--method-filter is not allowed when the promotion plan has no jit-asm capability.");
+            throw new InvalidDataException(context.RequiresJit ? "--method-filter is required by the promotion plan's jit-asm capability." : "--method-filter is not allowed when the promotion plan has no jit-asm capability.");
         }
         var policySha256 = Sha256(policyBytes);
         var token = ReadToken(options.TokenFile);
-        using var client = new HttpClient(new HttpClientHandler
-        {
-            AllowAutoRedirect = false
-        })
-        {
-            BaseAddress = NormalizeBaseAddress(options.SupervisorBaseAddress!),
-            Timeout = Timeout.InfiniteTimeSpan
-        };
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = NormalizeBaseAddress(options.SupervisorBaseAddress!), Timeout = Timeout.InfiniteTimeSpan };
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var collector = new SampleCollector(
-            client,
-            policy,
-            context,
-            options.ArtifactRef!,
-            options.MethodFilter,
-            timeout.Token);
+        var collector = new SampleCollector(client, policy, context, options.ArtifactRef!, options.MethodFilter, timeout.Token);
         await collector.CollectAsync().ConfigureAwait(false);
         var evidence = collector.BuildEvidence(policySha256);
         void VerifyInputs() => VerifyUnchangedInputs(
             repositoryRoot,
             [
                 new PromotionInput(profilePath, "Runtime Profile", profileBytes),
-                new PromotionInput(
-                    preflightProfilePath,
-                    "immutable preflight Runtime Profile",
-                    preflightProfileBytes),
+                new PromotionInput(preflightProfilePath, "immutable preflight Runtime Profile", preflightProfileBytes),
                 new PromotionInput(planPath, "runtime promotion plan", planBytes),
                 new PromotionInput(policyPath, "performance policy", policyBytes)
             ]);
-        WriteAtomicJson(
-            repositoryRoot,
-            outputPath,
-            evidence,
-            outputSnapshot,
-            VerifyInputs);
-        Console.WriteLine(
-            $"Runtime performance evidence written for {context.ProfileId}: {outputPath}");
+        WriteAtomicJson(repositoryRoot, outputPath, evidence, outputSnapshot, VerifyInputs);
+        Console.WriteLine($"Runtime performance evidence written for {context.ProfileId}: {outputPath}");
     }
 
     private static int RunSelfTest()
@@ -241,60 +162,24 @@ static class RuntimePerformancePreflightApplication
             "--policy", "profiles/runtime-performance-policies/runtime-image-linux-x64-v1.json",
             "--output", "profiles/runtime-promotion-evidence/example/performance.json"
         ]);
-        if (parsed.OverallTimeoutSeconds != 1800)
-            throw new InvalidOperationException("Default timeout self-test failed.");
-        var policy = new PerformancePolicy(
-            1,
-            "runtime-image-linux-x64-v1",
-            new SampleCounts(3, 10),
-            new ResourceLimits(1_000_000_000, [268_435_456]),
-            new ImageBudget(8_589_934_592),
-            new ScenarioPolicies(
-                BudgetPair(30_000, 45_000),
-                BudgetPair(45_000, 60_000),
-                BudgetPair(60_000, 90_000)));
+        if (parsed.OverallTimeoutSeconds != 1800) throw new InvalidOperationException("Default timeout self-test failed.");
+        var policy = new PerformancePolicy(1, "runtime-image-linux-x64-v1", new SampleCounts(3, 10), new ResourceLimits(1_000_000_000, [268_435_456]), new ImageBudget(8_589_934_592), new ScenarioPolicies(BudgetPair(30_000, 45_000), BudgetPair(45_000, 60_000), BudgetPair(60_000, 90_000)));
         ValidatePolicy(policy);
         var policyJson = JsonSerializer.Serialize(policy, PolicyJson);
         var policyRoundTrip = JsonSerializer.Deserialize<PerformancePolicy>(policyJson, PolicyJson);
-        if (!StringComparer.Ordinal.Equals(policyRoundTrip?.Id, policy.Id))
-            throw new InvalidOperationException("Performance policy JSON self-test failed.");
-        var requestJson = JsonSerializer.Serialize(
-            new SampleRequest(
-                "example",
-                $"sha256:{new string('2', 64)}",
-                $"sha256:{new string('1', 64)}",
-                "runtime-job-default",
-                "run",
-                null),
-            PascalJson);
-        if (!requestJson.Contains("\"RuntimeProfileId\":\"example\"", StringComparison.Ordinal))
-            throw new InvalidOperationException("Performance request JSON self-test failed.");
+        if (!StringComparer.Ordinal.Equals(policyRoundTrip?.Id, policy.Id)) throw new InvalidOperationException("Performance policy JSON self-test failed.");
+        var requestJson = JsonSerializer.Serialize(new SampleRequest("example", $"sha256:{new string('2', 64)}", $"sha256:{new string('1', 64)}", "runtime-job-default", "run", null), PascalJson);
+        if (!requestJson.Contains("\"RuntimeProfileId\":\"example\"", StringComparison.Ordinal)) throw new InvalidOperationException("Performance request JSON self-test failed.");
         var responseJson = JsonSerializer.Serialize(
             new SampleResponse(
                 "example",
                 "run",
                 "op_00000000000000000000000000000001",
-                new SampleImage(
-                    $"registry.example/runtime@sha256:{new string('3', 64)}",
-                    $"sha256:{new string('4', 64)}",
-                    1024),
-                new SampleMeasurementHelper(
-                    "sharplabnext-runtime-cgroup-sidecar-v1",
-                    new SampleImage(
-                        $"registry.example/runtime-supervisor@sha256:{new string('5', 64)}",
-                        $"sha256:{new string('6', 64)}",
-                        2048),
-                    "/usr/local/bin/sharplabnext-runtime-measurement",
-                    new string('7', 40),
-                    "sha256:f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c"),
+                new SampleImage($"registry.example/runtime@sha256:{new string('3', 64)}", $"sha256:{new string('4', 64)}", 1024),
+                new SampleMeasurementHelper("sharplabnext-runtime-cgroup-sidecar-v1", new SampleImage($"registry.example/runtime-supervisor@sha256:{new string('5', 64)}", $"sha256:{new string('6', 64)}", 2048), "/usr/local/bin/sharplabnext-runtime-measurement", new string('7', 40), "sha256:f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c"),
                 ["run"],
                 "not-applicable",
-                new SampleEnvironment(
-                    "runtime-preflight-linux-x64-v2",
-                    "linux",
-                    "x64",
-                    1_000_000_000,
-                    268_435_456),
+                new SampleEnvironment("runtime-preflight-linux-x64-v2", "linux", "x64", 1_000_000_000, 268_435_456),
                 new SampleValue(1, 2048, 1024),
                 2,
                 1,
@@ -302,33 +187,13 @@ static class RuntimePerformancePreflightApplication
                 DateTimeOffset.UtcNow),
             PascalJson);
         var responseRoundTrip = JsonSerializer.Deserialize<SampleResponse>(responseJson, PascalJson);
-        if (responseRoundTrip?.MeasurementHelper.Implementation !=
-                "sharplabnext-runtime-cgroup-sidecar-v1" ||
-            responseRoundTrip.MeasurementHelper.Entrypoint !=
-                "/usr/local/bin/sharplabnext-runtime-measurement" ||
-            responseRoundTrip.MeasurementHelper.ContentSha256 !=
-                "sha256:f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c" ||
-            responseRoundTrip.Sample.CompletionPeakMemoryBytes != 1024 ||
-            responseRoundTrip.PostCompletionResourceSampleCount != 1)
+        if (responseRoundTrip?.MeasurementHelper.Implementation != "sharplabnext-runtime-cgroup-sidecar-v1" || responseRoundTrip.MeasurementHelper.Entrypoint != "/usr/local/bin/sharplabnext-runtime-measurement" || responseRoundTrip.MeasurementHelper.ContentSha256 != "sha256:f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c" || responseRoundTrip.Sample.CompletionPeakMemoryBytes != 1024 || responseRoundTrip.PostCompletionResourceSampleCount != 1)
         {
             throw new InvalidOperationException("Performance response JSON self-test failed.");
         }
         var values = Enumerable.Range(1, 10).Select(static value => (double)value).ToArray();
-        if (NearestRank(values, 0.95) != 10)
-            throw new InvalidOperationException("Nearest-rank P95 self-test failed.");
-        ValidateSamples(
-            "run.warm",
-            values.Select((latency, index) => new SampleValue(
-                latency,
-                1024,
-                768,
-                $"op_{index + 1:x32}",
-                1,
-                1,
-                DateTimeOffset.UtcNow)).ToArray(),
-            10,
-            policy.Scenarios.Run.Warm,
-            policy.ResourceLimits.AllowedMemoryBytes[0]);
+        if (NearestRank(values, 0.95) != 10) throw new InvalidOperationException("Nearest-rank P95 self-test failed.");
+        ValidateSamples("run.warm", values.Select((latency, index) => new SampleValue(latency, 1024, 768, $"op_{index + 1:x32}", 1, 1, DateTimeOffset.UtcNow)).ToArray(), 10, policy.Scenarios.Run.Warm, policy.ResourceLimits.AllowedMemoryBytes[0]);
         try
         {
             ValidateSamples(
@@ -343,9 +208,7 @@ static class RuntimePerformancePreflightApplication
                 policy.ResourceLimits.AllowedMemoryBytes[0]);
             throw new InvalidOperationException("Single-sample failure self-test did not fail.");
         }
-        catch (PerformanceGateException)
-        {
-        }
+        catch (PerformanceGateException) { }
         ExpectArgumentFailure([]);
         ExpectArgumentFailure(["--unknown-option"]);
         ExpectArgumentFailure(["--overall-timeout-seconds", "59"]);
@@ -363,13 +226,8 @@ static class RuntimePerformancePreflightApplication
         try
         {
             Directory.CreateDirectory(root);
-            File.WriteAllText(Path.Combine(root, ".git"), "gitdir: ../worktrees/self-test\n");
-            var output = Path.Combine(
-                root,
-                "profiles",
-                "runtime-promotion-evidence",
-                "self-test",
-                "performance.json");
+            File.WriteAllText(Path.Combine(root, "SharpLabNext.slnx"), string.Empty);
+            var output = Path.Combine(root, "profiles", "runtime-promotion-evidence", "self-test", "performance.json");
             Directory.CreateDirectory(Path.GetDirectoryName(output)!);
             var original = "{\"original\":true}\n"u8.ToArray();
             File.WriteAllBytes(output, original);
@@ -385,14 +243,11 @@ static class RuntimePerformancePreflightApplication
                     () =>
                     {
                         calls++;
-                        if (calls == 2)
-                            throw new IOException("simulated input drift");
+                        if (calls == 2) throw new IOException("simulated input drift");
                     });
                 throw new InvalidOperationException("Atomic rollback self-test did not fail.");
             }
-            catch (IOException exception) when (exception.Message == "simulated input drift")
-            {
-            }
+            catch (IOException exception) when (exception.Message == "simulated input drift") { }
             VerifyExactFile(output, original, "rolled back performance evidence");
             var committedSnapshot = CaptureOutputSnapshot(root, output);
             WriteAtomicJson(
@@ -403,16 +258,14 @@ static class RuntimePerformancePreflightApplication
                 static () => { });
             AssertUtf8NoBomLf(File.ReadAllBytes(output), "written performance evidence");
             var directory = Path.GetDirectoryName(output)!;
-            if (Directory.EnumerateFiles(directory, ".*.tmp").Any() ||
-                Directory.EnumerateFiles(directory, ".*.bak").Any())
+            if (Directory.EnumerateFiles(directory, ".*.tmp").Any() || Directory.EnumerateFiles(directory, ".*.bak").Any())
             {
                 throw new InvalidOperationException("Atomic output self-test left temporary files behind.");
             }
         }
         finally
         {
-            if (Directory.Exists(root))
-                Directory.Delete(root, recursive: true);
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
     }
 
@@ -426,8 +279,7 @@ static class RuntimePerformancePreflightApplication
         {
             return;
         }
-        throw new InvalidOperationException(
-            $"Invalid preflight arguments were accepted: {string.Join(' ', args)}");
+        throw new InvalidOperationException($"Invalid preflight arguments were accepted: {string.Join(' ', args)}");
     }
 
     private static void ExpectEndpointFailure(string value)
@@ -443,27 +295,21 @@ static class RuntimePerformancePreflightApplication
         throw new InvalidOperationException($"Unsafe Supervisor endpoint was accepted: {value}");
     }
 
-    private static ScenarioPolicy BudgetPair(double p95, double sample) => new(
-        new SampleBudget(p95, sample, 268_435_456),
-        new SampleBudget(p95, sample, 268_435_456));
+    private static ScenarioPolicy BudgetPair(double p95, double sample) => new(new SampleBudget(p95, sample, 268_435_456), new SampleBudget(p95, sample, 268_435_456));
 
     internal static void ValidatePolicy(PerformancePolicy policy)
     {
-        if (policy.SchemaVersion != 1 || !IsId(policy.Id))
-            throw new InvalidDataException("The performance policy identity is invalid.");
-        if (policy.SampleCounts.Cold is < 3 or > 20 || policy.SampleCounts.Warm is < 5 or > 50)
-            throw new InvalidDataException("The performance sample counts are outside the absolute contract.");
+        if (policy.SchemaVersion != 1 || !IsId(policy.Id)) throw new InvalidDataException("The performance policy identity is invalid.");
+        if (policy.SampleCounts.Cold is < 3 or > 20 || policy.SampleCounts.Warm is < 5 or > 50) throw new InvalidDataException("The performance sample counts are outside the absolute contract.");
         if (policy.ResourceLimits.NanoCpus is < 250_000_000 or > 4_000_000_000 ||
             policy.ResourceLimits.AllowedMemoryBytes is not { Count: >= 1 and <= 8 } ||
             policy.ResourceLimits.AllowedMemoryBytes.Distinct().Count() !=
             policy.ResourceLimits.AllowedMemoryBytes.Count ||
-            policy.ResourceLimits.AllowedMemoryBytes.Any(static value =>
-                value is < 134_217_728 or > 2_147_483_648))
+            policy.ResourceLimits.AllowedMemoryBytes.Any(static value => value is < 134_217_728 or > 2_147_483_648))
         {
             throw new InvalidDataException("The performance resource limits are outside the absolute contract.");
         }
-        if (policy.Image.MaximumSizeBytes is < 1 or > 17_179_869_184)
-            throw new InvalidDataException("The performance image-size limit is outside the absolute contract.");
+        if (policy.Image.MaximumSizeBytes is < 1 or > 17_179_869_184) throw new InvalidDataException("The performance image-size limit is outside the absolute contract.");
         ValidateBudget("run", policy.Scenarios.Run);
         ValidateBudget("jit", policy.Scenarios.Jit);
         ValidateBudget("mapping", policy.Scenarios.Mapping);
@@ -477,77 +323,45 @@ static class RuntimePerformancePreflightApplication
 
     private static void ValidateBudget(string name, SampleBudget budget)
     {
-        if (!double.IsFinite(budget.MaximumP95LatencyMilliseconds) ||
-            budget.MaximumP95LatencyMilliseconds <= 0 ||
-            budget.MaximumP95LatencyMilliseconds > 60_000 ||
-            !double.IsFinite(budget.MaximumSampleLatencyMilliseconds) ||
-            budget.MaximumSampleLatencyMilliseconds < budget.MaximumP95LatencyMilliseconds ||
-            budget.MaximumSampleLatencyMilliseconds > 120_000 ||
-            budget.MaximumPeakMemoryBytes is < 1 or > 2_147_483_648)
+        if (!double.IsFinite(budget.MaximumP95LatencyMilliseconds) || budget.MaximumP95LatencyMilliseconds <= 0 || budget.MaximumP95LatencyMilliseconds > 60_000 || !double.IsFinite(budget.MaximumSampleLatencyMilliseconds) || budget.MaximumSampleLatencyMilliseconds < budget.MaximumP95LatencyMilliseconds || budget.MaximumSampleLatencyMilliseconds > 120_000 || budget.MaximumPeakMemoryBytes is < 1 or > 2_147_483_648)
         {
             throw new InvalidDataException($"The performance budget '{name}' is outside the absolute contract.");
         }
     }
 
-    internal static void ValidateSamples(
-        string name,
-        IReadOnlyList<SampleValue> samples,
-        int expectedCount,
-        SampleBudget budget,
-        long memoryLimitBytes)
+    internal static void ValidateSamples(string name, IReadOnlyList<SampleValue> samples, int expectedCount, SampleBudget budget, long memoryLimitBytes)
     {
-        if (samples.Count != expectedCount)
-            throw new PerformanceGateException($"{name} produced {samples.Count} samples; expected {expectedCount}.");
+        if (samples.Count != expectedCount) throw new PerformanceGateException($"{name} produced {samples.Count} samples; expected {expectedCount}.");
         foreach (var (sample, index) in samples.Select(static (value, index) => (value, index)))
         {
-            if (!double.IsFinite(sample.LatencyMilliseconds) || sample.LatencyMilliseconds <= 0 ||
-                sample.LatencyMilliseconds > budget.MaximumSampleLatencyMilliseconds)
+            if (!double.IsFinite(sample.LatencyMilliseconds) || sample.LatencyMilliseconds <= 0 || sample.LatencyMilliseconds > budget.MaximumSampleLatencyMilliseconds)
             {
-                throw new PerformanceGateException(
-                    $"{name}[{index}] latency {sample.LatencyMilliseconds} ms exceeds the sample budget.");
+                throw new PerformanceGateException($"{name}[{index}] latency {sample.LatencyMilliseconds} ms exceeds the sample budget.");
             }
-            if (sample.PeakMemoryBytes <= 0 || sample.PeakMemoryBytes > memoryLimitBytes ||
-                sample.PeakMemoryBytes > budget.MaximumPeakMemoryBytes ||
-                sample.CompletionPeakMemoryBytes <= 0 ||
-                sample.CompletionPeakMemoryBytes > sample.PeakMemoryBytes ||
-                sample.ResourceSampleCount is < 1 or > 1_000_000 ||
-                sample.PostCompletionResourceSampleCount is < 1 or > 1_000_000 ||
-                sample.ResourceSampleCount < sample.PostCompletionResourceSampleCount)
+            if (sample.PeakMemoryBytes <= 0 || sample.PeakMemoryBytes > memoryLimitBytes || sample.PeakMemoryBytes > budget.MaximumPeakMemoryBytes || sample.CompletionPeakMemoryBytes <= 0 || sample.CompletionPeakMemoryBytes > sample.PeakMemoryBytes || sample.ResourceSampleCount is < 1 or > 1_000_000 || sample.PostCompletionResourceSampleCount is < 1 or > 1_000_000 || sample.ResourceSampleCount < sample.PostCompletionResourceSampleCount)
             {
-                throw new PerformanceGateException(
-                    $"{name}[{index}] resource measurements are incomplete or exceed the budget.");
+                throw new PerformanceGateException($"{name}[{index}] resource measurements are incomplete or exceed the budget.");
             }
         }
         var p95 = NearestRank(samples.Select(static sample => sample.LatencyMilliseconds), 0.95);
         if (p95 > budget.MaximumP95LatencyMilliseconds)
         {
-            throw new PerformanceGateException(
-                $"{name} P95 latency {p95} ms exceeds {budget.MaximumP95LatencyMilliseconds} ms.");
+            throw new PerformanceGateException($"{name} P95 latency {p95} ms exceeds {budget.MaximumP95LatencyMilliseconds} ms.");
         }
     }
 
     private static double NearestRank(IEnumerable<double> values, double percentile)
     {
         var sorted = values.Order().ToArray();
-        if (sorted.Length == 0)
-            throw new ArgumentException("A percentile requires at least one value.", nameof(values));
+        if (sorted.Length == 0) throw new ArgumentException("A percentile requires at least one value.", nameof(values));
         return sorted[Math.Max(0, (int)Math.Ceiling(sorted.Length * percentile) - 1)];
     }
 
     private static string ResolveRepositoryRoot(string value)
     {
-        var root = Path.GetFullPath(value)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var gitMarker = Path.Combine(root, ".git");
-        if (!Directory.Exists(root) ||
-            (!Directory.Exists(gitMarker) && !File.Exists(gitMarker)))
-        {
-            throw new DirectoryNotFoundException(
-                "--repository-root must name the SharpLabNext Git worktree root.");
-        }
+        var root = Path.GetFullPath(value).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!Directory.Exists(root) || !File.Exists(Path.Combine(root, "SharpLabNext.slnx"))) throw new DirectoryNotFoundException("--repository-root must name the SharpLabNext source root.");
         EnsureNoReparsePoints(root, root, includeLeaf: true);
-        if ((File.GetAttributes(gitMarker) & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidDataException("The repository .git marker cannot be a reparse point.");
         return root;
     }
 
@@ -559,56 +373,37 @@ static class RuntimePerformancePreflightApplication
         return path;
     }
 
-    private static void RequireBoundInputPath(
-        string root,
-        string actualPath,
-        string expectedRelativePath,
-        string description)
+    private static void RequireBoundInputPath(string root, string actualPath, string expectedRelativePath, string description)
     {
-        var expected = Path.GetFullPath(Path.Combine(
-            root,
-            expectedRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+        var expected = Path.GetFullPath(Path.Combine(root, expectedRelativePath.Replace('/', Path.DirectorySeparatorChar)));
         if (!PathComparer.Equals(actualPath, expected))
         {
-            throw new InvalidDataException(
-                $"The {description} must use the promotion plan's canonical path " +
-                $"'{expectedRelativePath}'.");
+            throw new InvalidDataException($"The {description} must use the promotion plan's canonical path " + $"'{expectedRelativePath}'.");
         }
     }
 
-    private static string ResolveCanonicalOutput(
-        string root,
-        string value,
-        string expectedRelativePath)
+    private static string ResolveCanonicalOutput(string root, string value, string expectedRelativePath)
     {
         var output = Path.GetFullPath(value, root);
-        var expected = Path.GetFullPath(Path.Combine(
-            root,
-            expectedRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+        var expected = Path.GetFullPath(Path.Combine(root, expectedRelativePath.Replace('/', Path.DirectorySeparatorChar)));
         if (!PathComparer.Equals(output, expected))
         {
-            throw new InvalidDataException(
-                $"--output must use the promotion plan's canonical path '{expectedRelativePath}'.");
+            throw new InvalidDataException($"--output must use the promotion plan's canonical path '{expectedRelativePath}'.");
         }
         EnsureContained(root, output, "performance evidence output");
-        var directory = Path.GetDirectoryName(output)
-            ?? throw new InvalidDataException("The performance evidence output has no parent directory.");
+        var directory = Path.GetDirectoryName(output) ?? throw new InvalidDataException("The performance evidence output has no parent directory.");
         EnsureNoReparsePoints(root, directory, includeLeaf: false);
         Directory.CreateDirectory(directory);
         EnsureNoReparsePoints(root, directory, includeLeaf: true);
-        if (File.Exists(output) || Directory.Exists(output))
-            EnsureNoReparsePoints(root, output, includeLeaf: true);
-        if (Directory.Exists(output))
-            throw new InvalidDataException("The performance evidence output cannot be a directory.");
+        if (File.Exists(output) || Directory.Exists(output)) EnsureNoReparsePoints(root, output, includeLeaf: true);
+        if (Directory.Exists(output)) throw new InvalidDataException("The performance evidence output cannot be a directory.");
         return output;
     }
 
     private static void EnsureContained(string root, string path, string description)
     {
         var relative = Path.GetRelativePath(root, path);
-        if (Path.IsPathRooted(relative) || relative == ".." ||
-            relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
-            relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal))
+        if (Path.IsPathRooted(relative) || relative == ".." || relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) || relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal))
         {
             throw new InvalidDataException($"The {description} escapes the repository root.");
         }
@@ -617,31 +412,24 @@ static class RuntimePerformancePreflightApplication
     private static void EnsureNoReparsePoints(string root, string path, bool includeLeaf)
     {
         EnsureContained(root, path, "confined path");
-        if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidDataException("The repository root cannot be a reparse point.");
+        if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException("The repository root cannot be a reparse point.");
         var relative = Path.GetRelativePath(root, path);
         var segments = relative == "."
-            ? Array.Empty<string>()
-            : relative.Split(
-                [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
-                StringSplitOptions.RemoveEmptyEntries);
+            ? Array.Empty<string>() : relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
         var current = root;
         var count = includeLeaf ? segments.Length : Math.Max(0, segments.Length - 1);
         for (var index = 0; index < count; index++)
         {
             current = Path.Combine(current, segments[index]);
-            if (!File.Exists(current) && !Directory.Exists(current))
-                continue;
-            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
-                throw new InvalidDataException($"Confined path contains reparse point '{current}'.");
+            if (!File.Exists(current) && !Directory.Exists(current)) continue;
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException($"Confined path contains reparse point '{current}'.");
         }
     }
 
     private static OutputSnapshot CaptureOutputSnapshot(string root, string path)
     {
         EnsureNoReparsePoints(root, path, includeLeaf: File.Exists(path));
-        if (!File.Exists(path))
-            return new OutputSnapshot(false, 0, []);
+        if (!File.Exists(path)) return new OutputSnapshot(false, 0, []);
         var bytes = ReadBoundedRegularFile(path, "existing performance evidence");
         return new OutputSnapshot(true, bytes.LongLength, SHA256.HashData(bytes));
     }
@@ -649,8 +437,7 @@ static class RuntimePerformancePreflightApplication
     private static void RequireUnchangedOutput(string root, string path, OutputSnapshot expected)
     {
         var actual = CaptureOutputSnapshot(root, path);
-        if (actual.Exists != expected.Exists || actual.Length != expected.Length ||
-            !CryptographicOperations.FixedTimeEquals(actual.Sha256, expected.Sha256))
+        if (actual.Exists != expected.Exists || actual.Length != expected.Length || !CryptographicOperations.FixedTimeEquals(actual.Sha256, expected.Sha256))
         {
             throw new IOException("The performance evidence target changed during sampling.");
         }
@@ -669,10 +456,7 @@ static class RuntimePerformancePreflightApplication
     private static void VerifyExactFile(string path, byte[] expected, string description)
     {
         var actual = ReadBoundedRegularFile(path, description);
-        if (actual.LongLength != expected.LongLength ||
-            !CryptographicOperations.FixedTimeEquals(
-                SHA256.HashData(actual),
-                SHA256.HashData(expected)))
+        if (actual.LongLength != expected.LongLength || !CryptographicOperations.FixedTimeEquals(SHA256.HashData(actual), SHA256.HashData(expected)))
         {
             throw new IOException($"The {description} changed unexpectedly.");
         }
@@ -682,70 +466,45 @@ static class RuntimePerformancePreflightApplication
     {
         var fullPath = Path.GetFullPath(path);
         var info = new FileInfo(fullPath);
-        if (!info.Exists || info.LinkTarget is not null ||
-            (info.Attributes & FileAttributes.ReparsePoint) != 0 ||
-            info.Length is < 1 or > MaximumInputBytes)
+        if (!info.Exists || info.LinkTarget is not null || (info.Attributes & FileAttributes.ReparsePoint) != 0 || info.Length is < 1 or > MaximumInputBytes)
         {
             throw new InvalidDataException($"The {description} must be a 1..{MaximumInputBytes} byte regular file.");
         }
-        using var stream = new FileStream(
-            fullPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            64 * 1024,
-            FileOptions.SequentialScan);
+        using var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
         var bytes = new byte[checked((int)info.Length)];
         stream.ReadExactly(bytes);
-        if (stream.ReadByte() != -1 || stream.Length != info.Length)
-            throw new IOException($"The {description} changed while it was being read.");
+        if (stream.ReadByte() != -1 || stream.Length != info.Length) throw new IOException($"The {description} changed while it was being read.");
         return bytes;
     }
 
     private static string ReadToken(string? tokenFile)
     {
         var token = tokenFile is null
-            ? Environment.GetEnvironmentVariable("SHARPLABNEXT_INTERNAL_SERVICE_TOKEN")
-            : Encoding.UTF8.GetString(ReadBoundedRegularFile(tokenFile, "internal service token"));
+            ? Environment.GetEnvironmentVariable("SHARPLABNEXT_INTERNAL_SERVICE_TOKEN") : Encoding.UTF8.GetString(ReadBoundedRegularFile(tokenFile, "internal service token"));
         token = token?.TrimEnd('\r', '\n');
-        if (token is null || token.Length is < 32 or > 8192 ||
-            token.Any(static character => character is <= ' ' or >= '\u007f'))
+        if (token is null || token.Length is < 32 or > 8192 || token.Any(static character => character is <= ' ' or >= '\u007f'))
         {
-            throw new InvalidDataException(
-                "Set --token-file or SHARPLABNEXT_INTERNAL_SERVICE_TOKEN to a valid internal service token.");
+            throw new InvalidDataException("Set --token-file or SHARPLABNEXT_INTERNAL_SERVICE_TOKEN to a valid internal service token.");
         }
         return token;
     }
 
     private static Uri NormalizeBaseAddress(string value)
     {
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") ||
-            !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) ||
-            !string.IsNullOrEmpty(uri.Fragment) || uri.AbsolutePath != "/" ||
-            !IPAddress.TryParse(uri.Host, out var address) || !IPAddress.IsLoopback(address))
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment) || uri.AbsolutePath != "/" || !IPAddress.TryParse(uri.Host, out var address) || !IPAddress.IsLoopback(address))
         {
-            throw new ArgumentException(
-                "--supervisor-base-address must be an absolute HTTP URL on an IP loopback address.");
+            throw new ArgumentException("--supervisor-base-address must be an absolute HTTP URL on an IP loopback address.");
         }
         return new Uri(uri.AbsoluteUri.TrimEnd('/') + '/', UriKind.Absolute);
     }
 
-    private static string Sha256(ReadOnlySpan<byte> bytes) =>
-        $"sha256:{Convert.ToHexStringLower(SHA256.HashData(bytes))}";
+    private static string Sha256(ReadOnlySpan<byte> bytes) => $"sha256:{Convert.ToHexStringLower(SHA256.HashData(bytes))}";
 
-    private static bool IsId(string value) =>
-        value.Length is > 0 and <= 128 && value.All(static character =>
-            char.IsAsciiLetterLower(character) || char.IsAsciiDigit(character) || character is '-' or '_' or '.');
+    private static bool IsId(string value) => value.Length is > 0 and <= 128 && value.All(static character => char.IsAsciiLetterLower(character) || char.IsAsciiDigit(character) || character is '-' or '_' or '.');
 
-    private static void WriteAtomicJson(
-        string repositoryRoot,
-        string path,
-        JsonObject document,
-        OutputSnapshot snapshot,
-        Action verifyInputs)
+    private static void WriteAtomicJson(string repositoryRoot, string path, JsonObject document, OutputSnapshot snapshot, Action verifyInputs)
     {
-        var directory = Path.GetDirectoryName(path)
-            ?? throw new ArgumentException("The output path has no parent directory.");
+        var directory = Path.GetDirectoryName(path) ?? throw new ArgumentException("The output path has no parent directory.");
         Directory.CreateDirectory(directory);
         EnsureNoReparsePoints(repositoryRoot, directory, includeLeaf: true);
         var bytes = SerializeJsonUtf8Lf(document);
@@ -754,14 +513,7 @@ static class RuntimePerformancePreflightApplication
         var installed = false;
         try
         {
-            using (var stream = new FileStream(
-                       temporary,
-                       FileMode.CreateNew,
-                       FileAccess.Write,
-                       FileShare.None,
-                       64 * 1024,
-                       FileOptions.WriteThrough))
-            {
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.WriteThrough)) {
                 stream.Write(bytes);
                 stream.Flush(flushToDisk: true);
             }
@@ -786,8 +538,7 @@ static class RuntimePerformancePreflightApplication
         {
             try
             {
-                if (installed && File.Exists(path))
-                    File.Delete(path);
+                if (installed && File.Exists(path)) File.Delete(path);
                 if (backup is not null && File.Exists(backup) && !File.Exists(path))
                 {
                     File.Move(backup, path);
@@ -796,26 +547,19 @@ static class RuntimePerformancePreflightApplication
             }
             catch (Exception rollbackFailure)
             {
-                throw new AggregateException(
-                    "Performance evidence installation failed and could not be rolled back.",
-                    failure,
-                    rollbackFailure);
+                throw new AggregateException("Performance evidence installation failed and could not be rolled back.", failure, rollbackFailure);
             }
             throw;
         }
         finally
         {
-            if (File.Exists(temporary))
-                File.Delete(temporary);
+            if (File.Exists(temporary)) File.Delete(temporary);
         }
     }
 
     private static byte[] SerializeJsonUtf8Lf(JsonObject document)
     {
-        var bytes = Utf8NoBom.GetBytes(document.ToJsonString(new JsonSerializerOptions
-        {
-            WriteIndented = true
-        }).ReplaceLineEndings("\n") + "\n");
+        var bytes = Utf8NoBom.GetBytes(document.ToJsonString(new JsonSerializerOptions { WriteIndented = true }).ReplaceLineEndings("\n") + "\n");
         AssertUtf8NoBomLf(bytes, "serialized performance evidence");
         return bytes;
     }
@@ -823,20 +567,13 @@ static class RuntimePerformancePreflightApplication
     private static void AssertUtf8NoBomLf(ReadOnlySpan<byte> bytes, string description)
     {
         var text = Utf8NoBom.GetString(bytes);
-        if (text.Length == 0 || text[0] == '\uFEFF' || text[^1] != '\n' ||
-            bytes.IndexOf((byte)'\r') >= 0)
+        if (text.Length == 0 || text[0] == '\uFEFF' || text[^1] != '\n' || bytes.IndexOf((byte)'\r') >= 0)
         {
             throw new InvalidOperationException($"{description} must be UTF-8 without a BOM and use LF line endings.");
         }
     }
 
-    private sealed class SampleCollector(
-        HttpClient client,
-        PerformancePolicy policy,
-        RuntimePromotionPlanContext context,
-        string artifactRef,
-        string? methodFilter,
-        CancellationToken cancellationToken)
+    private sealed class SampleCollector(HttpClient client, PerformancePolicy policy, RuntimePromotionPlanContext context, string artifactRef, string? methodFilter, CancellationToken cancellationToken)
     {
         private readonly Dictionary<string, CollectedScenario> _scenarios = new(StringComparer.Ordinal);
         private readonly HashSet<string> _operationIds = new(StringComparer.Ordinal);
@@ -849,11 +586,9 @@ static class RuntimePerformancePreflightApplication
             var identity = _identity!;
             if (identity.Capabilities.Contains("jit-asm", StringComparer.Ordinal))
             {
-                if (string.IsNullOrWhiteSpace(methodFilter))
-                    throw new InvalidDataException("--method-filter is required for a JIT-capable Runtime Profile.");
+                if (string.IsNullOrWhiteSpace(methodFilter)) throw new InvalidDataException("--method-filter is required for a JIT-capable Runtime Profile.");
                 await CollectScenarioAsync("jit", methodFilter, policy.Scenarios.Jit).ConfigureAwait(false);
-                if (identity.SourceMappingKind is not ("none" or "not-applicable"))
-                    await CollectScenarioAsync("mapping", methodFilter, policy.Scenarios.Mapping).ConfigureAwait(false);
+                if (identity.SourceMappingKind is not ("none" or "not-applicable")) await CollectScenarioAsync("mapping", methodFilter, policy.Scenarios.Mapping).ConfigureAwait(false);
             }
         }
 
@@ -862,90 +597,37 @@ static class RuntimePerformancePreflightApplication
             var identity = _identity ?? throw new InvalidOperationException("No performance samples were collected.");
             var scenarios = new JsonObject();
             foreach (var (name, value) in _scenarios.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
-            {
-                scenarios[name] = new JsonObject
-                {
-                    ["cold"] = SamplesJson(value.Cold),
-                    ["warm"] = SamplesJson(value.Warm)
-                };
-            }
+                scenarios[name] = new JsonObject { ["cold"] = SamplesJson(value.Cold), ["warm"] = SamplesJson(value.Warm) };
             return new JsonObject
             {
                 ["schemaVersion"] = 1,
                 ["profileId"] = context.ProfileId,
                 ["planSha256"] = context.PlanSha256,
-                ["image"] = new JsonObject
-                {
-                    ["reference"] = identity.Image.Reference,
-                    ["imageId"] = identity.Image.ImageId,
-                    ["sizeBytes"] = identity.Image.SizeBytes
-                },
-                ["measurementHelper"] = new JsonObject
-                {
-                    ["implementation"] = identity.MeasurementHelper.Implementation,
-                    ["image"] = new JsonObject
-                    {
-                        ["reference"] = identity.MeasurementHelper.Image.Reference,
-                        ["imageId"] = identity.MeasurementHelper.Image.ImageId,
-                        ["sizeBytes"] = identity.MeasurementHelper.Image.SizeBytes
-                    },
-                    ["entrypoint"] = identity.MeasurementHelper.Entrypoint,
-                    ["sourceRevision"] = identity.MeasurementHelper.SourceRevision,
-                    ["contentSha256"] = identity.MeasurementHelper.ContentSha256
-                },
+                ["image"] = new JsonObject { ["reference"] = identity.Image.Reference, ["imageId"] = identity.Image.ImageId, ["sizeBytes"] = identity.Image.SizeBytes },
+                ["measurementHelper"] = new JsonObject { ["implementation"] = identity.MeasurementHelper.Implementation, ["image"] = new JsonObject { ["reference"] = identity.MeasurementHelper.Image.Reference, ["imageId"] = identity.MeasurementHelper.Image.ImageId, ["sizeBytes"] = identity.MeasurementHelper.Image.SizeBytes }, ["entrypoint"] = identity.MeasurementHelper.Entrypoint, ["sourceRevision"] = identity.MeasurementHelper.SourceRevision, ["contentSha256"] = identity.MeasurementHelper.ContentSha256 },
                 ["sourceRevision"] = context.SourceRevision,
-                ["policy"] = new JsonObject
-                {
-                    ["id"] = policy.Id,
-                    ["sha256"] = policySha256
-                },
-                ["capabilities"] = new JsonArray(identity.Capabilities
-                    .Select(static capability => (JsonNode?)JsonValue.Create(capability))
-                    .ToArray()),
+                ["policy"] = new JsonObject { ["id"] = policy.Id, ["sha256"] = policySha256 },
+                ["capabilities"] = new JsonArray(identity.Capabilities.Select(static capability => (JsonNode?)JsonValue.Create(capability)).ToArray()),
                 ["sourceMappingKind"] = identity.SourceMappingKind,
-                ["environment"] = new JsonObject
-                {
-                    ["runnerId"] = identity.Environment.RunnerId,
-                    ["operatingSystem"] = identity.Environment.OperatingSystem,
-                    ["architecture"] = identity.Environment.Architecture,
-                    ["nanoCpus"] = identity.Environment.NanoCpus,
-                    ["memoryLimitBytes"] = identity.Environment.MemoryLimitBytes
-                },
-                ["completedAtUtc"] = DateTimeOffset.UtcNow.ToString(
-                    "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'",
-                    CultureInfo.InvariantCulture),
+                ["environment"] = new JsonObject { ["runnerId"] = identity.Environment.RunnerId, ["operatingSystem"] = identity.Environment.OperatingSystem, ["architecture"] = identity.Environment.Architecture, ["nanoCpus"] = identity.Environment.NanoCpus, ["memoryLimitBytes"] = identity.Environment.MemoryLimitBytes },
+                ["completedAtUtc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture),
                 ["result"] = "passed",
                 ["scenarios"] = scenarios
             };
         }
 
-        private async Task CollectScenarioAsync(
-            string scenario,
-            string? methodFilter,
-            ScenarioPolicy scenarioPolicy)
+        private async Task CollectScenarioAsync(string scenario, string? methodFilter, ScenarioPolicy scenarioPolicy)
         {
             Console.WriteLine($"Collecting {scenario} cold samples...");
             var cold = new List<SampleValue>(policy.SampleCounts.Cold);
-            for (var index = 0; index < policy.SampleCounts.Cold; index++)
-                cold.Add((await MeasureAsync(scenario, methodFilter).ConfigureAwait(false)).Sample);
+            for (var index = 0; index < policy.SampleCounts.Cold; index++) cold.Add((await MeasureAsync(scenario, methodFilter).ConfigureAwait(false)).Sample);
             Console.WriteLine($"Warming {scenario} immutable image (unmeasured)...");
             _ = await MeasureAsync(scenario, methodFilter).ConfigureAwait(false);
             Console.WriteLine($"Collecting {scenario} warm samples...");
             var warm = new List<SampleValue>(policy.SampleCounts.Warm);
-            for (var index = 0; index < policy.SampleCounts.Warm; index++)
-                warm.Add((await MeasureAsync(scenario, methodFilter).ConfigureAwait(false)).Sample);
-            ValidateSamples(
-                $"{scenario}.cold",
-                cold,
-                policy.SampleCounts.Cold,
-                scenarioPolicy.Cold,
-                _identity!.Environment.MemoryLimitBytes);
-            ValidateSamples(
-                $"{scenario}.warm",
-                warm,
-                policy.SampleCounts.Warm,
-                scenarioPolicy.Warm,
-                _identity.Environment.MemoryLimitBytes);
+            for (var index = 0; index < policy.SampleCounts.Warm; index++) warm.Add((await MeasureAsync(scenario, methodFilter).ConfigureAwait(false)).Sample);
+            ValidateSamples($"{scenario}.cold", cold, policy.SampleCounts.Cold, scenarioPolicy.Cold, _identity!.Environment.MemoryLimitBytes);
+            ValidateSamples($"{scenario}.warm", warm, policy.SampleCounts.Warm, scenarioPolicy.Warm, _identity.Environment.MemoryLimitBytes);
             _scenarios.Add(scenario, new CollectedScenario(cold, warm));
         }
 
@@ -953,40 +635,18 @@ static class RuntimePerformancePreflightApplication
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "internal/v1/performance/samples")
             {
-                Content = JsonContent.Create(
-                    new SampleRequest(
-                        context.ProfileId,
-                        context.PlanSha256,
-                        artifactRef,
-                        context.SecurityPolicyId,
-                        scenario,
-                        methodFilter),
-                    options: PascalJson)
+                Content = JsonContent.Create(new SampleRequest(context.ProfileId, context.PlanSha256, artifactRef, context.SecurityPolicyId, scenario, methodFilter), options: PascalJson)
             };
             using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                if (body.Length > 4096)
-                    body = body[..4096];
-                throw new HttpRequestException(
-                    $"Supervisor sample returned HTTP {(int)response.StatusCode}: {body}");
+                if (body.Length > 4096) body = body[..4096];
+                throw new HttpRequestException($"Supervisor sample returned HTTP {(int)response.StatusCode}: {body}");
             }
-            var sample = await response.Content.ReadFromJsonAsync<SampleResponse>(
-                PascalJson,
-                cancellationToken).ConfigureAwait(false)
-                ?? throw new InvalidDataException("Supervisor returned an empty performance sample.");
+            var sample = await response.Content.ReadFromJsonAsync<SampleResponse>(PascalJson, cancellationToken).ConfigureAwait(false) ?? throw new InvalidDataException("Supervisor returned an empty performance sample.");
             ValidateResponse(sample, scenario);
-            return sample with
-            {
-                Sample = sample.Sample with
-                {
-                    OperationId = sample.OperationId,
-                    ResourceSampleCount = sample.ResourceSampleCount,
-                    PostCompletionResourceSampleCount = sample.PostCompletionResourceSampleCount,
-                    CompletedAtUtc = sample.CompletedAtUtc
-                }
-            };
+            return sample with { Sample = sample.Sample with { OperationId = sample.OperationId, ResourceSampleCount = sample.ResourceSampleCount, PostCompletionResourceSampleCount = sample.PostCompletionResourceSampleCount, CompletedAtUtc = sample.CompletedAtUtc } };
         }
 
         private void ValidateResponse(SampleResponse response, string scenario)
@@ -1006,19 +666,14 @@ static class RuntimePerformancePreflightApplication
                 response.CompletedAtUtc < _collectionStartedAtUtc.AddMinutes(-1) ||
                 response.CompletedAtUtc > now.AddMinutes(1))
             {
-                throw new InvalidDataException(
-                    "Supervisor returned an invalid or replayed performance sample contract.");
+                throw new InvalidDataException("Supervisor returned an invalid or replayed performance sample contract.");
             }
-            if (scenario == "mapping" && response.DistinctSequencePointRangeCount < 2)
-                throw new PerformanceGateException("The mapping sample lacks distinct sequence-point ranges.");
-            var canonicalCapabilities = response.Capabilities.Distinct(StringComparer.Ordinal)
-                .Order(StringComparer.Ordinal).ToArray();
+            if (scenario == "mapping" && response.DistinctSequencePointRangeCount < 2) throw new PerformanceGateException("The mapping sample lacks distinct sequence-point ranges.");
+            var canonicalCapabilities = response.Capabilities.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
             if (!response.Capabilities.SequenceEqual(canonicalCapabilities, StringComparer.Ordinal) ||
                 !response.Capabilities.Contains("run", StringComparer.Ordinal) ||
-                response.Capabilities.Any(static value => value is not (
-                    "run" or "jit-asm" or "inspection" or "execution-flow")) ||
-                response.SourceMappingKind is not (
-                    "not-applicable" or "none" or "linux-profiler" or "checked-jit-debug-info") ||
+                response.Capabilities.Any(static value => value is not ("run" or "jit-asm" or "inspection" or "execution-flow")) ||
+                response.SourceMappingKind is not ("not-applicable" or "none" or "linux-profiler" or "checked-jit-debug-info") ||
                 response.Environment.RunnerId != "runtime-preflight-linux-x64-v2" ||
                 response.Environment.OperatingSystem != "linux" ||
                 response.Environment.Architecture != "x64" ||
@@ -1035,17 +690,13 @@ static class RuntimePerformancePreflightApplication
                 response.Image.SizeBytes > policy.Image.MaximumSizeBytes ||
                 response.MeasurementHelper is null ||
                 response.MeasurementHelper.Image is null ||
-                response.MeasurementHelper.Implementation !=
-                    "sharplabnext-runtime-cgroup-sidecar-v1" ||
-                response.MeasurementHelper.Entrypoint !=
-                    "/usr/local/bin/sharplabnext-runtime-measurement" ||
+                response.MeasurementHelper.Implementation != "sharplabnext-runtime-cgroup-sidecar-v1" ||
+                response.MeasurementHelper.Entrypoint != "/usr/local/bin/sharplabnext-runtime-measurement" ||
                 response.MeasurementHelper.SourceRevision != context.SourceRevision ||
-                response.MeasurementHelper.ContentSha256 !=
-                    "sha256:f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c" ||
+                response.MeasurementHelper.ContentSha256 != "sha256:f7645af4191d024c86769f3e39fd76ad237f537572c752fdfec3ff529aea9e4c" ||
                 !IsImmutableReference(response.MeasurementHelper.Image.Reference) ||
                 !IsRuntimeSupervisorReference(response.MeasurementHelper.Image.Reference) ||
-                !IsSha256(response.MeasurementHelper.Image.ImageId) ||
-                response.MeasurementHelper.Image.SizeBytes is <= 0 or > 17_179_869_184 ||
+                !IsSha256(response.MeasurementHelper.Image.ImageId) || response.MeasurementHelper.Image.SizeBytes is <= 0 or > 17_179_869_184 ||
                 response.MeasurementHelper.Image.Reference == response.Image.Reference ||
                 response.MeasurementHelper.Image.ImageId == response.Image.ImageId)
             {
@@ -1056,14 +707,9 @@ static class RuntimePerformancePreflightApplication
                 _identity = response;
                 return;
             }
-            if (_identity.Image != response.Image ||
-                _identity.MeasurementHelper != response.MeasurementHelper ||
-                !_identity.Capabilities.SequenceEqual(response.Capabilities, StringComparer.Ordinal) ||
-                _identity.SourceMappingKind != response.SourceMappingKind ||
-                _identity.Environment != response.Environment)
+            if (_identity.Image != response.Image || _identity.MeasurementHelper != response.MeasurementHelper || !_identity.Capabilities.SequenceEqual(response.Capabilities, StringComparer.Ordinal) || _identity.SourceMappingKind != response.SourceMappingKind || _identity.Environment != response.Environment)
             {
-                throw new PerformanceGateException(
-                    "Runtime image, measurement helper, or environment drifted between samples.");
+                throw new PerformanceGateException("Runtime image, measurement helper, or environment drifted between samples.");
             }
         }
 
@@ -1076,38 +722,28 @@ static class RuntimePerformancePreflightApplication
                 ["operationId"] = sample.OperationId,
                 ["resourceSampleCount"] = sample.ResourceSampleCount,
                 ["postCompletionResourceSampleCount"] = sample.PostCompletionResourceSampleCount,
-                ["completedAtUtc"] = sample.CompletedAtUtc.ToUniversalTime().ToString(
-                    "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'",
-                    CultureInfo.InvariantCulture)
+                ["completedAtUtc"] = sample.CompletedAtUtc.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture)
             }).ToArray());
 
         private static bool IsImmutableReference(string value)
         {
             var marker = value.LastIndexOf("@sha256:", StringComparison.Ordinal);
             return marker > 0 && marker + 8 + 64 == value.Length &&
-                value[(marker + 8)..].All(static character =>
-                    char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
+                value[(marker + 8)..].All(static character => char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
         }
 
         private static bool IsRuntimeSupervisorReference(string value)
         {
             var digest = value.LastIndexOf("@sha256:", StringComparison.Ordinal);
-            if (digest <= 0)
-                return false;
+            if (digest <= 0) return false;
             var repository = value.AsSpan(0, digest);
             var separator = repository.LastIndexOf('/');
             return repository[(separator + 1)..].SequenceEqual("runtime-supervisor");
         }
 
-        private static bool IsSha256(string value) =>
-            value.Length == 71 && value.StartsWith("sha256:", StringComparison.Ordinal) &&
-            value[7..].All(static character =>
-                char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
+        private static bool IsSha256(string value) => value.Length == 71 && value.StartsWith("sha256:", StringComparison.Ordinal) && value[7..].All(static character => char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
 
-        private static bool IsOperationId(string value) =>
-            value.Length == 35 && value.StartsWith("op_", StringComparison.Ordinal) &&
-            value[3..].All(static character =>
-                char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
+        private static bool IsOperationId(string value) => value.Length == 35 && value.StartsWith("op_", StringComparison.Ordinal) && value[3..].All(static character => char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
     }
 }
 
@@ -1157,8 +793,7 @@ sealed class PreflightOptions
         for (var index = 0; index < args.Length; index++)
         {
             string Value() => index + 1 < args.Length
-                ? args[++index]
-                : throw new ArgumentException($"Missing value for {args[index]}.");
+                ? args[++index] : throw new ArgumentException($"Missing value for {args[index]}.");
             switch (args[index])
             {
                 case "--help" or "-h": options.ShowHelp = true; break;
@@ -1174,16 +809,13 @@ sealed class PreflightOptions
                 case "--output": options.OutputPath = Value(); break;
                 case "--token-file": options.TokenFile = Value(); break;
                 case "--overall-timeout-seconds":
-                    if (!int.TryParse(Value(), CultureInfo.InvariantCulture, out var timeout) ||
-                        timeout is < 60 or > 7200)
-                        throw new ArgumentException("--overall-timeout-seconds must be between 60 and 7200.");
+                    if (!int.TryParse(Value(), CultureInfo.InvariantCulture, out var timeout) || timeout is < 60 or > 7200) throw new ArgumentException("--overall-timeout-seconds must be between 60 and 7200.");
                     options.OverallTimeoutSeconds = timeout;
                     break;
                 default: throw new ArgumentException($"Unknown option '{args[index]}'.");
             }
         }
-        if (options.ShowHelp || options.SelfTest)
-            return options;
+        if (options.ShowHelp || options.SelfTest) return options;
         foreach (var (value, name) in new[]
                  {
                      (options.SupervisorBaseAddress, "--supervisor-base-address"),
@@ -1196,13 +828,10 @@ sealed class PreflightOptions
                      (options.OutputPath, "--output")
                  })
         {
-            if (string.IsNullOrWhiteSpace(value))
-                throw new ArgumentException($"{name} is required.");
+            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException($"{name} is required.");
         }
-        if (!IsSha256(options.ArtifactRef!))
-            throw new ArgumentException("--artifact-ref must be a canonical sha256 reference.");
-        if (options.MethodFilter is { Length: > 256 } || options.MethodFilter?.Any(char.IsControl) == true)
-            throw new ArgumentException("--method-filter is invalid.");
+        if (!IsSha256(options.ArtifactRef!)) throw new ArgumentException("--artifact-ref must be a canonical sha256 reference.");
+        if (options.MethodFilter is { Length: > 256 } || options.MethodFilter?.Any(char.IsControl) == true) throw new ArgumentException("--method-filter is invalid.");
         return options;
     }
 
@@ -1215,31 +844,16 @@ sealed class PreflightOptions
 sealed class PerformanceGateException(string message, Exception? innerException = null) :
     Exception(message, innerException);
 
-sealed record PerformancePolicy(
-    int SchemaVersion,
-    string Id,
-    SampleCounts SampleCounts,
-    ResourceLimits ResourceLimits,
-    ImageBudget Image,
-    ScenarioPolicies Scenarios);
+sealed record PerformancePolicy(int SchemaVersion, string Id, SampleCounts SampleCounts, ResourceLimits ResourceLimits, ImageBudget Image, ScenarioPolicies Scenarios);
 
 sealed record SampleCounts(int Cold, int Warm);
 sealed record ResourceLimits(long NanoCpus, IReadOnlyList<long> AllowedMemoryBytes);
 sealed record ImageBudget(long MaximumSizeBytes);
 sealed record ScenarioPolicies(ScenarioPolicy Run, ScenarioPolicy Jit, ScenarioPolicy Mapping);
 sealed record ScenarioPolicy(SampleBudget Cold, SampleBudget Warm);
-sealed record SampleBudget(
-    double MaximumP95LatencyMilliseconds,
-    double MaximumSampleLatencyMilliseconds,
-    long MaximumPeakMemoryBytes);
+sealed record SampleBudget(double MaximumP95LatencyMilliseconds, double MaximumSampleLatencyMilliseconds, long MaximumPeakMemoryBytes);
 
-sealed record SampleRequest(
-    string RuntimeProfileId,
-    string PlanSha256,
-    string ArtifactRef,
-    string SecurityPolicyId,
-    string Scenario,
-    string? MethodFilter);
+sealed record SampleRequest(string RuntimeProfileId, string PlanSha256, string ArtifactRef, string SecurityPolicyId, string Scenario, string? MethodFilter);
 
 sealed record SampleResponse(
     string ProfileId,
@@ -1257,18 +871,8 @@ sealed record SampleResponse(
     DateTimeOffset CompletedAtUtc);
 
 sealed record SampleImage(string Reference, string ImageId, long SizeBytes);
-sealed record SampleMeasurementHelper(
-    string Implementation,
-    SampleImage Image,
-    string Entrypoint,
-    string SourceRevision,
-    string ContentSha256);
-sealed record SampleEnvironment(
-    string RunnerId,
-    string OperatingSystem,
-    string Architecture,
-    long NanoCpus,
-    long MemoryLimitBytes);
+sealed record SampleMeasurementHelper(string Implementation, SampleImage Image, string Entrypoint, string SourceRevision, string ContentSha256);
+sealed record SampleEnvironment(string RunnerId, string OperatingSystem, string Architecture, long NanoCpus, long MemoryLimitBytes);
 sealed record SampleValue(
     double LatencyMilliseconds,
     long PeakMemoryBytes,

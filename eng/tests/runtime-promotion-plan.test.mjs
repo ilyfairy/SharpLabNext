@@ -5,19 +5,19 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { candidateExpectedImageLabels } from './build-runtime-candidate.mjs'
+import { candidateExpectedImageLabels } from '../build-runtime-candidate.mjs'
 import {
   produceRuntimePromotionPlan,
   runRuntimePromotionPlan,
   RuntimePromotionPlanError,
   verifyRuntimePromotionPlan,
-} from './runtime-promotion-plan.mjs'
+} from '../release/runtime-promotion-plan.mjs'
 import {
   createWineCoreClrOperatorReceipt,
   serializeWineCoreClrOperatorReceipt,
   signWineCoreClrOperatorReceipt,
   wineCoreClrOperatorCommittedFiles,
-} from './wine-coreclr-operator-receipt.mjs'
+} from '../release/wine-coreclr-operator-receipt.mjs'
 
 const target = 'runtime-wine-dotnet-matrix-candidate'
 const profileId = 'wine-dotnet-7-linux-x64'
@@ -27,13 +27,9 @@ const otherImageId = `sha256:${'c'.repeat(64)}`
 const pinnedReference = `registry.example/runtime@sha256:${'d'.repeat(64)}`
 const helperDigest = `sha256:${'e'.repeat(64)}`
 const planKeys = crypto.generateKeyPairSync('ed25519')
-const planKeyId = `sha256:${crypto.createHash('sha256').update(
-  planKeys.publicKey.export({ type: 'spki', format: 'der' }),
-).digest('hex')}`
+const planKeyId = `sha256:${crypto.createHash('sha256').update(planKeys.publicKey.export({ type: 'spki', format: 'der' })).digest('hex')}`;
 
-function digestReference(name, character) {
-  return `registry.example/${name}@sha256:${character.repeat(64)}`
-}
+function digestReference(name, character) { return `registry.example/${name}@sha256:${character.repeat(64)}`; }
 
 function createEnvironment() {
   return {
@@ -174,12 +170,7 @@ function createFixture() {
     profilePath,
     performancePolicyPath,
     outputPath: path.join(root, 'profiles', 'runtime-promotion-plans', `${profileId}.json`),
-    preflightProfilePath: path.join(
-      root,
-      'profiles',
-      'runtime-promotion-plans',
-      `${profileId}.profile.json`,
-    ),
+    preflightProfilePath: path.join(root, 'profiles', 'runtime-promotion-plans', `${profileId}.profile.json`),
     operatorPublicKey: publicKey,
     gitShow(arguments_) {
       if (arguments_[0] === 'rev-parse') return Buffer.from(`${operatorReceipt.source.tree}\n`)
@@ -305,12 +296,7 @@ function createModernFixture() {
     profilePath,
     performancePolicyPath,
     outputPath: path.join(root, 'profiles', 'runtime-promotion-plans', `${modernProfileId}.json`),
-    preflightProfilePath: path.join(
-      root,
-      'profiles',
-      'runtime-promotion-plans',
-      `${modernProfileId}.profile.json`,
-    ),
+    preflightProfilePath: path.join(root, 'profiles', 'runtime-promotion-plans', `${modernProfileId}.profile.json`),
     dispose() {
       fs.rmSync(root, { recursive: true, force: true })
     },
@@ -410,12 +396,7 @@ function createMonoFixture() {
     profilePath,
     performancePolicyPath,
     outputPath: path.join(root, 'profiles', 'runtime-promotion-plans', `${monoProfileId}.json`),
-    preflightProfilePath: path.join(
-      root,
-      'profiles',
-      'runtime-promotion-plans',
-      `${monoProfileId}.profile.json`,
-    ),
+    preflightProfilePath: path.join(root, 'profiles', 'runtime-promotion-plans', `${monoProfileId}.profile.json`),
     dispose() {
       fs.rmSync(root, { recursive: true, force: true })
     },
@@ -561,7 +542,7 @@ test('Mono JIT promotion plan binds the canonical mono-sgen executable', t => {
 
 test('promotion plan schema accepts only the canonical Mono JIT executable', () => {
   const schema = JSON.parse(fs.readFileSync(
-    new URL('../schemas/runtime-promotion-plan.schema.json', import.meta.url),
+    new URL('../../schemas/runtime-promotion-plan.schema.json', import.meta.url),
     'utf8',
   ))
   const pattern = new RegExp(schema.properties.jitLibraryPath.pattern)

@@ -19,8 +19,7 @@ public sealed class RuntimeMatrixBaseImageBindingsTests
             }
             """);
 
-        var exception = Assert.Throws<BundleValidationException>(() =>
-            RuntimeMatrixBaseImageBindings.Parse(bytes));
+        var exception = Assert.Throws<BundleValidationException>(() => RuntimeMatrixBaseImageBindings.Parse(bytes));
 
         Assert.Contains("duplicate Linux runtime row", exception.Message, StringComparison.Ordinal);
     }
@@ -37,8 +36,7 @@ public sealed class RuntimeMatrixBaseImageBindingsTests
             }
             """);
 
-        var exception = Assert.Throws<BundleValidationException>(() =>
-            RuntimeMatrixBaseImageBindings.Parse(bytes));
+        var exception = Assert.Throws<BundleValidationException>(() => RuntimeMatrixBaseImageBindings.Parse(bytes));
 
         Assert.Contains("not pinned by SHA-256 digest", exception.Message, StringComparison.Ordinal);
     }

@@ -6,11 +6,11 @@
  * Buildx is allowed to load a Dockerfile or resolve an external FROM image.
  */
 
-import { spawnSync } from 'node:child_process'
-import crypto from 'node:crypto'
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   candidateImageLabelBindings,
   isCandidateSourceUri,
@@ -34,7 +34,7 @@ import {
   inspectGitSourceState,
   validateRuntimeImageInspection,
   validateGitSourceState,
-} from './runtime-promotion-image-binding.mjs'
+} from './release/runtime-promotion-image-binding.mjs'
 import {
   createFrameworkCandidateInputFromImages,
 } from './create-runtime-framework-candidate-input.mjs'
@@ -48,7 +48,7 @@ import {
   receiptSha256,
   verifyWineCoreClrOperatorReceipt,
   wineCoreClrOperatorCommittedFiles,
-} from './wine-coreclr-operator-receipt.mjs'
+} from './release/wine-coreclr-operator-receipt.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const candidateDockerfiles = Object.freeze({
@@ -60,12 +60,7 @@ const candidateDockerfiles = Object.freeze({
   'runtime-wine-framework-matrix-shared-candidate': 'deploy/docker/Dockerfile.runtime-wine-framework-matrix-shared',
 })
 
-export const commonRequiredInputs = Object.freeze([
-  'IMAGE_PREFIX',
-  'RELEASE_ID',
-  'SOURCE_DATE_EPOCH',
-  'SOURCE_REVISION',
-])
+export const commonRequiredInputs = Object.freeze(['IMAGE_PREFIX', 'RELEASE_ID', 'SOURCE_DATE_EPOCH', 'SOURCE_REVISION']);
 
 const commonIdentityLabelBindings = Object.freeze({
   'org.opencontainers.image.version': 'RELEASE_ID',
@@ -93,11 +88,7 @@ const developmentOperatorTagInput = 'WINE_CORECLR_DEVELOPMENT_OPERATOR_TAG'
 const developmentOperatorImageIdInput = 'WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE_ID'
 const developmentOperatorBakeInput = 'WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE'
 const imageIdPattern = /^sha256:[0-9a-f]{64}$/
-const operatorReceiptLabelNames = Object.freeze([
-  'io.sharplabnext.operator.receipt-sha256',
-  'io.sharplabnext.operator.receipt-key-id',
-  'io.sharplabnext.operator.userspace-reference',
-])
+const operatorReceiptLabelNames = Object.freeze(['io.sharplabnext.operator.receipt-sha256', 'io.sharplabnext.operator.receipt-key-id', 'io.sharplabnext.operator.userspace-reference'])
 const historicalFrameworkForbiddenLabelNames = Object.freeze([
   ...operatorReceiptLabelNames,
   'io.sharplabnext.component.wine-coreclr-userspace.version',
@@ -623,9 +614,7 @@ function readJson(pathname, description, failures) {
   }
 }
 
-function expectedVersion(matrixRow) {
-  return matrixRow?.version ?? matrixRow?.resolvedVersion
-}
+function expectedVersion(matrixRow) { return matrixRow?.version ?? matrixRow?.resolvedVersion; }
 
 function expectEqual(failures, actual, expected, description) {
   if (actual !== expected) {
@@ -709,9 +698,7 @@ export function candidateMatrixBinding(target, profileId, matrix) {
   const kind = candidateTargetSpecifications[target]?.matrixBindingKind
   if (kind === undefined) throw new Error(`unknown candidate target '${target}'`)
   if (kind === 'combined-mono-wine') {
-    throw new Error(
-      `candidate target '${target}' is an operator image group, not a promotable runtime profile`,
-    )
+    throw new Error(`candidate target '${target}' is an operator image group, not a promotable runtime profile`)
   }
   const failures = []
   const binding = findCandidateBinding(kind, profileId, matrix, failures)
@@ -916,12 +903,7 @@ function validateCoreClrFrameworkBinding(binding, profile, version, failures) {
   )
 }
 
-function validateCandidateMatrixBinding(
-  target,
-  values,
-  failures,
-  sourceRoot = repositoryRoot,
-) {
+function validateCandidateMatrixBinding(target, values, failures, sourceRoot = repositoryRoot) {
   const kind = candidateTargetSpecifications[target]?.matrixBindingKind
   if (kind === undefined || kind === 'combined-mono-wine') return
 
@@ -936,13 +918,7 @@ function validateCandidateMatrixBinding(
     'profiles/runtime-matrix.json',
     failures,
   )
-  const profilePath = path.join(
-    sourceRoot,
-    'profiles',
-    'runtimes',
-    'candidates',
-    `${profileId}.json`,
-  )
+  const profilePath = path.join(sourceRoot, 'profiles', 'runtimes', 'candidates', `${profileId}.json`)
   const profile = readJson(
     profilePath,
     `candidate runtime profile profiles/runtimes/candidates/${profileId}.json`,
@@ -1027,12 +1003,7 @@ function validateCandidateMatrixBinding(
   }
 }
 
-export function validateCandidateBuildInputs(
-  target,
-  values,
-  sourceRoot = repositoryRoot,
-  options = {},
-) {
+export function validateCandidateBuildInputs(target, values, sourceRoot = repositoryRoot, options = {}) {
   const specification = candidateTargetSpecifications[target]
   if (specification === undefined) {
     return [`unknown candidate target '${target}'`]
@@ -1149,12 +1120,7 @@ export function validateCandidateBuildInputs(
   return failures
 }
 
-export function validateSharedFrameworkCandidateProvenance(
-  values,
-  spawn = spawnSync,
-  sourceRoot = repositoryRoot,
-  options = {},
-) {
+export function validateSharedFrameworkCandidateProvenance(values, spawn = spawnSync, sourceRoot = repositoryRoot, options = {}) {
   const metadataSource = values?.RUNTIME_MATRIX_FRAMEWORK_MATRIX_SOURCE_URI
   if (typeof metadataSource !== 'string' || !metadataSource.startsWith('docker://')) {
     throw new Error('Framework matrix metadata must use an immutable docker:// image')
@@ -1165,10 +1131,7 @@ export function validateSharedFrameworkCandidateProvenance(
   try {
     if (values.RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION !== values.SOURCE_REVISION) {
       if (options.allowHistoricalFrameworkInputForDevelopment !== true) {
-        throw new Error(
-          'Framework source revision may differ from candidate SOURCE_REVISION only in ' +
-          'explicit historical Framework development mode',
-        )
+        throw new Error('Framework source revision may differ from candidate SOURCE_REVISION only in explicit historical Framework development mode')
       }
       const createContext = options.createCommittedSourceContext ?? createCommittedSourceContext
       frameworkSourceContext = createContext({
@@ -1187,11 +1150,7 @@ export function validateSharedFrameworkCandidateProvenance(
       metadataImage,
       sourceRevision: values.RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION,
       runtimeMatrix: path.join(frameworkSourceRoot, 'profiles', 'runtime-matrix.json'),
-      installerManifest: path.join(
-        frameworkSourceRoot,
-        'profiles',
-        'runtime-framework-installers.json',
-      ),
+      installerManifest: path.join(frameworkSourceRoot, 'profiles', 'runtime-framework-installers.json'),
       spawn,
     })
     const derived = reconstruction.value
@@ -1293,8 +1252,8 @@ export function candidateOperationHelpers(target, values = process.env) {
 }
 
 export function candidateIdentityLabelBindings(target, values) {
-  const specification = candidateTargetSpecifications[target]
-  if (specification === undefined) throw new Error(`unknown candidate target '${target}'`)
+  const specification = candidateTargetSpecifications[target];
+  if (specification === undefined) throw new Error(`unknown candidate target '${target}'`);
   const bindings = {
     ...commonIdentityLabelBindings,
     ...specification.identityLabelBindings,
@@ -1351,10 +1310,7 @@ function candidateSourceExpectedLabels(values) {
     : ((context === 'committed' && promotionEligible === 'true') ||
        (context === 'working-tree-development' && promotionEligible === 'false'))
   if (!valid) {
-    throw new Error(
-      `${candidateSourceContextInput}/${candidatePromotionEligibilityInput} ` +
-      'do not match the candidate development mode',
-    )
+    throw new Error(`${candidateSourceContextInput}/${candidatePromotionEligibilityInput} do not match the candidate development mode`)
   }
   return {
     'io.sharplabnext.source.context': context,
@@ -1391,10 +1347,7 @@ export function wineCoreClrOperatorExpectedLabels(values, sourceBinding = undefi
   const validSource = (source.context === 'committed' && source.promotionEligible === true) ||
     (source.context === 'working-tree-development' && source.promotionEligible === false)
   if (!validSource) {
-    throw new Error(
-      'Wine CoreCLR operator source binding must be committed/true or ' +
-      'working-tree-development/false',
-    )
+    throw new Error('Wine CoreCLR operator source binding must be committed/true or working-tree-development/false')
   }
   return {
     ...wineCoreClrOperatorStaticLabels,
@@ -1426,17 +1379,12 @@ function inspectWineCoreClrOperator(values, reference, spawn, cwd, env, options 
     )
   }
   if (failures.length > 0) {
-    throw new Error(
-      `Wine CoreCLR operator '${reference}' does not satisfy the immutable userspace contract: ` +
-      failures.join('; '),
-    )
+    throw new Error(`Wine CoreCLR operator '${reference}' does not satisfy the immutable userspace contract: ${failures.join('; ')}`)
   }
   return inspection
 }
 
-function sha256File(filename) {
-  return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(filename)).digest('hex')}`
-}
+function sha256File(filename) { return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(filename)).digest('hex')}`; }
 
 function readBoundedRegularFile(filename, label, maximumBytes = 1024 * 1024) {
   if (typeof filename !== 'string' || !path.isAbsolute(filename)) {
@@ -1531,9 +1479,7 @@ function verifyWineOperatorLineage(target, values, receipt, spawn, cwd, env) {
   const specification = candidateTargetSpecifications[target]
   if (specification?.matrixBindingKind === 'wine-coreclr') {
     if (values.RUNTIME_MATRIX_WINE_IMAGE !== receipt.operator.reference) {
-      throw new Error(
-        'RUNTIME_MATRIX_WINE_IMAGE must equal the immutable operator reference in the signed receipt',
-      )
+      throw new Error('RUNTIME_MATRIX_WINE_IMAGE must equal the immutable operator reference in the signed receipt')
     }
     return
   }
@@ -1547,20 +1493,14 @@ function verifyWineOperatorLineage(target, values, receipt, spawn, cwd, env) {
     : 'io.sharplabnext.operator-base'
   const image = inspectDockerImage(reference, { spawn, cwd, env })
   if (image.labels[label] !== receipt.operator.reference) {
-    throw new Error(
-      `Framework Wine lineage label ${label} must equal the signed clean operator ` +
-      `${receipt.operator.reference}; observed ${image.labels[label] ?? '<missing>'}`,
-    )
+    throw new Error(`Framework Wine lineage label ${label} must equal the signed clean operator ${receipt.operator.reference}; observed ${image.labels[label] ?? '<missing>'}`)
   }
 }
 
 function ensureUnchangedWineCoreClrOperator(before, after) {
   if (before.imageId !== after.imageId || before.sizeBytes !== after.sizeBytes ||
       JSON.stringify(before.labels) !== JSON.stringify(after.labels)) {
-    throw new Error(
-      `Wine CoreCLR operator image changed during Bake; expected ${before.imageId}/${before.sizeBytes}, ` +
-      `observed ${after.imageId}/${after.sizeBytes}`,
-    )
+    throw new Error(`Wine CoreCLR operator image changed during Bake; expected ${before.imageId}/${before.sizeBytes}, observed ${after.imageId}/${after.sizeBytes}`)
   }
 }
 
@@ -1574,9 +1514,7 @@ function developmentWineOperatorRequested(target, developmentMode, values) {
     throw new Error('development Wine operator inputs are supported only for Wine CoreCLR candidates')
   }
   if (!developmentMode || !wrapperOptIn) {
-    throw new Error(
-      'development Wine operator requires matching wrapper and candidate development opt-ins',
-    )
+    throw new Error('development Wine operator requires matching wrapper and candidate development opt-ins')
   }
   const tag = values?.[developmentOperatorTagInput]
   const imageId = values?.[developmentOperatorImageIdInput]
@@ -1604,19 +1542,13 @@ function historicalFrameworkInputRequested(target, flagPresent, values) {
   const anyHistoricalInput = flagPresent || wrapperOptIn !== undefined
   if (!anyHistoricalInput) return false
   if (!flagPresent || wrapperOptIn !== 'true') {
-    throw new Error(
-      'Framework development mode requires both the wrapper and candidate opt-ins',
-    )
+    throw new Error('Framework development mode requires both the wrapper and candidate opt-ins')
   }
   if (target !== 'runtime-wine-framework-matrix-shared-candidate') {
-    throw new Error(
-      'historical Framework development input is supported only for the shared Framework candidate',
-    )
+    throw new Error('historical Framework development input is supported only for the shared Framework candidate')
   }
   if (values?.RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION === values?.SOURCE_REVISION) {
-    throw new Error(
-      'historical Framework source revision must differ from candidate SOURCE_REVISION',
-    )
+    throw new Error('historical Framework source revision must differ from candidate SOURCE_REVISION')
   }
   if ([operatorReceiptInput, operatorReceiptSignatureInput,
     'WINE_CORECLR_OPERATOR_RECEIPT_SHA256',
@@ -1628,12 +1560,7 @@ function historicalFrameworkInputRequested(target, flagPresent, values) {
   return true
 }
 
-export function createCandidateBakeArguments(
-  target,
-  additionalArguments = [],
-  values = process.env,
-  sourceRoot = undefined,
-) {
+export function createCandidateBakeArguments(target, additionalArguments = [], values = process.env, sourceRoot = undefined) {
   if (candidateTargetSpecifications[target] === undefined) {
     throw new Error(`unknown candidate target '${target}'`)
   }
@@ -1803,13 +1730,7 @@ function candidateExpectedBuildImageLabels(target, values) {
   }
 }
 
-export function runCandidateBuild(
-  argv,
-  values = process.env,
-  spawn = spawnSync,
-  output = console,
-  testHooks = {},
-) {
+export function runCandidateBuild(argv, values = process.env, spawn = spawnSync, output = console, testHooks = {}) {
   const effectiveRepositoryRoot = path.resolve(testHooks.repositoryRoot ?? repositoryRoot)
   const allowedDirtyPaths = Object.freeze([...(testHooks.allowedDirtyPaths ?? [])])
   const buildStdio = testHooks.buildStdio ?? 'inherit'
@@ -1824,31 +1745,25 @@ export function runCandidateBuild(
     return 64
   }
 
-  const developmentOverrideCount = rawAdditionalArguments
-    .filter(argument => argument === developmentSourceOverride).length
+  const developmentOverrideCount = rawAdditionalArguments.filter(argument => argument === developmentSourceOverride).length
   if (developmentOverrideCount > 1) {
     output.error(`runtime candidate input error: ${developmentSourceOverride} may be specified once`)
     return 64
   }
   const allowUncommittedSourceForDevelopment = developmentOverrideCount === 1
-  const developmentImageInputsOverrideCount = rawAdditionalArguments
-    .filter(argument => argument === developmentImageInputsOverride).length
+  const developmentImageInputsOverrideCount = rawAdditionalArguments.filter(argument => argument === developmentImageInputsOverride).length
   if (developmentImageInputsOverrideCount > 1) {
     output.error(`runtime candidate input error: ${developmentImageInputsOverride} may be specified once`)
     return 64
   }
   const allowDevelopmentImageInputs = developmentImageInputsOverrideCount === 1
-  const historicalFrameworkOverrideCount = rawAdditionalArguments
-    .filter(argument => argument === historicalFrameworkOverride).length
+  const historicalFrameworkOverrideCount = rawAdditionalArguments.filter(argument => argument === historicalFrameworkOverride).length
   if (historicalFrameworkOverrideCount > 1) {
     output.error(`runtime candidate input error: ${historicalFrameworkOverride} may be specified once`)
     return 64
   }
   const historicalFrameworkFlagPresent = historicalFrameworkOverrideCount === 1
-  const additionalArguments = rawAdditionalArguments
-    .filter(argument => argument !== developmentSourceOverride &&
-      argument !== developmentImageInputsOverride &&
-      argument !== historicalFrameworkOverride)
+  const additionalArguments = rawAdditionalArguments.filter(argument => argument !== developmentSourceOverride && argument !== developmentImageInputsOverride && argument !== historicalFrameworkOverride)
   let developmentWineOperator = false
   let historicalFrameworkInput = false
   let currentFrameworkDevelopmentInput = false
@@ -1954,8 +1869,7 @@ export function runCandidateBuild(
           'this local candidate is not eligible for a promotion receipt.',
         )
       } else {
-        const createContext = testHooks.createCommittedSourceContext ??
-          createCommittedSourceContext
+        const createContext = testHooks.createCommittedSourceContext ?? createCommittedSourceContext;
         sourceContext = createContext({
           repositoryRoot: effectiveRepositoryRoot,
           revision: values.SOURCE_REVISION,
@@ -2083,10 +1997,7 @@ export function runCandidateBuild(
           },
         )
         if (initialWineOperator.imageId !== dockerEnvironment[developmentOperatorImageIdInput]) {
-          throw new Error(
-            `development Wine operator tag changed before Bake; expected ` +
-            `${dockerEnvironment[developmentOperatorImageIdInput]}, observed ${initialWineOperator.imageId}`,
-          )
+          throw new Error(`development Wine operator tag changed before Bake; expected ${dockerEnvironment[developmentOperatorImageIdInput]}, observed ${initialWineOperator.imageId}`)
         }
       } else {
         const loadOperatorReceipt = testHooks.loadWineCoreClrOperatorReceipt ??

@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  createSourceAssociation,
-  isLinkedLineSourceAssociation,
-  sourceAssociationActivationKey,
-  sourceAssociationForSelection,
-  sourceAssociationLines,
-} from './sourceAssociationModel'
+import { createSourceAssociation, isLinkedLineSourceAssociation, sourceAssociationActivationKey, sourceAssociationForSelection, sourceAssociationLines } from './sourceAssociationModel'
 
 describe('source association activation', () => {
   it('does not carry an active range into a later result with the same association key', () => {
@@ -65,13 +59,7 @@ describe('source association activation', () => {
   })
 
   it('maps a source selection to the exact or largest enclosed AST node', () => {
-    const astAssociation = (
-      startLine: number,
-      startColumn: number,
-      endLine: number,
-      endColumn: number,
-      label: string,
-    ) => ({
+    const astAssociation = (startLine: number, startColumn: number, endLine: number, endColumn: number, label: string) => ({
       ...createSourceAssociation(
         {
           documentPath: 'Program.cs',
@@ -113,13 +101,7 @@ describe('source association activation', () => {
   })
 
   it('selects the smallest common AST container for sibling nodes', () => {
-    const astAssociation = (
-      startLine: number,
-      startColumn: number,
-      endLine: number,
-      endColumn: number,
-      label: string,
-    ) => ({
+    const astAssociation = (startLine: number, startColumn: number, endLine: number, endColumn: number, label: string) => ({
       ...createSourceAssociation(
         {
           documentPath: 'Program.cs',
@@ -134,13 +116,7 @@ describe('source association activation', () => {
     const secondStatement = astAssociation(4, 1, 4, 24, 'AST GlobalStatement')
     const thirdStatement = astAssociation(5, 1, 5, 27, 'AST GlobalStatement')
     const fourthStatement = astAssociation(6, 1, 6, 27, 'AST GlobalStatement')
-    const associations = [
-      fourthStatement,
-      thirdStatement,
-      secondStatement,
-      compilationUnit,
-      firstStatement,
-    ]
+    const associations = [fourthStatement, thirdStatement, secondStatement, compilationUnit, firstStatement]
 
     expect(
       sourceAssociationForSelection(associations, 'Program.cs', {
@@ -153,14 +129,7 @@ describe('source association activation', () => {
   })
 
   it('ignores trailing trivia when a multi-line selection ends at a newline', () => {
-    const astAssociation = (
-      startLine: number,
-      startColumn: number,
-      endLine: number,
-      endColumn: number,
-      label: string,
-      astCategory: 'node' | 'token' | 'trivia' = 'node',
-    ) => ({
+    const astAssociation = (startLine: number, startColumn: number, endLine: number, endColumn: number, label: string, astCategory: 'node' | 'token' | 'trivia' = 'node') => ({
       ...createSourceAssociation(
         {
           documentPath: 'Program.cs',
@@ -178,16 +147,12 @@ describe('source association activation', () => {
     const trailingTrivia = astAssociation(6, 27, 7, 1, 'AST EndOfLineTrivia', 'trivia')
 
     expect(
-      sourceAssociationForSelection(
-        [trailingTrivia, thirdStatement, secondStatement, firstStatement, compilationUnit],
-        'Program.cs',
-        {
-          startLine: 3,
-          startColumn: 1,
-          endLine: 7,
-          endColumn: 1,
-        },
-      ),
+      sourceAssociationForSelection([trailingTrivia, thirdStatement, secondStatement, firstStatement, compilationUnit], 'Program.cs', {
+        startLine: 3,
+        startColumn: 1,
+        endLine: 7,
+        endColumn: 1,
+      }),
     ).toBe(compilationUnit)
   })
 })

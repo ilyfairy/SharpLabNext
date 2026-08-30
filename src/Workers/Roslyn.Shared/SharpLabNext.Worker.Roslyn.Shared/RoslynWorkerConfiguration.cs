@@ -6,14 +6,7 @@ namespace SharpLabNext.Worker.Roslyn;
 
 public sealed record ReferenceSetDefinition
 {
-    public ReferenceSetDefinition(
-        string Id,
-        string Path,
-        string TargetFramework,
-        string FrameworkVersion,
-        string? Digest = null,
-        string? AttestationPath = null,
-        bool? IncludeSharpLabRuntime = null)
+    public ReferenceSetDefinition(string Id, string Path, string TargetFramework, string FrameworkVersion, string? Digest = null, string? AttestationPath = null, bool? IncludeSharpLabRuntime = null)
     {
         this.Id = Id;
         this.Path = Path;
@@ -69,16 +62,11 @@ public sealed record ReferenceSetDefinition
 
     public bool IncludeSharpLabRuntime { get; init; }
 
-    public string GetRuntimeFrameworkVersion() =>
-        RuntimeFrameworkVersion ?? ReferenceSetArtifactContractDefaults.GetRuntimeFrameworkVersion(
-            TargetFramework,
-            FrameworkVersion);
+    public string GetRuntimeFrameworkVersion() => RuntimeFrameworkVersion ?? ReferenceSetArtifactContractDefaults.GetRuntimeFrameworkVersion(TargetFramework, FrameworkVersion);
 
-    internal bool IsFrameworkReferenceSet =>
-        ReferenceSetArtifactContractDefaults.IsFrameworkTarget(TargetFramework);
+    internal bool IsFrameworkReferenceSet => ReferenceSetArtifactContractDefaults.IsFrameworkTarget(TargetFramework);
 
-    internal bool IsLegacyFrameworkReferenceSet =>
-        ReferenceSetArtifactContractDefaults.IsLegacyFrameworkTarget(TargetFramework);
+    internal bool IsLegacyFrameworkReferenceSet => ReferenceSetArtifactContractDefaults.IsLegacyFrameworkTarget(TargetFramework);
 
     internal void Validate()
     {
@@ -92,8 +80,7 @@ public sealed record ReferenceSetDefinition
             throw new InvalidOperationException($"Reference set '{Id}' framework version cannot be empty.");
         if (ArtifactFormat is not ("dotnet-managed-pe-v1" or "dotnet-framework-managed-pe-v1"))
         {
-            throw new InvalidOperationException(
-                $"Reference set '{Id}' artifact format must be 'dotnet-managed-pe-v1' or 'dotnet-framework-managed-pe-v1'.");
+            throw new InvalidOperationException($"Reference set '{Id}' artifact format must be 'dotnet-managed-pe-v1' or 'dotnet-framework-managed-pe-v1'.");
         }
         if (string.IsNullOrWhiteSpace(RuntimeFamily))
             throw new InvalidOperationException($"Reference set '{Id}' runtime family cannot be empty.");
@@ -103,8 +90,7 @@ public sealed record ReferenceSetDefinition
             throw new InvalidOperationException($"Reference set '{Id}' runtime framework version cannot be empty.");
         if (Architecture is not ("anycpu" or "x64" or "x86"))
         {
-            throw new InvalidOperationException(
-                $"Reference set '{Id}' architecture must be 'anycpu', 'x64', or 'x86'.");
+            throw new InvalidOperationException($"Reference set '{Id}' architecture must be 'anycpu', 'x64', or 'x86'.");
         }
 
         ValidateFileExtension(ExecutableFileExtension, nameof(ExecutableFileExtension));
@@ -131,43 +117,21 @@ public sealed record ReferenceSetDefinition
     }
 }
 
-internal sealed record ReferenceSetArtifactContractDefaults(
-    string ArtifactFormat,
-    string RuntimeFamily,
-    string FrameworkName,
-    string Architecture,
-    string ExecutableFileExtension,
-    string LibraryFileExtension,
-    bool IncludeSharpLabRuntime)
+internal sealed record ReferenceSetArtifactContractDefaults(string ArtifactFormat, string RuntimeFamily, string FrameworkName, string Architecture, string ExecutableFileExtension, string LibraryFileExtension, bool IncludeSharpLabRuntime)
 {
     public static ReferenceSetArtifactContractDefaults For(string targetFramework)
     {
         if (IsFrameworkTarget(targetFramework))
         {
-            return new(
-                "dotnet-framework-managed-pe-v1",
-                "netfx-clr-wine",
-                ".NETFramework",
-                "anycpu",
-                ".exe",
-                ".dll",
-                IncludeSharpLabRuntime: false);
+            return new("dotnet-framework-managed-pe-v1", "netfx-clr-wine", ".NETFramework", "anycpu", ".exe", ".dll", IncludeSharpLabRuntime: false);
         }
 
         if (IsCoreTarget(targetFramework))
         {
-            return new(
-                "dotnet-managed-pe-v1",
-                "coreclr",
-                "Microsoft.NETCore.App",
-                "anycpu",
-                ".dll",
-                ".dll",
-                IncludeSharpLabRuntime: SupportsNetStandard21(targetFramework));
+            return new("dotnet-managed-pe-v1", "coreclr", "Microsoft.NETCore.App", "anycpu", ".dll", ".dll", IncludeSharpLabRuntime: SupportsNetStandard21(targetFramework));
         }
 
-        throw new InvalidOperationException(
-            $"Target framework '{targetFramework}' is not a supported CoreCLR or .NET Framework application TFM.");
+        throw new InvalidOperationException($"Target framework '{targetFramework}' is not a supported CoreCLR or .NET Framework application TFM.");
     }
 
     public static string GetRuntimeFrameworkVersion(string targetFramework, string referencePackVersion)
@@ -180,8 +144,7 @@ internal sealed record ReferenceSetArtifactContractDefaults(
         {
             2 => $"{digits[0]}.{digits[1]}",
             3 => $"{digits[0]}.{digits[1]}.{digits[2]}",
-            _ => throw new InvalidOperationException(
-                $"Target framework '{targetFramework}' is not a recognized .NET Framework TFM.")
+            _ => throw new InvalidOperationException($"Target framework '{targetFramework}' is not a recognized .NET Framework TFM.")
         };
     }
 
@@ -229,12 +192,7 @@ internal sealed record ReferenceSetArtifactContractDefaults(
     }
 }
 
-public sealed record RoslynWorkerIdentity(
-    string ReleaseId,
-    string ToolchainId,
-    string CompilerVersion,
-    string? CompilerCommit,
-    string WorkerImageId)
+public sealed record RoslynWorkerIdentity(string ReleaseId, string ToolchainId, string CompilerVersion, string? CompilerCommit, string WorkerImageId)
 {
     public IReadOnlyList<string> SupportedLanguageIds { get; init; } = ["csharp", "visual-basic"];
 
@@ -262,14 +220,7 @@ public sealed record RoslynWorkerIdentity(
         SupportedLanguageIds.Contains(languageId, StringComparer.Ordinal);
 }
 
-public sealed record CompilationLimits(
-    int MaxFiles,
-    int MaxFileUtf8Bytes,
-    int MaxTotalSourceUtf8Bytes,
-    int MaxDiagnostics,
-    int MaxPeBytes,
-    int MaxPdbBytes,
-    int MaxBuildMilliseconds)
+public sealed record CompilationLimits(int MaxFiles, int MaxFileUtf8Bytes, int MaxTotalSourceUtf8Bytes, int MaxDiagnostics, int MaxPeBytes, int MaxPdbBytes, int MaxBuildMilliseconds)
 {
     public static CompilationLimits Default { get; } = new(
         MaxFiles: 32,
@@ -281,17 +232,9 @@ public sealed record CompilationLimits(
         MaxBuildMilliseconds: 15_000);
 }
 
-public sealed record AstLimits(
-    int MaxNodes,
-    int MaxDepth,
-    int MaxUtf8Bytes,
-    int MaxTextPreviewCharacters)
+public sealed record AstLimits(int MaxNodes, int MaxDepth, int MaxUtf8Bytes, int MaxTextPreviewCharacters)
 {
-    public static AstLimits Default { get; } = new(
-        MaxNodes: 25_000,
-        MaxDepth: 128,
-        MaxUtf8Bytes: 4 * 1024 * 1024,
-        MaxTextPreviewCharacters: 160);
+    public static AstLimits Default { get; } = new(MaxNodes: 25_000, MaxDepth: 128, MaxUtf8Bytes: 4 * 1024 * 1024, MaxTextPreviewCharacters: 160);
 }
 
 public sealed record DevelopmentArtifactEnvelopeOptions(bool Enabled, int MaxBytes)
@@ -344,17 +287,9 @@ public sealed record RoslynWorkerSettings(
 
         var worker = configuration.GetSection("RoslynWorker");
         var artifactContract = worker.GetSection("ArtifactContract");
-        var identity = new RoslynWorkerIdentity(
-            Required(worker["ReleaseId"], "RoslynWorker:ReleaseId"),
-            Required(worker["ToolchainId"], "RoslynWorker:ToolchainId"),
-            PinnedOrConfigured(worker["CompilerVersion"], CSharpBuildService.GetLoadedCompilerVersion()),
-            worker["CompilerCommit"],
-            Required(worker["WorkerImageId"], "RoslynWorker:WorkerImageId"))
+        var identity = new RoslynWorkerIdentity(Required(worker["ReleaseId"], "RoslynWorker:ReleaseId"), Required(worker["ToolchainId"], "RoslynWorker:ToolchainId"), PinnedOrConfigured(worker["CompilerVersion"], CSharpBuildService.GetLoadedCompilerVersion()), worker["CompilerCommit"], Required(worker["WorkerImageId"], "RoslynWorker:WorkerImageId"))
         {
-            SupportedLanguageIds = StringList(
-                worker.GetSection("SupportedLanguageIds"),
-                ["csharp", "visual-basic"],
-                requireAtLeastOne: true),
+            SupportedLanguageIds = StringList(worker.GetSection("SupportedLanguageIds"), ["csharp", "visual-basic"], requireAtLeastOne: true),
             ArtifactFormat = artifactContract["Format"] ?? "dotnet-managed-pe-v1",
             ArtifactRuntimeFamily = artifactContract["RuntimeFamily"] ?? "coreclr",
             ArtifactFrameworkName = artifactContract["FrameworkName"] ?? "Microsoft.NETCore.App",
@@ -362,14 +297,8 @@ public sealed record RoslynWorkerSettings(
             ArtifactArchitecture = artifactContract["Architecture"] ?? "anycpu",
             ExecutableFileExtension = artifactContract["ExecutableFileExtension"] ?? ".dll",
             LibraryFileExtension = artifactContract["LibraryFileExtension"] ?? ".dll",
-            RequiredRuntimeFeatureTags = StringList(
-                artifactContract.GetSection("RequiredRuntimeFeatureTags"),
-                [],
-                requireAtLeastOne: false),
-            MetadataFeatureTags = StringList(
-                artifactContract.GetSection("MetadataFeatureTags"),
-                [],
-                requireAtLeastOne: false),
+            RequiredRuntimeFeatureTags = StringList(artifactContract.GetSection("RequiredRuntimeFeatureTags"), [], requireAtLeastOne: false),
+            MetadataFeatureTags = StringList(artifactContract.GetSection("MetadataFeatureTags"), [], requireAtLeastOne: false),
             CompatibilityGroup = artifactContract["CompatibilityGroup"]
         };
 
@@ -392,64 +321,29 @@ public sealed record RoslynWorkerSettings(
 
         var astDefaults = AstLimits.Default;
         var ast = worker.GetSection("AstLimits");
-        var astLimits = new AstLimits(
-            PositiveInt(ast["MaxNodes"], astDefaults.MaxNodes, "MaxNodes"),
-            PositiveInt(ast["MaxDepth"], astDefaults.MaxDepth, "MaxDepth"),
-            PositiveInt(ast["MaxUtf8Bytes"], astDefaults.MaxUtf8Bytes, "MaxUtf8Bytes"),
-            PositiveInt(ast["MaxTextPreviewCharacters"], astDefaults.MaxTextPreviewCharacters, "MaxTextPreviewCharacters"));
+        var astLimits = new AstLimits(PositiveInt(ast["MaxNodes"], astDefaults.MaxNodes, "MaxNodes"), PositiveInt(ast["MaxDepth"], astDefaults.MaxDepth, "MaxDepth"), PositiveInt(ast["MaxUtf8Bytes"], astDefaults.MaxUtf8Bytes, "MaxUtf8Bytes"), PositiveInt(ast["MaxTextPreviewCharacters"], astDefaults.MaxTextPreviewCharacters, "MaxTextPreviewCharacters"));
 
         var processDefaults = CompilerProcessIsolationOptions.Default;
         var process = worker.GetSection("BuildProcess");
         var buildProcess = new CompilerProcessIsolationOptions(
             Boolean(process["Enabled"], processDefaults.Enabled, "BuildProcess:Enabled"),
-            PositiveInt(
-                process["MaximumConcurrentProcesses"],
-                processDefaults.MaximumConcurrentProcesses,
-                "BuildProcess:MaximumConcurrentProcesses"),
-            PositiveLong(
-                process["MaximumWorkingSetBytes"],
-                processDefaults.MaximumWorkingSetBytes,
-                "BuildProcess:MaximumWorkingSetBytes"),
-            PositiveInt(
-                process["MaximumRequestBytes"],
-                processDefaults.MaximumRequestBytes,
-                "BuildProcess:MaximumRequestBytes"),
-            PositiveInt(
-                process["MaximumResponseBytes"],
-                processDefaults.MaximumResponseBytes,
-                "BuildProcess:MaximumResponseBytes"),
-            PositiveInt(
-                process["MaximumStandardErrorBytes"],
-                processDefaults.MaximumStandardErrorBytes,
-                "BuildProcess:MaximumStandardErrorBytes"),
-            PositiveInt(
-                process["MemoryPollIntervalMilliseconds"],
-                processDefaults.MemoryPollIntervalMilliseconds,
-                "BuildProcess:MemoryPollIntervalMilliseconds"));
+            PositiveInt(process["MaximumConcurrentProcesses"], processDefaults.MaximumConcurrentProcesses, "BuildProcess:MaximumConcurrentProcesses"),
+            PositiveLong(process["MaximumWorkingSetBytes"], processDefaults.MaximumWorkingSetBytes, "BuildProcess:MaximumWorkingSetBytes"),
+            PositiveInt(process["MaximumRequestBytes"], processDefaults.MaximumRequestBytes, "BuildProcess:MaximumRequestBytes"),
+            PositiveInt(process["MaximumResponseBytes"], processDefaults.MaximumResponseBytes, "BuildProcess:MaximumResponseBytes"),
+            PositiveInt(process["MaximumStandardErrorBytes"], processDefaults.MaximumStandardErrorBytes, "BuildProcess:MaximumStandardErrorBytes"),
+            PositiveInt(process["MemoryPollIntervalMilliseconds"], processDefaults.MemoryPollIntervalMilliseconds, "BuildProcess:MemoryPollIntervalMilliseconds"));
         buildProcess.Validate();
 
         var envelope = worker.GetSection("DevelopmentArtifactEnvelope");
-        var envelopeOptions = new DevelopmentArtifactEnvelopeOptions(
-            bool.TryParse(envelope["Enabled"], out var enabled) && enabled,
-            PositiveInt(envelope["MaxBytes"], DevelopmentArtifactEnvelopeOptions.Default.MaxBytes, "MaxBytes"));
+        var envelopeOptions = new DevelopmentArtifactEnvelopeOptions(bool.TryParse(envelope["Enabled"], out var enabled) && enabled, PositiveInt(envelope["MaxBytes"], DevelopmentArtifactEnvelopeOptions.Default.MaxBytes, "MaxBytes"));
 
         var artifactStoreBaseUrl = configuration["ArtifactStore:BaseUrl"] ?? "http://artifact-store:8080";
-        if (!Uri.TryCreate(artifactStoreBaseUrl, UriKind.Absolute, out var artifactStoreBaseAddress) ||
-            (!string.Equals(artifactStoreBaseAddress.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
-             !string.Equals(artifactStoreBaseAddress.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) ||
-            !string.IsNullOrEmpty(artifactStoreBaseAddress.UserInfo) ||
-            !string.IsNullOrEmpty(artifactStoreBaseAddress.Query) ||
-            !string.IsNullOrEmpty(artifactStoreBaseAddress.Fragment))
+        if (!Uri.TryCreate(artifactStoreBaseUrl, UriKind.Absolute, out var artifactStoreBaseAddress) || (!string.Equals(artifactStoreBaseAddress.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) && !string.Equals(artifactStoreBaseAddress.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) || !string.IsNullOrEmpty(artifactStoreBaseAddress.UserInfo) || !string.IsNullOrEmpty(artifactStoreBaseAddress.Query) || !string.IsNullOrEmpty(artifactStoreBaseAddress.Fragment))
         {
-            throw new InvalidOperationException(
-                "Configuration value 'ArtifactStore:BaseUrl' must be an absolute HTTP(S) URL without credentials, query, or fragment.");
+            throw new InvalidOperationException("Configuration value 'ArtifactStore:BaseUrl' must be an absolute HTTP(S) URL without credentials, query, or fragment.");
         }
-        var artifactPublishing = new ArtifactBundlePublishingOptions(
-            artifactStoreBaseAddress,
-            TimeSpan.FromMinutes(PositiveInt(
-                worker["ArtifactTimeToLiveMinutes"],
-                60,
-                "ArtifactTimeToLiveMinutes")));
+        var artifactPublishing = new ArtifactBundlePublishingOptions(artifactStoreBaseAddress, TimeSpan.FromMinutes(PositiveInt(worker["ArtifactTimeToLiveMinutes"], 60, "ArtifactTimeToLiveMinutes")));
 
         var lspDefaults = LspLimits.Default;
         var lsp = worker.GetSection("LspLimits");
@@ -467,93 +361,42 @@ public sealed record RoslynWorkerSettings(
             PositiveInt(lsp["MaxCodeActions"], lspDefaults.MaxCodeActions, "MaxCodeActions"),
             PositiveInt(lsp["DiagnosticsDebounceMilliseconds"], lspDefaults.DiagnosticsDebounceMilliseconds, "DiagnosticsDebounceMilliseconds"));
 
-        var referenceSets = configuration.GetSection("ReferenceSets")
-            .GetChildren()
-            .Select(section => CreateReferenceSetDefinition(section, artifactContract))
-            .ToArray();
+        var referenceSets = configuration.GetSection("ReferenceSets").GetChildren().Select(section => CreateReferenceSetDefinition(section, artifactContract)).ToArray();
 
-        return new RoslynWorkerSettings(
-            identity,
-            compilationLimits,
-            astLimits,
-            lspLimits,
-            buildProcess,
-            envelopeOptions,
-            artifactPublishing,
-            referenceSets);
+        return new RoslynWorkerSettings(identity, compilationLimits, astLimits, lspLimits, buildProcess, envelopeOptions, artifactPublishing, referenceSets);
     }
 
     private static string PinnedOrConfigured(string? value, string pinned) =>
         string.IsNullOrWhiteSpace(value) || string.Equals(value, "__pinned__", StringComparison.Ordinal)
-            ? pinned
-            : value;
+            ? pinned : value;
 
-    private static ReferenceSetDefinition CreateReferenceSetDefinition(
-        IConfigurationSection section,
-        IConfigurationSection legacyArtifactContract)
+    private static ReferenceSetDefinition CreateReferenceSetDefinition(IConfigurationSection section, IConfigurationSection legacyArtifactContract)
     {
         var keyPrefix = $"ReferenceSets:{section.Key}";
-        var definition = new ReferenceSetDefinition(
-            section.Key,
-            Required(section["Path"], $"{keyPrefix}:Path"),
-            Required(section["TargetFramework"], $"{keyPrefix}:TargetFramework"),
-            Required(section["FrameworkVersion"], $"{keyPrefix}:FrameworkVersion"),
-            section["Digest"],
-            section["AttestationPath"],
-            NullableBoolean(section["IncludeSharpLabRuntime"], $"{keyPrefix}:IncludeSharpLabRuntime"));
+        var definition = new ReferenceSetDefinition(section.Key, Required(section["Path"], $"{keyPrefix}:Path"), Required(section["TargetFramework"], $"{keyPrefix}:TargetFramework"), Required(section["FrameworkVersion"], $"{keyPrefix}:FrameworkVersion"), section["Digest"], section["AttestationPath"], NullableBoolean(section["IncludeSharpLabRuntime"], $"{keyPrefix}:IncludeSharpLabRuntime"));
 
         definition = definition with
         {
-            ArtifactFormat = FirstConfigured(section["ArtifactFormat"], legacyArtifactContract["Format"])
-                ?? definition.ArtifactFormat,
-            RuntimeFamily = FirstConfigured(section["RuntimeFamily"], legacyArtifactContract["RuntimeFamily"])
-                ?? definition.RuntimeFamily,
-            FrameworkName = FirstConfigured(section["FrameworkName"], legacyArtifactContract["FrameworkName"])
-                ?? definition.FrameworkName,
-            RuntimeFrameworkVersion = FirstConfigured(
-                section["RuntimeFrameworkVersion"],
-                legacyArtifactContract["FrameworkVersion"]),
-            Architecture = FirstConfigured(section["Architecture"], legacyArtifactContract["Architecture"])
-                ?? definition.Architecture,
-            ExecutableFileExtension = FirstConfigured(
-                    section["ExecutableFileExtension"],
-                    section["ExecutableExtension"],
-                    legacyArtifactContract["ExecutableFileExtension"])
-                ?? definition.ExecutableFileExtension,
-            LibraryFileExtension = FirstConfigured(
-                    section["LibraryFileExtension"],
-                    section["LibraryExtension"],
-                    legacyArtifactContract["LibraryFileExtension"])
-                ?? definition.LibraryFileExtension,
-            RequiredRuntimeFeatureTags = OptionalStringList(
-                    section.GetSection("RequiredRuntimeFeatureTags"),
-                    $"{keyPrefix}:RequiredRuntimeFeatureTags")
-                ?? OptionalStringList(
-                    legacyArtifactContract.GetSection("RequiredRuntimeFeatureTags"),
-                    "RoslynWorker:ArtifactContract:RequiredRuntimeFeatureTags")
-                ?? definition.RequiredRuntimeFeatureTags,
-            MetadataFeatureTags = OptionalStringList(
-                    section.GetSection("MetadataFeatureTags"),
-                    $"{keyPrefix}:MetadataFeatureTags")
-                ?? OptionalStringList(
-                    legacyArtifactContract.GetSection("MetadataFeatureTags"),
-                    "RoslynWorker:ArtifactContract:MetadataFeatureTags")
-                ?? definition.MetadataFeatureTags,
-            CompatibilityGroup = FirstConfigured(
-                section["CompatibilityGroup"],
-                legacyArtifactContract["CompatibilityGroup"])
+            ArtifactFormat = FirstConfigured(section["ArtifactFormat"], legacyArtifactContract["Format"]) ?? definition.ArtifactFormat,
+            RuntimeFamily = FirstConfigured(section["RuntimeFamily"], legacyArtifactContract["RuntimeFamily"]) ?? definition.RuntimeFamily,
+            FrameworkName = FirstConfigured(section["FrameworkName"], legacyArtifactContract["FrameworkName"]) ?? definition.FrameworkName,
+            RuntimeFrameworkVersion = FirstConfigured(section["RuntimeFrameworkVersion"], legacyArtifactContract["FrameworkVersion"]),
+            Architecture = FirstConfigured(section["Architecture"], legacyArtifactContract["Architecture"]) ?? definition.Architecture,
+            ExecutableFileExtension = FirstConfigured(section["ExecutableFileExtension"], section["ExecutableExtension"], legacyArtifactContract["ExecutableFileExtension"]) ?? definition.ExecutableFileExtension,
+            LibraryFileExtension = FirstConfigured(section["LibraryFileExtension"], section["LibraryExtension"], legacyArtifactContract["LibraryFileExtension"]) ?? definition.LibraryFileExtension,
+            RequiredRuntimeFeatureTags = OptionalStringList(section.GetSection("RequiredRuntimeFeatureTags"), $"{keyPrefix}:RequiredRuntimeFeatureTags") ?? OptionalStringList(legacyArtifactContract.GetSection("RequiredRuntimeFeatureTags"), "RoslynWorker:ArtifactContract:RequiredRuntimeFeatureTags") ?? definition.RequiredRuntimeFeatureTags,
+            MetadataFeatureTags = OptionalStringList(section.GetSection("MetadataFeatureTags"), $"{keyPrefix}:MetadataFeatureTags") ?? OptionalStringList(legacyArtifactContract.GetSection("MetadataFeatureTags"), "RoslynWorker:ArtifactContract:MetadataFeatureTags") ?? definition.MetadataFeatureTags,
+            CompatibilityGroup = FirstConfigured(section["CompatibilityGroup"], legacyArtifactContract["CompatibilityGroup"])
         };
         definition.Validate();
         return definition;
     }
 
-    private static string? FirstConfigured(params string?[] values) =>
-        values.FirstOrDefault(static value => value is not null);
+    private static string? FirstConfigured(params string?[] values) => values.FirstOrDefault(static value => value is not null);
 
     private static string Required(string? value, string key) =>
         !string.IsNullOrWhiteSpace(value)
-            ? value
-            : throw new InvalidOperationException($"Configuration value '{key}' is required.");
+            ? value : throw new InvalidOperationException($"Configuration value '{key}' is required.");
 
     private static string? Optional(string? value, string key)
     {
@@ -568,8 +411,7 @@ public sealed record RoslynWorkerSettings(
     {
         if (identity.ArtifactFormat is not ("dotnet-managed-pe-v1" or "dotnet-framework-managed-pe-v1"))
         {
-            throw new InvalidOperationException(
-                "RoslynWorker:ArtifactContract:Format must be 'dotnet-managed-pe-v1' or 'dotnet-framework-managed-pe-v1'.");
+            throw new InvalidOperationException("RoslynWorker:ArtifactContract:Format must be 'dotnet-managed-pe-v1' or 'dotnet-framework-managed-pe-v1'.");
         }
         if (string.IsNullOrWhiteSpace(identity.ArtifactRuntimeFamily))
             throw new InvalidOperationException("RoslynWorker:ArtifactContract:RuntimeFamily cannot be empty.");
@@ -577,21 +419,14 @@ public sealed record RoslynWorkerSettings(
             throw new InvalidOperationException("RoslynWorker:ArtifactContract:FrameworkName cannot be empty.");
         if (identity.ArtifactArchitecture is not ("anycpu" or "x64"))
         {
-            throw new InvalidOperationException(
-                "RoslynWorker:ArtifactContract:Architecture must be 'anycpu' or 'x64'.");
+            throw new InvalidOperationException("RoslynWorker:ArtifactContract:Architecture must be 'anycpu' or 'x64'.");
         }
         ValidateFileExtension(identity.ExecutableFileExtension, "ExecutableFileExtension");
         ValidateFileExtension(identity.LibraryFileExtension, "LibraryFileExtension");
 
-        if (StringComparer.Ordinal.Equals(identity.ArtifactFormat, "dotnet-framework-managed-pe-v1") &&
-            (!StringComparer.Ordinal.Equals(identity.ArtifactRuntimeFamily, "netfx-clr-wine") ||
-             !StringComparer.Ordinal.Equals(identity.ArtifactFrameworkName, ".NETFramework") ||
-             !StringComparer.Ordinal.Equals(identity.ArtifactFrameworkVersion, "4.8") ||
-             !StringComparer.Ordinal.Equals(identity.ExecutableFileExtension, ".exe") ||
-             !StringComparer.Ordinal.Equals(identity.LibraryFileExtension, ".dll")))
+        if (StringComparer.Ordinal.Equals(identity.ArtifactFormat, "dotnet-framework-managed-pe-v1") && (!StringComparer.Ordinal.Equals(identity.ArtifactRuntimeFamily, "netfx-clr-wine") || !StringComparer.Ordinal.Equals(identity.ArtifactFrameworkName, ".NETFramework") || !StringComparer.Ordinal.Equals(identity.ArtifactFrameworkVersion, "4.8") || !StringComparer.Ordinal.Equals(identity.ExecutableFileExtension, ".exe") || !StringComparer.Ordinal.Equals(identity.LibraryFileExtension, ".dll")))
         {
-            throw new InvalidOperationException(
-                "The framework managed-PE contract requires netfx-clr-wine, .NETFramework 4.8, .exe applications, and .dll libraries.");
+            throw new InvalidOperationException("The framework managed-PE contract requires netfx-clr-wine, .NETFramework 4.8, .exe applications, and .dll libraries.");
         }
     }
 
@@ -599,8 +434,7 @@ public sealed record RoslynWorkerSettings(
     {
         if (value is not (".dll" or ".exe"))
         {
-            throw new InvalidOperationException(
-                $"RoslynWorker:ArtifactContract:{key} must be '.dll' or '.exe'.");
+            throw new InvalidOperationException($"RoslynWorker:ArtifactContract:{key} must be '.dll' or '.exe'.");
         }
     }
 
@@ -651,18 +485,10 @@ public sealed record RoslynWorkerSettings(
         return StringList(section, [], requireAtLeastOne: false, key);
     }
 
-    private static string[] StringList(
-        IConfigurationSection section,
-        IReadOnlyList<string> fallback,
-        bool requireAtLeastOne,
-        string? displayPath = null)
+    private static string[] StringList(IConfigurationSection section, IReadOnlyList<string> fallback, bool requireAtLeastOne, string? displayPath = null)
     {
         var path = displayPath ?? section.Path;
-        var values = section.GetChildren()
-            .Select(child => child.Value)
-            .Where(static value => value is not null)
-            .Select(static value => value!)
-            .ToArray();
+        var values = section.GetChildren().Select(child => child.Value).Where(static value => value is not null).Select(static value => value!).ToArray();
         if (values.Length == 0)
             values = fallback.ToArray();
         if (requireAtLeastOne && values.Length == 0)

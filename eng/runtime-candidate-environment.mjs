@@ -4,10 +4,10 @@
  * run-with-bake-environment.cs and are intentionally absent here.
  */
 
-import { spawnSync } from 'node:child_process'
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   isCandidateSourceUri,
@@ -18,11 +18,11 @@ import {
   isSha512HexDigest,
 } from './runtime-candidate-input-validation.mjs'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const defaultRuntimeMatrixPath = path.join(repositoryRoot, 'profiles', 'runtime-matrix.json')
-const buildEntryPath = path.join(repositoryRoot, 'eng', 'build-runtime-candidate.mjs')
-const publishEntryPath = path.join(repositoryRoot, 'eng', 'publish-runtime-candidate.mjs')
-const maximumJsonBytes = 1024 * 1024
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const defaultRuntimeMatrixPath = path.join(repositoryRoot, 'profiles', 'runtime-matrix.json');
+const buildEntryPath = path.join(repositoryRoot, 'eng', 'build-runtime-candidate.mjs');
+const publishEntryPath = path.join(repositoryRoot, 'eng', 'release', 'publish-runtime-candidate.mjs');
+const maximumJsonBytes = 1024 * 1024;
 export const frameworkCandidateInputStrategy = 'runtime-framework-candidate-input-v1'
 const safeIdPattern = /^[a-z0-9][a-z0-9._-]{0,127}$/
 const safeDigestPinnedImagePattern = /^[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64}$/
@@ -62,13 +62,9 @@ export class RuntimeCandidateEnvironmentError extends Error {
   }
 }
 
-function fail(message, options) {
-  throw new RuntimeCandidateEnvironmentError(message, options)
-}
+function fail(message, options) { throw new RuntimeCandidateEnvironmentError(message, options); }
 
-function isObject(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
+function isObject(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 
 function assertExactKeys(value, expected, label) {
   if (!isObject(value)) fail(`${label} must be an object.`)
@@ -116,9 +112,7 @@ function requiredImage(value, label, options = {}) {
   return value
 }
 
-function imageDigest(reference) {
-  return reference.slice(reference.lastIndexOf('@') + 1)
-}
+function imageDigest(reference) { return reference.slice(reference.lastIndexOf('@') + 1); }
 
 function requiredPayload(value, label) {
   if (!isObject(value)) fail(`${label} must be an object.`)
@@ -148,9 +142,7 @@ function indexUniqueRows(values, label) {
   return result
 }
 
-function controlImage(matrix) {
-  return requiredImage(matrix?.controlRuntime?.image, 'runtime matrix controlRuntime.image')
-}
+function controlImage(matrix) { return requiredImage(matrix?.controlRuntime?.image, 'runtime matrix controlRuntime.image'); }
 
 function coreClrEnvironment(profileId, row, platform, wineImage, matrix, options = {}) {
   const version = requiredString(row.version ?? row.resolvedVersion, `CoreCLR row '${row.id}' version`)
@@ -237,8 +229,7 @@ function addCheckedJitEnvironment(environment, row) {
       `CoreCLR row '${row.id}' checkedJit.${name.toLowerCase()}`,
     )
   }
-  environment.RUNTIME_MATRIX_CHECKED_JIT_VERSION_GENERATION_MODE =
-    checked.versionGenerationMode ?? ''
+  environment.RUNTIME_MATRIX_CHECKED_JIT_VERSION_GENERATION_MODE = checked.versionGenerationMode ?? '';
 }
 
 function addProfilerEnvironment(environment, row) {
@@ -367,9 +358,7 @@ function parseJson(bytes, label) {
   }
 }
 
-export function readRuntimeMatrix(filename = defaultRuntimeMatrixPath) {
-  return parseJson(readBoundedRegularFile(path.resolve(filename), 'runtime matrix'), 'runtime matrix')
-}
+export function readRuntimeMatrix(filename = defaultRuntimeMatrixPath) { return parseJson(readBoundedRegularFile(path.resolve(filename), 'runtime matrix'), 'runtime matrix'); }
 
 export function readFrameworkCandidateInput(filename, matrix) {
   const absolute = path.resolve(requiredString(filename, 'Framework candidate input path'))
@@ -567,20 +556,17 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
       output.log(runtimeCandidateEnvironmentUsage)
       return 0
     }
-    const developmentOverrideCount = (parsed.buildArguments ?? [])
-      .filter(argument => argument === developmentSourceOverride).length
+    const developmentOverrideCount = (parsed.buildArguments ?? []).filter(argument => argument === developmentSourceOverride).length
     if (developmentOverrideCount > 1) {
       fail(`${developmentSourceOverride} may be supplied once after --.`)
     }
     const developmentMode = developmentOverrideCount === 1
-    const developmentImageInputsOverrideCount = (parsed.buildArguments ?? [])
-      .filter(argument => argument === developmentImageInputsOverride).length
+    const developmentImageInputsOverrideCount = (parsed.buildArguments ?? []).filter(argument => argument === developmentImageInputsOverride).length
     if (developmentImageInputsOverrideCount > 1) {
       fail(`${developmentImageInputsOverride} may be supplied once after --.`)
     }
     const developmentImageInputsMode = developmentImageInputsOverrideCount === 1
-    const historicalFrameworkOverrideCount = (parsed.buildArguments ?? [])
-      .filter(argument => argument === historicalFrameworkDevelopmentOverride).length
+    const historicalFrameworkOverrideCount = (parsed.buildArguments ?? []).filter(argument => argument === historicalFrameworkDevelopmentOverride).length
     if (historicalFrameworkOverrideCount > 1) {
       fail(`${historicalFrameworkDevelopmentOverride} may be supplied once after --.`)
     }
@@ -767,7 +753,7 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
     return result.status ?? 1
   } catch (error) {
     output.error(`runtime candidate environment error: ${error.message}`)
-    return error instanceof RuntimeCandidateEnvironmentError ? 1 : 1
+    return 1;
   }
 }
 

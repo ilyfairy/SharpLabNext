@@ -20,17 +20,8 @@ internal static class PeachPieTestSettings
     }
 
     public static PeachPieWorkerSettings CreateSettings(string root, bool isolated) => new(
-        new PeachPieWorkerIdentity(
-            "test-release",
-            PeachPieToolchain.CompilerVersion,
-            PeachPieToolchain.CompilerCommit,
-            $"sha256:{new string('a', 64)}"),
-        CompilerProcessIsolationOptions.Default with
-        {
-            Enabled = isolated,
-            MaximumConcurrentProcesses = 4,
-            MaximumResponseBytes = 64 * 1024 * 1024
-        },
+        new PeachPieWorkerIdentity("test-release", PeachPieToolchain.CompilerVersion, PeachPieToolchain.CompilerCommit, $"sha256:{new string('a', 64)}"),
+        CompilerProcessIsolationOptions.Default with { Enabled = isolated, MaximumConcurrentProcesses = 4, MaximumResponseBytes = 64 * 1024 * 1024 },
         Path.Combine(root, "work"),
         Path.Combine(AppContext.BaseDirectory, PeachPieToolchain.RuntimeAssemblyName),
         Path.Combine(AppContext.BaseDirectory, PeachPieToolchain.LibraryAssemblyName),
@@ -41,14 +32,7 @@ internal static class PeachPieTestSettings
     {
         var outputPath = Path.Combine(AppContext.BaseDirectory, "language-worker.json");
         var path = File.Exists(outputPath)
-            ? outputPath
-            : Path.Combine(
-                RepositoryRoot,
-                "src",
-                "Workers",
-                "PeachPie",
-                "SharpLabNext.Worker.PeachPie",
-                "language-worker.json");
+            ? outputPath : Path.Combine(RepositoryRoot, "src", "Workers", "PeachPie", "SharpLabNext.Worker.PeachPie", "language-worker.json");
         return LanguageWorkerCapabilityManifestSerializer.Load(path);
     }
 
@@ -62,12 +46,7 @@ internal static class PeachPieTestSettings
     {
         var manifest = LoadManifest();
         var referenceSets = new PeachPieReferenceSetProvider(settings.ReferenceSets, requireAttestation: false);
-        return new PeachPieBuildService(
-            referenceSets,
-            new PeachPieCompiler(referenceSets, settings, manifest),
-            new UnexpectedCompilerProcessRunner(),
-            settings,
-            manifest);
+        return new PeachPieBuildService(referenceSets, new PeachPieCompiler(referenceSets, settings, manifest), new UnexpectedCompilerProcessRunner(), settings, manifest);
     }
 
     public static CompilerProcessRunner CreateCompilerProcessRunner(PeachPieWorkerSettings settings) => new(
@@ -82,50 +61,14 @@ internal static class PeachPieTestSettings
                 ["ASPNETCORE_ENVIRONMENT"] = "Development"
             }));
 
-    public static BuildRequest CreateRequest(
-        BuildTarget target,
-        string source,
-        string path = "Program.php") =>
-        CreateRequest(
-            target,
-            [new WorkspaceFile(path, 1, source)],
-            [path],
-            path);
+    public static BuildRequest CreateRequest(BuildTarget target, string source, string path = "Program.php") =>
+        CreateRequest(target, [new WorkspaceFile(path, 1, source)], [path], path);
 
-    public static BuildRequest CreateRequest(
-        BuildTarget target,
-        IReadOnlyList<WorkspaceFile> files,
-        IReadOnlyList<string> sourceOrder,
-        string activeFile)
+    public static BuildRequest CreateRequest(BuildTarget target, IReadOnlyList<WorkspaceFile> files, IReadOnlyList<string> sourceOrder, string activeFile)
     {
-        var options = new BuildOptions(
-            BuildConfiguration.Release,
-            Optimize: true,
-            BuildOutputKind.Console,
-            AllowUnsafe: false,
-            EmitPortablePdb: true,
-            NullableContextMode.Disable,
-            LanguageVersion: "8.5");
-        var workspace = new WorkspaceSnapshot(
-            ContractSchemaVersions.WorkspaceSnapshot,
-            7,
-            3,
-            PeachPieToolchain.LanguageId,
-            files,
-            activeFile,
-            sourceOrder,
-            "net10-ref",
-            options);
-        return new BuildRequest(
-            $"request-{Guid.NewGuid():N}",
-            $"idempotency-{Guid.NewGuid():N}",
-            "pipeline-peachpie-test",
-            PeachPieToolchain.ToolchainId,
-            workspace.ReferenceSetId,
-            workspace,
-            DateTimeOffset.UtcNow.AddSeconds(60),
-            options,
-            target);
+        var options = new BuildOptions(BuildConfiguration.Release, Optimize: true, BuildOutputKind.Console, AllowUnsafe: false, EmitPortablePdb: true, NullableContextMode.Disable, LanguageVersion: "8.5");
+        var workspace = new WorkspaceSnapshot(ContractSchemaVersions.WorkspaceSnapshot, 7, 3, PeachPieToolchain.LanguageId, files, activeFile, sourceOrder, "net10-ref", options);
+        return new BuildRequest($"request-{Guid.NewGuid():N}", $"idempotency-{Guid.NewGuid():N}", "pipeline-peachpie-test", PeachPieToolchain.ToolchainId, workspace.ReferenceSetId, workspace, DateTimeOffset.UtcNow.AddSeconds(60), options, target);
     }
 
     public static IReadOnlyDictionary<string, string?> WebHostConfiguration(string root) =>
@@ -165,9 +108,7 @@ internal static class PeachPieTestSettings
                     Directory.Delete(root, recursive: true);
                 return;
             }
-            catch (Exception exception) when (
-                (exception is IOException or UnauthorizedAccessException) &&
-                attempt < 9)
+            catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException) && attempt < 9)
             {
                 Thread.Sleep(50);
             }
@@ -176,20 +117,10 @@ internal static class PeachPieTestSettings
 
     private static IReadOnlyList<PeachPieReferenceSetDefinition> ReferenceSets() =>
     [
-        new(
-            "net10-ref",
-            GetReferencePath(),
-            "net10.0",
-            TestReferenceSets.Net10.Version,
-            TestReferenceSets.Net10.Digest)
+        new("net10-ref", GetReferencePath(), "net10.0", TestReferenceSets.Net10.Version, TestReferenceSets.Net10.Digest)
     ];
 
-    private static string GetMonoUnixNativeLibraryPath() => Path.Combine(
-        AppContext.BaseDirectory,
-        "runtimes",
-        PeachPieToolchain.NativeRuntimeIdentifier,
-        "native",
-        PeachPieToolchain.MonoUnixNativeLibraryName);
+    private static string GetMonoUnixNativeLibraryPath() => Path.Combine(AppContext.BaseDirectory, "runtimes", PeachPieToolchain.NativeRuntimeIdentifier, "native", PeachPieToolchain.MonoUnixNativeLibraryName);
 
     private static string GetReferencePath() => TestReferenceSets.Net10.Path;
 
@@ -207,11 +138,7 @@ internal static class PeachPieTestSettings
 
     private sealed class UnexpectedCompilerProcessRunner : ICompilerProcessRunner
     {
-        public Task<TResponse> RunAsync<TRequest, TResponse>(
-            string childArgument,
-            TRequest request,
-            TimeSpan timeout,
-            CancellationToken cancellationToken)
+        public Task<TResponse> RunAsync<TRequest, TResponse>(string childArgument, TRequest request, TimeSpan timeout, CancellationToken cancellationToken)
             where TRequest : class
             where TResponse : class =>
             throw new InvalidOperationException("The in-process test unexpectedly invoked compiler isolation.");

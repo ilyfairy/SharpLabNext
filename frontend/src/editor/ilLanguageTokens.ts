@@ -62,30 +62,9 @@ export const ilKeywords = [
   'value',
   'valuetype',
   'virtual',
-] as const
+] as const;
 
-export const ilPrimitiveTypes = [
-  'bool',
-  'char',
-  'float32',
-  'float64',
-  'int',
-  'int8',
-  'int16',
-  'int32',
-  'int64',
-  'native int',
-  'native uint',
-  'object',
-  'string',
-  'typedref',
-  'uint',
-  'uint8',
-  'uint16',
-  'uint32',
-  'uint64',
-  'void',
-] as const
+export const ilPrimitiveTypes = ['bool', 'char', 'float32', 'float64', 'int', 'int8', 'int16', 'int32', 'int64', 'native int', 'native uint', 'object', 'string', 'typedref', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'void'] as const;
 
 export const ilOpcodes = [
   'add',
@@ -307,20 +286,15 @@ export const ilOpcodes = [
   'unbox.any',
   'volatile.',
   'xor',
-] as const
+] as const;
 
-export const ilWordTokens: ReadonlySet<string> = new Set([
-  ...ilKeywords,
-  ...ilPrimitiveTypes,
-  ...ilOpcodes,
-])
+export const ilWordTokens: ReadonlySet<string> = new Set([...ilKeywords, ...ilPrimitiveTypes, ...ilOpcodes]);
 
 // A resolved assembly hover is a standalone IL fenced block such as
 // `[System.Console, Version=11.0.0.0, Culture=neutral, PublicKeyToken=...]`.
 // Match only through the simple name while requiring the complete identity in
 // lookahead, so metadata fields retain their normal IL token colors.
-export const ilStandaloneAssemblyIdentityPattern =
-  /^(\s*)(\[)([^,\]\r\n]+)(?=,\s*Version=[^\]\r\n]+\]\s*$)/
+export const ilStandaloneAssemblyIdentityPattern = /^(\s*)(\[)([^,\]\r\n]+)(?=,\s*Version=[^\]\r\n]+\]\s*$)/;
 
 export interface IlTextRange {
   from: number

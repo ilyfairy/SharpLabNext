@@ -17,13 +17,9 @@ public sealed class ConstGenericsArtifactWorkerEndpointTests
     {
         await using var factory = CreateFactory();
         using var client = factory.CreateClient();
-        Assert.Same(
-            SharpLabNextTelemetry.Metrics,
-            factory.Services.GetRequiredService<SharpLabNextMetrics>());
+        Assert.Same(SharpLabNextTelemetry.Metrics, factory.Services.GetRequiredService<SharpLabNextMetrics>());
 
-        var manifest = await client.GetFromJsonAsync<ArtifactWorkerCapabilityManifest>(
-            "/api/v1/worker/capabilities",
-            TestContext.Current.CancellationToken);
+        var manifest = await client.GetFromJsonAsync<ArtifactWorkerCapabilityManifest>("/api/v1/worker/capabilities", TestContext.Current.CancellationToken);
 
         Assert.NotNull(manifest);
         Assert.Equal("artifacts-const-generics", manifest.WorkerId);
@@ -38,45 +34,22 @@ public sealed class ConstGenericsArtifactWorkerEndpointTests
     {
         await using var factory = CreateFactory();
         using var client = factory.CreateClient();
-        var request = ConstGenericsTestInfrastructure.RenderRequest(
-            new ArtifactRef($"sha256:{new string('c', 64)}"),
-            "il") with
-        {
-            ProcessorId = "artifacts-default"
-        };
+        var request = ConstGenericsTestInfrastructure.RenderRequest(new ArtifactRef($"sha256:{new string('c', 64)}"), "il") with { ProcessorId = "artifacts-default" };
 
-        using var response = await client.PostAsJsonAsync(
-            "/api/v1/artifact-renders",
-            request,
-            ConstGenericsTestInfrastructure.JsonOptions,
-            TestContext.Current.CancellationToken);
+        using var response = await client.PostAsJsonAsync("/api/v1/artifact-renders", request, ConstGenericsTestInfrastructure.JsonOptions, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        var problem = await response.Content.ReadFromJsonAsync<Dictionary<string, object>>(
-            ConstGenericsTestInfrastructure.JsonOptions,
-            TestContext.Current.CancellationToken);
+        var problem = await response.Content.ReadFromJsonAsync<Dictionary<string, object>>(ConstGenericsTestInfrastructure.JsonOptions, TestContext.Current.CancellationToken);
         Assert.NotNull(problem);
         Assert.Contains("wrong-processor", problem["Title"].ToString());
     }
 
     private static WebApplicationFactory<Program> CreateFactory()
     {
-        var configuration = Directory.GetParent(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar))?
-            .Name ?? "Debug";
-        var buildOutput = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            "..",
-            "SharpLabNext.Worker.Artifacts.ConstGenerics.Processor",
-            "bin",
-            configuration,
-            "net8.0",
-            "SharpLabNext.Worker.Artifacts.ConstGenerics.Processor.dll"));
+        var configuration = Directory.GetParent(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar))?.Name ?? "Debug";
+        var buildOutput = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "SharpLabNext.Worker.Artifacts.ConstGenerics.Processor", "bin", configuration, "net8.0", "SharpLabNext.Worker.Artifacts.ConstGenerics.Processor.dll"));
         var processorPath = File.Exists(buildOutput)
-            ? buildOutput
-            : throw new FileNotFoundException("The ConstGenerics processor test build output is unavailable.", buildOutput);
+            ? buildOutput : throw new FileNotFoundException("The ConstGenerics processor test build output is unavailable.", buildOutput);
         return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Testing");

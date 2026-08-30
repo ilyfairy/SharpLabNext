@@ -2,9 +2,7 @@ namespace SharpLabNext.Catalog;
 
 public static class ReferenceSetIdentityResolver
 {
-    public static IReadOnlyDictionary<string, string> ResolveExpectedDigests(
-        CatalogDocument catalog,
-        ReleaseLockDocument releaseLock)
+    public static IReadOnlyDictionary<string, string> ResolveExpectedDigests(CatalogDocument catalog, ReleaseLockDocument releaseLock)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(releaseLock);
@@ -13,10 +11,7 @@ public static class ReferenceSetIdentityResolver
         if (!string.Equals(catalog.ReleaseId, releaseLock.ReleaseId, StringComparison.Ordinal))
             errors.Add("Catalog and release lock release IDs do not match.");
 
-        var hostedReferenceSetIds = catalog.Toolchains
-            .Where(static toolchain => toolchain.Availability.IsSelectable)
-            .SelectMany(static toolchain => toolchain.AllowedReferenceSetIds)
-            .ToHashSet(StringComparer.Ordinal);
+        var hostedReferenceSetIds = catalog.Toolchains.Where(static toolchain => toolchain.Availability.IsSelectable).SelectMany(static toolchain => toolchain.AllowedReferenceSetIds).ToHashSet(StringComparer.Ordinal);
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var referenceSet in catalog.ReferenceSets)
         {
@@ -24,8 +19,7 @@ public static class ReferenceSetIdentityResolver
             // selectable worker already advertises that it hosts the reference
             // set. Hosted content remains locked and attested while its matching
             // runtime is still waiting for promotion.
-            if (!referenceSet.Availability.IsSelectable &&
-                !hostedReferenceSetIds.Contains(referenceSet.Id))
+            if (!referenceSet.Availability.IsSelectable && !hostedReferenceSetIds.Contains(referenceSet.Id))
             {
                 continue;
             }
@@ -46,8 +40,7 @@ public static class ReferenceSetIdentityResolver
                 continue;
             if (!string.Equals(referenceSet.Digest, expected, StringComparison.Ordinal))
             {
-                errors.Add(
-                    $"Catalog reference set '{referenceSet.Id}' digest '{referenceSet.Digest}' does not match the release lock digest '{expected}'.");
+                errors.Add($"Catalog reference set '{referenceSet.Id}' digest '{referenceSet.Digest}' does not match the release lock digest '{expected}'.");
                 continue;
             }
             result.Add(referenceSet.Id, expected);
@@ -69,17 +62,13 @@ public static class ReferenceSetIdentityResolver
         return digest;
     }
 
-    private static string? ResolveLockedDigest(
-        LockedComponent component,
-        string id,
-        List<string> errors)
+    private static string? ResolveLockedDigest(LockedComponent component, string id, List<string> errors)
     {
         if (!string.IsNullOrWhiteSpace(component.Package))
         {
             if (string.IsNullOrWhiteSpace(component.PackageContentHash))
             {
-                errors.Add(
-                    $"Package reference set '{id}' must carry packageContentHash in the release lock.");
+                errors.Add($"Package reference set '{id}' must carry packageContentHash in the release lock.");
                 return null;
             }
             return component.PackageContentHash;

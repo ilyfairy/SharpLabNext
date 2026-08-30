@@ -14,17 +14,8 @@ describe('findSourceMethodAtLine', () => {
   })
 
   it('finds G# and Visual Basic functions', () => {
-    expect(
-      findSourceMethodAtLine('async func compute(n int32) int32 {\n return n\n}', 'gsharp', 2)
-        ?.name,
-    ).toBe('compute')
-    expect(
-      findSourceMethodAtLine(
-        'Public Function Total() As Integer\n Return 1\nEnd Function',
-        'visual-basic',
-        2,
-      )?.name,
-    ).toBe('Total')
+    expect(findSourceMethodAtLine('async func compute(n int32) int32 {\n return n\n}', 'gsharp', 2)?.name).toBe('compute')
+    expect(findSourceMethodAtLine('Public Function Total() As Integer\n Return 1\nEnd Function', 'visual-basic', 2)?.name).toBe('Total')
   })
 
   it('maps only a cursor inside C# top-level statements to <Main>$', () => {
@@ -174,12 +165,7 @@ function plainHtml() {}`
   })
 
   it('does not invent a JIT filter for PHP identifiers outside the verified CLR mapping set', () => {
-    const selection = findSourceMethodAtLine(
-      '<?php\nfunction 计算(int $value): int {\n    return $value;\n}',
-      'php',
-      3,
-      'index.php',
-    )
+    const selection = findSourceMethodAtLine('<?php\nfunction 计算(int $value): int {\n    return $value;\n}', 'php', 3, 'index.php')
 
     expect(selection).toMatchObject({ name: '计算', jitMethodFilter: null })
   })

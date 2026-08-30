@@ -10,21 +10,13 @@ using Resolver = SharpLabNext.PipelineResolver.PipelineResolver;
 
 namespace SharpLabNext.Gateway;
 
-internal sealed class OperationCommandWebSocket(
-    OperationControlService control,
-    OperationStore operations,
-    PipelineResolutionRegistry resolutions,
-    GatewayDependencyHealthService dependencyHealth,
-    ILogger<OperationCommandWebSocket> logger)
+internal sealed class OperationCommandWebSocket(OperationControlService control, OperationStore operations, PipelineResolutionRegistry resolutions, GatewayDependencyHealthService dependencyHealth, ILogger<OperationCommandWebSocket> logger)
 {
     private const int MaximumCommandBytes = 2 * 1024 * 1024;
     private const int RuntimeSessionReleaseAttempts = 2;
     private static readonly JsonSerializerOptions SerializerOptions = ContractJson.CreateSerializerOptions();
     private static readonly Action<ILogger, string, Exception?> LogRuntimeSessionReleaseFailure =
-        LoggerMessage.Define<string>(
-            LogLevel.Warning,
-            new EventId(40, nameof(LogRuntimeSessionReleaseFailure)),
-            "Could not release the runtime session for operation WebSocket {TraceId}.");
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(40, nameof(LogRuntimeSessionReleaseFailure)), "Could not release the runtime session for operation WebSocket {TraceId}.");
 
     public async Task RunAsync(HttpContext context)
     {
@@ -65,41 +57,17 @@ internal sealed class OperationCommandWebSocket(
                 }
                 catch (JsonException)
                 {
-                    await WriteResponseAsync(
-                        outbound.Writer,
-                        new OperationCommandResponse(
-                            "response",
-                            string.Empty,
-                            false,
-                            StatusCodes.Status400BadRequest,
-                            null,
-                            new OperationCommandProblem("invalid-command", "The operation command is malformed.")),
-                        sessionCancellation.Token).ConfigureAwait(false);
+                    await WriteResponseAsync(outbound.Writer, new OperationCommandResponse("response", string.Empty, false, StatusCodes.Status400BadRequest, null, new OperationCommandProblem("invalid-command", "The operation command is malformed.")), sessionCancellation.Token).ConfigureAwait(false);
                     continue;
                 }
 
                 if (command is null || string.IsNullOrWhiteSpace(command.CommandId))
                 {
-                    await WriteResponseAsync(
-                        outbound.Writer,
-                        new OperationCommandResponse(
-                            "response",
-                            command?.CommandId ?? string.Empty,
-                            false,
-                            StatusCodes.Status400BadRequest,
-                            null,
-                            new OperationCommandProblem("invalid-command", "CommandId is required.")),
-                        sessionCancellation.Token).ConfigureAwait(false);
+                    await WriteResponseAsync(outbound.Writer, new OperationCommandResponse("response", command?.CommandId ?? string.Empty, false, StatusCodes.Status400BadRequest, null, new OperationCommandProblem("invalid-command", "CommandId is required.")), sessionCancellation.Token).ConfigureAwait(false);
                     continue;
                 }
 
-                await HandleCommandAsync(
-                    command,
-                    context.TraceIdentifier,
-                    outbound.Writer,
-                    subscriptions,
-                    runtimeSession,
-                    sessionCancellation.Token).ConfigureAwait(false);
+                await HandleCommandAsync(command, context.TraceIdentifier, outbound.Writer, subscriptions, runtimeSession, sessionCancellation.Token).ConfigureAwait(false);
             }
         }
         catch (Exception exception) when (exception is OperationCanceledException or WebSocketException)
@@ -112,28 +80,17 @@ internal sealed class OperationCommandWebSocket(
             foreach (var subscription in subscriptions.Values)
                 subscription.Cancel();
             CancelStartedRuntimeOperations(runtimeSession, "runtime-session-disconnected");
-            await TryReleaseRuntimeSessionAsync(
-                runtimeSession.Id,
-                context.TraceIdentifier,
-                CancellationToken.None).ConfigureAwait(false);
+            await TryReleaseRuntimeSessionAsync(runtimeSession.Id, context.TraceIdentifier, CancellationToken.None).ConfigureAwait(false);
             outbound.Writer.TryComplete();
             try
             {
                 await sender.ConfigureAwait(false);
             }
-            catch (Exception exception) when (exception is OperationCanceledException or WebSocketException)
-            {
-            }
+            catch (Exception exception) when (exception is OperationCanceledException or WebSocketException) { }
         }
     }
 
-    private async Task HandleCommandAsync(
-        OperationCommand command,
-        string traceId,
-        ChannelWriter<byte[]> outbound,
-        ConcurrentDictionary<string, CancellationTokenSource> subscriptions,
-        RuntimeCommandSession runtimeSession,
-        CancellationToken cancellationToken)
+    private async Task HandleCommandAsync(OperationCommand command, string traceId, ChannelWriter<byte[]> outbound, ConcurrentDictionary<string, CancellationTokenSource> subscriptions, RuntimeCommandSession runtimeSession, CancellationToken cancellationToken)
     {
         try
         {
@@ -142,44 +99,25 @@ internal sealed class OperationCommandWebSocket(
                 case "resolve-selection":
                     if (command.Request is null)
                     {
-                        await WriteProblemAsync(
-                            command.CommandId,
-                            "invalid-command",
-                            "Resolve selection requires request.",
-                            outbound,
-                            cancellationToken).ConfigureAwait(false);
+                        await WriteProblemAsync(command.CommandId, "invalid-command", "Resolve selection requires request.", outbound, cancellationToken).ConfigureAwait(false);
                         return;
                     }
 
-                    var selectionRequest = command.Request.Value.Deserialize<ResolveSelectionRequest>(SerializerOptions)
-                        ?? throw new JsonException("The selection request is missing.");
+                    var selectionRequest = command.Request.Value.Deserialize<ResolveSelectionRequest>(SerializerOptions) ?? throw new JsonException("The selection request is missing.");
                     var snapshot = await dependencyHealth.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
                     var resolution = Resolver.Resolve(snapshot.Catalog, selectionRequest, DateTimeOffset.UtcNow);
                     var fingerprint = CreateRuntimeFingerprint(selectionRequest, resolution);
-                    if (runtimeSession.Fingerprint is not null &&
-                        !string.Equals(runtimeSession.Fingerprint, fingerprint, StringComparison.Ordinal))
+                    if (runtimeSession.Fingerprint is not null && !string.Equals(runtimeSession.Fingerprint, fingerprint, StringComparison.Ordinal))
                     {
                         CancelStartedRuntimeOperations(runtimeSession, "runtime-session-pipeline-changed");
                         var releasedSessionId = runtimeSession.Rotate(CreateRuntimeSessionId());
-                        await TryReleaseRuntimeSessionAsync(
-                            releasedSessionId,
-                            traceId,
-                            CancellationToken.None).ConfigureAwait(false);
+                        await TryReleaseRuntimeSessionAsync(releasedSessionId, traceId, CancellationToken.None).ConfigureAwait(false);
                     }
 
                     runtimeSession.Fingerprint = fingerprint;
                     runtimeSession.PipelineResolutionId = resolution.PipelineResolutionId;
                     resolutions.Store(resolution);
-                    await WriteResponseAsync(
-                        outbound,
-                        new OperationCommandResponse(
-                            "response",
-                            command.CommandId,
-                            true,
-                            StatusCodes.Status200OK,
-                            resolution,
-                            null),
-                        cancellationToken).ConfigureAwait(false);
+                    await WriteResponseAsync(outbound, new OperationCommandResponse("response", command.CommandId, true, StatusCodes.Status200OK, resolution, null), cancellationToken).ConfigureAwait(false);
                     return;
 
                 case "start":
@@ -190,30 +128,14 @@ internal sealed class OperationCommandWebSocket(
                     }
                     if (command.Operation is "run" or "jit")
                     {
-                        var requestPipelineResolutionId = GetRuntimePipelineResolutionId(
-                            command.Operation,
-                            command.Request.Value);
-                        if (string.IsNullOrWhiteSpace(runtimeSession.PipelineResolutionId) ||
-                            !string.Equals(
-                                runtimeSession.PipelineResolutionId,
-                                requestPipelineResolutionId,
-                                StringComparison.Ordinal))
+                        var requestPipelineResolutionId = GetRuntimePipelineResolutionId(command.Operation, command.Request.Value);
+                        if (string.IsNullOrWhiteSpace(runtimeSession.PipelineResolutionId) || !string.Equals(runtimeSession.PipelineResolutionId, requestPipelineResolutionId, StringComparison.Ordinal))
                         {
-                            await WriteProblemAsync(
-                                command.CommandId,
-                                "runtime-session-resolution-mismatch",
-                                "Run and JIT must use the last pipeline resolution returned by this operation WebSocket.",
-                                outbound,
-                                cancellationToken).ConfigureAwait(false);
+                            await WriteProblemAsync(command.CommandId, "runtime-session-resolution-mismatch", "Run and JIT must use the last pipeline resolution returned by this operation WebSocket.", outbound, cancellationToken).ConfigureAwait(false);
                             return;
                         }
                     }
-                    var start = await control.StartAsync(
-                        command.Operation,
-                        command.Request.Value,
-                        traceId,
-                        runtimeSession.Id,
-                        cancellationToken).ConfigureAwait(false);
+                    var start = await control.StartAsync(command.Operation, command.Request.Value, traceId, runtimeSession.Id, cancellationToken).ConfigureAwait(false);
                     if (command.Operation is "run" or "jit" &&
                         start.Payload is OperationHandle { IsExisting: false } handle)
                     {
@@ -228,11 +150,7 @@ internal sealed class OperationCommandWebSocket(
                         await WriteProblemAsync(command.CommandId, "invalid-command", "State requires operationId.", outbound, cancellationToken);
                         return;
                     }
-                    await WriteControlResponseAsync(
-                        command.CommandId,
-                        control.GetState(command.OperationId),
-                        outbound,
-                        cancellationToken).ConfigureAwait(false);
+                    await WriteControlResponseAsync(command.CommandId, control.GetState(command.OperationId), outbound, cancellationToken).ConfigureAwait(false);
                     return;
 
                 case "cancel":
@@ -241,50 +159,23 @@ internal sealed class OperationCommandWebSocket(
                         await WriteProblemAsync(command.CommandId, "invalid-command", "Cancel requires operationId.", outbound, cancellationToken);
                         return;
                     }
-                    await WriteControlResponseAsync(
-                        command.CommandId,
-                        control.Cancel(command.OperationId, command.OperationId, command.Reason),
-                        outbound,
-                        cancellationToken).ConfigureAwait(false);
+                    await WriteControlResponseAsync(command.CommandId, control.Cancel(command.OperationId, command.OperationId, command.Reason), outbound, cancellationToken).ConfigureAwait(false);
                     return;
 
                 case "subscribe":
                     if (string.IsNullOrWhiteSpace(command.OperationId) || command.FromSequence is null or < 0)
                     {
-                        await WriteProblemAsync(
-                            command.CommandId,
-                            "invalid-command",
-                            "Subscribe requires OperationId and a non-negative FromSequence.",
-                            outbound,
-                            cancellationToken);
+                        await WriteProblemAsync(command.CommandId, "invalid-command", "Subscribe requires OperationId and a non-negative FromSequence.", outbound, cancellationToken);
                         return;
                     }
                     if (operations.Get(command.OperationId) is null)
                     {
-                        await WriteControlResponseAsync(
-                            command.CommandId,
-                            new OperationControlResponse(StatusCodes.Status404NotFound, null),
-                            outbound,
-                            cancellationToken).ConfigureAwait(false);
+                        await WriteControlResponseAsync(command.CommandId, new OperationControlResponse(StatusCodes.Status404NotFound, null), outbound, cancellationToken).ConfigureAwait(false);
                         return;
                     }
 
-                    await WriteResponseAsync(
-                        outbound,
-                        new OperationCommandResponse(
-                            "response",
-                            command.CommandId,
-                            true,
-                            StatusCodes.Status200OK,
-                            new OperationSubscription(command.OperationId, command.FromSequence.Value),
-                            null),
-                        cancellationToken).ConfigureAwait(false);
-                    StartSubscription(
-                        command.OperationId,
-                        command.FromSequence.Value,
-                        outbound,
-                        subscriptions,
-                        cancellationToken);
+                    await WriteResponseAsync(outbound, new OperationCommandResponse("response", command.CommandId, true, StatusCodes.Status200OK, new OperationSubscription(command.OperationId, command.FromSequence.Value), null), cancellationToken).ConfigureAwait(false);
+                    StartSubscription(command.OperationId, command.FromSequence.Value, outbound, subscriptions, cancellationToken);
                     return;
 
                 default:
@@ -298,36 +189,11 @@ internal sealed class OperationCommandWebSocket(
         }
         catch (SelectionResolutionException exception)
         {
-            await WriteResponseAsync(
-                outbound,
-                new OperationCommandResponse(
-                    "response",
-                    command.CommandId,
-                    false,
-                    StatusCodes.Status400BadRequest,
-                    null,
-                    new SelectionCommandProblem(
-                        exception.Code,
-                        exception.Message,
-                        exception.Field.ToString(),
-                        exception.Value)),
-                cancellationToken).ConfigureAwait(false);
+            await WriteResponseAsync(outbound, new OperationCommandResponse("response", command.CommandId, false, StatusCodes.Status400BadRequest, null, new SelectionCommandProblem(exception.Code, exception.Message, exception.Field.ToString(), exception.Value)), cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCapacityExceededException exception)
         {
-            await WriteResponseAsync(
-                outbound,
-                new OperationCommandResponse(
-                    "response",
-                    command.CommandId,
-                    false,
-                    StatusCodes.Status429TooManyRequests,
-                    null,
-                    new OperationCapacityCommandProblem(
-                        "operation-capacity-exhausted",
-                        "The service is retaining the maximum number of operations. Retry shortly.",
-                        exception.MaximumOperations)),
-                cancellationToken).ConfigureAwait(false);
+            await WriteResponseAsync(outbound, new OperationCommandResponse("response", command.CommandId, false, StatusCodes.Status429TooManyRequests, null, new OperationCapacityCommandProblem("operation-capacity-exhausted", "The service is retaining the maximum number of operations. Retry shortly.", exception.MaximumOperations)), cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -338,10 +204,7 @@ internal sealed class OperationCommandWebSocket(
         session.StartedRuntimeOperationIds.Clear();
     }
 
-    private async Task TryReleaseRuntimeSessionAsync(
-        string runtimeSessionId,
-        string traceId,
-        CancellationToken cancellationToken)
+    private async Task TryReleaseRuntimeSessionAsync(string runtimeSessionId, string traceId, CancellationToken cancellationToken)
     {
         Exception? lastException = null;
         for (var attempt = 1; attempt <= RuntimeSessionReleaseAttempts; attempt++)
@@ -373,37 +236,15 @@ internal sealed class OperationCommandWebSocket(
             _ => null
         };
 
-    private static string CreateRuntimeFingerprint(
-        ResolveSelectionRequest request,
-        ResolveSelectionResponse resolution)
+    private static string CreateRuntimeFingerprint(ResolveSelectionRequest request, ResolveSelectionResponse resolution)
     {
         var selection = resolution.EffectiveSelection;
         var plan = resolution.PipelinePlan;
-        var descriptor = new RuntimeFingerprintDescriptor(
-            selection.LanguageId,
-            selection.ToolchainId,
-            selection.ReferenceSetId,
-            selection.OutputId,
-            selection.RuntimeId,
-            request.BuildMode,
-            plan.SecurityPolicyId,
-            plan.ReleaseId,
-            plan.Stages.Select(static stage => new RuntimeFingerprintStage(
-                stage.Id,
-                stage.Kind,
-                stage.ProviderId,
-                stage.InputArtifactFormat,
-                stage.OutputArtifactFormat)).ToArray());
-        return Convert.ToHexString(SHA256.HashData(
-            JsonSerializer.SerializeToUtf8Bytes(descriptor, SerializerOptions)));
+        var descriptor = new RuntimeFingerprintDescriptor(selection.LanguageId, selection.ToolchainId, selection.ReferenceSetId, selection.OutputId, selection.RuntimeId, request.BuildMode, plan.SecurityPolicyId, plan.ReleaseId, plan.Stages.Select(static stage => new RuntimeFingerprintStage(stage.Id, stage.Kind, stage.ProviderId, stage.InputArtifactFormat, stage.OutputArtifactFormat)).ToArray());
+        return Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(descriptor, SerializerOptions)));
     }
 
-    private void StartSubscription(
-        string operationId,
-        long fromSequence,
-        ChannelWriter<byte[]> outbound,
-        ConcurrentDictionary<string, CancellationTokenSource> subscriptions,
-        CancellationToken sessionCancellation)
+    private void StartSubscription(string operationId, long fromSequence, ChannelWriter<byte[]> outbound, ConcurrentDictionary<string, CancellationTokenSource> subscriptions, CancellationToken sessionCancellation)
     {
         var subscriptionCancellation = CancellationTokenSource.CreateLinkedTokenSource(sessionCancellation);
         if (subscriptions.TryGetValue(operationId, out var previous))
@@ -414,20 +255,13 @@ internal sealed class OperationCommandWebSocket(
         {
             try
             {
-                await foreach (var operationEvent in operations.WatchAsync(
-                                   operationId,
-                                   fromSequence,
-                                   subscriptionCancellation.Token))
+                await foreach (var operationEvent in operations.WatchAsync(operationId, fromSequence, subscriptionCancellation.Token))
                 {
-                    var message = JsonSerializer.SerializeToUtf8Bytes(
-                        new OperationCommandEvent("event", operationId, operationEvent),
-                        SerializerOptions);
+                    var message = JsonSerializer.SerializeToUtf8Bytes(new OperationCommandEvent("event", operationId, operationEvent), SerializerOptions);
                     await outbound.WriteAsync(message, subscriptionCancellation.Token).ConfigureAwait(false);
                 }
             }
-            catch (Exception exception) when (exception is OperationCanceledException or ChannelClosedException)
-            {
-            }
+            catch (Exception exception) when (exception is OperationCanceledException or ChannelClosedException) { }
             finally
             {
                 if (subscriptions.TryGetValue(operationId, out var current) && ReferenceEquals(current, subscriptionCancellation))
@@ -441,53 +275,16 @@ internal sealed class OperationCommandWebSocket(
         string commandId,
         OperationControlResponse controlResponse,
         ChannelWriter<byte[]> outbound,
-        CancellationToken cancellationToken) => WriteResponseAsync(
-        outbound,
-        new OperationCommandResponse(
-            "response",
-            commandId,
-            controlResponse.StatusCode is >= 200 and < 300,
-            controlResponse.StatusCode,
-            controlResponse.StatusCode is >= 200 and < 300 ? controlResponse.Payload : null,
-            controlResponse.StatusCode is >= 200 and < 300 ? null : controlResponse.Payload),
-        cancellationToken);
+        CancellationToken cancellationToken) => WriteResponseAsync(outbound, new OperationCommandResponse("response", commandId, controlResponse.StatusCode is >= 200 and < 300, controlResponse.StatusCode, controlResponse.StatusCode is >= 200 and < 300 ? controlResponse.Payload : null, controlResponse.StatusCode is >= 200 and < 300 ? null : controlResponse.Payload), cancellationToken);
 
-    private static ValueTask WriteProblemAsync(
-        string commandId,
-        string error,
-        string message,
-        ChannelWriter<byte[]> outbound,
-        CancellationToken cancellationToken) => WriteResponseAsync(
-        outbound,
-        new OperationCommandResponse(
-            "response",
-            commandId,
-            false,
-            StatusCodes.Status400BadRequest,
-            null,
-            new OperationCommandProblem(error, message)),
-        cancellationToken);
+    private static ValueTask WriteProblemAsync(string commandId, string error, string message, ChannelWriter<byte[]> outbound, CancellationToken cancellationToken) => WriteResponseAsync(outbound, new OperationCommandResponse("response", commandId, false, StatusCodes.Status400BadRequest, null, new OperationCommandProblem(error, message)), cancellationToken);
 
-    private static ValueTask WriteResponseAsync(
-        ChannelWriter<byte[]> outbound,
-        OperationCommandResponse response,
-        CancellationToken cancellationToken) => outbound.WriteAsync(
-        JsonSerializer.SerializeToUtf8Bytes(response, SerializerOptions),
-        cancellationToken);
+    private static ValueTask WriteResponseAsync(ChannelWriter<byte[]> outbound, OperationCommandResponse response, CancellationToken cancellationToken) => outbound.WriteAsync(JsonSerializer.SerializeToUtf8Bytes(response, SerializerOptions), cancellationToken);
 
-    private static async Task SendAsync(
-        WebSocket socket,
-        ChannelReader<byte[]> outbound,
-        CancellationToken cancellationToken)
+    private static async Task SendAsync(WebSocket socket, ChannelReader<byte[]> outbound, CancellationToken cancellationToken)
     {
         await foreach (var message in outbound.ReadAllAsync(cancellationToken))
-        {
-            await socket.SendAsync(
-                message.AsMemory(),
-                WebSocketMessageType.Text,
-                endOfMessage: true,
-                cancellationToken).ConfigureAwait(false);
-        }
+            await socket.SendAsync(message.AsMemory(), WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<byte[]?> ReceiveMessageAsync(WebSocket socket, CancellationToken cancellationToken)
@@ -501,18 +298,12 @@ internal sealed class OperationCommandWebSocket(
                 return null;
             if (result.MessageType != WebSocketMessageType.Text)
             {
-                await socket.CloseOutputAsync(
-                    WebSocketCloseStatus.InvalidMessageType,
-                    "Operation commands must be UTF-8 text.",
-                    cancellationToken).ConfigureAwait(false);
+                await socket.CloseOutputAsync(WebSocketCloseStatus.InvalidMessageType, "Operation commands must be UTF-8 text.", cancellationToken).ConfigureAwait(false);
                 return null;
             }
             if (stream.Length + result.Count > MaximumCommandBytes)
             {
-                await socket.CloseOutputAsync(
-                    WebSocketCloseStatus.MessageTooBig,
-                    "Operation command is too large.",
-                    cancellationToken).ConfigureAwait(false);
+                await socket.CloseOutputAsync(WebSocketCloseStatus.MessageTooBig, "Operation command is too large.", cancellationToken).ConfigureAwait(false);
                 return null;
             }
             stream.Write(buffer, 0, result.Count);
@@ -521,22 +312,9 @@ internal sealed class OperationCommandWebSocket(
         }
     }
 
-    private sealed record OperationCommand(
-        string Type,
-        string CommandId,
-        string? Operation,
-        string? OperationId,
-        long? FromSequence,
-        string? Reason,
-        JsonElement? Request);
+    private sealed record OperationCommand(string Type, string CommandId, string? Operation, string? OperationId, long? FromSequence, string? Reason, JsonElement? Request);
 
-    private sealed record OperationCommandResponse(
-        string Type,
-        string CommandId,
-        bool Ok,
-        int Status,
-        object? Payload,
-        object? Error);
+    private sealed record OperationCommandResponse(string Type, string CommandId, bool Ok, int Status, object? Payload, object? Error);
 
     private sealed record OperationCommandEvent(string Type, string OperationId, OperationEvent Event);
 
@@ -577,10 +355,5 @@ internal sealed class OperationCommandWebSocket(
         string ReleaseId,
         IReadOnlyList<RuntimeFingerprintStage> Stages);
 
-    private sealed record RuntimeFingerprintStage(
-        string Id,
-        PipelineStageKind Kind,
-        string ProviderId,
-        string? InputArtifactFormat,
-        string? OutputArtifactFormat);
+    private sealed record RuntimeFingerprintStage(string Id, PipelineStageKind Kind, string ProviderId, string? InputArtifactFormat, string? OutputArtifactFormat);
 }

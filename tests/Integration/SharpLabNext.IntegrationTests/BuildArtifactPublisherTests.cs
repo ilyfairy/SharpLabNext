@@ -12,11 +12,7 @@ public sealed class BuildArtifactPublisherTests
     public async Task PublishesGenericCilTextArtifactByManifestPath()
     {
         var content = ".assembly Sample {}\n"u8.ToArray();
-        var descriptor = new ArtifactFileDescriptor(
-            "generated-il",
-            "Program.il",
-            content.LongLength,
-            ContentIdentity.Compute(content).Value);
+        var descriptor = new ArtifactFileDescriptor("generated-il", "Program.il", content.LongLength, ContentIdentity.Compute(content).Value);
         var manifest = CreateManifest(descriptor);
         var store = new RecordingArtifactStoreClient();
         var publisher = new BuildArtifactPublisher(store, new BuildPipelineOptions());
@@ -45,15 +41,9 @@ public sealed class BuildArtifactPublisherTests
     {
         var declared = "declared"u8.ToArray();
         var actual = "different"u8.ToArray();
-        var descriptor = new ArtifactFileDescriptor(
-            "generated-il",
-            "Program.il",
-            declared.LongLength,
-            ContentIdentity.Compute(declared).Value);
+        var descriptor = new ArtifactFileDescriptor("generated-il", "Program.il", declared.LongLength, ContentIdentity.Compute(declared).Value);
         var manifest = CreateManifest(descriptor);
-        var publisher = new BuildArtifactPublisher(
-            new RecordingArtifactStoreClient(),
-            new BuildPipelineOptions());
+        var publisher = new BuildArtifactPublisher(new RecordingArtifactStoreClient(), new BuildPipelineOptions());
         var envelope = new WorkerArtifactEnvelope(
             manifest.ArtifactId,
             "cil-text-v1",
@@ -66,8 +56,7 @@ public sealed class BuildArtifactPublisherTests
             [descriptor],
             new Dictionary<string, string> { [descriptor.Path] = Convert.ToBase64String(actual) });
 
-        var exception = await Assert.ThrowsAsync<BuildArtifactPublishingException>(() =>
-            publisher.PublishAsync(envelope, TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<BuildArtifactPublishingException>(() => publisher.PublishAsync(envelope, TestContext.Current.CancellationToken));
 
         Assert.Contains("checksum", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -76,37 +65,16 @@ public sealed class BuildArtifactPublisherTests
     public async Task AcceptsCompilerPublishedArtifactWithoutReadingArtifactBytes()
     {
         var content = "managed assembly"u8.ToArray();
-        var descriptor = new ArtifactFileDescriptor(
-            "primary-assembly",
-            "app.dll",
-            content.LongLength,
-            ContentIdentity.Compute(content).Value);
+        var descriptor = new ArtifactFileDescriptor("primary-assembly", "app.dll", content.LongLength, ContentIdentity.Compute(content).Value);
         var manifest = CreateManifest(descriptor);
         var store = new RecordingArtifactStoreClient
         {
-            PublishedBundle = new ArtifactBundleDescriptor(
-                manifest,
-                [new ArtifactBundleEntry(
-                    descriptor.Path,
-                    descriptor.Size,
-                    descriptor.Digest,
-                    descriptor.Role,
-                    new ContentRef(descriptor.Digest))])
+            PublishedBundle = new ArtifactBundleDescriptor(manifest, [new ArtifactBundleEntry(descriptor.Path, descriptor.Size, descriptor.Digest, descriptor.Role, new ContentRef(descriptor.Digest))])
         };
         var publisher = new BuildArtifactPublisher(store, new BuildPipelineOptions());
-        var identity = new BuildIdentity(
-            manifest.Producer.ReleaseId,
-            manifest.Producer.LanguageId,
-            manifest.Producer.ToolchainId,
-            manifest.Producer.CompilerVersion,
-            manifest.Producer.CompilerCommit,
-            manifest.ReferenceSetId,
-            manifest.Producer.WorkerImageId);
+        var identity = new BuildIdentity(manifest.Producer.ReleaseId, manifest.Producer.LanguageId, manifest.Producer.ToolchainId, manifest.Producer.CompilerVersion, manifest.Producer.CompilerCommit, manifest.ReferenceSetId, manifest.Producer.WorkerImageId);
 
-        var result = await publisher.AcceptPublishedAsync(
-            manifest.ArtifactId,
-            identity,
-            TestContext.Current.CancellationToken);
+        var result = await publisher.AcceptPublishedAsync(manifest.ArtifactId, identity, TestContext.Current.CancellationToken);
 
         Assert.Equal(manifest.ArtifactId, result.ArtifactRef);
         Assert.Equal(manifest.ArtifactFormat, result.ArtifactFormat);
@@ -118,38 +86,16 @@ public sealed class BuildArtifactPublisherTests
     public async Task RejectsCompilerPublishedArtifactWithDifferentProducerIdentity()
     {
         var content = "managed assembly"u8.ToArray();
-        var descriptor = new ArtifactFileDescriptor(
-            "primary-assembly",
-            "app.dll",
-            content.LongLength,
-            ContentIdentity.Compute(content).Value);
+        var descriptor = new ArtifactFileDescriptor("primary-assembly", "app.dll", content.LongLength, ContentIdentity.Compute(content).Value);
         var manifest = CreateManifest(descriptor);
         var store = new RecordingArtifactStoreClient
         {
-            PublishedBundle = new ArtifactBundleDescriptor(
-                manifest,
-                [new ArtifactBundleEntry(
-                    descriptor.Path,
-                    descriptor.Size,
-                    descriptor.Digest,
-                    descriptor.Role,
-                    new ContentRef(descriptor.Digest))])
+            PublishedBundle = new ArtifactBundleDescriptor(manifest, [new ArtifactBundleEntry(descriptor.Path, descriptor.Size, descriptor.Digest, descriptor.Role, new ContentRef(descriptor.Digest))])
         };
         var publisher = new BuildArtifactPublisher(store, new BuildPipelineOptions());
-        var identity = new BuildIdentity(
-            manifest.Producer.ReleaseId,
-            manifest.Producer.LanguageId,
-            "another-toolchain",
-            manifest.Producer.CompilerVersion,
-            manifest.Producer.CompilerCommit,
-            manifest.ReferenceSetId,
-            manifest.Producer.WorkerImageId);
+        var identity = new BuildIdentity(manifest.Producer.ReleaseId, manifest.Producer.LanguageId, "another-toolchain", manifest.Producer.CompilerVersion, manifest.Producer.CompilerCommit, manifest.ReferenceSetId, manifest.Producer.WorkerImageId);
 
-        var exception = await Assert.ThrowsAsync<BuildArtifactPublishingException>(() =>
-            publisher.AcceptPublishedAsync(
-                manifest.ArtifactId,
-                identity,
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<BuildArtifactPublishingException>(() => publisher.AcceptPublishedAsync(manifest.ArtifactId, identity, TestContext.Current.CancellationToken));
 
         Assert.Contains("producer identity", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -159,21 +105,11 @@ public sealed class BuildArtifactPublisherTests
         var placeholder = new ArtifactManifest(
             1,
             new ArtifactRef($"sha256:{new string('0', 64)}"),
-            new ArtifactProducer(
-                "development",
-                "tiny-language",
-                "tiny-language-stable",
-                "1.0.0",
-                null,
-                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            new ArtifactProducer("development", "tiny-language", "tiny-language-stable", "1.0.0", null, "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
             "net10-ref",
             "net10.0",
             "cil-text-v1",
-            new ArtifactRuntimeRequirement(
-                "coreclr",
-                [new FrameworkRequirement("Microsoft.NETCore.App", "10.0.9")],
-                "anycpu",
-                []),
+            new ArtifactRuntimeRequirement("coreclr", [new FrameworkRequirement("Microsoft.NETCore.App", "10.0.9")], "anycpu", []),
             [],
             BuildOutputKind.Console,
             descriptor.Path,
@@ -192,29 +128,19 @@ public sealed class BuildArtifactPublisherTests
 
         public string? UploadedPath { get; private set; }
 
-        public Task<PutArtifactResponse> PutArtifactAsync(
-            ArtifactManifest manifest,
-            IReadOnlyList<ArtifactFileUpload> files,
-            TimeSpan? timeToLive = null,
-            CancellationToken cancellationToken = default)
+        public Task<PutArtifactResponse> PutArtifactAsync(ArtifactManifest manifest, IReadOnlyList<ArtifactFileUpload> files, TimeSpan? timeToLive = null, CancellationToken cancellationToken = default)
         {
             Assert.Single(files);
             UploadedPath = files[0].Path;
             using var buffer = new MemoryStream();
             files[0].Content.CopyTo(buffer);
             UploadedContent = buffer.ToArray();
-            return Task.FromResult(new PutArtifactResponse(
-                manifest.ArtifactId,
-                UploadedContent.LongLength,
-                DateTimeOffset.UtcNow.AddHours(1),
-                false));
+            return Task.FromResult(new PutArtifactResponse(manifest.ArtifactId, UploadedContent.LongLength, DateTimeOffset.UtcNow.AddHours(1), false));
         }
 
         public Task<PutContentResponse> PutContentAsync(ContentRef contentRef, Stream content, long? declaredSize = null, TimeSpan? timeToLive = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<ArtifactContentResponse> OpenContentReadAsync(ContentRef contentRef, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<ArtifactBundleDescriptor?> GetArtifactAsync(
-            ArtifactRef artifactRef,
-            CancellationToken cancellationToken = default)
+        public Task<ArtifactBundleDescriptor?> GetArtifactAsync(ArtifactRef artifactRef, CancellationToken cancellationToken = default)
         {
             GetArtifactCallCount++;
             return Task.FromResult(PublishedBundle);

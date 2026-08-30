@@ -16,10 +16,7 @@ public sealed class RuntimePromotionMatrixBindingTests
         var profile = CreateProfile();
         var snapshot = CreateSnapshot();
 
-        RuntimePromotionMatrixBinding.Validate(
-            CreateMatrix(ReceiptPath, ReceiptDigest, "verified"),
-            [profile],
-            [snapshot]);
+        RuntimePromotionMatrixBinding.Validate(CreateMatrix(ReceiptPath, ReceiptDigest, "verified"), [profile], [snapshot]);
     }
 
     [Fact]
@@ -28,18 +25,10 @@ public sealed class RuntimePromotionMatrixBindingTests
         var profile = CreateProfile();
         var snapshot = CreateSnapshot();
 
-        var stateException = Assert.Throws<BundleValidationException>(() =>
-            RuntimePromotionMatrixBinding.Validate(
-                CreateMatrix(ReceiptPath, ReceiptDigest, "blocked"),
-                [profile],
-                [snapshot]));
+        var stateException = Assert.Throws<BundleValidationException>(() => RuntimePromotionMatrixBinding.Validate(CreateMatrix(ReceiptPath, ReceiptDigest, "blocked"), [profile], [snapshot]));
         Assert.Contains("must be 'verified'", stateException.Message, StringComparison.Ordinal);
 
-        var digestException = Assert.Throws<BundleValidationException>(() =>
-            RuntimePromotionMatrixBinding.Validate(
-                CreateMatrix(ReceiptPath, "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "verified"),
-                [profile],
-                [snapshot]));
+        var digestException = Assert.Throws<BundleValidationException>(() => RuntimePromotionMatrixBinding.Validate(CreateMatrix(ReceiptPath, "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "verified"), [profile], [snapshot]));
         Assert.Contains("does not match its active profile", digestException.Message, StringComparison.Ordinal);
     }
 
@@ -58,23 +47,14 @@ public sealed class RuntimePromotionMatrixBindingTests
     [Fact]
     public async Task AsyncGateReadsOnlyTheCanonicalMatrixPath()
     {
-        var root = Path.Combine(
-            Path.GetTempPath(),
-            $"sharplabnext-matrix-binding-{Guid.NewGuid():N}");
+        var root = Path.Combine(Path.GetTempPath(), $"sharplabnext-matrix-binding-{Guid.NewGuid():N}");
         try
         {
             var matrixPath = Path.Combine(root, "profiles", "runtime-matrix.json");
             Directory.CreateDirectory(Path.GetDirectoryName(matrixPath)!);
-            await File.WriteAllBytesAsync(
-                matrixPath,
-                CreateMatrix(ReceiptPath, ReceiptDigest, "verified"),
-                TestContext.Current.CancellationToken);
+            await File.WriteAllBytesAsync(matrixPath, CreateMatrix(ReceiptPath, ReceiptDigest, "verified"), TestContext.Current.CancellationToken);
 
-            await RuntimePromotionMatrixBinding.ValidateAsync(
-                root,
-                [CreateProfile()],
-                [CreateSnapshot()],
-                TestContext.Current.CancellationToken);
+            await RuntimePromotionMatrixBinding.ValidateAsync(root, [CreateProfile()], [CreateSnapshot()], TestContext.Current.CancellationToken);
         }
         finally
         {
@@ -87,11 +67,7 @@ public sealed class RuntimePromotionMatrixBindingTests
     {
         Id = ProfileId,
         Family = "coreclr",
-        PromotionReceipt = new RuntimePromotionReceiptReference
-        {
-            Path = ReceiptPath,
-            Sha256 = ReceiptDigest
-        }
+        PromotionReceipt = new RuntimePromotionReceiptReference { Path = ReceiptPath, Sha256 = ReceiptDigest }
     };
 
     private static RuntimePromotionTrustSnapshot CreateSnapshot() => new(
@@ -104,17 +80,8 @@ public sealed class RuntimePromotionMatrixBindingTests
         1,
         new RuntimePromotionFileSnapshot(ReceiptPath, ReceiptDigest),
         [],
-        new RuntimePromotionFileSnapshot(
-            "profiles/runtime-performance-policies/test.json",
-            "sha256:" + new string('1', 64)),
-        new RuntimePromotionMeasurementHelperSnapshot(
-            "sharplabnext-runtime-cgroup-sidecar-v1",
-            "registry.example/runtime-supervisor@sha256:" + new string('2', 64),
-            "sha256:" + new string('3', 64),
-            1,
-            "/usr/local/bin/sharplabnext-runtime-measurement",
-            new string('c', 40),
-            RuntimeMeasurementHelperContract.ContentSha256),
+        new RuntimePromotionFileSnapshot("profiles/runtime-performance-policies/test.json", "sha256:" + new string('1', 64)),
+        new RuntimePromotionMeasurementHelperSnapshot("sharplabnext-runtime-cgroup-sidecar-v1", "registry.example/runtime-supervisor@sha256:" + new string('2', 64), "sha256:" + new string('3', 64), 1, "/usr/local/bin/sharplabnext-runtime-measurement", new string('c', 40), RuntimeMeasurementHelperContract.ContentSha256),
         []);
 
     private static byte[] CreateMatrix(string path, string digest, string state) =>
@@ -122,15 +89,7 @@ public sealed class RuntimePromotionMatrixBindingTests
         {
             coreClr = new[]
             {
-                new
-                {
-                    id = "dotnet-10",
-                    linuxCapability = new
-                    {
-                        promotionState = state,
-                        promotionReceipt = new { path, sha256 = digest }
-                    }
-                }
+                new { id = "dotnet-10", linuxCapability = new { promotionState = state, promotionReceipt = new { path, sha256 = digest } } }
             }
         });
 }

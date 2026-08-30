@@ -113,10 +113,7 @@ namespace SharpLabNext.RuntimeCapabilityProbe
             Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
             for (int index = 0; index < assemblies.Length; index++)
             {
-                if (string.Equals(
-                    assemblies[index].GetName().Name,
-                    "SharpLab.Runtime",
-                    StringComparison.Ordinal))
+                if (string.Equals(assemblies[index].GetName().Name, "SharpLab.Runtime", StringComparison.Ordinal))
                 {
                     return assemblies[index];
                 }
@@ -125,11 +122,7 @@ namespace SharpLabNext.RuntimeCapabilityProbe
             throw new InvalidOperationException("Runner did not load the SharpLab.Runtime support assembly.");
         }
 
-        private static MethodInfo FindGenericMethod(
-            Type type,
-            string name,
-            int parameterCount,
-            bool firstParameterIsByRef)
+        private static MethodInfo FindGenericMethod(Type type, string name, int parameterCount, bool firstParameterIsByRef)
         {
             MethodInfo[] methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static);
             for (int index = 0; index < methods.Length; index++)
@@ -137,18 +130,12 @@ namespace SharpLabNext.RuntimeCapabilityProbe
                 MethodInfo method = methods[index];
                 ParameterInfo[] parameters = method.GetParameters();
                 Type firstParameter = parameters.Length == 0
-                    ? null
-                    : parameters[0].ParameterType;
+                    ? null : parameters[0].ParameterType;
                 bool firstParameterMatches = firstParameterIsByRef
                     ? firstParameter != null &&
                       firstParameter.IsByRef &&
-                      firstParameter.GetElementType().IsGenericParameter
-                    : firstParameter != null && firstParameter.IsGenericParameter;
-                if (method.Name == name &&
-                    method.IsGenericMethodDefinition &&
-                    method.GetGenericArguments().Length == 1 &&
-                    parameters.Length == parameterCount &&
-                    firstParameterMatches)
+                      firstParameter.GetElementType().IsGenericParameter : firstParameter != null && firstParameter.IsGenericParameter;
+                if (method.Name == name && method.IsGenericMethodDefinition && method.GetGenericArguments().Length == 1 && parameters.Length == parameterCount && firstParameterMatches)
                 {
                     return method;
                 }
@@ -190,8 +177,7 @@ namespace SharpLabNext.RuntimeCapabilityProbe
         private static bool RootFileSystemIsReadOnly()
         {
             string path = Environment.OSVersion.Platform == PlatformID.Win32NT
-                ? @"Z:\sharplabnext-runtime-capability-probe.tmp"
-                : "/sharplabnext-runtime-capability-probe.tmp";
+                ? @"Z:\sharplabnext-runtime-capability-probe.tmp" : "/sharplabnext-runtime-capability-probe.tmp";
             try
             {
                 File.WriteAllText(path, "write must fail");
@@ -238,8 +224,7 @@ namespace SharpLabNext.RuntimeCapabilityProbe
             {
                 FileName = windows ? "cmd.exe" : "/bin/sh",
                 Arguments = windows
-                    ? "/d /s /c \"ping -t 127.0.0.1 >NUL 2>NUL\""
-                    : "-c \"while :; do sleep 60; done >/dev/null 2>&1\"",
+                    ? "/d /s /c \"ping -t 127.0.0.1 >NUL 2>NUL\"" : "-c \"while :; do sleep 60; done >/dev/null 2>&1\"",
                 UseShellExecute = false,
                 CreateNoWindow = true
             };

@@ -4,31 +4,13 @@ namespace SharpLabNext.Worker.CppCli;
 
 internal static class CppCliCompilerCommand
 {
-    public static ProcessStartInfo Create(
-        CppCliWorkerSettings settings,
-        string workingDirectory,
-        string sourcePath,
-        string objectPath,
-        string outputPath,
-        bool optimize)
+    public static ProcessStartInfo Create(CppCliWorkerSettings settings, string workingDirectory, string sourcePath, string objectPath, string outputPath, bool optimize)
     {
         RequireRelative(sourcePath, nameof(sourcePath));
         RequireRelative(objectPath, nameof(objectPath));
         RequireRelative(outputPath, nameof(outputPath));
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = settings.CompilerPath,
-            WorkingDirectory = workingDirectory,
-            UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-        var inherited = startInfo.Environment.ToDictionary(
-            static pair => pair.Key,
-            static pair => pair.Value,
-            StringComparer.OrdinalIgnoreCase);
+        var startInfo = new ProcessStartInfo { FileName = settings.CompilerPath, WorkingDirectory = workingDirectory, UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        var inherited = startInfo.Environment.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.OrdinalIgnoreCase);
         startInfo.Environment.Clear();
         Copy("PATH");
         Copy("HOME");
@@ -65,10 +47,7 @@ internal static class CppCliCompilerCommand
 
     private static void RequireRelative(string path, string parameterName)
     {
-        if (string.IsNullOrWhiteSpace(path) ||
-            Path.IsPathRooted(path) ||
-            path.Contains(':') ||
-            path.Replace('\\', '/').Split('/').Any(static segment => segment is "" or "." or ".."))
+        if (string.IsNullOrWhiteSpace(path) || Path.IsPathRooted(path) || path.Contains(':') || path.Replace('\\', '/').Split('/').Any(static segment => segment is "" or "." or ".."))
         {
             throw new ArgumentException("MSVC source and output paths must be safe relative paths.", parameterName);
         }

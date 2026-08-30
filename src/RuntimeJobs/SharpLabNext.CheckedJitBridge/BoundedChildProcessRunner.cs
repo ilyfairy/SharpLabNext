@@ -88,11 +88,9 @@ internal sealed class BoundedProcessOutput
         lock (_gate)
         {
             var destination = kind == ProcessOutputKind.StandardOutput
-                ? _standardOutput
-                : _standardError;
+                ? _standardOutput : _standardError;
             var streamLimit = kind == ProcessOutputKind.StandardOutput
-                ? _standardOutputLimit
-                : _standardErrorLimit;
+                ? _standardOutputLimit : _standardErrorLimit;
             var streamRemaining = Math.Max(0, streamLimit - destination.WrittenCount);
             var totalRemaining = Math.Max(0, _totalLimit - _totalBytes);
             var accepted = Math.Min(bytes.Length, Math.Min(streamRemaining, totalRemaining));
@@ -114,12 +112,7 @@ internal sealed class BoundedProcessOutput
 
 internal sealed class BoundedChildProcessLimits
 {
-    public BoundedChildProcessLimits(
-        int standardOutputBytes,
-        int standardErrorBytes,
-        int totalOutputBytes,
-        TimeSpan executionTimeout,
-        TimeSpan cleanupTimeout)
+    public BoundedChildProcessLimits(int standardOutputBytes, int standardErrorBytes, int totalOutputBytes, TimeSpan executionTimeout, TimeSpan cleanupTimeout)
     {
         if (standardOutputBytes <= 0)
             throw new ArgumentOutOfRangeException(nameof(standardOutputBytes));
@@ -150,39 +143,24 @@ internal sealed class BoundedChildProcessLimits
     public TimeSpan CleanupTimeout { get; }
 }
 
-internal sealed record BoundedChildProcessResult(
-    int ProcessId,
-    int ExitCode,
-    ChildTerminationReason TerminationReason,
-    byte[] StandardOutput,
-    byte[] StandardError);
+internal sealed record BoundedChildProcessResult(int ProcessId, int ExitCode, ChildTerminationReason TerminationReason, byte[] StandardOutput, byte[] StandardError);
 
 internal static class BoundedChildProcessRunner
 {
     private const int ReadBufferSize = 16 * 1024;
 
-    public static async Task<BoundedChildProcessResult> RunAsync(
-        ProcessStartInfo startInfo,
-        BoundedChildProcessLimits limits,
-        CancellationToken cancellationToken,
-        Task? protocolFailureSignal = null,
-        Action? processStarted = null)
+    public static async Task<BoundedChildProcessResult> RunAsync(ProcessStartInfo startInfo, BoundedChildProcessLimits limits, CancellationToken cancellationToken, Task? protocolFailureSignal = null, Action? processStarted = null)
     {
         ValidateStartInfo(startInfo);
         if (limits is null)
             throw new ArgumentNullException(nameof(limits));
 
-        var output = new BoundedProcessOutput(
-            limits.StandardOutputBytes,
-            limits.StandardErrorBytes,
-            limits.TotalOutputBytes);
+        var output = new BoundedProcessOutput(limits.StandardOutputBytes, limits.StandardErrorBytes, limits.TotalOutputBytes);
         var outputExceeded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var cancellation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var cancellationRegistration = cancellationToken.Register(
-            () => cancellation.TrySetResult(true));
+        using var cancellationRegistration = cancellationToken.Register(() => cancellation.TrySetResult(true));
         var timeout = Task.Delay(limits.ExecutionTimeout);
-        var neverProtocolFailure = new TaskCompletionSource<bool>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
+        var neverProtocolFailure = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         protocolFailureSignal ??= neverProtocolFailure.Task;
 
         using var process = new Process { StartInfo = startInfo };
@@ -191,33 +169,16 @@ internal static class BoundedChildProcessRunner
         var processId = process.Id;
         processStarted?.Invoke();
 
-        var stdout = CaptureAsync(
-            process.StandardOutput.BaseStream,
-            ProcessOutputKind.StandardOutput,
-            output,
-            outputExceeded);
-        var stderr = CaptureAsync(
-            process.StandardError.BaseStream,
-            ProcessOutputKind.StandardError,
-            output,
-            outputExceeded);
+        var stdout = CaptureAsync(process.StandardOutput.BaseStream, ProcessOutputKind.StandardOutput, output, outputExceeded);
+        var stderr = CaptureAsync(process.StandardError.BaseStream, ProcessOutputKind.StandardError, output, outputExceeded);
         var wait = process.WaitForExitAsync();
 
-        var completed = await Task.WhenAny(
-            wait,
-            outputExceeded.Task,
-            cancellation.Task,
-            timeout,
-            protocolFailureSignal).ConfigureAwait(false);
+        var completed = await Task.WhenAny(wait, outputExceeded.Task, cancellation.Task, timeout, protocolFailureSignal).ConfigureAwait(false);
         var reason = completed == outputExceeded.Task
-            ? ChildTerminationReason.OutputLimitExceeded
-            : completed == cancellation.Task
-                ? ChildTerminationReason.Cancelled
-                : completed == timeout
-                    ? ChildTerminationReason.TimedOut
-                    : completed == protocolFailureSignal
-                        ? ChildTerminationReason.ProtocolFailure
-                        : ChildTerminationReason.Exited;
+            ? ChildTerminationReason.OutputLimitExceeded : completed == cancellation.Task
+                ? ChildTerminationReason.Cancelled : completed == timeout
+                    ? ChildTerminationReason.TimedOut : completed == protocolFailureSignal
+                        ? ChildTerminationReason.ProtocolFailure : ChildTerminationReason.Exited;
 
         if (reason != ChildTerminationReason.Exited)
             KillProcessTree(process);
@@ -227,19 +188,10 @@ internal static class BoundedChildProcessRunner
         if (output.LimitExceeded)
             reason = ChildTerminationReason.OutputLimitExceeded;
 
-        return new BoundedChildProcessResult(
-            processId,
-            process.ExitCode,
-            reason,
-            output.StandardOutput,
-            output.StandardError);
+        return new BoundedChildProcessResult(processId, process.ExitCode, reason, output.StandardOutput, output.StandardError);
     }
 
-    private static async Task CaptureAsync(
-        Stream stream,
-        ProcessOutputKind kind,
-        BoundedProcessOutput output,
-        TaskCompletionSource<bool> outputExceeded)
+    private static async Task CaptureAsync(Stream stream, ProcessOutputKind kind, BoundedProcessOutput output, TaskCompletionSource<bool> outputExceeded)
     {
         var buffer = new byte[ReadBufferSize];
         while (true)
@@ -269,11 +221,7 @@ internal static class BoundedChildProcessRunner
         await wait.ConfigureAwait(false);
     }
 
-    private static async Task AwaitDrainAsync(
-        Task stdout,
-        Task stderr,
-        Process process,
-        TimeSpan cleanupTimeout)
+    private static async Task AwaitDrainAsync(Task stdout, Task stderr, Process process, TimeSpan cleanupTimeout)
     {
         var drains = Task.WhenAll(stdout, stderr);
         if (await Task.WhenAny(drains, Task.Delay(cleanupTimeout)).ConfigureAwait(false) == drains)
@@ -306,24 +254,16 @@ internal static class BoundedChildProcessRunner
     {
         if (startInfo is null)
             throw new ArgumentNullException(nameof(startInfo));
-        if (startInfo.UseShellExecute ||
-            !startInfo.RedirectStandardOutput ||
-            !startInfo.RedirectStandardError ||
-            startInfo.RedirectStandardInput)
+        if (startInfo.UseShellExecute || !startInfo.RedirectStandardOutput || !startInfo.RedirectStandardError || startInfo.RedirectStandardInput)
         {
-            throw new ArgumentException(
-                "Checked JIT child start info must use separated argv and redirected output without a shell.",
-                nameof(startInfo));
+            throw new ArgumentException("Checked JIT child start info must use separated argv and redirected output without a shell.", nameof(startInfo));
         }
     }
 }
 
 internal static class BoundedStreamReader
 {
-    public static async Task<byte[]> ReadAsync(
-        Stream stream,
-        int maximumBytes,
-        TaskCompletionSource<bool> failureSignal)
+    public static async Task<byte[]> ReadAsync(Stream stream, int maximumBytes, TaskCompletionSource<bool> failureSignal)
     {
         if (stream is null)
             throw new ArgumentNullException(nameof(stream));

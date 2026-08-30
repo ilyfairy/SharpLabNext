@@ -18,20 +18,13 @@ interface StoredLanguageWorkspaceDocument {
   workspaces: Record<string, StoredLanguageWorkspace>
 }
 
-export function readLanguageWorkspace(
-  storage: Storage | null,
-  language: LanguageManifest,
-): StoredLanguageWorkspace | null {
+export function readLanguageWorkspace(storage: Storage | null, language: LanguageManifest): StoredLanguageWorkspace | null {
   const document = readDocument(storage)
   const workspace = document?.workspaces[language.id]
   return validateWorkspace(workspace, language) ? cloneWorkspace(workspace) : null
 }
 
-export function writeLanguageWorkspace(
-  storage: Storage | null,
-  languageId: string,
-  workspace: StoredLanguageWorkspace,
-): void {
+export function writeLanguageWorkspace(storage: Storage | null, languageId: string, workspace: StoredLanguageWorkspace): void {
   if (!storage || !validLanguageId(languageId) || !validateWorkspaceShape(workspace)) return
 
   const document = readDocument(storage) ?? { version: 1, workspaces: {} }
@@ -40,10 +33,7 @@ export function writeLanguageWorkspace(
   workspaces[languageId] = cloneWorkspace(workspace)
 
   try {
-    storage.setItem(
-      languageWorkspaceStorageKey,
-      JSON.stringify({ version: 1, workspaces } satisfies StoredLanguageWorkspaceDocument),
-    )
+    storage.setItem(languageWorkspaceStorageKey, JSON.stringify({ version: 1, workspaces } satisfies StoredLanguageWorkspaceDocument));
   } catch {
     // Browsers can deny storage or reject writes after their quota is exhausted.
   }
@@ -61,17 +51,12 @@ export function removeLanguageWorkspace(storage: Storage | null, languageId: str
   if (!storage || !validLanguageId(languageId)) return
   const document = readDocument(storage)
   if (!document || !(languageId in document.workspaces)) return
-  const workspaces = Object.fromEntries(
-    Object.entries(document.workspaces).filter(([id]) => id !== languageId),
-  )
+  const workspaces = Object.fromEntries(Object.entries(document.workspaces).filter(([id]) => id !== languageId))
   try {
     if (Object.keys(workspaces).length === 0) {
       storage.removeItem(languageWorkspaceStorageKey)
     } else {
-      storage.setItem(
-        languageWorkspaceStorageKey,
-        JSON.stringify({ version: 1, workspaces } satisfies StoredLanguageWorkspaceDocument),
-      )
+      storage.setItem(languageWorkspaceStorageKey, JSON.stringify({ version: 1, workspaces } satisfies StoredLanguageWorkspaceDocument));
     }
   } catch {
     // Storage access is optional for the workbench.
@@ -91,10 +76,7 @@ function readDocument(storage: Storage | null): StoredLanguageWorkspaceDocument 
   }
 }
 
-function validateWorkspace(
-  workspace: unknown,
-  language: LanguageManifest,
-): workspace is StoredLanguageWorkspace {
+function validateWorkspace(workspace: unknown, language: LanguageManifest): workspace is StoredLanguageWorkspace {
   if (!validateWorkspaceShape(workspace)) return false
   const extensions = language.extensions.map((extension) => extension.toLocaleLowerCase())
   return workspace.files.every((file) => {
@@ -114,12 +96,7 @@ function validateWorkspaceShape(workspace: unknown): workspace is StoredLanguage
     if (!isRecord(file) || typeof file.path !== 'string' || typeof file.text !== 'string') {
       return false
     }
-    if (
-      file.path.length === 0 ||
-      file.path.length > maximumPathLength ||
-      file.text.length > maximumFileLength ||
-      paths.has(file.path)
-    ) {
+    if (file.path.length === 0 || file.path.length > maximumPathLength || file.text.length > maximumFileLength || paths.has(file.path)) {
       return false
     }
     paths.add(file.path)

@@ -16,16 +16,10 @@ describe('PaneSplitSeparator', () => {
   it('supports desktop keyboard sizing and double-click reset', () => {
     const onChange = vi.fn()
     const onReset = vi.fn()
-    render(
-      <PaneSplitSeparator
-        containerRef={createRef<HTMLElement>()}
-        isMobile={false}
-        sourcePercent={50}
-        onChange={onChange}
-        onReset={onReset}
-      />,
-    )
-    const separator = screen.getByRole('separator', { name: 'Resize source and result panes' })
+    render(<PaneSplitSeparator containerRef={createRef<HTMLElement>()} isMobile={false} sourcePercent={50} onChange={onChange} onReset={onReset} />)
+    const separator = screen.getByRole('separator', {
+      name: 'Resize source and result panes',
+    })
     expect(separator).toHaveAttribute('aria-orientation', 'vertical')
     expect(separator).toHaveAttribute('aria-valuenow', '50')
 
@@ -44,15 +38,7 @@ describe('PaneSplitSeparator', () => {
   it('uses vertical movement keys for the mobile horizontal separator', () => {
     const onChange = vi.fn()
     const onReset = vi.fn()
-    render(
-      <PaneSplitSeparator
-        containerRef={createRef<HTMLElement>()}
-        isMobile
-        sourcePercent={64}
-        onChange={onChange}
-        onReset={onReset}
-      />,
-    )
+    render(<PaneSplitSeparator containerRef={createRef<HTMLElement>()} isMobile sourcePercent={64} onChange={onChange} onReset={onReset} />)
     const separator = screen.getByRole('separator')
     expect(separator).toHaveAttribute('aria-orientation', 'horizontal')
     expect(separator).toHaveAttribute('aria-valuetext', 'Source 64%, result 36%')

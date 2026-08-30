@@ -6,19 +6,10 @@ using SharpLabNext.Observability;
 using SharpLabNext.Worker.Artifacts.ConstGenerics;
 
 var builder = WebApplication.CreateBuilder(args);
-var internalServiceAuthentication = InternalServiceAuthenticationOptions.FromConfiguration(
-    builder.Configuration,
-    builder.Environment);
-var manifest = ArtifactWorkerCapabilityManifestSerializer.Load(
-    Path.Combine(AppContext.BaseDirectory, "artifact-worker.json"));
+var internalServiceAuthentication = InternalServiceAuthenticationOptions.FromConfiguration(builder.Configuration, builder.Environment);
+var manifest = ArtifactWorkerCapabilityManifestSerializer.Load(Path.Combine(AppContext.BaseDirectory, "artifact-worker.json"));
 var settings = ConstGenericsArtifactWorkerSettings.FromConfiguration(builder.Configuration, manifest);
-var identity = new ServiceIdentity(
-    manifest.WorkerId,
-    ServiceKind.ArtifactWorker,
-    settings.ReleaseId,
-    ProtocolVersion.WorkerV1,
-    manifest.Capabilities,
-    "starting");
+var identity = new ServiceIdentity(manifest.WorkerId, ServiceKind.ArtifactWorker, settings.ReleaseId, ProtocolVersion.WorkerV1, manifest.Capabilities, "starting");
 builder.AddSharpLabNextObservability(identity.Id, identity.ReleaseId);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -38,12 +29,9 @@ builder.Services.AddSingleton<ConstGenericsArtifactProcessor>();
 builder.Services.AddSingleton<ConstGenericsIlRenderHandler>();
 builder.Services.AddSingleton<ConstGenericsCSharpRenderHandler>();
 builder.Services.AddSingleton<ConstGenericsVerificationHandler>();
-builder.Services.AddSingleton<IArtifactRenderHandler>(services =>
-    services.GetRequiredService<ConstGenericsIlRenderHandler>());
-builder.Services.AddSingleton<IArtifactRenderHandler>(services =>
-    services.GetRequiredService<ConstGenericsCSharpRenderHandler>());
-builder.Services.AddSingleton<IArtifactVerificationHandler>(services =>
-    services.GetRequiredService<ConstGenericsVerificationHandler>());
+builder.Services.AddSingleton<IArtifactRenderHandler>(services => services.GetRequiredService<ConstGenericsIlRenderHandler>());
+builder.Services.AddSingleton<IArtifactRenderHandler>(services => services.GetRequiredService<ConstGenericsCSharpRenderHandler>());
+builder.Services.AddSingleton<IArtifactVerificationHandler>(services => services.GetRequiredService<ConstGenericsVerificationHandler>());
 builder.Services.AddArtifactWorkerReadinessCheck<ConstGenericsArtifactWorkerReadinessCheck>();
 builder.Services.AddSharpLabNextArtifactWorker(identity, settings.WorkerImageId, manifest);
 

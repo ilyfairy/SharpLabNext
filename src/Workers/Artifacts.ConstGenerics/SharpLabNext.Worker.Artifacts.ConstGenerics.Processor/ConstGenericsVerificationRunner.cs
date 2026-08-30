@@ -10,18 +10,14 @@ namespace SharpLabNext.Worker.Artifacts.ConstGenerics.Processing;
 
 internal static class ConstGenericsVerificationRunner
 {
-    public static Task<ConstGenericsProcessorResponse> VerifyAsync(
-        ConstGenericsProcessorRequest request,
-        CancellationToken cancellationToken)
+    public static Task<ConstGenericsProcessorResponse> VerifyAsync(ConstGenericsProcessorRequest request, CancellationToken cancellationToken)
     {
         var verificationAssemblyPath = Path.Combine(AppContext.BaseDirectory, "ILVerification.dll");
         if (!File.Exists(verificationAssemblyPath))
             throw new InvalidOperationException("The matching ILVerification assembly is unavailable.");
         var verificationAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(verificationAssemblyPath);
         var resolverInterface = verificationAssembly.GetType("ILVerify.IResolver", throwOnError: true)!;
-        using var resolverState = new VerificationResolverState(
-            Path.GetDirectoryName(request.AssemblyPath)!,
-            request.ReferenceRoots);
+        using var resolverState = new VerificationResolverState(Path.GetDirectoryName(request.AssemblyPath)!, request.ReferenceRoots);
         var resolver = DispatchProxy.Create(resolverInterface, typeof(ResolverDispatchProxy));
         ((ResolverDispatchProxy)resolver).Configure(resolverState);
         var verifierType = verificationAssembly.GetType("ILVerify.Verifier", throwOnError: true)!;
@@ -33,8 +29,7 @@ internal static class ConstGenericsVerificationRunner
         if (!peReader.HasMetadata)
             throw new BadImageFormatException();
         var metadata = peReader.GetMetadataReader();
-        var verifyMethod = verifierType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .Single(method =>
+        var verifyMethod = verifierType.GetMethods(BindingFlags.Public | BindingFlags.Instance).Single(method =>
                 string.Equals(method.Name, "Verify", StringComparison.Ordinal) &&
                 method.GetParameters() is [{ ParameterType: var parameterType }] &&
                 parameterType == typeof(PEReader));
@@ -42,8 +37,7 @@ internal static class ConstGenericsVerificationRunner
         var truncated = false;
         try
         {
-            var results = (IEnumerable)(verifyMethod.Invoke(verifier, [peReader])
-                ?? throw new InvalidOperationException("The verifier returned no result stream."));
+            var results = (IEnumerable)(verifyMethod.Invoke(verifier, [peReader]) ?? throw new InvalidOperationException("The verifier returned no result stream."));
             foreach (var result in results)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -62,18 +56,9 @@ internal static class ConstGenericsVerificationRunner
         }
 
         var outcome = truncated
-            ? ConstGenericsProcessorOutcome.LimitExceeded
-            : findings.Count == 0
-                ? ConstGenericsProcessorOutcome.Succeeded
-                : ConstGenericsProcessorOutcome.Findings;
-        return Task.FromResult(ConstGenericsProcessorEngine.Response(
-            outcome,
-            "ilverification-const-generics",
-            ConstGenericsProcessorProtocol.VerificationProcessorVersion,
-            "application/vnd.sharplabnext.il-verification+json",
-            findings: findings,
-            truncated: truncated,
-            publicMessage: truncated ? "Verification findings exceeded the configured limit." : null));
+            ? ConstGenericsProcessorOutcome.LimitExceeded : findings.Count == 0
+                ? ConstGenericsProcessorOutcome.Succeeded : ConstGenericsProcessorOutcome.Findings;
+        return Task.FromResult(ConstGenericsProcessorEngine.Response(outcome, "ilverification-const-generics", ConstGenericsProcessorProtocol.VerificationProcessorVersion, "application/vnd.sharplabnext.il-verification+json", findings: findings, truncated: truncated, publicMessage: truncated ? "Verification findings exceeded the configured limit." : null));
     }
 
     private static object CreateVerifier(Type verifierType, Type resolverInterface, object resolver)
@@ -85,8 +70,7 @@ internal static class ConstGenericsVerificationRunner
         if (withOptions is not null)
         {
             var optionsType = withOptions.GetParameters()[1].ParameterType;
-            var options = Activator.CreateInstance(optionsType)
-                ?? throw new InvalidOperationException("The verifier options could not be created.");
+            var options = Activator.CreateInstance(optionsType) ?? throw new InvalidOperationException("The verifier options could not be created.");
             SetProperty(optionsType, options, "IncludeMetadataTokensInErrorMessages", true);
             SetProperty(optionsType, options, "SanityChecks", true);
             return withOptions.Invoke([resolver, options]);
@@ -100,10 +84,7 @@ internal static class ConstGenericsVerificationRunner
     {
         if (string.IsNullOrWhiteSpace(systemModuleName))
             return;
-        var method = verifierType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .Single(candidate =>
-                string.Equals(candidate.Name, "SetSystemModuleName", StringComparison.Ordinal) &&
-                candidate.GetParameters().Length == 1);
+        var method = verifierType.GetMethods(BindingFlags.Public | BindingFlags.Instance).Single(candidate => string.Equals(candidate.Name, "SetSystemModuleName", StringComparison.Ordinal) && candidate.GetParameters().Length == 1);
         var parameterType = method.GetParameters()[0].ParameterType;
         object name;
         if (parameterType == typeof(AssemblyName))
@@ -112,8 +93,7 @@ internal static class ConstGenericsVerificationRunner
         }
         else
         {
-            var constructor = parameterType.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
-                .SingleOrDefault(candidate => candidate.GetParameters() is
+            var constructor = parameterType.GetConstructors(BindingFlags.Public | BindingFlags.Instance).SingleOrDefault(candidate => candidate.GetParameters() is
                 [
                     { ParameterType: var first },
                     { ParameterType: var second },
@@ -174,14 +154,7 @@ internal static class ConstGenericsVerificationRunner
             }
             token = MetadataTokens.GetToken(methodHandle);
         }
-        return new ConstGenericsProcessorFinding(
-            Limit(code, 128),
-            Limit(message.Replace('\r', ' ').Replace('\n', ' '), 4_096),
-            typeName,
-            methodName,
-            token,
-            null,
-            null);
+        return new ConstGenericsProcessorFinding(Limit(code, 128), Limit(message.Replace('\r', ' ').Replace('\n', ' '), 4_096), typeName, methodName, token, null, null);
     }
 
     private static void SetProperty(Type type, object instance, string name, bool value)
@@ -191,11 +164,9 @@ internal static class ConstGenericsVerificationRunner
             property.SetValue(instance, value);
     }
 
-    private static string JoinTypeName(string ns, string name) =>
-        string.IsNullOrEmpty(ns) ? name : $"{ns}.{name}";
+    private static string JoinTypeName(string ns, string name) => string.IsNullOrEmpty(ns) ? name : $"{ns}.{name}";
 
-    private static string Limit(string value, int maximum) =>
-        value.Length <= maximum ? value : value[..maximum];
+    private static string Limit(string value, int maximum) => value.Length <= maximum ? value : value[..maximum];
 
     private class ResolverDispatchProxy : DispatchProxy
     {
@@ -260,8 +231,7 @@ internal static class ConstGenericsVerificationRunner
 
         private void Index(string root, SearchOption searchOption, bool replaceExisting)
         {
-            foreach (var path in Directory.EnumerateFiles(Path.GetFullPath(root), "*", searchOption)
-                         .Where(static path => Path.GetExtension(path).ToLowerInvariant() is ".dll" or ".exe" or ".winmd"))
+            foreach (var path in Directory.EnumerateFiles(Path.GetFullPath(root), "*", searchOption).Where(static path => Path.GetExtension(path).ToLowerInvariant() is ".dll" or ".exe" or ".winmd"))
             {
                 if (_paths.Count >= MaximumAssemblies)
                     throw new ProcessorLimitExceededException();

@@ -9,9 +9,7 @@ using System.Text;
 Process? docker = null;
 Stream input;
 if (args.Length == 0)
-{
     input = Console.OpenStandardInput();
-}
 else
 {
     var startInfo = new ProcessStartInfo("docker")
@@ -22,8 +20,7 @@ else
     };
     startInfo.ArgumentList.Add("logs");
     startInfo.ArgumentList.Add(args[0]);
-    docker = Process.Start(startInfo)
-        ?? throw new InvalidOperationException("Docker logs could not be started.");
+    docker = Process.Start(startInfo) ?? throw new InvalidOperationException("Docker logs could not be started.");
     input = docker.StandardOutput.BaseStream;
 }
 var count = 0;
@@ -46,8 +43,7 @@ while (await reader.ReadLineAsync() is { } line)
     var length = BinaryPrimitives.ReadInt32LittleEndian(header.Slice(14, 4));
     if (sequence <= previousSequence || length < 0 || length > 4 * 1024 * 1024)
     {
-        throw new InvalidDataException(
-            $"Invalid frame after {count} frames: sequence={sequence}, previous={previousSequence}, kind={header[5]}, length={length}, header={Convert.ToHexString(header)}");
+        throw new InvalidDataException($"Invalid frame after {count} frames: sequence={sequence}, previous={previousSequence}, kind={header[5]}, length={length}, header={Convert.ToHexString(header)}");
     }
     if (frame.Length != 18 + length)
         throw new InvalidDataException($"Frame {sequence} length does not match its encoded line.");

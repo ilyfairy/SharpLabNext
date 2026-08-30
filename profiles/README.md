@@ -46,7 +46,7 @@ presets until the exact image passes the promotion/preflight gates in ADR
 profiles. Regenerating the matrix therefore cannot overwrite a running
 profile or silently change its runtime/JIT identity.
 
-`node eng/validate-schemas.mjs` validates both channels with different
+`node eng/validation/validate-schemas.mjs` validates both channels with different
 boundaries: candidate files are schema-checked only, while top-level active
 files must map to a healthy selectable Catalog runtime with matching
 runtime/image identity. Candidate identity closure is checked by the
@@ -56,14 +56,14 @@ Use the following command to validate the matrix without changing the active
 catalog or profiles:
 
 ```powershell
-dotnet run eng/generate-runtime-matrix.cs -- --check
+dotnet run eng/tools/generate-runtime-matrix.cs -- --check
 ```
 
 Candidate profile generation is explicit and may overwrite only files below
 the candidate directory:
 
 ```powershell
-dotnet run eng/generate-runtime-matrix.cs -- --overwrite-profiles
+dotnet run eng/tools/generate-runtime-matrix.cs -- --overwrite-profiles
 ```
 
 Promotion must materialize an immutable image and update the Catalog, profile,
@@ -75,7 +75,7 @@ After the canonical receipt and every retained evidence file have been
 reviewed, stage the complete promotion without changing active files:
 
 ```powershell
-node eng/promote-runtime-matrix.mjs --profile-id dotnet-9-linux-x64 --check
+node eng/release/promote-runtime-matrix.mjs --profile-id dotnet-9-linux-x64 --check
 ```
 
 Remove `--check` to commit the promotion. The materializer verifies the

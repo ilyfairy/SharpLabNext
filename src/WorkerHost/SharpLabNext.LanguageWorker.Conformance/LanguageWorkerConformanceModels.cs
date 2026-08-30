@@ -24,10 +24,7 @@ public sealed record LanguageWorkerConformanceReport(IReadOnlyList<string> Passe
     public bool Succeeded => PassedChecks.Count == 6;
 }
 
-public sealed class LanguageWorkerConformanceException(
-    string check,
-    string message,
-    Exception? innerException = null) : Exception($"Language worker conformance check '{check}' failed: {message}", innerException)
+public sealed class LanguageWorkerConformanceException(string check, string message, Exception? innerException = null) : Exception($"Language worker conformance check '{check}' failed: {message}", innerException)
 {
     public string Check { get; } = check;
 }

@@ -1,12 +1,4 @@
-import {
-  startArtifactRender,
-  startArtifactTransform,
-  startBuild,
-  startExplain,
-  startJit,
-  startRun,
-  startVerification,
-} from '../api/client'
+import { startArtifactRender, startArtifactTransform, startBuild, startExplain, startJit, startRun, startVerification } from '../api/client'
 import type {
   ArtifactRef,
   BuildRequest,
@@ -23,14 +15,7 @@ import type {
 import { createBuildRequest } from './buildRequest'
 import type { WorkbenchSnapshot } from './storeSnapshot'
 
-export type PipelineOperationKind =
-  | 'build'
-  | 'transform'
-  | 'render'
-  | 'verify'
-  | 'run'
-  | 'jit'
-  | 'explain'
+export type PipelineOperationKind = 'build' | 'transform' | 'render' | 'verify' | 'run' | 'jit' | 'explain'
 
 export type PipelineOperationStart =
   | { kind: 'build'; request: BuildRequest }
@@ -50,9 +35,7 @@ function requestIdentity(kind: PipelineOperationKind): {
   requestId: string
   idempotencyKey: string
 } {
-  const uuid =
-    globalThis.crypto?.randomUUID?.() ??
-    `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`
+  const uuid = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`
   const requestId = `req_${uuid}`
   return { requestId, idempotencyKey: `${kind}:${requestId}` }
 }
@@ -62,17 +45,12 @@ function deadline(seconds: number): string {
 }
 
 function runtimeId(resolution: ResolveSelectionResponse): string {
-  const id =
-    resolution.effectiveSelection.runtimeId ?? resolution.pipelinePlan.runtimeId ?? undefined
+  const id = resolution.effectiveSelection.runtimeId ?? resolution.pipelinePlan.runtimeId ?? undefined
   if (!id) throw new Error('The resolved pipeline does not identify a runtime.')
   return id
 }
 
-export function createFollowupOperation(
-  resolution: ResolveSelectionResponse,
-  artifactRef: ArtifactRef,
-  stageIndex = 1,
-): FollowupOperation | null {
+export function createFollowupOperation(resolution: ResolveSelectionResponse, artifactRef: ArtifactRef, stageIndex = 1): FollowupOperation | null {
   const stage = resolution.pipelinePlan.stages[stageIndex]
   if (!stage) return null
 
@@ -95,8 +73,7 @@ export function createFollowupOperation(
             options: {
               preservePortablePdb: true,
               preserveSequencePoints: true,
-              rewriterProfileId:
-                stage.id === 'runtime-instrumentation-v1' ? 'execution-flow-v1' : null,
+              rewriterProfileId: stage.id === 'runtime-instrumentation-v1' ? 'execution-flow-v1' : null,
             },
             deadlineUtc: deadline(30),
           },
@@ -157,10 +134,7 @@ export function createFollowupOperation(
             options: {
               arguments: [],
               stdin: null,
-              instrumentation:
-                resolution.effectiveSelection.outputId === 'execution-flow'
-                  ? 'execution-flow'
-                  : 'none',
+              instrumentation: resolution.effectiveSelection.outputId === 'execution-flow' ? 'execution-flow' : 'none',
               securityPolicyId: resolution.pipelinePlan.securityPolicyId,
             },
             deadlineUtc: deadline(30),
@@ -196,10 +170,7 @@ export function createFollowupOperation(
   }
 }
 
-export function createInitialPipelineOperation(
-  resolution: ResolveSelectionResponse,
-  workspace: WorkbenchSnapshot,
-): PipelineOperationStart {
+export function createInitialPipelineOperation(resolution: ResolveSelectionResponse, workspace: WorkbenchSnapshot): PipelineOperationStart {
   const build = createBuildRequest(resolution, workspace)
   const firstStage = resolution.pipelinePlan.stages[0]
   if (firstStage?.kind !== 'explain') return { kind: 'build', request: build }
@@ -218,10 +189,7 @@ export function createInitialPipelineOperation(
   }
 }
 
-export function startPipelineOperation(
-  operation: PipelineOperationStart,
-  signal?: AbortSignal,
-): Promise<OperationHandle> {
+export function startPipelineOperation(operation: PipelineOperationStart, signal?: AbortSignal): Promise<OperationHandle> {
   switch (operation.kind) {
     case 'build':
       return startBuild(operation.request, signal)

@@ -32,10 +32,7 @@ public sealed class MonoJitInspectorTests
     [Fact]
     public void ParserReturnsOnlyBoundedAssemblySection()
     {
-        var method = new MonoMethodCandidate(
-            "0x06000001",
-            "Example.Program.Calculate",
-            "Example.Program:Calculate(int)");
+        var method = new MonoMethodCandidate("0x06000001", "Example.Program.Calculate", "Example.Program:Calculate(int)");
 
         var section = MonoJitOutputParser.Parse(RawOutput, method, "6.12.0.182");
 
@@ -59,34 +56,25 @@ public sealed class MonoJitInspectorTests
     {
         var method = new MonoMethodCandidate("0x06000001", "Example.Program.Calculate", selector);
 
-        Assert.Throws<InvalidDataException>(
-            () => MonoJitOutputParser.Parse(RawOutput, method, "6.12.0.182"));
+        Assert.Throws<InvalidDataException>(() => MonoJitOutputParser.Parse(RawOutput, method, "6.12.0.182"));
     }
 
     [Fact]
     public void ParserRejectsInconsistentNativeSize()
     {
-        var method = new MonoMethodCandidate(
-            "0x06000001",
-            "Example.Program.Calculate",
-            "Example.Program:Calculate(int)");
+        var method = new MonoMethodCandidate("0x06000001", "Example.Program.Calculate", "Example.Program:Calculate(int)");
         var corrupted = RawOutput.Replace("code length 13", "code length 14", StringComparison.Ordinal);
 
-        Assert.Throws<InvalidDataException>(
-            () => MonoJitOutputParser.Parse(corrupted, method, "6.12.0.182"));
+        Assert.Throws<InvalidDataException>(() => MonoJitOutputParser.Parse(corrupted, method, "6.12.0.182"));
     }
 
     [Fact]
     public void ParserFailureNeverEchoesRawVerboseOutput()
     {
         const string secret = "RAW-VERBOSE-MUST-NOT-ESCAPE";
-        var method = new MonoMethodCandidate(
-            "0x06000001",
-            "Example.Program.Other",
-            "Example.Program:Other(int)");
+        var method = new MonoMethodCandidate("0x06000001", "Example.Program.Other", "Example.Program:Other(int)");
 
-        var exception = Assert.Throws<InvalidDataException>(
-            () => MonoJitOutputParser.Parse(RawOutput + secret, method, "6.12.0.182"));
+        var exception = Assert.Throws<InvalidDataException>(() => MonoJitOutputParser.Parse(RawOutput + secret, method, "6.12.0.182"));
 
         Assert.DoesNotContain(secret, exception.Message, StringComparison.Ordinal);
     }
@@ -95,8 +83,7 @@ public sealed class MonoJitInspectorTests
     public void RuntimeVersionParserRequiresExactNumericVersion()
     {
         Assert.Equal("6.12.0.182", MonoJitOutputParser.ParseRuntimeVersion(RawOutput));
-        Assert.Throws<InvalidDataException>(
-            () => MonoJitOutputParser.ParseRuntimeVersion("Mono runtime version unavailable"));
+        Assert.Throws<InvalidDataException>(() => MonoJitOutputParser.ParseRuntimeVersion("Mono runtime version unavailable"));
     }
 
     [Fact]
@@ -104,15 +91,10 @@ public sealed class MonoJitInspectorTests
     {
         var assemblyPath = typeof(MonoJitInspectorTests).Assembly.Location;
 
-        var inspection = MonoAssemblyInspection.Read(
-            assemblyPath,
-            "*RuntimeVersionParserRequiresExactNumericVersion");
+        var inspection = MonoAssemblyInspection.Read(assemblyPath, "*RuntimeVersionParserRequiresExactNumericVersion");
 
         var method = Assert.Single(inspection.Methods);
-        Assert.EndsWith(
-            ".MonoJitInspectorTests.RuntimeVersionParserRequiresExactNumericVersion",
-            method.DisplayName,
-            StringComparison.Ordinal);
+        Assert.EndsWith(".MonoJitInspectorTests.RuntimeVersionParserRequiresExactNumericVersion", method.DisplayName, StringComparison.Ordinal);
         Assert.StartsWith("0x06", method.Identity, StringComparison.Ordinal);
         Assert.Contains(":RuntimeVersionParserRequiresExactNumericVersion", method.Selector, StringComparison.Ordinal);
     }
@@ -121,10 +103,8 @@ public sealed class MonoJitInspectorTests
     public void ArgumentsRejectMissingFilesAndControlCharacters()
     {
         Assert.Throws<ArgumentException>(() => MonoJitInspectorArguments.Parse([]));
-        Assert.Throws<FileNotFoundException>(
-            () => MonoJitInspectorArguments.Parse([Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".dll")]));
-        Assert.Throws<ArgumentException>(
-            () => MonoJitInspectorArguments.Parse([typeof(MonoJitInspectorTests).Assembly.Location, "bad\nfilter"]));
+        Assert.Throws<FileNotFoundException>(() => MonoJitInspectorArguments.Parse([Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".dll")]));
+        Assert.Throws<ArgumentException>(() => MonoJitInspectorArguments.Parse([typeof(MonoJitInspectorTests).Assembly.Location, "bad\nfilter"]));
     }
 
     [Fact]
@@ -139,8 +119,7 @@ public sealed class MonoJitInspectorTests
         };
         start.ArgumentList.Add(typeof(RunnerFixtureMarker).Assembly.Location);
         start.ArgumentList.Add("compiler-child-hang");
-        using var process = Process.Start(start)
-            ?? throw new InvalidOperationException("Could not start the output-budget fixture.");
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start the output-budget fixture.");
         var budget = new ProcessOutputBudget(process, maximumBytes: 4);
 
         Assert.True(budget.TryReserve(2));

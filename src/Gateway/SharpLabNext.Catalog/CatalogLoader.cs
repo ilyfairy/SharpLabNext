@@ -7,15 +7,10 @@ public static class CatalogLoader
 {
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
-    public static async Task<CatalogDocument> LoadCatalogAsync(
-        string path,
-        CancellationToken cancellationToken = default)
+    public static async Task<CatalogDocument> LoadCatalogAsync(string path, CancellationToken cancellationToken = default)
     {
         await using var stream = File.OpenRead(path);
-        var catalog = await JsonSerializer.DeserializeAsync<CatalogDocument>(
-            stream,
-            JsonOptions,
-            cancellationToken);
+        var catalog = await JsonSerializer.DeserializeAsync<CatalogDocument>(stream, JsonOptions, cancellationToken);
         if (catalog is null)
         {
             throw new CatalogValidationException(["Catalog document is empty."]);
@@ -25,15 +20,10 @@ public static class CatalogLoader
         return catalog;
     }
 
-    public static async Task<ReleaseLockDocument> LoadReleaseLockAsync(
-        string path,
-        CancellationToken cancellationToken = default)
+    public static async Task<ReleaseLockDocument> LoadReleaseLockAsync(string path, CancellationToken cancellationToken = default)
     {
         await using var stream = File.OpenRead(path);
-        var releaseLock = await JsonSerializer.DeserializeAsync<ReleaseLockDocument>(
-            stream,
-            JsonOptions,
-            cancellationToken);
+        var releaseLock = await JsonSerializer.DeserializeAsync<ReleaseLockDocument>(stream, JsonOptions, cancellationToken);
         if (releaseLock is null)
         {
             throw new CatalogValidationException(["Release lock document is empty."]);
@@ -72,8 +62,7 @@ public static class CatalogLoader
     }
 }
 
-public sealed class CatalogValidationException(IReadOnlyList<string> errors)
-    : Exception(string.Join(Environment.NewLine, errors))
+public sealed class CatalogValidationException(IReadOnlyList<string> errors) : Exception(string.Join(Environment.NewLine, errors))
 {
     public IReadOnlyList<string> Errors { get; } = errors;
 }

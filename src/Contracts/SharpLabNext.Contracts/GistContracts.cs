@@ -1,17 +1,10 @@
 namespace SharpLabNext.Contracts;
 
-public sealed record GitHubAuthStatus(
-    bool Available,
-    bool Authenticated,
-    string? Login,
-    string? CsrfToken);
+public sealed record GitHubAuthStatus(bool Available, bool Authenticated, string? Login, string? CsrfToken);
 
-public sealed record GitHubOAuthStartResponse(
-    string AuthorizationUrl);
+public sealed record GitHubOAuthStartResponse(string AuthorizationUrl);
 
-public sealed record GistSourceFile(
-    string Path,
-    string Text);
+public sealed record GistSourceFile(string Path, string Text);
 
 public sealed record GistWorkspaceState(
     int SchemaVersion,
@@ -27,14 +20,9 @@ public sealed record GistWorkspaceState(
     IReadOnlyList<GistSourceFile> Files,
     string? LegacyBranchId = null);
 
-public sealed record CreateGistRequest(
-    string Description,
-    bool IsPublic,
-    GistWorkspaceState Workspace);
+public sealed record CreateGistRequest(string Description, bool IsPublic, GistWorkspaceState Workspace);
 
-public sealed record UpdateGistRequest(
-    string Description,
-    GistWorkspaceState Workspace);
+public sealed record UpdateGistRequest(string Description, GistWorkspaceState Workspace);
 
 public sealed record GistDocument(
     string Id,

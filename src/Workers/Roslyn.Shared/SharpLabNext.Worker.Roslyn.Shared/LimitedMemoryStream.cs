@@ -2,9 +2,7 @@ namespace SharpLabNext.Worker.Roslyn;
 
 internal sealed class LimitedMemoryStream(int maxLength) : MemoryStream
 {
-    private readonly int _maxLength = maxLength > 0
-        ? maxLength
-        : throw new ArgumentOutOfRangeException(nameof(maxLength));
+    private readonly int _maxLength = maxLength > 0 ? maxLength : throw new ArgumentOutOfRangeException(nameof(maxLength));
 
     public override void SetLength(long value)
     {
@@ -24,20 +22,14 @@ internal sealed class LimitedMemoryStream(int maxLength) : MemoryStream
         base.Write(buffer);
     }
 
-    public override Task WriteAsync(
-        byte[] buffer,
-        int offset,
-        int count,
-        CancellationToken cancellationToken)
+    public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         EnsureWrite(count);
         return base.WriteAsync(buffer, offset, count, cancellationToken);
     }
 
-    public override ValueTask WriteAsync(
-        ReadOnlyMemory<byte> buffer,
-        CancellationToken cancellationToken = default)
+    public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         EnsureWrite(buffer.Length);
@@ -65,8 +57,7 @@ internal sealed class LimitedMemoryStream(int maxLength) : MemoryStream
     {
         if (length > _maxLength)
         {
-            throw new BuildOutputLimitExceededException(
-                $"Compiler output exceeds the configured {_maxLength} byte limit.");
+            throw new BuildOutputLimitExceededException($"Compiler output exceeds the configured {_maxLength} byte limit.");
         }
     }
 }

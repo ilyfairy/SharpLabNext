@@ -2,11 +2,7 @@ import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, openLanguageSessionWithResolution, resolveSelectionHttp } from '../api/client'
 import type { ResolveSelectionRequest, ResolveSelectionResponse } from '../api/types'
-import {
-  type LanguageSessionInitialRetryPolicy,
-  LanguageSessionProtocolError,
-  LanguageSessionTransportError,
-} from '../lsp/languageSessionLifecycle'
+import { type LanguageSessionInitialRetryPolicy, LanguageSessionProtocolError, LanguageSessionTransportError } from '../lsp/languageSessionLifecycle'
 import { useIlOutputLanguageSession } from './ilOutputLanguageSession'
 
 vi.mock('../api/client', async (importOriginal) => ({
@@ -29,11 +25,7 @@ vi.mock('../lsp/languageSessionLifecycle', async (importOriginal) => ({
     readonly update = vi.fn()
     readonly dispose = vi.fn(() => Promise.resolve())
 
-    constructor(
-      _onStatus: unknown,
-      _dependencies: unknown,
-      retryPolicy?: LanguageSessionInitialRetryPolicy,
-    ) {
+    constructor(_onStatus: unknown, _dependencies: unknown, retryPolicy?: LanguageSessionInitialRetryPolicy) {
       lifecycleHarness.instances.push({
         update: this.update,
         dispose: this.dispose,
@@ -113,13 +105,9 @@ describe('useIlOutputLanguageSession', () => {
     ['rate limit', new ApiError(429, null, 'Too many requests.')],
     ['Gateway outage', new ApiError(503, null, 'Gateway unavailable.')],
   ])('retries a transient %s and starts the session after resolution succeeds', async (_, error) => {
-    resolveSelectionHttpMock
-      .mockRejectedValueOnce(error)
-      .mockImplementation(async (request) => responseFor(request))
+    resolveSelectionHttpMock.mockRejectedValueOnce(error).mockImplementation(async (request) => responseFor(request))
 
-    const { result } = renderHook(() =>
-      useIlOutputLanguageSession('.method public static void Main() {}', 'generation-1', options),
-    )
+    const { result } = renderHook(() => useIlOutputLanguageSession('.method public static void Main() {}', 'generation-1', options))
     await flushAsync()
 
     expect(resolveSelectionHttpMock).toHaveBeenCalledOnce()
@@ -136,19 +124,18 @@ describe('useIlOutputLanguageSession', () => {
     expect(lifecycleHarness.instances[0]?.update).toHaveBeenCalledWith(
       expect.objectContaining({
         key: expect.stringContaining('pipeline-il-output'),
-        plan: expect.objectContaining({ languageId: 'il', modelLanguageId: 'il' }),
+        plan: expect.objectContaining({
+          languageId: 'il',
+          modelLanguageId: 'il',
+        }),
       }),
     )
   })
 
   it('falls back after an unsupported selection response without retrying', async () => {
-    resolveSelectionHttpMock.mockRejectedValue(
-      new ApiError(400, null, 'The reference set does not support IL language services.'),
-    )
+    resolveSelectionHttpMock.mockRejectedValue(new ApiError(400, null, 'The reference set does not support IL language services.'))
 
-    const { result } = renderHook(() =>
-      useIlOutputLanguageSession('.class public Example {}', 'generation-1', options),
-    )
+    const { result } = renderHook(() => useIlOutputLanguageSession('.class public Example {}', 'generation-1', options))
     await flushAsync()
 
     expect(resolveSelectionHttpMock).toHaveBeenCalledOnce()
@@ -192,9 +179,7 @@ describe('useIlOutputLanguageSession', () => {
   it('classifies only transient IL output session transport and HTTP failures for retry', async () => {
     resolveSelectionHttpMock.mockImplementation(async (request) => responseFor(request))
 
-    renderHook(() =>
-      useIlOutputLanguageSession('.class public Example {}', 'generation-1', options),
-    )
+    renderHook(() => useIlOutputLanguageSession('.class public Example {}', 'generation-1', options))
     await flushAsync()
 
     const policy = lifecycleHarness.instances[0]?.retryPolicy
@@ -206,37 +191,18 @@ describe('useIlOutputLanguageSession', () => {
     expect(policy.shouldRetry(new TypeError('Network request failed.'), open)).toBe(true)
     expect(policy.shouldRetry(new TypeError('Programming error.'), initialize)).toBe(false)
     for (const status of [408, 429, 500, 502, 599]) {
-      expect(
-        policy.shouldRetry(new ApiError(status, null, 'Transient gateway failure.'), open),
-      ).toBe(true)
+      expect(policy.shouldRetry(new ApiError(status, null, 'Transient gateway failure.'), open)).toBe(true)
     }
     expect(policy.shouldRetry(new ApiError(400, null, 'Bad request.'), open)).toBe(false)
+    expect(policy.shouldRetry(new LanguageSessionTransportError('websocket-open-failed', 'Socket failed.'), initialize)).toBe(true)
+    expect(policy.shouldRetry(new LanguageSessionTransportError('websocket-closed', 'Socket closed.'), initialize)).toBe(true)
+    expect(policy.shouldRetry(new LanguageSessionTransportError('initialize-timeout', 'Initialize timed out.'), initialize)).toBe(true)
+    expect(policy.shouldRetry(new LanguageSessionProtocolError('Invalid initialize response.'), initialize)).toBe(false)
     expect(
-      policy.shouldRetry(
-        new LanguageSessionTransportError('websocket-open-failed', 'Socket failed.'),
-        initialize,
-      ),
-    ).toBe(true)
-    expect(
-      policy.shouldRetry(
-        new LanguageSessionTransportError('websocket-closed', 'Socket closed.'),
-        initialize,
-      ),
-    ).toBe(true)
-    expect(
-      policy.shouldRetry(
-        new LanguageSessionTransportError('initialize-timeout', 'Initialize timed out.'),
-        initialize,
-      ),
-    ).toBe(true)
-    expect(
-      policy.shouldRetry(
-        new LanguageSessionProtocolError('Invalid initialize response.'),
-        initialize,
-      ),
-    ).toBe(false)
-    expect(
-      policy.shouldRetry(new Error('Descriptor mismatch.'), { phase: 'descriptor', attempt: 0 }),
+      policy.shouldRetry(new Error('Descriptor mismatch.'), {
+        phase: 'descriptor',
+        attempt: 0,
+      }),
     ).toBe(false)
   })
 })

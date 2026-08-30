@@ -5,20 +5,16 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { runRuntimeArtifactSmokes, runRuntimeArtifactSmokeCli } from './runtime-artifact-smoke.mjs'
+import { runRuntimeArtifactSmokes, runRuntimeArtifactSmokeCli } from '../smoke/runtime-artifact-smoke.mjs'
 
 const digest = value => `sha256:${crypto.createHash('sha256').update(value).digest('hex')}`
 const fixedNow = () => new Date('2026-08-13T04:00:00.000Z')
 const releaseId = 'runtime-matrix-current'
 const protocol = () => ({ Major: 1, Minor: 0 })
 
-function service(id, kind, capabilities) {
-  return { Id: id, Kind: kind, ReleaseId: releaseId, Protocol: protocol(), Capabilities: capabilities, Status: 'ready' }
-}
+function service(id, kind, capabilities) { return { Id: id, Kind: kind, ReleaseId: releaseId, Protocol: protocol(), Capabilities: capabilities, Status: 'ready' }; }
 
-function capability(id, profileId) {
-  return { Id: id, ContractVersion: 1, Available: true, ProfileIds: [profileId] }
-}
+function capability(id, profileId) { return { Id: id, ContractVersion: 1, Available: true, ProfileIds: [profileId] }; }
 
 function referenceSet(id) {
   return {

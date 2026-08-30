@@ -2,7 +2,7 @@
 #:property TargetFramework=net10.0
 #:property JsonSerializerIsReflectionEnabledByDefault=true
 #:property NuGetLockFilePath=obj/run-with-bake-environment.packages.lock.json
-#:project ../src/Tools/SharpLabNext.ProfileUpdater/SharpLabNext.ProfileUpdater.csproj
+#:project ../../src/Tools/SharpLabNext.ProfileUpdater/SharpLabNext.ProfileUpdater.csproj
 
 using System.Diagnostics;
 using System.Text.Json;
@@ -18,12 +18,9 @@ string? runtimeMatrixPath = null;
 var allowUncommittedSourceForDevelopment = false;
 var allowDevelopmentImageInputs = false;
 var emitEnvironmentJson = false;
-const string developmentGrantEnvironmentVariable =
-    "SHARPLABNEXT_BAKE_ALLOW_UNCOMMITTED_SOURCE_FOR_DEVELOPMENT";
-const string developmentImageInputsGrantEnvironmentVariable =
-    "SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS";
-const string sourceIdentityModeEnvironmentVariable =
-    "SHARPLABNEXT_SOURCE_IDENTITY_MODE";
+const string developmentGrantEnvironmentVariable = "SHARPLABNEXT_BAKE_ALLOW_UNCOMMITTED_SOURCE_FOR_DEVELOPMENT";
+const string developmentImageInputsGrantEnvironmentVariable = "SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS";
+const string sourceIdentityModeEnvironmentVariable = "SHARPLABNEXT_SOURCE_IDENTITY_MODE";
 const string contentSourceIdentityMode = "content";
 const string environmentJsonPrefix = "SHARPLABNEXT_BAKE_ENVIRONMENT_JSON=";
 var imagePrefix = "sharplabnext";
@@ -58,9 +55,7 @@ for (var index = 0; index < args.Length; index++)
             emitEnvironmentJson = true;
             break;
         case "--development-image-input":
-            AddDevelopmentImageInput(
-                developmentImageInputs,
-                RequiredValue(args, ref index));
+            AddDevelopmentImageInput(developmentImageInputs, RequiredValue(args, ref index));
             break;
         case "--image-prefix":
             imagePrefix = RequiredValue(args, ref index);
@@ -78,74 +73,41 @@ for (var index = 0; index < args.Length; index++)
 // Content-addressed builds are ordinary local builds by definition. Keep the
 // low-level wrapper consistent with the top-level entry point even when it is
 // invoked directly without the legacy development switch.
-if (string.Equals(
-        Environment.GetEnvironmentVariable(sourceIdentityModeEnvironmentVariable),
-        contentSourceIdentityMode,
-        StringComparison.OrdinalIgnoreCase))
+if (string.Equals(Environment.GetEnvironmentVariable(sourceIdentityModeEnvironmentVariable), contentSourceIdentityMode, StringComparison.OrdinalIgnoreCase))
 {
     allowUncommittedSourceForDevelopment = true;
 }
 
-if (string.IsNullOrWhiteSpace(lockPath) ||
-    string.IsNullOrWhiteSpace(baseImageManifestPath) ||
-    string.IsNullOrWhiteSpace(sourceRevision) ||
-    string.IsNullOrWhiteSpace(repositoryRoot))
+if (string.IsNullOrWhiteSpace(lockPath) || string.IsNullOrWhiteSpace(baseImageManifestPath) || string.IsNullOrWhiteSpace(sourceRevision) || string.IsNullOrWhiteSpace(repositoryRoot))
 {
-    Console.Error.WriteLine(
-        "Usage: dotnet run eng/run-with-bake-environment.cs -- " +
-        "--lock PATH --base-images PATH --source-revision REVISION --repository-root PATH " +
-        "[--runtime-matrix PATH] " +
-        "[--allow-uncommitted-source-for-development] " +
-        "[--allow-development-image-inputs] " +
-        "[--development-image-input NAME=REFERENCE] " +
-        "[--emit-environment-json] " +
-        "[--image-prefix PREFIX] [-- COMMAND [ARG...]]");
+    Console.Error.WriteLine("Usage: dotnet run eng/tools/run-with-bake-environment.cs -- " + "--lock PATH --base-images PATH --source-revision REVISION --repository-root PATH " + "[--runtime-matrix PATH] " + "[--allow-uncommitted-source-for-development] " + "[--allow-development-image-inputs] " + "[--development-image-input NAME=REFERENCE] " + "[--emit-environment-json] " + "[--image-prefix PREFIX] [-- COMMAND [ARG...]]");
     return 64;
 }
 
 if (developmentImageInputs.Count > 0 && !allowDevelopmentImageInputs)
 {
-    Console.Error.WriteLine(
-        "--development-image-input requires --allow-development-image-inputs.");
+    Console.Error.WriteLine("--development-image-input requires --allow-development-image-inputs.");
     return 64;
 }
 
 if (emitEnvironmentJson && command.Count > 0)
 {
-    Console.Error.WriteLine(
-        "--emit-environment-json cannot be combined with a child command.");
+    Console.Error.WriteLine("--emit-environment-json cannot be combined with a child command.");
     return 64;
 }
 
 try
 {
-    await VerifyILSenseInputsAsync(
-        repositoryRoot,
-        lockPath,
-        allowUncommittedSourceForDevelopment);
-    var sourceDateEpoch = await SourceDateEpochResolver.ResolveAsync(
-        repositoryRoot,
-        sourceRevision,
-        allowUncommittedSourceForDevelopment);
-    var controlRuntimeTargetFramework = await ReadControlRuntimeTargetFrameworkAsync(
-        runtimeMatrixPath ?? Path.Combine(repositoryRoot, "profiles", "runtime-matrix.json"));
-    var environment = await BakeEnvironmentResolver.CreateAsync(
-        lockPath,
-        baseImageManifestPath,
-        sourceRevision,
-        sourceDateEpoch,
-        imagePrefix,
-        controlRuntimeTargetFramework: controlRuntimeTargetFramework);
-    environment["DEVELOPMENT_IMAGE_INPUTS"] =
-        allowDevelopmentImageInputs ? "true" : "false";
+    await VerifyILSenseInputsAsync(repositoryRoot, lockPath, allowUncommittedSourceForDevelopment);
+    var sourceDateEpoch = await SourceDateEpochResolver.ResolveAsync(repositoryRoot, sourceRevision, allowUncommittedSourceForDevelopment);
+    var controlRuntimeTargetFramework = await ReadControlRuntimeTargetFrameworkAsync(runtimeMatrixPath ?? Path.Combine(repositoryRoot, "profiles", "runtime-matrix.json"));
+    var environment = await BakeEnvironmentResolver.CreateAsync(lockPath, baseImageManifestPath, sourceRevision, sourceDateEpoch, imagePrefix, controlRuntimeTargetFramework: controlRuntimeTargetFramework);
+    environment["DEVELOPMENT_IMAGE_INPUTS"] = allowDevelopmentImageInputs ? "true" : "false";
     foreach (var pair in developmentImageInputs)
         environment[pair.Key] = pair.Value;
     if (emitEnvironmentJson)
     {
-        Console.WriteLine(
-            $"{environmentJsonPrefix}{JsonSerializer.Serialize(
-                environment,
-                BakeEnvironmentJsonSerializerContext.Default.DictionaryStringString)}");
+        Console.WriteLine($"{environmentJsonPrefix}{JsonSerializer.Serialize(environment, BakeEnvironmentJsonSerializerContext.Default.DictionaryStringString)}");
         return 0;
     }
     if (command.Count == 0)
@@ -155,21 +117,14 @@ try
         return 0;
     }
 
-    var startInfo = new ProcessStartInfo
-    {
-        FileName = command[0],
-        UseShellExecute = false
-    };
+    var startInfo = new ProcessStartInfo { FileName = command[0], UseShellExecute = false };
     foreach (var argument in command.Skip(1))
         startInfo.ArgumentList.Add(argument);
     foreach (var pair in environment)
         startInfo.Environment[pair.Key] = pair.Value;
     startInfo.Environment.Remove(developmentGrantEnvironmentVariable);
     startInfo.Environment.Remove(developmentImageInputsGrantEnvironmentVariable);
-    if (string.Equals(
-            Environment.GetEnvironmentVariable(sourceIdentityModeEnvironmentVariable),
-            contentSourceIdentityMode,
-            StringComparison.OrdinalIgnoreCase))
+    if (string.Equals(Environment.GetEnvironmentVariable(sourceIdentityModeEnvironmentVariable), contentSourceIdentityMode, StringComparison.OrdinalIgnoreCase))
     {
         startInfo.Environment[sourceIdentityModeEnvironmentVariable] = contentSourceIdentityMode;
     }
@@ -187,8 +142,7 @@ try
     await process.WaitForExitAsync();
     return process.ExitCode;
 }
-catch (Exception exception) when (
-    exception is BakeEnvironmentValidationException or CatalogValidationException or IOException or JsonException or InvalidDataException)
+catch (Exception exception) when (exception is BakeEnvironmentValidationException or CatalogValidationException or IOException or JsonException or InvalidDataException)
 {
     Console.Error.WriteLine(exception.Message);
     return 1;
@@ -198,43 +152,23 @@ static async Task<string> ReadControlRuntimeTargetFrameworkAsync(string path)
 {
     await using var stream = File.OpenRead(Path.GetFullPath(path));
     using var document = await JsonDocument.ParseAsync(stream, cancellationToken: CancellationToken.None);
-    if (!document.RootElement.TryGetProperty("controlRuntime", out var controlRuntime) ||
-        controlRuntime.ValueKind != JsonValueKind.Object ||
-        !controlRuntime.TryGetProperty("targetFramework", out var targetFramework) ||
-        targetFramework.ValueKind != JsonValueKind.String ||
-        string.IsNullOrWhiteSpace(targetFramework.GetString()))
+    if (!document.RootElement.TryGetProperty("controlRuntime", out var controlRuntime) || controlRuntime.ValueKind != JsonValueKind.Object || !controlRuntime.TryGetProperty("targetFramework", out var targetFramework) || targetFramework.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(targetFramework.GetString()))
     {
-        throw new InvalidDataException(
-            $"Runtime matrix '{path}' must declare controlRuntime.targetFramework.");
+        throw new InvalidDataException($"Runtime matrix '{path}' must declare controlRuntime.targetFramework.");
     }
     return targetFramework.GetString()!;
 }
 
-static async Task VerifyILSenseInputsAsync(
-    string repositoryRoot,
-    string releaseLockPath,
-    bool allowMissingGit)
+static async Task VerifyILSenseInputsAsync(string repositoryRoot, string releaseLockPath, bool allowMissingGit)
 {
     var dotnet = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
-    var verifier = Path.Combine(repositoryRoot, "eng", "verify-ilsense-inputs.cs");
-    var startInfo = new ProcessStartInfo
-    {
-        FileName = dotnet,
-        WorkingDirectory = repositoryRoot,
-        UseShellExecute = false
-    };
-    var verifierArguments = new List<string>
-    {
-        "run", verifier, "--",
-        "--repository-root", repositoryRoot,
-        "--lock", releaseLockPath
-    };
+    var verifier = Path.Combine(repositoryRoot, "eng", "tools", "verify-ilsense-inputs.cs");
+    var startInfo = new ProcessStartInfo { FileName = dotnet, WorkingDirectory = repositoryRoot, UseShellExecute = false };
+    var verifierArguments = new List<string> { "run", verifier, "--", "--repository-root", repositoryRoot, "--lock", releaseLockPath };
     if (allowMissingGit)
         verifierArguments.Add("--allow-missing-git");
     foreach (var argument in verifierArguments)
-    {
         startInfo.ArgumentList.Add(argument);
-    }
 
     using var process = Process.Start(startInfo);
     if (process is null)
@@ -252,14 +186,11 @@ static string RequiredValue(string[] values, ref int index)
     return values[index];
 }
 
-static void AddDevelopmentImageInput(
-    IDictionary<string, string> inputs,
-    string configured)
+static void AddDevelopmentImageInput(IDictionary<string, string> inputs, string configured)
 {
     var separator = configured.IndexOf('=');
     if (separator <= 0 || separator == configured.Length - 1)
-        throw new BakeEnvironmentValidationException(
-            "--development-image-input must use NAME=REFERENCE.");
+        throw new BakeEnvironmentValidationException("--development-image-input must use NAME=REFERENCE.");
 
     var name = configured[..separator];
     var reference = configured[(separator + 1)..];
@@ -269,21 +200,14 @@ static void AddDevelopmentImageInput(
         "JSHARP_TOOLCHAIN_IMAGE"
     };
     if (!allowed.Contains(name))
-        throw new BakeEnvironmentValidationException(
-            $"Development image input '{name}' is not supported.");
-    if (reference.Length > 512 ||
-        reference.Any(static character => char.IsWhiteSpace(character) || char.IsControl(character)) ||
-        !reference.Contains(':', StringComparison.Ordinal))
+        throw new BakeEnvironmentValidationException($"Development image input '{name}' is not supported.");
+    if (reference.Length > 512 || reference.Any(static character => char.IsWhiteSpace(character) || char.IsControl(character)) || !reference.Contains(':', StringComparison.Ordinal))
     {
-        throw new BakeEnvironmentValidationException(
-            $"Development image input '{name}' has an invalid Docker reference.");
+        throw new BakeEnvironmentValidationException($"Development image input '{name}' has an invalid Docker reference.");
     }
     if (!inputs.TryAdd(name, reference))
-        throw new BakeEnvironmentValidationException(
-            $"Development image input '{name}' was supplied more than once.");
+        throw new BakeEnvironmentValidationException($"Development image input '{name}' was supplied more than once.");
 }
 
 [JsonSerializable(typeof(Dictionary<string, string>))]
-internal sealed partial class BakeEnvironmentJsonSerializerContext : JsonSerializerContext
-{
-}
+internal sealed partial class BakeEnvironmentJsonSerializerContext : JsonSerializerContext;

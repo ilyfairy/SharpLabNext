@@ -1327,15 +1327,12 @@
 
 .monaco-editor .view-overlays .selected-text {
   pointer-events: none;
-  /* biome-ignore lint/complexity/noImportantStyles: Monaco writes selection colors inline. */
   background-color: #add6ff !important;
 }
 
 .monaco-editor:has(.view-overlays .selected-text) .view-overlays .current-line,
 .monaco-editor:has(.view-overlays .selected-text) .margin-view-overlays .current-line-margin {
-  /* biome-ignore lint/complexity/noImportantStyles: Monaco writes current-line colors inline. */
   background-color: transparent !important;
-  /* biome-ignore lint/complexity/noImportantStyles: Monaco writes current-line borders inline. */
   border-color: transparent !important;
 }
 
@@ -1403,11 +1400,7 @@
   border-radius: 0;
   outline: 0;
   box-shadow: none;
-  background-color: color-mix(
-    in srgb,
-    var(--source-association-background) 62%,
-    rgb(48 99 157 / 48%) 38%
-  );
+  background-color: color-mix(in srgb, var(--source-association-background) 62%, rgb(48 99 157 / 48%) 38%);
 }
 
 .monaco-code-document .monaco-output-source-navigable {

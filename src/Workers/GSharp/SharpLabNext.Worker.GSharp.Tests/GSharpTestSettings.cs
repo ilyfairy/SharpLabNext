@@ -18,11 +18,9 @@ internal static class GSharpTestSettings
 
     public static string LanguageServerPath => StableToolchain.LanguageServerAssemblyPath;
 
-    public static GSharpToolchainProfile StableToolchain { get; } = CreateToolchain(
-        GSharpToolchain.ToolchainId);
+    public static GSharpToolchainProfile StableToolchain { get; } = CreateToolchain(GSharpToolchain.ToolchainId);
 
-    public static GSharpToolchainProfile LegacyToolchain { get; } = CreateToolchain(
-        GSharpToolchain.LegacyToolchainId);
+    public static GSharpToolchainProfile LegacyToolchain { get; } = CreateToolchain(GSharpToolchain.LegacyToolchainId);
 
     public static string CreateRoot()
     {
@@ -33,13 +31,8 @@ internal static class GSharpTestSettings
     }
 
     public static GSharpWorkerSettings CreateSettings(string root) => new(
-        new GSharpWorkerIdentity(
-            "test-release",
-            $"sha256:{new string('a', 64)}"),
-        new GSharpProcessLimits(
-            1024 * 1024,
-            512L * 1024 * 1024,
-            TimeSpan.FromMinutes(5)),
+        new GSharpWorkerIdentity("test-release", $"sha256:{new string('a', 64)}"),
+        new GSharpProcessLimits(1024 * 1024, 512L * 1024 * 1024, TimeSpan.FromMinutes(5)),
         Path.Combine(root, "work"),
         Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet",
         new Dictionary<string, GSharpToolchainProfile>(StringComparer.Ordinal)
@@ -49,83 +42,29 @@ internal static class GSharpTestSettings
         },
         ReferenceSets());
 
-    public static GSharpBuildService CreateBuildService(
-        string root,
-        out GSharpCompilerProcess compiler)
+    public static GSharpBuildService CreateBuildService(string root, out GSharpCompilerProcess compiler)
     {
         var settings = CreateSettings(root);
         var manifest = LoadManifest();
-        var referenceSets = new GSharpReferenceSetProvider(
-            settings.ReferenceSets.Where(static item => item.Id == "net10-ref").ToArray(),
-            requireAttestation: false);
-        compiler = new GSharpCompilerProcess(
-            settings,
-            manifest,
-            NullLogger<GSharpCompilerProcess>.Instance);
+        var referenceSets = new GSharpReferenceSetProvider(settings.ReferenceSets.Where(static item => item.Id == "net10-ref").ToArray(), requireAttestation: false);
+        compiler = new GSharpCompilerProcess(settings, manifest, NullLogger<GSharpCompilerProcess>.Instance);
         return new GSharpBuildService(referenceSets, compiler, settings, manifest);
     }
 
     public static LanguageWorkerCapabilityManifest LoadManifest() =>
-        LanguageWorkerCapabilityManifestSerializer.Load(Path.Combine(
-            RepositoryRoot,
-            "src",
-            "Workers",
-            "GSharp",
-            "SharpLabNext.Worker.GSharp",
-            "language-worker.json"));
+        LanguageWorkerCapabilityManifestSerializer.Load(Path.Combine(RepositoryRoot, "src", "Workers", "GSharp", "SharpLabNext.Worker.GSharp", "language-worker.json"));
 
-    public static BuildRequest CreateRequest(
-        BuildTarget target,
-        string source,
-        BuildOutputKind outputKind = BuildOutputKind.Console,
-        string toolchainId = GSharpToolchain.ToolchainId) =>
-        CreateRequest(
-            target,
-            [new WorkspaceFile("Program.gs", 1, source)],
-            ["Program.gs"],
-            outputKind,
-            toolchainId);
+    public static BuildRequest CreateRequest(BuildTarget target, string source, BuildOutputKind outputKind = BuildOutputKind.Console, string toolchainId = GSharpToolchain.ToolchainId) =>
+        CreateRequest(target, [new WorkspaceFile("Program.gs", 1, source)], ["Program.gs"], outputKind, toolchainId);
 
-    public static BuildRequest CreateRequest(
-        BuildTarget target,
-        IReadOnlyList<WorkspaceFile> files,
-        IReadOnlyList<string> sourceOrder,
-        BuildOutputKind outputKind = BuildOutputKind.Console,
-        string toolchainId = GSharpToolchain.ToolchainId)
+    public static BuildRequest CreateRequest(BuildTarget target, IReadOnlyList<WorkspaceFile> files, IReadOnlyList<string> sourceOrder, BuildOutputKind outputKind = BuildOutputKind.Console, string toolchainId = GSharpToolchain.ToolchainId)
     {
         var toolchain = toolchainId == StableToolchain.ToolchainId
-            ? StableToolchain
-            : toolchainId == LegacyToolchain.ToolchainId
-                ? LegacyToolchain
-                : throw new ArgumentOutOfRangeException(nameof(toolchainId));
-        var options = new BuildOptions(
-            BuildConfiguration.Release,
-            Optimize: true,
-            outputKind,
-            AllowUnsafe: false,
-            EmitPortablePdb: true,
-            NullableContextMode.Disable,
-            LanguageVersion: toolchain.CompilerVersion);
-        var workspace = new WorkspaceSnapshot(
-            ContractSchemaVersions.WorkspaceSnapshot,
-            7,
-            3,
-            GSharpToolchain.LanguageId,
-            files,
-            files[0].Path,
-            sourceOrder,
-            "net10-ref",
-            options);
-        return new BuildRequest(
-            $"request-{Guid.NewGuid():N}",
-            $"idempotency-{Guid.NewGuid():N}",
-            "pipeline-gsharp-test",
-            toolchainId,
-            workspace.ReferenceSetId,
-            workspace,
-            DateTimeOffset.UtcNow.AddSeconds(30),
-            options,
-            target);
+            ? StableToolchain : toolchainId == LegacyToolchain.ToolchainId
+                ? LegacyToolchain : throw new ArgumentOutOfRangeException(nameof(toolchainId));
+        var options = new BuildOptions(BuildConfiguration.Release, Optimize: true, outputKind, AllowUnsafe: false, EmitPortablePdb: true, NullableContextMode.Disable, LanguageVersion: toolchain.CompilerVersion);
+        var workspace = new WorkspaceSnapshot(ContractSchemaVersions.WorkspaceSnapshot, 7, 3, GSharpToolchain.LanguageId, files, files[0].Path, sourceOrder, "net10-ref", options);
+        return new BuildRequest($"request-{Guid.NewGuid():N}", $"idempotency-{Guid.NewGuid():N}", "pipeline-gsharp-test", toolchainId, workspace.ReferenceSetId, workspace, DateTimeOffset.UtcNow.AddSeconds(30), options, target);
     }
 
     public static IReadOnlyDictionary<string, string?> WebHostConfiguration(string root) =>
@@ -174,13 +113,7 @@ internal static class GSharpTestSettings
 
     private static IReadOnlyList<GSharpReferenceSetDefinition> ReferenceSets() =>
     [
-        new(
-            "net10-ref",
-            TestReferenceSets.Net10.Path,
-            "net10.0",
-            TestReferenceSets.Net10.Version,
-            TestReferenceSets.Net10.Digest,
-            null)
+        new("net10-ref", TestReferenceSets.Net10.Path, "net10.0", TestReferenceSets.Net10.Version, TestReferenceSets.Net10.Digest, null)
     ];
 
     private static void EnsureToolsExist()
@@ -189,9 +122,7 @@ internal static class GSharpTestSettings
         {
             if (!File.Exists(toolchain.CompilerAssemblyPath) || !File.Exists(toolchain.LanguageServerAssemblyPath))
             {
-                throw new InvalidOperationException(
-                    $"The fixed G# v{toolchain.CompilerVersion} compiler and language server must be built under " +
-                    $"artifacts/source-cache/gsharp-v{toolchain.CompilerVersion}/out/bin/Release before running G# worker tests.");
+                throw new InvalidOperationException($"The fixed G# v{toolchain.CompilerVersion} compiler and language server must be built under " + $"artifacts/source-cache/gsharp-v{toolchain.CompilerVersion}/out/bin/Release before running G# worker tests.");
             }
         }
     }
@@ -199,20 +130,8 @@ internal static class GSharpTestSettings
     private static GSharpToolchainProfile CreateToolchain(string toolchainId)
     {
         var version = LockedToolchainProperty(toolchainId, "resolvedVersion");
-        var sourceRoot = Path.Combine(
-            RepositoryRoot,
-            "artifacts",
-            "source-cache",
-            $"gsharp-v{version}",
-            "out",
-            "bin",
-            "Release");
-        return new GSharpToolchainProfile(
-            toolchainId,
-            version,
-            LockedToolchainProperty(toolchainId, "commit"),
-            Path.Combine(sourceRoot, "Compiler", "gsc.dll"),
-            Path.Combine(sourceRoot, "LanguageServer", "GSharp.LanguageServer.dll"));
+        var sourceRoot = Path.Combine(RepositoryRoot, "artifacts", "source-cache", $"gsharp-v{version}", "out", "bin", "Release");
+        return new GSharpToolchainProfile(toolchainId, version, LockedToolchainProperty(toolchainId, "commit"), Path.Combine(sourceRoot, "Compiler", "gsc.dll"), Path.Combine(sourceRoot, "LanguageServer", "GSharp.LanguageServer.dll"));
     }
 
     private static string FindRepositoryRoot()
@@ -229,14 +148,8 @@ internal static class GSharpTestSettings
 
     private static string LockedToolchainProperty(string toolchainId, string propertyName)
     {
-        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(
-            RepositoryRoot,
-            "profiles",
-            "lock.json")));
-        var component = document.RootElement
-            .GetProperty("components")
-            .GetProperty(toolchainId);
-        return component.GetProperty(propertyName).GetString()
-            ?? throw new InvalidDataException($"profiles/lock.json {toolchainId}.{propertyName} is missing.");
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepositoryRoot, "profiles", "lock.json")));
+        var component = document.RootElement.GetProperty("components").GetProperty(toolchainId);
+        return component.GetProperty(propertyName).GetString() ?? throw new InvalidDataException($"profiles/lock.json {toolchainId}.{propertyName} is missing.");
     }
 }

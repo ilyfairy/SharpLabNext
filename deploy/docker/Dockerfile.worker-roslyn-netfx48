@@ -28,7 +28,7 @@ RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages
 FROM publish AS reference-set
 COPY profiles/runtime-matrix.json /inputs/runtime-matrix.json
 COPY deploy/docker/roslyn-netfx48-appsettings.json /inputs/appsettings.template.json
-COPY eng/materialize-framework-reference-sets.cs /tools/materialize-framework-reference-sets.cs
+COPY eng/tools/materialize-framework-reference-sets.cs /tools/materialize-framework-reference-sets.cs
 RUN --mount=type=cache,id=sharplabnext-reference-archives,target=/reference-archives,sharing=locked \
     cd /tools \
     && NUGET_PACKAGES=/tmp/sharplabnext-nuget dotnet run materialize-framework-reference-sets.cs -- \

@@ -17,10 +17,7 @@ import {
   lspSemanticTokenTypes,
 } from './codeMirrorLanguageClient'
 import { ilSenseCompletionTriggerCharacters } from './completionTriggerCharacters'
-import type {
-  LanguageSessionLifecycleDependencies,
-  LanguageSessionStatus,
-} from './languageSessionLifecycle'
+import type { LanguageSessionLifecycleDependencies, LanguageSessionStatus } from './languageSessionLifecycle'
 
 interface MonacoDocumentState {
   path: string
@@ -100,23 +97,12 @@ export class MonacoLanguageBridge {
     this.documentsByUri.delete(state.model.uri.toString())
   }
 
-  consumeEmptyCompletionRetry(
-    path: string,
-    currentVersion: number,
-    changes: readonly CompletionContentChange[],
-  ): boolean {
+  consumeEmptyCompletionRetry(path: string, currentVersion: number, changes: readonly CompletionContentChange[]): boolean {
     const state = this.documents.get(path)
     if (!state) return false
     const retry = state.emptyCompletionRetry
     state.emptyCompletionRetry = null
-    if (
-      !canConsumeEmptyCompletionRetry(
-        retry,
-        currentVersion,
-        changes,
-        monacoLanguageTriggerCharacters(this.registeredLanguageId ?? '').completion,
-      )
-    ) {
+    if (!canConsumeEmptyCompletionRetry(retry, currentVersion, changes, monacoLanguageTriggerCharacters(this.registeredLanguageId ?? '').completion)) {
       return false
     }
     // Suppress every empty Invoke response produced at this recovery version.
@@ -166,27 +152,16 @@ export class MonacoLanguageBridge {
           const state = this.documentState(model)
           if (!state) return null
           const version = model.getVersionId()
-          const triggerKind =
-            context.triggerKind === monaco.languages.CompletionTriggerKind.Invoke
-              ? 1
-              : context.triggerKind === monaco.languages.CompletionTriggerKind.TriggerCharacter
-                ? 2
-                : 3
+          const triggerKind = context.triggerKind === monaco.languages.CompletionTriggerKind.Invoke ? 1 : context.triggerKind === monaco.languages.CompletionTriggerKind.TriggerCharacter ? 2 : 3
           const completionList = await this.transport.completion(state.path, {
             line: position.lineNumber - 1,
             character: position.column - 1,
             triggerKind,
             ...(context.triggerCharacter ? { triggerCharacter: context.triggerCharacter } : {}),
           })
-          if (token.isCancellationRequested || model.getVersionId() !== version || !completionList)
-            return null
+          if (token.isCancellationRequested || model.getVersionId() !== version || !completionList) return null
           const recoveryResult = state.emptyCompletionRecoveryVersion === version
-          state.emptyCompletionRetry = emptyCompletionRetryForResult(
-            version,
-            position,
-            completionList.items.length,
-            recoveryResult,
-          )
+          state.emptyCompletionRetry = emptyCompletionRetryForResult(version, position, completionList.items.length, recoveryResult)
           if (completionList.items.length > 0) state.emptyCompletionRecoveryVersion = null
           return monacoCompletionList(model, position, state.path, completionList)
         },
@@ -194,10 +169,7 @@ export class MonacoLanguageBridge {
           const candidate = item as MonacoCompletionItem
           const state = this.documents.get(candidate.documentPath)
           if (!state) return item
-          const resolved = await this.transport.resolveCompletion(
-            candidate.documentPath,
-            candidate.lspItem,
-          )
+          const resolved = await this.transport.resolveCompletion(candidate.documentPath, candidate.lspItem)
           if (token.isCancellationRequested || !resolved) return item
           const position = positionForCompletionRange(candidate.range)
           return completionItem(state.model, position, state.path, resolved)
@@ -212,8 +184,7 @@ export class MonacoLanguageBridge {
             line: position.lineNumber - 1,
             character: position.column - 1,
           })
-          if (token.isCancellationRequested || model.getVersionId() !== version || !hover)
-            return null
+          if (token.isCancellationRequested || model.getVersionId() !== version || !hover) return null
           const contents = markdownContents(hover.contents)
           if (contents.length === 0) return null
           return {
@@ -229,14 +200,8 @@ export class MonacoLanguageBridge {
           const state = this.documentState(model)
           if (!state) return null
           const version = model.getVersionId()
-          const help = await this.transport.signatureHelp(
-            state.path,
-            { line: position.lineNumber - 1, character: position.column - 1 },
-            context.triggerCharacter,
-            context.isRetrigger,
-          )
-          if (token.isCancellationRequested || model.getVersionId() !== version || !help)
-            return null
+          const help = await this.transport.signatureHelp(state.path, { line: position.lineNumber - 1, character: position.column - 1 }, context.triggerCharacter, context.isRetrigger)
+          if (token.isCancellationRequested || model.getVersionId() !== version || !help) return null
           return { value: signatureHelp(help), dispose() {} }
         },
       }),
@@ -332,7 +297,11 @@ export class MonacoLanguageBridge {
     monaco.editor.setModelMarkers(state.model, markerOwner, [])
     this.semanticChange.fire()
     this.fireFoldingChange()
-    this.symbolsChange.fire({ path, version: state.model.getVersionId(), symbols: null })
+    this.symbolsChange.fire({
+      path,
+      version: state.model.getVersionId(),
+      symbols: null,
+    })
   }
 
   private currentDocument(path: string, version: number | undefined): MonacoDocumentState | null {
@@ -355,16 +324,9 @@ export class MonacoLanguageBridge {
   }
 }
 
-export function monacoCompletionList(
-  model: monaco.editor.ITextModel,
-  position: monaco.Position,
-  documentPath: string,
-  completionList: CodeMirrorLspCompletionList,
-): monaco.languages.CompletionList {
+export function monacoCompletionList(model: monaco.editor.ITextModel, position: monaco.Position, documentPath: string, completionList: CodeMirrorLspCompletionList): monaco.languages.CompletionList {
   return {
-    suggestions: completionList.items.map((item) =>
-      completionItem(model, position, documentPath, item),
-    ),
+    suggestions: completionList.items.map((item) => completionItem(model, position, documentPath, item)),
     // Preserve the protocol bit for non-empty lists. Empty-list retries are
     // handled by MonacoLanguageBridge/MonacoEditor because Monaco's suggest
     // model drops providers that have no items.
@@ -377,12 +339,7 @@ export function monacoCompletionList(
  * through the suggest model. A later document version is therefore the only
  * safe point at which the editor may issue a one-shot explicit retry.
  */
-export function canConsumeEmptyCompletionRetry(
-  retry: EmptyCompletionRetry | null | undefined,
-  currentVersion: number,
-  changes: readonly CompletionContentChange[],
-  triggerCharacters: readonly string[],
-): boolean {
+export function canConsumeEmptyCompletionRetry(retry: EmptyCompletionRetry | null | undefined, currentVersion: number, changes: readonly CompletionContentChange[], triggerCharacters: readonly string[]): boolean {
   if (!retry || currentVersion <= retry.documentVersion || changes.length !== 1) return false
   const change = changes[0]
   if (!change || change.text.length === 0) return false
@@ -391,11 +348,7 @@ export function canConsumeEmptyCompletionRetry(
   // pressing Enter can still recover contextual IL suggestions.
   if (change.text === ' ') return false
   const range = change.range
-  const insertsAtRequestPosition =
-    range.startLineNumber === retry.lineNumber &&
-    range.startColumn === retry.column &&
-    range.endLineNumber === retry.lineNumber &&
-    range.endColumn === retry.column
+  const insertsAtRequestPosition = range.startLineNumber === retry.lineNumber && range.startColumn === retry.column && range.endLineNumber === retry.lineNumber && range.endColumn === retry.column
   if (!insertsAtRequestPosition) return false
 
   // Monaco already issues the language provider's TriggerCharacter request.
@@ -403,12 +356,7 @@ export function canConsumeEmptyCompletionRetry(
   return !triggerCharacters.some((trigger) => change.text.endsWith(trigger))
 }
 
-export function emptyCompletionRetryForResult(
-  documentVersion: number,
-  position: { lineNumber: number; column: number },
-  itemCount: number,
-  recoveryResult: boolean,
-): EmptyCompletionRetry | null {
+export function emptyCompletionRetryForResult(documentVersion: number, position: { lineNumber: number; column: number }, itemCount: number, recoveryResult: boolean): EmptyCompletionRetry | null {
   if (itemCount > 0 || recoveryResult) return null
   return {
     documentVersion,
@@ -422,9 +370,7 @@ function clearEmptyCompletionState(state: MonacoDocumentState): void {
   state.emptyCompletionRecoveryVersion = null
 }
 
-export function createMonacoLanguageSessionDependencies(
-  bridge: MonacoLanguageBridge,
-): LanguageSessionLifecycleDependencies {
+export function createMonacoLanguageSessionDependencies(bridge: MonacoLanguageBridge): LanguageSessionLifecycleDependencies {
   return bridge.createDependencies()
 }
 
@@ -434,9 +380,7 @@ export interface MonacoLanguageTriggerCharacters {
   signatureRetrigger: readonly string[]
 }
 
-export function monacoLanguageTriggerCharacters(
-  languageId: string,
-): MonacoLanguageTriggerCharacters {
+export function monacoLanguageTriggerCharacters(languageId: string): MonacoLanguageTriggerCharacters {
   switch (languageId) {
     case 'il':
       return {
@@ -445,7 +389,11 @@ export function monacoLanguageTriggerCharacters(
         signatureRetrigger: [','],
       }
     case 'fsharp':
-      return { completion: ['.'], signature: ['(', ','], signatureRetrigger: [','] }
+      return {
+        completion: ['.'],
+        signature: ['(', ','],
+        signatureRetrigger: [','],
+      }
     case 'csharp':
     case 'visual-basic':
       return {
@@ -462,9 +410,7 @@ export function monacoLanguageTriggerCharacters(
   }
 }
 
-export function monacoFoldingRanges(
-  ranges: readonly CodeMirrorLspFoldingRange[] | null | undefined,
-): monaco.languages.FoldingRange[] | null {
+export function monacoFoldingRanges(ranges: readonly CodeMirrorLspFoldingRange[] | null | undefined): monaco.languages.FoldingRange[] | null {
   if (!ranges) return null
   return ranges.map((range) => ({
     start: range.startLine + 1,
@@ -473,19 +419,9 @@ export function monacoFoldingRanges(
   }))
 }
 
-function completionItem(
-  model: monaco.editor.ITextModel,
-  position: monaco.Position,
-  documentPath: string,
-  item: CodeMirrorLspCompletionItem,
-): MonacoCompletionItem {
+function completionItem(model: monaco.editor.ITextModel, position: monaco.Position, documentPath: string, item: CodeMirrorLspCompletionItem): MonacoCompletionItem {
   const word = model.getWordUntilPosition(position)
-  const fallbackRange = new monaco.Range(
-    position.lineNumber,
-    word.startColumn,
-    position.lineNumber,
-    word.endColumn,
-  )
+  const fallbackRange = new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn)
   const range = item.textEdit ? toMonacoRange(item.textEdit.range) : fallbackRange
   const documentation = markdownValue(item.documentation)
   const filterText = monacoCompletionFilterText(model, position, word.startColumn, range, item)
@@ -498,48 +434,27 @@ function completionItem(
     ...(documentation ? { documentation } : {}),
     ...(item.sortText ? { sortText: item.sortText } : {}),
     ...(filterText ? { filterText } : {}),
-    ...(item.additionalTextEdits
-      ? { additionalTextEdits: item.additionalTextEdits.map(toMonacoTextEdit) }
-      : {}),
+    ...(item.additionalTextEdits ? { additionalTextEdits: item.additionalTextEdits.map(toMonacoTextEdit) } : {}),
     lspItem: item,
     documentPath,
   }
 }
 
-function monacoCompletionFilterText(
-  model: monaco.editor.ITextModel,
-  position: monaco.Position,
-  wordStartColumn: number,
-  range: monaco.Range,
-  item: CodeMirrorLspCompletionItem,
-): string | undefined {
-  const rangeEndsAtPosition =
-    range.endLineNumber === position.lineNumber && range.endColumn === position.column
-  const rangeStartsBeforeCurrentWord =
-    range.startLineNumber === position.lineNumber && range.startColumn < wordStartColumn
+function monacoCompletionFilterText(model: monaco.editor.ITextModel, position: monaco.Position, wordStartColumn: number, range: monaco.Range, item: CodeMirrorLspCompletionItem): string | undefined {
+  const rangeEndsAtPosition = range.endLineNumber === position.lineNumber && range.endColumn === position.column
+  const rangeStartsBeforeCurrentWord = range.startLineNumber === position.lineNumber && range.startColumn < wordStartColumn
 
   if (!rangeEndsAtPosition || !rangeStartsBeforeCurrentWord) return item.filterText
 
   // Monaco filters against the complete text between the replacement start and
   // the caret. Keep that target stable while the user extends the postfix suffix:
   // `task.` + `await` stays filterable as `task.a`, `task.aw`, and so on.
-  const receiverPrefix = model.getValueInRange(
-    new monaco.Range(
-      range.startLineNumber,
-      range.startColumn,
-      position.lineNumber,
-      wordStartColumn,
-    ),
-  )
+  const receiverPrefix = model.getValueInRange(new monaco.Range(range.startLineNumber, range.startColumn, position.lineNumber, wordStartColumn))
   const candidateFilterText = item.filterText ?? item.label
-  return candidateFilterText.startsWith(receiverPrefix)
-    ? candidateFilterText
-    : `${receiverPrefix}${candidateFilterText}`
+  return candidateFilterText.startsWith(receiverPrefix) ? candidateFilterText : `${receiverPrefix}${candidateFilterText}`
 }
 
-export function monacoCompletionInsertion(
-  item: CodeMirrorLspCompletionItem,
-): Pick<monaco.languages.CompletionItem, 'insertText' | 'insertTextRules'> {
+export function monacoCompletionInsertion(item: CodeMirrorLspCompletionItem): Pick<monaco.languages.CompletionItem, 'insertText' | 'insertTextRules'> {
   const insertText = item.textEdit?.newText ?? item.insertText ?? item.label
   if (item.insertTextFormat !== 2) return { insertText: plainCompletionText(insertText) }
   return {
@@ -548,9 +463,7 @@ export function monacoCompletionInsertion(
   }
 }
 
-function positionForCompletionRange(
-  range: monaco.IRange | monaco.languages.CompletionItemRanges,
-): monaco.Position {
+function positionForCompletionRange(range: monaco.IRange | monaco.languages.CompletionItemRanges): monaco.Position {
   const value = 'insert' in range ? range.insert : range
   return new monaco.Position(value.endLineNumber, value.endColumn)
 }
@@ -621,19 +534,14 @@ function signatureHelp(help: CodeMirrorLspSignatureHelp): monaco.languages.Signa
         label: signature.label,
         parameters: signature.parameters.map((parameter) => {
           const parameterDocumentation = markdownValue(parameter.documentation)
-          const label: string | [number, number] =
-            typeof parameter.label === 'string'
-              ? parameter.label
-              : [parameter.label[0], parameter.label[1]]
+          const label: string | [number, number] = typeof parameter.label === 'string' ? parameter.label : [parameter.label[0], parameter.label[1]]
           return {
             label,
             ...(parameterDocumentation ? { documentation: parameterDocumentation } : {}),
           }
         }),
         ...(documentation ? { documentation } : {}),
-        ...(signature.activeParameter !== undefined
-          ? { activeParameter: signature.activeParameter }
-          : {}),
+        ...(signature.activeParameter !== undefined ? { activeParameter: signature.activeParameter } : {}),
       }
     }),
     activeSignature: help.activeSignature,
@@ -645,10 +553,7 @@ function markdownContents(value: unknown): monaco.IMarkdownString[] {
   if (Array.isArray(value)) return value.flatMap(markdownContents)
   if (typeof value === 'string') return value ? [safeMarkdown(value)] : []
   if (!isRecord(value) || typeof value.value !== 'string' || !value.value) return []
-  const content =
-    typeof value.language === 'string'
-      ? `\`\`\`${value.language}\n${value.value}\n\`\`\``
-      : value.value
+  const content = typeof value.language === 'string' ? `\`\`\`${value.language}\n${value.value}\n\`\`\`` : value.value
   return [safeMarkdown(content)]
 }
 
@@ -673,10 +578,7 @@ function toMonacoMarker(diagnostic: CodeMirrorLspDiagnostic): monaco.editor.IMar
   return {
     ...toMonacoRange(diagnostic.range),
     severity: markerSeverity(diagnostic.severity),
-    message:
-      diagnostic.code === undefined
-        ? diagnostic.message
-        : `[${String(diagnostic.code)}] ${diagnostic.message}`,
+    message: diagnostic.code === undefined ? diagnostic.message : `[${String(diagnostic.code)}] ${diagnostic.message}`,
     ...(diagnostic.source ? { source: diagnostic.source } : {}),
     ...(diagnostic.code !== undefined ? { code: String(diagnostic.code) } : {}),
   }
@@ -708,12 +610,7 @@ function toMonacoDocumentSymbol(symbol: CodeMirrorDocumentSymbol): monaco.langua
 }
 
 function toMonacoRange(range: LspRange): monaco.Range {
-  return new monaco.Range(
-    range.start.line + 1,
-    range.start.character + 1,
-    range.end.line + 1,
-    range.end.character + 1,
-  )
+  return new monaco.Range(range.start.line + 1, range.start.character + 1, range.end.line + 1, range.end.character + 1)
 }
 
 function toMonacoTextEdit(edit: CodeMirrorLspTextEdit): monaco.editor.ISingleEditOperation {
@@ -721,24 +618,18 @@ function toMonacoTextEdit(edit: CodeMirrorLspTextEdit): monaco.editor.ISingleEdi
 }
 
 export function encodeSemanticTokens(tokens: readonly CodeMirrorSemanticToken[]): Uint32Array {
-  const ordered = [...tokens].sort(
-    (left, right) => left.line - right.line || left.character - right.character,
-  )
+  const ordered = [...tokens].sort((left, right) => left.line - right.line || left.character - right.character)
   const data: number[] = []
   let previousLine = 0
   let previousCharacter = 0
   for (const token of ordered) {
-    const type = lspSemanticTokenTypes.indexOf(
-      token.tokenType as (typeof lspSemanticTokenTypes)[number],
-    )
+    const type = lspSemanticTokenTypes.indexOf(token.tokenType as (typeof lspSemanticTokenTypes)[number])
     if (type < 0) continue
     const deltaLine = token.line - previousLine
     const deltaCharacter = deltaLine === 0 ? token.character - previousCharacter : token.character
     if (deltaLine < 0 || deltaCharacter < 0 || token.length <= 0) continue
     const modifiers = token.tokenModifiers.reduce((bits, modifier) => {
-      const index = lspSemanticTokenModifiers.indexOf(
-        modifier as (typeof lspSemanticTokenModifiers)[number],
-      )
+      const index = lspSemanticTokenModifiers.indexOf(modifier as (typeof lspSemanticTokenModifiers)[number])
       return index < 0 ? bits : bits | (2 ** index)
     }, 0)
     data.push(deltaLine, deltaCharacter, token.length, type, modifiers)
@@ -748,15 +639,8 @@ export function encodeSemanticTokens(tokens: readonly CodeMirrorSemanticToken[])
   return new Uint32Array(data)
 }
 
-export function monacoCodeActions(
-  state: MonacoDocumentState,
-  documents: ReadonlyMap<string, MonacoDocumentState>,
-  markers: readonly monaco.editor.IMarkerData[],
-): monaco.languages.CodeAction[] {
-  const unique = new Map<
-    string,
-    { action: CodeMirrorLspCodeAction; markers: Set<monaco.editor.IMarkerData> }
-  >()
+export function monacoCodeActions(state: MonacoDocumentState, documents: ReadonlyMap<string, MonacoDocumentState>, markers: readonly monaco.editor.IMarkerData[]): monaco.languages.CodeAction[] {
+  const unique = new Map<string, { action: CodeMirrorLspCodeAction; markers: Set<monaco.editor.IMarkerData> }>()
   for (const diagnostic of state.diagnostics) {
     const matchingMarkers = markers.filter((marker) => markerMatchesDiagnostic(marker, diagnostic))
     if (matchingMarkers.length === 0) continue
@@ -795,15 +679,9 @@ export function monacoCodeActions(
   })
 }
 
-function markerMatchesDiagnostic(
-  marker: monaco.editor.IMarkerData,
-  diagnostic: CodeMirrorLspDiagnostic,
-): boolean {
+function markerMatchesDiagnostic(marker: monaco.editor.IMarkerData, diagnostic: CodeMirrorLspDiagnostic): boolean {
   const range = diagnostic.range
-  const expectedMessage =
-    diagnostic.code === undefined
-      ? diagnostic.message
-      : `[${String(diagnostic.code)}] ${diagnostic.message}`
+  const expectedMessage = diagnostic.code === undefined ? diagnostic.message : `[${String(diagnostic.code)}] ${diagnostic.message}`
   return (
     marker.startLineNumber === range.start.line + 1 &&
     marker.startColumn === range.start.character + 1 &&

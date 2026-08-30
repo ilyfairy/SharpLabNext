@@ -12,15 +12,7 @@ public sealed class RequestShapeTests
     [Fact]
     public void ResolveSelectionMatchesThePublicRequestEnvelope()
     {
-        var request = new ResolveSelectionRequest(
-            "csharp",
-            "roslyn-main",
-            "net11-preview-ref",
-            "jit-asm",
-            "dotnet-11-preview-linux-x64",
-            BuildConfiguration.Release,
-            "20260711.1",
-            42);
+        var request = new ResolveSelectionRequest("csharp", "roslyn-main", "net11-preview-ref", "jit-asm", "dotnet-11-preview-linux-x64", BuildConfiguration.Release, "20260711.1", 42);
 
         var document = JsonNode.Parse(JsonSerializer.Serialize(request, JsonOptions))!.AsObject();
 
@@ -33,14 +25,7 @@ public sealed class RequestShapeTests
     [Fact]
     public void JitRequestMatchesTheRuntimeJobEnvelope()
     {
-        var request = new JitRequest(
-            "req-03",
-            "jit-key",
-            "pipeline-01",
-            new ArtifactRef("sha256:artifact"),
-            "dotnet-11-preview-linux-x64",
-            new JitOptions(null, "tier0-diffable", "disabled", "coreclr-jitdisasm", "runtime-job-default"),
-            DateTimeOffset.Parse("2026-07-11T00:00:10Z", CultureInfo.InvariantCulture));
+        var request = new JitRequest("req-03", "jit-key", "pipeline-01", new ArtifactRef("sha256:artifact"), "dotnet-11-preview-linux-x64", new JitOptions(null, "tier0-diffable", "disabled", "coreclr-jitdisasm", "runtime-job-default"), DateTimeOffset.Parse("2026-07-11T00:00:10Z", CultureInfo.InvariantCulture));
 
         var document = JsonNode.Parse(JsonSerializer.Serialize(request, JsonOptions))!.AsObject();
 
@@ -52,21 +37,7 @@ public sealed class RequestShapeTests
     [Fact]
     public void ExplainRequestCarriesOnlyResolvedWorkspaceInput()
     {
-        var request = new ExplainRequest(
-            "req-explain",
-            "explain-key",
-            "pipeline-explain",
-            new WorkspaceSnapshot(
-                ContractSchemaVersions.WorkspaceSnapshot,
-                7,
-                9,
-                "csharp",
-                [new WorkspaceFile("Program.cs", 1, "return;")],
-                "Program.cs",
-                ["Program.cs"],
-                "net10-ref",
-                new BuildOptions(BuildConfiguration.Release, true, BuildOutputKind.Console, false, true)),
-            DateTimeOffset.Parse("2026-07-11T00:00:10Z", CultureInfo.InvariantCulture));
+        var request = new ExplainRequest("req-explain", "explain-key", "pipeline-explain", new WorkspaceSnapshot(ContractSchemaVersions.WorkspaceSnapshot, 7, 9, "csharp", [new WorkspaceFile("Program.cs", 1, "return;")], "Program.cs", ["Program.cs"], "net10-ref", new BuildOptions(BuildConfiguration.Release, true, BuildOutputKind.Console, false, true)), DateTimeOffset.Parse("2026-07-11T00:00:10Z", CultureInfo.InvariantCulture));
 
         var document = JsonNode.Parse(JsonSerializer.Serialize(request, JsonOptions))!.AsObject();
 
@@ -80,13 +51,7 @@ public sealed class RequestShapeTests
     public void WorkerDescriptorRoundTripsNegotiatedIdentityAndCapabilities()
     {
         var descriptor = new WorkerDescriptor(
-            new ServiceIdentity(
-                "roslyn-stable",
-                ServiceKind.ToolchainWorker,
-                "20260711.1",
-                new ProtocolVersion(1, 2),
-                ["build", "lsp"],
-                "ready"),
+            new ServiceIdentity("roslyn-stable", ServiceKind.ToolchainWorker, "20260711.1", new ProtocolVersion(1, 2), ["build", "lsp"], "ready"),
             "instance-1",
             WorkerKind.Toolchain,
             "sha256:worker",
@@ -216,10 +181,8 @@ public sealed class RequestShapeTests
             }
             """;
 
-        Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<OperationEvent>(eventWithLegacyDiscriminator, JsonOptions));
-        Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<OperationResult>(resultWithLegacyDiscriminator, JsonOptions));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<OperationEvent>(eventWithLegacyDiscriminator, JsonOptions));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<OperationResult>(resultWithLegacyDiscriminator, JsonOptions));
 
         // An unknown but correctly named discriminator remains the documented
         // forward-compatible ignorable base value.
@@ -229,8 +192,7 @@ public sealed class RequestShapeTests
               "FutureValue": 42
             }
             """;
-        Assert.IsType<OperationResult>(
-            JsonSerializer.Deserialize<OperationResult>(futureResult, JsonOptions));
+        Assert.IsType<OperationResult>(JsonSerializer.Deserialize<OperationResult>(futureResult, JsonOptions));
     }
 
     [Fact]
@@ -255,10 +217,8 @@ public sealed class RequestShapeTests
             }
             """;
 
-        Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<OperationResult>(futureResultWithLegacyAlias, JsonOptions));
-        Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<OperationEventPayload>(futureEventWithLegacyAlias, JsonOptions));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<OperationResult>(futureResultWithLegacyAlias, JsonOptions));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<OperationEventPayload>(futureEventWithLegacyAlias, JsonOptions));
     }
 
 }

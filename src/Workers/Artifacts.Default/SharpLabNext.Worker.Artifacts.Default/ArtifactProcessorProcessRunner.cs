@@ -6,59 +6,30 @@ using SharpLabNext.ArtifactProcessing.Protocol;
 
 namespace SharpLabNext.ArtifactWorker;
 
-internal sealed record ProcessorRunResult(
-    ProcessorResponse Response,
-    string OutputPath,
-    string? PortablePdbOutputPath = null);
+internal sealed record ProcessorRunResult(ProcessorResponse Response, string OutputPath, string? PortablePdbOutputPath = null);
 
 internal interface IArtifactProcessorRunner
 {
-    Task<ProcessorRunResult> RunAsync(
-        MaterializedArtifact artifact,
-        ProcessorOperation operation,
-        bool includeSequencePoints,
-        bool includeCompilerGeneratedMembers,
-        bool includeMetadataTokens,
-        int maxCharacters,
-        int maxFindings,
-        DateTimeOffset deadlineUtc,
-        CancellationToken cancellationToken,
-        string? rewriterProfileId = null);
+    Task<ProcessorRunResult> RunAsync(MaterializedArtifact artifact, ProcessorOperation operation, bool includeSequencePoints, bool includeCompilerGeneratedMembers, bool includeMetadataTokens, int maxCharacters, int maxFindings, DateTimeOffset deadlineUtc, CancellationToken cancellationToken, string? rewriterProfileId = null);
 }
 
-internal sealed class ArtifactProcessorProcessRunner(ArtifactWorkerSettings settings)
-    : IArtifactProcessorRunner
+internal sealed class ArtifactProcessorProcessRunner(ArtifactWorkerSettings settings) : IArtifactProcessorRunner
 {
     private const int MaximumLogCharacters = 64 * 1024;
 
-    public async Task<ProcessorRunResult> RunAsync(
-        MaterializedArtifact artifact,
-        ProcessorOperation operation,
-        bool includeSequencePoints,
-        bool includeCompilerGeneratedMembers,
-        bool includeMetadataTokens,
-        int maxCharacters,
-        int maxFindings,
-        DateTimeOffset deadlineUtc,
-        CancellationToken cancellationToken,
-        string? rewriterProfileId = null)
+    public async Task<ProcessorRunResult> RunAsync(MaterializedArtifact artifact, ProcessorOperation operation, bool includeSequencePoints, bool includeCompilerGeneratedMembers, bool includeMetadataTokens, int maxCharacters, int maxFindings, DateTimeOffset deadlineUtc, CancellationToken cancellationToken, string? rewriterProfileId = null)
     {
         var remaining = deadlineUtc - DateTimeOffset.UtcNow;
         if (remaining <= TimeSpan.Zero)
             return LimitResult(operation, "The artifact processing deadline elapsed before execution.");
-        var timeout = TimeSpan.FromMilliseconds(Math.Min(
-            settings.Limits.MaxProcessorMilliseconds,
-            Math.Max(1, remaining.TotalMilliseconds)));
+        var timeout = TimeSpan.FromMilliseconds(Math.Min(settings.Limits.MaxProcessorMilliseconds, Math.Max(1, remaining.TotalMilliseconds)));
 
         var requestPath = TemporaryArtifactDirectory.ResolvePath(artifact.RootPath, "processor-request.json");
         var responsePath = TemporaryArtifactDirectory.ResolvePath(artifact.RootPath, "processor-response.json");
         var isTransform = operation == ProcessorOperation.RuntimeInstrumentationV1;
-        var outputPath = TemporaryArtifactDirectory.ResolvePath(
-            artifact.RootPath,
-            isTransform ? "processor-output.dll" : "processor-output.txt");
+        var outputPath = TemporaryArtifactDirectory.ResolvePath(artifact.RootPath, isTransform ? "processor-output.dll" : "processor-output.txt");
         var portablePdbOutputPath = isTransform && artifact.PortablePdbPath is not null
-            ? TemporaryArtifactDirectory.ResolvePath(artifact.RootPath, "processor-output.pdb")
-            : null;
+            ? TemporaryArtifactDirectory.ResolvePath(artifact.RootPath, "processor-output.pdb") : null;
         var request = new ProcessorRequest(
             ProcessorProtocol.Version,
             operation,
@@ -75,21 +46,14 @@ internal sealed class ArtifactProcessorProcessRunner(ArtifactWorkerSettings sett
             rewriterProfileId,
             portablePdbOutputPath,
             artifact.Manifest?.ArtifactFormat ?? ArtifactFormatContract.ManagedPe);
-        await File.WriteAllTextAsync(
-            requestPath,
-            JsonSerializer.Serialize(request, ProcessorProtocol.JsonOptions),
-            new UTF8Encoding(false),
-            cancellationToken);
+        await File.WriteAllTextAsync(requestPath, JsonSerializer.Serialize(request, ProcessorProtocol.JsonOptions), new UTF8Encoding(false), cancellationToken);
 
         var startInfo = CreateStartInfo(requestPath, responsePath, artifact.RootPath);
-        using var process = Process.Start(startInfo)
-            ?? throw new ArtifactProcessorCrashedException("The artifact processor could not be started.");
+        using var process = Process.Start(startInfo) ?? throw new ArtifactProcessorCrashedException("The artifact processor could not be started.");
         var stdout = ReadBoundedAsync(process.StandardOutput, MaximumLogCharacters);
         var stderr = ReadBoundedAsync(process.StandardError, MaximumLogCharacters);
         using var timeoutSource = new CancellationTokenSource(timeout);
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            timeoutSource.Token);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
 
         var memoryExceeded = false;
         try
@@ -136,10 +100,7 @@ internal sealed class ArtifactProcessorProcessRunner(ArtifactWorkerSettings sett
             return LimitResult(operation, "The artifact processor exceeded its memory limit.", outputPath);
         if (!File.Exists(responsePath))
         {
-            return InvalidArtifactResult(
-                operation,
-                "The artifact processor terminated without a valid response.",
-                outputPath);
+            return InvalidArtifactResult(operation, "The artifact processor terminated without a valid response.", outputPath);
         }
 
         var responseInfo = new FileInfo(responsePath);
@@ -147,20 +108,11 @@ internal sealed class ArtifactProcessorProcessRunner(ArtifactWorkerSettings sett
         {
             return LimitResult(operation, "The artifact processor response exceeded its limit.", outputPath);
         }
-        await using var responseStream = new FileStream(
-            responsePath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 16 * 1024,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var responseStream = new FileStream(responsePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 16 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
         ProcessorResponse? response;
         try
         {
-            response = await JsonSerializer.DeserializeAsync<ProcessorResponse>(
-                responseStream,
-                ProcessorProtocol.JsonOptions,
-                cancellationToken);
+            response = await JsonSerializer.DeserializeAsync<ProcessorResponse>(responseStream, ProcessorProtocol.JsonOptions, cancellationToken);
         }
         catch (JsonException)
         {
@@ -168,19 +120,15 @@ internal sealed class ArtifactProcessorProcessRunner(ArtifactWorkerSettings sett
         }
         if (response is null || response.ProtocolVersion != ProcessorProtocol.Version)
             return InvalidArtifactResult(operation, "The artifact processor response was invalid.", outputPath);
-        if (response.LinkedRanges.Count > settings.Limits.MaxLinkedRanges ||
-            response.Findings.Count > settings.Limits.MaxFindings)
+        if (response.LinkedRanges.Count > settings.Limits.MaxLinkedRanges || response.Findings.Count > settings.Limits.MaxFindings)
         {
             return LimitResult(operation, "The artifact processor response exceeded its item limit.", outputPath);
         }
         var maximumOutputBytes = isTransform
-            ? settings.Limits.MaxAssemblyBytes
-            : settings.Limits.MaxOutputBytes;
+            ? settings.Limits.MaxAssemblyBytes : settings.Limits.MaxOutputBytes;
         if (File.Exists(outputPath) && new FileInfo(outputPath).Length > maximumOutputBytes)
             return LimitResult(operation, "The artifact processor output exceeded its byte limit.", outputPath);
-        if (portablePdbOutputPath is not null &&
-            File.Exists(portablePdbOutputPath) &&
-            new FileInfo(portablePdbOutputPath).Length > settings.Limits.MaxPortablePdbBytes)
+        if (portablePdbOutputPath is not null && File.Exists(portablePdbOutputPath) && new FileInfo(portablePdbOutputPath).Length > settings.Limits.MaxPortablePdbBytes)
         {
             return LimitResult(operation, "The rewritten portable PDB exceeded its byte limit.", outputPath);
         }
@@ -192,16 +140,7 @@ internal sealed class ArtifactProcessorProcessRunner(ArtifactWorkerSettings sett
         var dotnetHost = ResolveExecutable(settings.DotNetHostPath);
         if (!File.Exists(settings.ProcessorAssemblyPath))
             throw new ArtifactProcessorCrashedException("The artifact processor executable is unavailable.");
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = dotnetHost,
-            WorkingDirectory = workRoot,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = false,
-            CreateNoWindow = true
-        };
+        var startInfo = new ProcessStartInfo { FileName = dotnetHost, WorkingDirectory = workRoot, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = false, CreateNoWindow = true };
         startInfo.ArgumentList.Add(settings.ProcessorAssemblyPath);
         startInfo.ArgumentList.Add("--request");
         startInfo.ArgumentList.Add(requestPath);
@@ -235,18 +174,14 @@ internal sealed class ArtifactProcessorProcessRunner(ArtifactWorkerSettings sett
         if (Path.IsPathFullyQualified(configuredPath))
             return Path.GetFullPath(configuredPath);
         var currentProcess = Environment.ProcessPath;
-        if (string.Equals(configuredPath, "dotnet", StringComparison.OrdinalIgnoreCase) &&
-            currentProcess is not null &&
-            string.Equals(Path.GetFileNameWithoutExtension(currentProcess), "dotnet", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(configuredPath, "dotnet", StringComparison.OrdinalIgnoreCase) && currentProcess is not null && string.Equals(Path.GetFileNameWithoutExtension(currentProcess), "dotnet", StringComparison.OrdinalIgnoreCase))
         {
             return currentProcess;
         }
 
         var executableName = OperatingSystem.IsWindows() && Path.GetExtension(configuredPath).Length == 0
-            ? configuredPath + ".exe"
-            : configuredPath;
-        foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-                     .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            ? configuredPath + ".exe" : configuredPath;
+        foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             var candidate = Path.Combine(directory, executableName);
             if (File.Exists(candidate))
@@ -275,30 +210,16 @@ internal sealed class ArtifactProcessorProcessRunner(ArtifactWorkerSettings sett
             if (!process.HasExited)
                 process.Kill(entireProcessTree: true);
         }
-        catch (InvalidOperationException)
-        {
-        }
+        catch (InvalidOperationException) { }
     }
 
-    private static ProcessorRunResult LimitResult(
-        ProcessorOperation operation,
-        string message,
-        string outputPath = "") =>
-        new(Response(
-            operation,
-            ProcessorOutcome.LimitExceeded,
-            message), outputPath);
+    private static ProcessorRunResult LimitResult(ProcessorOperation operation, string message, string outputPath = "") =>
+        new(Response(operation, ProcessorOutcome.LimitExceeded, message), outputPath);
 
-    private static ProcessorRunResult InvalidArtifactResult(
-        ProcessorOperation operation,
-        string message,
-        string outputPath) =>
+    private static ProcessorRunResult InvalidArtifactResult(ProcessorOperation operation, string message, string outputPath) =>
         new(Response(operation, ProcessorOutcome.InvalidArtifact, message), outputPath);
 
-    private static ProcessorResponse Response(
-        ProcessorOperation operation,
-        ProcessorOutcome outcome,
-        string message) => new(
+    private static ProcessorResponse Response(ProcessorOperation operation, ProcessorOutcome outcome, string message) => new(
             ProcessorProtocol.Version,
             outcome,
             operation switch

@@ -163,7 +163,11 @@ describe('workspace template restoration', () => {
       files: [{ path: 'Program.fs', text: 'printfn "F#"\n' }],
       activeFile: 'Program.fs',
       sourceOrder: ['Program.fs'],
-      selection: { ...csharpSelection, languageId: 'fsharp', toolchainId: 'fsharp-stable' },
+      selection: {
+        ...csharpSelection,
+        languageId: 'fsharp',
+        toolchainId: 'fsharp-stable',
+      },
       template: { fileName: 'Program.fs', source: 'printfn "F#"\n' },
     })
 
@@ -196,9 +200,7 @@ describe('workspace template restoration', () => {
       source: csharp.defaultSource,
       sourceIsTemplate: true,
     })
-    expect(useWorkbenchStore.getState().files).toEqual([
-      { path: 'Program.cs', text: csharp.defaultSource },
-    ])
+    expect(useWorkbenchStore.getState().files).toEqual([{ path: 'Program.cs', text: csharp.defaultSource }])
 
     useWorkbenchStore.getState().selectLanguage(fsharp, fsharpSelection)
 
@@ -224,9 +226,7 @@ describe('workspace template restoration', () => {
       sourceOrder: ['index.php'],
       sourceIsTemplate: true,
     })
-    expect(useWorkbenchStore.getState().files).toEqual([
-      { path: 'index.php', text: php.defaultSource },
-    ])
+    expect(useWorkbenchStore.getState().files).toEqual([{ path: 'index.php', text: php.defaultSource }])
   })
 
   it('restores the current language template when the final file is closed', () => {
@@ -246,9 +246,7 @@ describe('workspace template restoration', () => {
       sourceIsTemplate: true,
       workspaceRevision: before + 1,
     })
-    expect(useWorkbenchStore.getState().files).toEqual([
-      { path: 'index.php', text: php.defaultSource },
-    ])
+    expect(useWorkbenchStore.getState().files).toEqual([{ path: 'index.php', text: php.defaultSource }])
 
     resetWorkbenchStore({ preserveLanguageWorkspaces: true })
     expect(useWorkbenchStore.getState().source).toBe(savedCsharp)
@@ -271,9 +269,7 @@ describe('workspace template restoration', () => {
       sourceIsTemplate: false,
       workspaceRevision: beforeUnknown + 1,
     })
-    expect(useWorkbenchStore.getState().files).toEqual([
-      { path: 'Library.fs', text: 'module Library\n' },
-    ])
+    expect(useWorkbenchStore.getState().files).toEqual([{ path: 'Library.fs', text: 'module Library\n' }])
   })
 
   it('keeps C++/CLI source in its own persistent .cpp workspace', () => {
@@ -380,11 +376,7 @@ describe('workspace source order', () => {
     expect(useWorkbenchStore.getState().files).toEqual(files)
 
     expect(useWorkbenchStore.getState().moveFileInSourceOrder('Middle.fs', 'later')).toBe(true)
-    expect(useWorkbenchStore.getState().sourceOrder).toEqual([
-      'Library.fs',
-      'Middle.fs',
-      'Program.fs',
-    ])
+    expect(useWorkbenchStore.getState().sourceOrder).toEqual(['Library.fs', 'Middle.fs', 'Program.fs'])
     expect(useWorkbenchStore.getState().workspaceRevision).toBe(before.workspaceRevision + 2)
   })
 

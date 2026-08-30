@@ -1,11 +1,6 @@
 export type BuildConfiguration = 'debug' | 'release'
 export type BuildOutputKind = 'auto' | 'console' | 'library' | 'windows-application'
-export type NullableContextMode =
-  | 'project-default'
-  | 'disable'
-  | 'enable'
-  | 'warnings'
-  | 'annotations'
+export type NullableContextMode = 'project-default' | 'disable' | 'enable' | 'warnings' | 'annotations'
 
 export interface ComponentAvailability {
   installed: boolean
@@ -119,10 +114,7 @@ export interface OutputManifest {
   outputArtifactFormat?: string
 }
 
-export type CompatibilityRuleKind =
-  | 'toolchain-reference-set'
-  | 'artifact-processor'
-  | 'artifact-runtime'
+export type CompatibilityRuleKind = 'toolchain-reference-set' | 'artifact-processor' | 'artifact-runtime'
 
 export interface CompatibilityRule {
   id: string
@@ -182,22 +174,9 @@ export interface ResolvedSelection {
   runtimeId?: string | null
 }
 
-export type SelectionField =
-  | 'language'
-  | 'toolchain'
-  | 'reference-set'
-  | 'output'
-  | 'runtime'
-  | 'build-mode'
+export type SelectionField = 'language' | 'toolchain' | 'reference-set' | 'output' | 'runtime' | 'build-mode'
 
-export type SelectionChangeReason =
-  | 'default-applied'
-  | 'legacy-alias-resolved'
-  | 'unsupported-by-language'
-  | 'incompatible-reference-set'
-  | 'incompatible-artifact'
-  | 'runtime-not-required'
-  | 'profile-unavailable'
+export type SelectionChangeReason = 'default-applied' | 'legacy-alias-resolved' | 'unsupported-by-language' | 'incompatible-reference-set' | 'incompatible-artifact' | 'runtime-not-required' | 'profile-unavailable'
 
 export interface SelectionChange {
   field: SelectionField
@@ -214,14 +193,7 @@ export interface EffectiveCapabilities {
   runtimeCapabilities: string[]
 }
 
-export type PipelineStageKind =
-  | 'build'
-  | 'transform'
-  | 'render'
-  | 'verify'
-  | 'run'
-  | 'jit'
-  | 'explain'
+export type PipelineStageKind = 'build' | 'transform' | 'render' | 'verify' | 'run' | 'jit' | 'explain'
 
 export interface PipelineStageDescriptor {
   id: string
@@ -423,34 +395,11 @@ export interface OperationHandle {
   isExisting: boolean
 }
 
-export type OperationKind =
-  | 'build'
-  | 'transform-artifact'
-  | 'render-artifact'
-  | 'verify-artifact'
-  | 'run'
-  | 'jit'
-  | 'explain'
+export type OperationKind = 'build' | 'transform-artifact' | 'render-artifact' | 'verify-artifact' | 'run' | 'jit' | 'explain'
 
-export type OperationStatus =
-  | 'accepted'
-  | 'running'
-  | 'cancelling'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
+export type OperationStatus = 'accepted' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
 
-export type WorkerErrorCategory =
-  | 'invalid-argument'
-  | 'not-found'
-  | 'unsupported-capability'
-  | 'stale-revision'
-  | 'incompatible-artifact'
-  | 'resource-exhausted'
-  | 'deadline-exceeded'
-  | 'cancelled'
-  | 'unavailable'
-  | 'internal'
+export type WorkerErrorCategory = 'invalid-argument' | 'not-found' | 'unsupported-capability' | 'stale-revision' | 'incompatible-artifact' | 'resource-exhausted' | 'deadline-exceeded' | 'cancelled' | 'unavailable' | 'internal'
 
 export interface WorkerError {
   code: string
@@ -597,11 +546,7 @@ export interface ArtifactProcessorIdentity {
   workerImageId: string
 }
 
-export type ArtifactJobOutcome =
-  | 'succeeded'
-  | 'unsupported-artifact'
-  | 'invalid-artifact'
-  | 'limit-exceeded'
+export type ArtifactJobOutcome = 'succeeded' | 'unsupported-artifact' | 'invalid-artifact' | 'limit-exceeded'
 
 export interface LinkedRange {
   sourceFilePath?: string | null
@@ -620,12 +565,7 @@ export interface ArtifactRenderResult {
   identity?: ArtifactProcessorIdentity | null
 }
 
-export type ArtifactVerificationOutcome =
-  | 'valid'
-  | 'findings'
-  | 'unsupported-artifact'
-  | 'invalid-artifact'
-  | 'limit-exceeded'
+export type ArtifactVerificationOutcome = 'valid' | 'findings' | 'unsupported-artifact' | 'invalid-artifact' | 'limit-exceeded'
 
 export interface VerificationFinding {
   code: string
@@ -661,15 +601,7 @@ export interface RuntimeIdentity {
   architecture: string
 }
 
-export type RunTerminalStatus =
-  | 'completed'
-  | 'user-exception'
-  | 'non-zero-exit'
-  | 'timeout'
-  | 'out-of-memory'
-  | 'process-crash'
-  | 'cancelled'
-  | 'output-limit-exceeded'
+export type RunTerminalStatus = 'completed' | 'user-exception' | 'non-zero-exit' | 'timeout' | 'out-of-memory' | 'process-crash' | 'cancelled' | 'output-limit-exceeded'
 
 export interface RunResult {
   resultType: 'run'
@@ -699,15 +631,7 @@ export interface JitIdentity extends RuntimeIdentity {
   inspectionMethod: string
 }
 
-export type JitTerminalStatus =
-  | 'completed'
-  | 'no-matching-methods'
-  | 'inspection-failed'
-  | 'timeout'
-  | 'out-of-memory'
-  | 'process-crash'
-  | 'cancelled'
-  | 'output-limit-exceeded'
+export type JitTerminalStatus = 'completed' | 'no-matching-methods' | 'inspection-failed' | 'timeout' | 'out-of-memory' | 'process-crash' | 'cancelled' | 'output-limit-exceeded'
 
 export interface JitResult {
   resultType: 'jit'
@@ -729,17 +653,7 @@ export interface ArtifactTransformResult {
   identity?: ArtifactProcessorIdentity | null
 }
 
-export type OperationResult =
-  | BuildResult
-  | CompilationCheckResult
-  | AstResult
-  | GeneratedSourceResult
-  | ArtifactTransformResult
-  | ArtifactRenderResult
-  | ArtifactVerificationResult
-  | RunResult
-  | JitResult
-  | ExplainResult
+export type OperationResult = BuildResult | CompilationCheckResult | AstResult | GeneratedSourceResult | ArtifactTransformResult | ArtifactRenderResult | ArtifactVerificationResult | RunResult | JitResult | ExplainResult
 
 export type OutputChannel = 'stdout' | 'stderr' | 'inspection' | 'flow' | 'jit' | 'log'
 
@@ -752,11 +666,26 @@ export interface OutputChunk {
 
 export type OperationEventPayload =
   | { kind: 'accepted'; requestId: string; operationKind: OperationKind }
-  | { kind: 'progress'; stage: string; message?: string | null; fraction?: number | null }
+  | {
+      kind: 'progress'
+      stage: string
+      message?: string | null
+      fraction?: number | null
+    }
   | { kind: 'diagnostic'; diagnostic: Diagnostic }
   | { kind: 'output-chunk'; chunk: OutputChunk }
-  | { kind: 'artifact-produced'; artifactRef: string; artifactFormat: string; role: string }
-  | { kind: 'content-produced'; contentRef: string; mediaType: string; size: number }
+  | {
+      kind: 'artifact-produced'
+      artifactRef: string
+      artifactFormat: string
+      role: string
+    }
+  | {
+      kind: 'content-produced'
+      contentRef: string
+      mediaType: string
+      size: number
+    }
   | { kind: 'typed-result'; result: OperationResult }
   | {
       kind: 'output-truncated'

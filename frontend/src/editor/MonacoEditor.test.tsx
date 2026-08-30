@@ -40,14 +40,14 @@ const mocks = vi.hoisted(() => {
     getValue: () => string
     getVersionId: () => number
     isDisposed: () => boolean
-    onDidChangeContent: (handler: (event: ModelContentEvent) => void) => { dispose: () => void }
+    onDidChangeContent: (handler: (event: ModelContentEvent) => void) => {
+      dispose: () => void
+    }
     emitContent: (event: ModelContentEvent) => void
     setValue: (value: string) => void
   }> = []
   let activeModel: (typeof models)[number] | null = null
-  let cursorHandler:
-    | ((event: { position: { lineNumber: number; column: number } }) => void)
-    | null = null
+  let cursorHandler: ((event: { position: { lineNumber: number; column: number } }) => void) | null = null
   let cursorSelectionHandler:
     | ((event: {
         source: string
@@ -63,40 +63,38 @@ const mocks = vi.hoisted(() => {
   let keyDownHandler: (() => void) | null = null
   let mouseUpHandler:
     | ((event: {
-        event: { leftButton: boolean; browserEvent: { detail: number } & MockMouseModifiers }
+        event: {
+          leftButton: boolean
+          browserEvent: { detail: number } & MockMouseModifiers
+        }
         target: { position: { lineNumber: number; column: number } | null }
       }) => void)
     | null = null
   let mouseDownHandler:
     | ((event: {
-        event: { leftButton: boolean; browserEvent: { detail: number } & MockMouseModifiers }
+        event: {
+          leftButton: boolean
+          browserEvent: { detail: number } & MockMouseModifiers
+        }
         target: { position: { lineNumber: number; column: number } | null }
       }) => void)
     | null = null
   let languageStatusHandler: ((change: { status: string }) => void) | null = null
-  let documentSymbolsHandler:
-    | ((change: {
-        path: string
-        version: number
-        symbols: readonly LspDocumentSymbol[] | null
-      }) => void)
-    | null = null
+  let documentSymbolsHandler: ((change: { path: string; version: number; symbols: readonly LspDocumentSymbol[] | null }) => void) | null = null
   const editor = {
-    addCommand: vi.fn(
-      (_keybinding: number, _handler: () => void, _context?: string) => 'snippet-enter',
-    ),
+    addCommand: vi.fn((_keybinding: number, _handler: () => void, _context?: string) => 'snippet-enter'),
     dispose: vi.fn(),
     focus: vi.fn(),
     getModel: vi.fn(() => activeModel),
     getPosition: vi.fn(() => ({ lineNumber: 1, column: 1 })),
-    getSelection: vi.fn((): { isEmpty: () => boolean } => ({ isEmpty: () => true })),
+    getSelection: vi.fn((): { isEmpty: () => boolean } => ({
+      isEmpty: () => true,
+    })),
     layout: vi.fn(),
-    onDidChangeCursorPosition: vi.fn(
-      (handler: (event: { position: { lineNumber: number; column: number } }) => void) => {
-        cursorHandler = handler
-        return { dispose: vi.fn() }
-      },
-    ),
+    onDidChangeCursorPosition: vi.fn((handler: (event: { position: { lineNumber: number; column: number } }) => void) => {
+      cursorHandler = handler
+      return { dispose: vi.fn() }
+    }),
     onDidChangeCursorSelection: vi.fn((handler: NonNullable<typeof cursorSelectionHandler>) => {
       cursorSelectionHandler = handler
       return { dispose: vi.fn() }
@@ -108,7 +106,10 @@ const mocks = vi.hoisted(() => {
     onMouseDown: vi.fn(
       (
         handler: (event: {
-          event: { leftButton: boolean; browserEvent: { detail: number } & MockMouseModifiers }
+          event: {
+            leftButton: boolean
+            browserEvent: { detail: number } & MockMouseModifiers
+          }
           target: { position: { lineNumber: number; column: number } | null }
         }) => void,
       ) => {
@@ -119,7 +120,10 @@ const mocks = vi.hoisted(() => {
     onMouseUp: vi.fn(
       (
         handler: (event: {
-          event: { leftButton: boolean; browserEvent: { detail: number } & MockMouseModifiers }
+          event: {
+            leftButton: boolean
+            browserEvent: { detail: number } & MockMouseModifiers
+          }
           target: { position: { lineNumber: number; column: number } | null }
         }) => void,
       ) => {
@@ -146,9 +150,7 @@ const mocks = vi.hoisted(() => {
       const model = {
         text,
         uri,
-        deltaDecorations: vi.fn((_old: string[], decorations: unknown[]) =>
-          decorations.map((_, index) => `decoration-${index + 1}`),
-        ),
+        deltaDecorations: vi.fn((_old: string[], decorations: unknown[]) => decorations.map((_, index) => `decoration-${index + 1}`)),
         dispose: vi.fn(),
         getLanguageId: () => languageId,
         getValue: () => model.text,
@@ -183,8 +185,7 @@ const mocks = vi.hoisted(() => {
       setSessionStatus: vi.fn(),
       unregisterDocument: vi.fn(),
     },
-    emitCursor: (lineNumber: number, column: number) =>
-      cursorHandler?.({ position: { lineNumber, column } }),
+    emitCursor: (lineNumber: number, column: number) => cursorHandler?.({ position: { lineNumber, column } }),
     emitCursorSelection: (startColumn: number, endColumn: number, source = 'mouse') =>
       cursorSelectionHandler?.({
         source,
@@ -211,29 +212,18 @@ const mocks = vi.hoisted(() => {
           },
         ],
       }),
-    emitMouseDown: (
-      lineNumber: number,
-      column: number,
-      detail = 1,
-      modifiers: MockMouseModifiers = {},
-    ) =>
+    emitMouseDown: (lineNumber: number, column: number, detail = 1, modifiers: MockMouseModifiers = {}) =>
       mouseDownHandler?.({
         event: { leftButton: true, browserEvent: { detail, ...modifiers } },
         target: { position: { lineNumber, column } },
       }),
-    emitMouseUp: (
-      lineNumber: number,
-      column: number,
-      detail = 1,
-      modifiers: MockMouseModifiers = {},
-    ) =>
+    emitMouseUp: (lineNumber: number, column: number, detail = 1, modifiers: MockMouseModifiers = {}) =>
       mouseUpHandler?.({
         event: { leftButton: true, browserEvent: { detail, ...modifiers } },
         target: { position: { lineNumber, column } },
       }),
     emitLanguageStatus: (status: string) => languageStatusHandler?.({ status }),
-    emitDocumentSymbols: (symbols: readonly LspDocumentSymbol[] | null) =>
-      documentSymbolsHandler?.({ path: 'Program.cs', version: 1, symbols }),
+    emitDocumentSymbols: (symbols: readonly LspDocumentSymbol[] | null) => documentSymbolsHandler?.({ path: 'Program.cs', version: 1, symbols }),
     setLanguageStatusHandler: (handler: (change: { status: string }) => void) => {
       languageStatusHandler = handler
     },
@@ -268,12 +258,7 @@ vi.mock('./monacoCore', () => ({
     readonly endLineNumber: number
     readonly endColumn: number
 
-    constructor(
-      startLineNumber: number,
-      startColumn: number,
-      endLineNumber: number,
-      endColumn: number,
-    ) {
+    constructor(startLineNumber: number, startColumn: number, endLineNumber: number, endColumn: number) {
       this.startLineNumber = startLineNumber
       this.startColumn = startColumn
       this.endLineNumber = endLineNumber
@@ -343,10 +328,7 @@ const languageSession: MonacoLanguageSessionOptions = {
   sourceOrder: ['Program.cs'],
 }
 
-function resolvedLanguageSession(
-  kind: 'render' | 'run',
-  languageId: 'csharp' | 'il' = 'csharp',
-): MonacoLanguageSessionOptions {
+function resolvedLanguageSession(kind: 'render' | 'run', languageId: 'csharp' | 'il' = 'csharp'): MonacoLanguageSessionOptions {
   const runtimeId = kind === 'run' ? 'dotnet-10-linux-x64' : null
   const outputId = kind === 'run' ? 'run' : 'il'
   const toolchainId = languageId === 'il' ? 'mobius-ilasm-stable' : 'roslyn-stable'
@@ -409,12 +391,7 @@ const flow: ExecutionFlowSourceModel = {
   ],
 }
 
-function editor(
-  executionFlow: ExecutionFlowSourceModel | null,
-  navigationRevision?: number,
-  onCursorMethodChange?: (selection: SourceMethodSelection | null) => void,
-  source = 'line 1\nline 2',
-) {
+function editor(executionFlow: ExecutionFlowSourceModel | null, navigationRevision?: number, onCursorMethodChange?: (selection: SourceMethodSelection | null) => void, source = 'line 1\nline 2') {
   return (
     <MonacoEditor
       files={[{ path: 'Program.cs', text: source }]}
@@ -483,7 +460,11 @@ describe('Monaco execution-flow presentation', () => {
         files={[{ path: 'Program.cs', text: 'class Utility { int Value; }' }]}
         activeFile="Program.cs"
         monacoLanguageId="csharp"
-        languageSession={{ ...initialSession, resolution: null, workspaceRevision: 2 }}
+        languageSession={{
+          ...initialSession,
+          resolution: null,
+          workspaceRevision: 2,
+        }}
         executionFlow={null}
         sourceNavigation={null}
         fontSize={14}
@@ -517,9 +498,7 @@ describe('Monaco execution-flow presentation', () => {
     await waitFor(() => expect(mocks.sessionUpdates.length).toBeGreaterThan(unresolvedCount))
     const revisedUpdate = mocks.sessionUpdates.at(-1)
     expect(revisedUpdate?.key).not.toBe(initialUpdate.key)
-    expect(JSON.parse(revisedUpdate?.key ?? '{}')).toEqual(
-      expect.objectContaining({ outputKind: 'console', selectionRevision: 2 }),
-    )
+    expect(JSON.parse(revisedUpdate?.key ?? '{}')).toEqual(expect.objectContaining({ outputKind: 'console', selectionRevision: 2 }))
     view.unmount()
   })
 
@@ -548,25 +527,17 @@ describe('Monaco execution-flow presentation', () => {
   it('applies shared font size changes without recreating the editor', async () => {
     const view = render(editor(null))
     await waitFor(() => expect(mocks.createEditor).toHaveBeenCalledTimes(1))
-    expect(mocks.createEditor.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({ fontSize: 14, lineHeight: 21 }),
-    )
+    expect(mocks.createEditor.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ fontSize: 14, lineHeight: 21 }))
 
     view.rerender(
-      <MonacoEditor
-        files={[{ path: 'Program.cs', text: 'line 1' }]}
-        activeFile="Program.cs"
-        monacoLanguageId="csharp"
-        languageSession={languageSession}
-        executionFlow={null}
-        sourceNavigation={null}
-        fontSize={18}
-        onChange={vi.fn()}
-      />,
+      <MonacoEditor files={[{ path: 'Program.cs', text: 'line 1' }]} activeFile="Program.cs" monacoLanguageId="csharp" languageSession={languageSession} executionFlow={null} sourceNavigation={null} fontSize={18} onChange={vi.fn()} />,
     )
 
     await waitFor(() =>
-      expect(mocks.editor.updateOptions).toHaveBeenCalledWith({ fontSize: 18, lineHeight: 27 }),
+      expect(mocks.editor.updateOptions).toHaveBeenCalledWith({
+        fontSize: 18,
+        lineHeight: 27,
+      }),
     )
     expect(mocks.createEditor).toHaveBeenCalledTimes(1)
     expect(editorLineHeight(20)).toBe(30)
@@ -584,32 +555,16 @@ describe('Monaco execution-flow presentation', () => {
       }),
     )
     for (const keyCode of [3, 2]) {
-      expect(mocks.editor.addCommand).toHaveBeenCalledWith(
-        keyCode,
-        expect.any(Function),
-        'inSnippetMode && hasNextTabstop',
-      )
-      const snippetNavigationHandler = mocks.editor.addCommand.mock.calls.find(
-        ([registeredKeyCode]) => registeredKeyCode === keyCode,
-      )?.[1]
+      expect(mocks.editor.addCommand).toHaveBeenCalledWith(keyCode, expect.any(Function), 'inSnippetMode && hasNextTabstop')
+      const snippetNavigationHandler = mocks.editor.addCommand.mock.calls.find(([registeredKeyCode]) => registeredKeyCode === keyCode)?.[1]
       if (typeof snippetNavigationHandler !== 'function') {
         throw new Error(`Snippet navigation handler missing for key code ${keyCode}.`)
       }
       snippetNavigationHandler()
     }
     expect(mocks.editor.trigger).toHaveBeenCalledTimes(2)
-    expect(mocks.editor.trigger).toHaveBeenNthCalledWith(
-      1,
-      'keyboard',
-      'jumpToNextSnippetPlaceholder',
-      null,
-    )
-    expect(mocks.editor.trigger).toHaveBeenNthCalledWith(
-      2,
-      'keyboard',
-      'jumpToNextSnippetPlaceholder',
-      null,
-    )
+    expect(mocks.editor.trigger).toHaveBeenNthCalledWith(1, 'keyboard', 'jumpToNextSnippetPlaceholder', null)
+    expect(mocks.editor.trigger).toHaveBeenNthCalledWith(2, 'keyboard', 'jumpToNextSnippetPlaceholder', null)
     view.unmount()
   })
 
@@ -631,11 +586,7 @@ describe('Monaco execution-flow presentation', () => {
       await Promise.resolve()
     })
 
-    expect(mocks.editor.trigger).toHaveBeenCalledWith(
-      'keyboard',
-      'editor.action.triggerSuggest',
-      null,
-    )
+    expect(mocks.editor.trigger).toHaveBeenCalledWith('keyboard', 'editor.action.triggerSuggest', null)
     view.unmount()
   })
 
@@ -713,9 +664,7 @@ describe('Monaco execution-flow presentation', () => {
 
     // Once the parent catches up, the guard is cleared and normal external
     // synchronization remains available.
-    view.rerender(
-      <MonacoEditor {...props} files={[{ path: 'Program.cs', text: 'line X\nline 2' }]} />,
-    )
+    view.rerender(<MonacoEditor {...props} files={[{ path: 'Program.cs', text: 'line X\nline 2' }]} />)
     view.rerender(<MonacoEditor {...props} files={[{ path: 'Program.cs', text: 'server text' }]} />)
     expect(model.getValue()).toBe('server text')
     view.unmount()
@@ -771,14 +720,15 @@ describe('Monaco execution-flow presentation', () => {
     expect(model).toBeDefined()
     if (!model) throw new Error('Expected Monaco source model.')
     await waitFor(() => expect(model.deltaDecorations).toHaveBeenCalled())
-    const flowCall = model.deltaDecorations.mock.calls.find((call) =>
-      (call[1] as Array<{ options?: { afterContentClassName?: string } }>).some((decoration) =>
-        decoration.options?.afterContentClassName?.includes('execution-flow-count'),
-      ),
-    )
+    const flowCall = model.deltaDecorations.mock.calls.find((call) => (call[1] as Array<{ options?: { afterContentClassName?: string } }>).some((decoration) => decoration.options?.afterContentClassName?.includes('execution-flow-count')))
     expect(flowCall?.[1]).toEqual([
       expect.objectContaining({
-        range: { startLineNumber: 2, startColumn: 1, endLineNumber: 2, endColumn: 7 },
+        range: {
+          startLineNumber: 2,
+          startColumn: 1,
+          endLineNumber: 2,
+          endColumn: 7,
+        },
         options: expect.objectContaining({
           afterContentClassName: 'execution-flow-count execution-flow-count-2',
         }),
@@ -786,18 +736,10 @@ describe('Monaco execution-flow presentation', () => {
     ])
     const decorations = flowCall?.[1] as Array<{ options: Record<string, unknown> }> | undefined
     expect(decorations?.[0]?.options).not.toHaveProperty('glyphMarginClassName')
-    expect(
-      document.head.querySelector('[data-sharplabnext-execution-flow]')?.textContent,
-    ).toContain('content: "2"')
+    expect(document.head.querySelector('[data-sharplabnext-execution-flow]')?.textContent).toContain('content: "2"')
 
     view.rerender(editor(null))
-    await waitFor(() =>
-      expect(
-        model.deltaDecorations.mock.calls.some(
-          (call) => (call[0] as string[]).includes('decoration-1') && call[1].length === 0,
-        ),
-      ).toBe(true),
-    )
+    await waitFor(() => expect(model.deltaDecorations.mock.calls.some((call) => (call[0] as string[]).includes('decoration-1') && call[1].length === 0)).toBe(true))
   })
 
   it('selects and reveals the exact 1-based navigation range', async () => {
@@ -806,7 +748,12 @@ describe('Monaco execution-flow presentation', () => {
 
     view.rerender(editor(flow, 1))
 
-    const range = { startLineNumber: 2, startColumn: 1, endLineNumber: 2, endColumn: 7 }
+    const range = {
+      startLineNumber: 2,
+      startColumn: 1,
+      endLineNumber: 2,
+      endColumn: 7,
+    }
     await waitFor(() => expect(mocks.editor.setSelection).toHaveBeenCalledWith(range))
     expect(mocks.editor.revealRangeInCenter).toHaveBeenCalledWith(range, 0)
     expect(mocks.editor.focus).toHaveBeenCalled()
@@ -843,27 +790,14 @@ describe('Monaco execution-flow presentation', () => {
       const candidates = model.deltaDecorations.mock.calls
         .flatMap((call) => call[1] as Array<Record<string, unknown>>)
         .filter((item) => {
-          const options = item.options as
-            | { className?: string; inlineClassName?: string }
-            | undefined
-          return (
-            options?.className?.includes('source-association') ||
-            options?.inlineClassName?.includes('source-association')
-          )
+          const options = item.options as { className?: string; inlineClassName?: string } | undefined
+          return options?.className?.includes('source-association') || options?.inlineClassName?.includes('source-association')
         })
       expect(candidates).toHaveLength(2)
       return candidates
     })
-    const lineDecoration = decorations.find((item) =>
-      String((item.options as { className?: string } | undefined)?.className).includes(
-        'monaco-source-association-line',
-      ),
-    )
-    const rangeDecoration = decorations.find((item) =>
-      (item.options as { inlineClassName?: string } | undefined)?.inlineClassName?.includes(
-        'monaco-source-association-range',
-      ),
-    )
+    const lineDecoration = decorations.find((item) => String((item.options as { className?: string } | undefined)?.className).includes('monaco-source-association-line'))
+    const rangeDecoration = decorations.find((item) => (item.options as { inlineClassName?: string } | undefined)?.inlineClassName?.includes('monaco-source-association-range'))
     expect(lineDecoration).toEqual(
       expect.objectContaining({
         range: {
@@ -902,20 +836,15 @@ describe('Monaco execution-flow presentation', () => {
     await waitFor(() =>
       expect(
         model.deltaDecorations.mock.calls.some((call) =>
-          (call[1] as Array<{ options?: { className?: string; inlineClassName?: string } }>).some(
-            (decoration) =>
-              decoration.options?.className?.includes('monaco-source-association-line-active'),
-          ),
+          (
+            call[1] as Array<{
+              options?: { className?: string; inlineClassName?: string }
+            }>
+          ).some((decoration) => decoration.options?.className?.includes('monaco-source-association-line-active')),
         ),
       ).toBe(true),
     )
-    expect(
-      model.deltaDecorations.mock.calls.some((call) =>
-        (call[1] as Array<{ options?: { inlineClassName?: string } }>).some((decoration) =>
-          decoration.options?.inlineClassName?.includes('monaco-source-association-exact-active'),
-        ),
-      ),
-    ).toBe(true)
+    expect(model.deltaDecorations.mock.calls.some((call) => (call[1] as Array<{ options?: { inlineClassName?: string } }>).some((decoration) => decoration.options?.inlineClassName?.includes('monaco-source-association-exact-active')))).toBe(true)
 
     mocks.editor.getSelection.mockReturnValue({ isEmpty: () => false })
     act(() => mocks.emitMouseUp(1, 3))
@@ -977,9 +906,7 @@ describe('Monaco execution-flow presentation', () => {
     if (!model) throw new Error('Expected Monaco source model.')
 
     await waitFor(() => expect(model.deltaDecorations).toHaveBeenCalled())
-    expect(model.deltaDecorations.mock.calls.flatMap((call) => call[1] as unknown[])).toHaveLength(
-      0,
-    )
+    expect(model.deltaDecorations.mock.calls.flatMap((call) => call[1] as unknown[])).toHaveLength(0)
 
     act(() => {
       mocks.emitMouseDown(1, 1)
@@ -1034,7 +961,10 @@ describe('Monaco execution-flow presentation', () => {
       mocks.emitMouseDown(1, 3)
       mocks.emitMouseUp(1, 3)
     })
-    expect(mocks.editor.setPosition).toHaveBeenCalledWith({ lineNumber: 1, column: 3 })
+    expect(mocks.editor.setPosition).toHaveBeenCalledWith({
+      lineNumber: 1,
+      column: 3,
+    })
 
     mocks.editor.setPosition.mockClear()
     act(() => {
@@ -1046,9 +976,7 @@ describe('Monaco execution-flow presentation', () => {
 
     view.rerender(<MonacoEditor {...props} activeSourceAssociationKey={identifier.key} />)
     await waitFor(() => {
-      const latest = model.deltaDecorations.mock.calls.at(-1)?.[1] as
-        | Array<{ options?: { className?: string; inlineClassName?: string } }>
-        | undefined
+      const latest = model.deltaDecorations.mock.calls.at(-1)?.[1] as Array<{ options?: { className?: string; inlineClassName?: string } }> | undefined
       expect(latest).toHaveLength(0)
     })
   })
@@ -1060,19 +988,18 @@ describe('Monaco execution-flow presentation', () => {
       {
         name: 'Compute',
         kind: 6,
-        range: { start: { line: 1, character: 4 }, end: { line: 6, character: 5 } },
-        selectionRange: { start: { line: 2, character: 4 }, end: { line: 2, character: 11 } },
+        range: {
+          start: { line: 1, character: 4 },
+          end: { line: 6, character: 5 },
+        },
+        selectionRange: {
+          start: { line: 2, character: 4 },
+          end: { line: 2, character: 11 },
+        },
         children: [],
       },
     ]
-    render(
-      editor(
-        null,
-        undefined,
-        onCursorMethodChange,
-        'class C\n{\n    int Compute(\n        int value)\n    {\n        return value;\n    }\n}',
-      ),
-    )
+    render(editor(null, undefined, onCursorMethodChange, 'class C\n{\n    int Compute(\n        int value)\n    {\n        return value;\n    }\n}'))
     await waitFor(() => expect(mocks.models).toHaveLength(1))
 
     mocks.emitLanguageStatus('ready')
@@ -1080,7 +1007,10 @@ describe('Monaco execution-flow presentation', () => {
     mocks.emitCursor(5, 9)
 
     await waitFor(() =>
-      expect(onCursorMethodChange).toHaveBeenLastCalledWith({ name: 'Compute', lineNumber: 3 }),
+      expect(onCursorMethodChange).toHaveBeenLastCalledWith({
+        name: 'Compute',
+        lineNumber: 3,
+      }),
     )
   })
 })

@@ -25,31 +25,19 @@ public sealed class PeachPieWorkerEndpointTests
             await using var factory = new PeachPieWebApplicationFactory(root);
             using var client = factory.CreateClient();
 
-            var descriptor = await client.GetFromJsonAsync<WorkerDescriptor>(
-                "/api/v1/worker/describe",
-                JsonOptions,
-                TestContext.Current.CancellationToken);
+            var descriptor = await client.GetFromJsonAsync<WorkerDescriptor>("/api/v1/worker/describe", JsonOptions, TestContext.Current.CancellationToken);
             Assert.NotNull(descriptor);
             Assert.Equal(PeachPieToolchain.ToolchainId, descriptor.Service.Id);
             Assert.NotNull(descriptor.Identity);
             Assert.Equal(PeachPieToolchain.CompilerVersion, descriptor.Identity["compilerVersion"]);
             Assert.Equal(PeachPieToolchain.CompilerCommit, descriptor.Identity["compilerCommit"]);
 
-            var capabilities = await client.GetFromJsonAsync<LanguageWorkerCapabilityManifest>(
-                "/api/v1/worker/capabilities",
-                JsonOptions,
-                TestContext.Current.CancellationToken);
+            var capabilities = await client.GetFromJsonAsync<LanguageWorkerCapabilityManifest>("/api/v1/worker/capabilities", JsonOptions, TestContext.Current.CancellationToken);
             Assert.NotNull(capabilities);
             Assert.Contains("artifact", capabilities.Capabilities);
             Assert.DoesNotContain("lsp", capabilities.Capabilities);
 
-            using var invalidResponse = await client.PostAsJsonAsync(
-                "/api/v1/build",
-                PeachPieTestSettings.CreateRequest(
-                    BuildTarget.CompileCheck,
-                    "<?php\nfunction broken( {\n"),
-                JsonOptions,
-                TestContext.Current.CancellationToken);
+            using var invalidResponse = await client.PostAsJsonAsync("/api/v1/build", PeachPieTestSettings.CreateRequest(BuildTarget.CompileCheck, "<?php\nfunction broken( {\n"), JsonOptions, TestContext.Current.CancellationToken);
             var invalidBody = await invalidResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
             Assert.True(invalidResponse.IsSuccessStatusCode, invalidBody);
             var invalid = JsonSerializer.Deserialize<LanguageWorkerBuildHttpResponse>(invalidBody, JsonOptions);
@@ -58,11 +46,7 @@ public sealed class PeachPieWorkerEndpointTests
             Assert.False(check.CompilationSucceeded);
             Assert.All(check.Diagnostics, static diagnostic => Assert.Equal("Program.php", diagnostic.FilePath));
 
-            using var artifactResponse = await client.PostAsJsonAsync(
-                "/api/v1/build",
-                PeachPieTestSettings.CreateRequest(BuildTarget.Artifact, "<?php echo 'endpoint';"),
-                JsonOptions,
-                TestContext.Current.CancellationToken);
+            using var artifactResponse = await client.PostAsJsonAsync("/api/v1/build", PeachPieTestSettings.CreateRequest(BuildTarget.Artifact, "<?php echo 'endpoint';"), JsonOptions, TestContext.Current.CancellationToken);
             var artifactBody = await artifactResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
             Assert.True(artifactResponse.IsSuccessStatusCode, artifactBody);
             var artifact = JsonSerializer.Deserialize<LanguageWorkerBuildHttpResponse>(artifactBody, JsonOptions);
@@ -105,8 +89,7 @@ internal sealed class PeachPieWebApplicationFactory : WebApplicationFactory<glob
         {
             var settings = PeachPieTestSettings.CreateSettings(_root, isolated: true);
             services.RemoveAll<ICompilerProcessRunner>();
-            services.AddSingleton<ICompilerProcessRunner>(
-                PeachPieTestSettings.CreateCompilerProcessRunner(settings));
+            services.AddSingleton<ICompilerProcessRunner>(PeachPieTestSettings.CreateCompilerProcessRunner(settings));
         });
     }
 

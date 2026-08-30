@@ -9,30 +9,9 @@ namespace SharpLabNext.IntegrationTests;
 public sealed class CompilerProcessIsolationTests
 {
     [Theory]
-    [InlineData(
-        "src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable",
-        "SharpLabNext.Worker.Roslyn.Stable.dll",
-        "--sharplabnext-roslyn-build-child",
-        "csharp",
-        "roslyn-stable",
-        "Program.cs",
-        "System.Console.WriteLine(42);")]
-    [InlineData(
-        "src/Workers/FSharp/SharpLabNext.Worker.FSharp",
-        "SharpLabNext.Worker.FSharp.dll",
-        "--sharplabnext-fsharp-build-child",
-        "fsharp",
-        "fsharp-stable",
-        "Program.fs",
-        "module Program\nprintfn \"hello\"\n")]
-    public async Task RealCompilerChildReturnsTypedCompileCheckResult(
-        string projectDirectory,
-        string assemblyName,
-        string childArgument,
-        string languageId,
-        string toolchainId,
-        string fileName,
-        string source)
+    [InlineData("src/Workers/Roslyn.Stable/SharpLabNext.Worker.Roslyn.Stable", "SharpLabNext.Worker.Roslyn.Stable.dll", "--sharplabnext-roslyn-build-child", "csharp", "roslyn-stable", "Program.cs", "System.Console.WriteLine(42);")]
+    [InlineData("src/Workers/FSharp/SharpLabNext.Worker.FSharp", "SharpLabNext.Worker.FSharp.dll", "--sharplabnext-fsharp-build-child", "fsharp", "fsharp-stable", "Program.fs", "module Program\nprintfn \"hello\"\n")]
+    public async Task RealCompilerChildReturnsTypedCompileCheckResult(string projectDirectory, string assemblyName, string childArgument, string languageId, string toolchainId, string fileName, string source)
     {
         var root = FindRepositoryRoot();
         var outputDirectory = Path.Combine(root, projectDirectory, "bin", "Release", "net10.0");
@@ -54,11 +33,7 @@ public sealed class CompilerProcessIsolationTests
             };
             using var runner = new CompilerProcessRunner(
                 CompilerProcessIsolationOptions.Default with { MaximumConcurrentProcesses = 1 },
-                new CompilerProcessCommand(
-                    Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet",
-                    [assemblyPath, childArgument],
-                    outputDirectory,
-                    environment));
+                new CompilerProcessCommand(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet", [assemblyPath, childArgument], outputDirectory, environment));
             var options = new BuildOptions(
                 BuildConfiguration.Release,
                 Optimize: true,
@@ -72,31 +47,9 @@ public sealed class CompilerProcessIsolationTests
                     "php" => "8.5",
                     _ => "14.0"
                 });
-            var request = new BuildRequest(
-                $"{languageId}-child-request",
-                $"{languageId}-child-key",
-                $"{languageId}-child-pipeline",
-                toolchainId,
-                "net10-ref",
-                new WorkspaceSnapshot(
-                    ContractSchemaVersions.WorkspaceSnapshot,
-                    1,
-                    1,
-                    languageId,
-                    [new WorkspaceFile(fileName, 1, source)],
-                    fileName,
-                    [fileName],
-                    "net10-ref",
-                    options),
-                DateTimeOffset.UtcNow.AddSeconds(30),
-                options,
-                BuildTarget.CompileCheck);
+            var request = new BuildRequest($"{languageId}-child-request", $"{languageId}-child-key", $"{languageId}-child-pipeline", toolchainId, "net10-ref", new WorkspaceSnapshot(ContractSchemaVersions.WorkspaceSnapshot, 1, 1, languageId, [new WorkspaceFile(fileName, 1, source)], fileName, [fileName], "net10-ref", options), DateTimeOffset.UtcNow.AddSeconds(30), options, BuildTarget.CompileCheck);
 
-            var execution = await runner.RunAsync<BuildRequest, RawBuildExecution>(
-                "unused",
-                request,
-                TimeSpan.FromSeconds(30),
-                TestContext.Current.CancellationToken);
+            var execution = await runner.RunAsync<BuildRequest, RawBuildExecution>("unused", request, TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
             var result = execution.Result;
             Assert.Equal("compile-check", result.GetProperty("ResultType").GetString());
@@ -114,9 +67,7 @@ public sealed class CompilerProcessIsolationTests
     public async Task PeachPieCompilerChildReturnsSuccessfulCompileCheckResult()
     {
         var root = FindRepositoryRoot();
-        var outputDirectory = Path.Combine(
-            root,
-            "src/Workers/PeachPie/SharpLabNext.Worker.PeachPie/bin/Release/net10.0");
+        var outputDirectory = Path.Combine(root, "src/Workers/PeachPie/SharpLabNext.Worker.PeachPie/bin/Release/net10.0");
         var assemblyPath = Path.Combine(outputDirectory, "SharpLabNext.Worker.PeachPie.dll");
         Assert.True(File.Exists(assemblyPath), assemblyPath);
         var workRoot = Path.Combine(Path.GetTempPath(), "SharpLabNext-CompilerChild", Guid.NewGuid().ToString("N"));
@@ -133,47 +84,11 @@ public sealed class CompilerProcessIsolationTests
             };
             using var runner = new CompilerProcessRunner(
                 CompilerProcessIsolationOptions.Default with { MaximumConcurrentProcesses = 1 },
-                new CompilerProcessCommand(
-                    Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet",
-                    [assemblyPath, "--sharplabnext-peachpie-compiler-child"],
-                    outputDirectory,
-                    environment));
-            var options = new BuildOptions(
-                BuildConfiguration.Release,
-                Optimize: true,
-                BuildOutputKind.Console,
-                AllowUnsafe: false,
-                EmitPortablePdb: false,
-                NullableContextMode.Disable,
-                LanguageVersion: "8.5");
-            var request = new BuildRequest(
-                "php-child-request",
-                "php-child-key",
-                "php-child-pipeline",
-                "peachpie-stable",
-                "net10-ref",
-                new WorkspaceSnapshot(
-                    ContractSchemaVersions.WorkspaceSnapshot,
-                    1,
-                    1,
-                    "php",
-                    [new WorkspaceFile(
-                        "index.php",
-                        1,
-                        "<?php function square($value) { return $value * $value; } echo square(7);")],
-                    "index.php",
-                    ["index.php"],
-                    "net10-ref",
-                    options),
-                DateTimeOffset.UtcNow.AddSeconds(30),
-                options,
-                BuildTarget.CompileCheck);
+                new CompilerProcessCommand(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet", [assemblyPath, "--sharplabnext-peachpie-compiler-child"], outputDirectory, environment));
+            var options = new BuildOptions(BuildConfiguration.Release, Optimize: true, BuildOutputKind.Console, AllowUnsafe: false, EmitPortablePdb: false, NullableContextMode.Disable, LanguageVersion: "8.5");
+            var request = new BuildRequest("php-child-request", "php-child-key", "php-child-pipeline", "peachpie-stable", "net10-ref", new WorkspaceSnapshot(ContractSchemaVersions.WorkspaceSnapshot, 1, 1, "php", [new WorkspaceFile("index.php", 1, "<?php function square($value) { return $value * $value; } echo square(7);")], "index.php", ["index.php"], "net10-ref", options), DateTimeOffset.UtcNow.AddSeconds(30), options, BuildTarget.CompileCheck);
 
-            var execution = await runner.RunAsync<BuildRequest, RawPeachPieCompilerResponse>(
-                "unused",
-                request,
-                TimeSpan.FromSeconds(30),
-                TestContext.Current.CancellationToken);
+            var execution = await runner.RunAsync<BuildRequest, RawPeachPieCompilerResponse>("unused", request, TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
             Assert.True(execution.CompilerProcessId > 0);
             Assert.True(execution.CompilationSucceeded);
@@ -224,12 +139,7 @@ public sealed class CompilerProcessIsolationTests
     {
         using var runner = CreateRunner(
             "compiler-child-memory",
-            CompilerProcessIsolationOptions.Default with
-            {
-                MaximumConcurrentProcesses = 1,
-                MaximumWorkingSetBytes = 64L * 1024 * 1024,
-                MemoryPollIntervalMilliseconds = 10
-            });
+            CompilerProcessIsolationOptions.Default with { MaximumConcurrentProcesses = 1, MaximumWorkingSetBytes = 64L * 1024 * 1024, MemoryPollIntervalMilliseconds = 10 });
 
         var exception = await Assert.ThrowsAsync<CompilerProcessMemoryLimitExceededException>(() =>
             runner.RunAsync<object, string>(
@@ -248,11 +158,7 @@ public sealed class CompilerProcessIsolationTests
             "compiler-child-hang",
             CompilerProcessIsolationOptions.Default with { MaximumConcurrentProcesses = 1 });
         using var firstCancellation = new CancellationTokenSource();
-        var first = runner.RunAsync<object, string>(
-            "unused",
-            new { request = "first" },
-            TimeSpan.FromSeconds(10),
-            firstCancellation.Token);
+        var first = runner.RunAsync<object, string>("unused", new { request = "first" }, TimeSpan.FromSeconds(10), firstCancellation.Token);
         await Task.Delay(100, TestContext.Current.CancellationToken);
 
         await Assert.ThrowsAsync<CompilerProcessCapacityExceededException>(() =>
@@ -271,11 +177,7 @@ public sealed class CompilerProcessIsolationTests
     {
         using var runner = CreateRunner(
             "compiler-child-stderr",
-            CompilerProcessIsolationOptions.Default with
-            {
-                MaximumConcurrentProcesses = 1,
-                MaximumStandardErrorBytes = 1024
-            });
+            CompilerProcessIsolationOptions.Default with { MaximumConcurrentProcesses = 1, MaximumStandardErrorBytes = 1024 });
         var started = Stopwatch.StartNew();
 
         var exception = await Assert.ThrowsAsync<CompilerProcessCrashedException>(() =>
@@ -294,11 +196,7 @@ public sealed class CompilerProcessIsolationTests
     {
         using (var requestRunner = CreateRunner(
                    "compiler-child-hang",
-                   CompilerProcessIsolationOptions.Default with
-                   {
-                       MaximumConcurrentProcesses = 1,
-                       MaximumRequestBytes = 64 * 1024
-                   }))
+                   CompilerProcessIsolationOptions.Default with { MaximumConcurrentProcesses = 1, MaximumRequestBytes = 64 * 1024 }))
         {
             await Assert.ThrowsAsync<CompilerProcessProtocolException>(() =>
                 requestRunner.RunAsync<object, string>(
@@ -310,11 +208,7 @@ public sealed class CompilerProcessIsolationTests
 
         using var responseRunner = CreateRunner(
             "compiler-child-stdout",
-            CompilerProcessIsolationOptions.Default with
-            {
-                MaximumConcurrentProcesses = 1,
-                MaximumResponseBytes = 1024 * 1024
-            });
+            CompilerProcessIsolationOptions.Default with { MaximumConcurrentProcesses = 1, MaximumResponseBytes = 1024 * 1024 });
         await Assert.ThrowsAsync<CompilerProcessProtocolException>(() =>
             responseRunner.RunAsync<object, string>(
                 "unused",
@@ -323,9 +217,7 @@ public sealed class CompilerProcessIsolationTests
                 TestContext.Current.CancellationToken));
     }
 
-    private static CompilerProcessRunner CreateRunner(
-        string mode,
-        CompilerProcessIsolationOptions? options = null)
+    private static CompilerProcessRunner CreateRunner(string mode, CompilerProcessIsolationOptions? options = null)
     {
         var dotnet = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
         var fixture = typeof(RunnerFixtureMarker).Assembly.Location;
@@ -348,8 +240,7 @@ public sealed class CompilerProcessIsolationTests
 
     private static string FindReferencePath(string id, string version, string targetFramework)
     {
-        var materializedRoot = Environment.GetEnvironmentVariable(
-            "SHARPLABNEXT_TEST_CORECLR_REFERENCE_SETS");
+        var materializedRoot = Environment.GetEnvironmentVariable("SHARPLABNEXT_TEST_CORECLR_REFERENCE_SETS");
         if (!string.IsNullOrWhiteSpace(materializedRoot))
         {
             var materialized = Path.Combine(materializedRoot, id);
@@ -376,10 +267,5 @@ public sealed class CompilerProcessIsolationTests
 
     private sealed record RawBuildExecution(JsonElement Result);
 
-    private sealed record RawPeachPieCompilerResponse(
-        int CompilerProcessId,
-        bool CompilationSucceeded,
-        bool EmitSucceeded,
-        byte[] PeImage,
-        IReadOnlyList<JsonElement> Diagnostics);
+    private sealed record RawPeachPieCompilerResponse(int CompilerProcessId, bool CompilationSucceeded, bool EmitSucceeded, byte[] PeImage, IReadOnlyList<JsonElement> Diagnostics);
 }

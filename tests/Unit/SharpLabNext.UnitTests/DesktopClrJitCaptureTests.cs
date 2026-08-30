@@ -33,15 +33,13 @@ public sealed class DesktopClrJitCaptureTests
     {
         var capture = CreateCapture([(0x06000001u, "Example.Program.M", 0x1000UL, new byte[] { 0x90 })]);
 
-        Assert.Throws<InvalidDataException>(() =>
-            DesktopClrJitCapture.Parse(capture.AsSpan(0, capture.Length - 1)));
+        Assert.Throws<InvalidDataException>(() => DesktopClrJitCapture.Parse(capture.AsSpan(0, capture.Length - 1)));
     }
 
     [Fact]
     public void ParseFailsClosedForADeclaredMethodAboveTheCodeLimit()
     {
-        var capture = CreateCapture([(0x06000001u, "Example.Program.M", 0x1000UL, Array.Empty<byte>())],
-            declaredCodeLength: 1024 * 1024 + 1);
+        var capture = CreateCapture([(0x06000001u, "Example.Program.M", 0x1000UL, Array.Empty<byte>())], declaredCodeLength: 1024 * 1024 + 1);
 
         Assert.Throws<InvalidDataException>(() => DesktopClrJitCapture.Parse(capture));
     }
@@ -77,9 +75,7 @@ public sealed class DesktopClrJitCaptureTests
         Assert.Throws<InvalidDataException>(() => DesktopClrJitCapture.Parse(capture));
     }
 
-    private static byte[] CreateCapture(
-        IReadOnlyList<(uint Token, string DisplayName, ulong NativeAddress, byte[] NativeCode)> methods,
-        int? declaredCodeLength = null)
+    private static byte[] CreateCapture(IReadOnlyList<(uint Token, string DisplayName, ulong NativeAddress, byte[] NativeCode)> methods, int? declaredCodeLength = null)
     {
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);

@@ -4,12 +4,7 @@ import { activateHover, EditorView } from '@codemirror/view'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CodeMirrorLspHover, LspPosition } from '../lsp/codeMirrorLanguageClient'
-import {
-  CodeDocumentView,
-  codeDocumentFoldingExtensions,
-  codeDocumentIlHoverSource,
-  codeDocumentSourceMapHoverSource,
-} from './CodeDocumentView'
+import { CodeDocumentView, codeDocumentFoldingExtensions, codeDocumentIlHoverSource, codeDocumentSourceMapHoverSource } from './CodeDocumentView'
 import { createSourceAssociation } from './sourceAssociationModel'
 
 const ilOutputLanguageSessionMock = vi.hoisted(() => ({
@@ -35,9 +30,7 @@ if (!Range.prototype.getBoundingClientRect) {
 }
 
 vi.mock('./MonacoCodeDocumentView', () => ({
-  MonacoCodeDocumentView: ({ text, ariaLabel }: { text: string; ariaLabel: string }) => (
-    <textarea readOnly aria-label={ariaLabel} data-output-editor="monaco" value={text} />
-  ),
+  MonacoCodeDocumentView: ({ text, ariaLabel }: { text: string; ariaLabel: string }) => <textarea readOnly aria-label={ariaLabel} data-output-editor="monaco" value={text} />,
 }))
 
 vi.mock('./ilOutputLanguageSession', async (importOriginal) => ({
@@ -76,16 +69,7 @@ describe('CodeDocumentView', () => {
       workspaceRevision: 2,
       selectionRevision: 3,
     }
-    const rendered = render(
-      <CodeDocumentView
-        text={text}
-        languageId="il"
-        ariaLabel="Semantic IL output"
-        fontSize={14}
-        generationKey="result-1"
-        ilOutputLanguageSessionOptions={languageSessionOptions}
-      />,
-    )
+    const rendered = render(<CodeDocumentView text={text} languageId="il" ariaLabel="Semantic IL output" fontSize={14} generationKey="result-1" ilOutputLanguageSessionOptions={languageSessionOptions} />)
 
     const textbox = screen.getByRole('textbox', { name: 'Semantic IL output' })
     expect(textbox).toHaveAttribute('contenteditable', 'false')
@@ -94,16 +78,7 @@ describe('CodeDocumentView', () => {
       expect(rendered.container.querySelector('.cm-semantic-type')).toHaveTextContent('Console')
     })
 
-    rendered.rerender(
-      <CodeDocumentView
-        text=".class Program {}"
-        languageId="il"
-        ariaLabel="Semantic IL output"
-        fontSize={14}
-        generationKey="result-2"
-        ilOutputLanguageSessionOptions={languageSessionOptions}
-      />,
-    )
+    rendered.rerender(<CodeDocumentView text=".class Program {}" languageId="il" ariaLabel="Semantic IL output" fontSize={14} generationKey="result-2" ilOutputLanguageSessionOptions={languageSessionOptions} />)
     await waitFor(() => {
       expect(rendered.container.querySelector('.cm-semantic-type')).toBeNull()
     })
@@ -117,16 +92,7 @@ describe('CodeDocumentView', () => {
         tokenModifiers: [],
       },
     ]
-    rendered.rerender(
-      <CodeDocumentView
-        text=".class Program {}"
-        languageId="il"
-        ariaLabel="Semantic IL output"
-        fontSize={14}
-        generationKey="result-2"
-        ilOutputLanguageSessionOptions={languageSessionOptions}
-      />,
-    )
+    rendered.rerender(<CodeDocumentView text=".class Program {}" languageId="il" ariaLabel="Semantic IL output" fontSize={14} generationKey="result-2" ilOutputLanguageSessionOptions={languageSessionOptions} />)
     await waitFor(() => {
       expect(rendered.container.querySelector('.cm-semantic-type')).toHaveTextContent('Program')
     })
@@ -136,8 +102,7 @@ describe('CodeDocumentView', () => {
     ilOutputLanguageSessionMock.hover.mockResolvedValue({
       contents: {
         kind: 'markdown',
-        value:
-          '```il\n[System.Console, Version=11.0.0.0, Culture=neutral, PublicKeyToken=null]\n```\n\nAssembly reference',
+        value: '```il\n[System.Console, Version=11.0.0.0, Culture=neutral, PublicKeyToken=null]\n```\n\nAssembly reference',
       },
       range: {
         start: { line: 0, character: 1 },
@@ -157,19 +122,22 @@ describe('CodeDocumentView', () => {
 
     const tooltip = await source(view, 4)
 
-    expect(ilOutputLanguageSessionMock.hover).toHaveBeenCalledWith({ line: 0, character: 4 })
+    expect(ilOutputLanguageSessionMock.hover).toHaveBeenCalledWith({
+      line: 0,
+      character: 4,
+    })
     expect(tooltip).toMatchObject({ pos: 1, end: 15, above: true })
     const dom = tooltip?.create(view).dom
     expect(dom).toHaveClass('cm-lsp-hover')
     expect(dom?.querySelector('.cm-lsp-hover-assembly')).toHaveTextContent('System.Console')
-    expect(dom?.querySelector('.cm-lsp-hover-documentation')).toHaveTextContent(
-      'Assembly reference',
-    )
+    expect(dom?.querySelector('.cm-lsp-hover-documentation')).toHaveTextContent('Assembly reference')
     view.destroy()
   })
 
   it('shows mapped source immediately alongside a pending ready-session IL hover', async () => {
-    const view = new EditorView({ state: EditorState.create({ doc: 'line one' }) })
+    const view = new EditorView({
+      state: EditorState.create({ doc: 'line one' }),
+    })
     let resolveIlHover: ((hover: CodeMirrorLspHover | null) => void) | undefined
     ilOutputLanguageSessionMock.hover.mockImplementation(
       () =>
@@ -185,7 +153,14 @@ describe('CodeDocumentView', () => {
       },
     }
     const sourceMapSource = codeDocumentSourceMapHoverSource({
-      current: [{ startLine: 1, endLine: 1, heading: 'Program.cs:1', body: 'mapped source' }],
+      current: [
+        {
+          startLine: 1,
+          endLine: 1,
+          heading: 'Program.cs:1',
+          body: 'mapped source',
+        },
+      ],
     })
     const ilSource = codeDocumentIlHoverSource(sessionRef)
 
@@ -197,7 +172,10 @@ describe('CodeDocumentView', () => {
     expect(sourceDom).toHaveClass('code-document-source-tooltip')
     expect(sourceDom).toHaveTextContent('Program.cs:1')
     expect(sourceDom).toHaveTextContent('mapped source')
-    expect(ilOutputLanguageSessionMock.hover).toHaveBeenCalledWith({ line: 0, character: 3 })
+    expect(ilOutputLanguageSessionMock.hover).toHaveBeenCalledWith({
+      line: 0,
+      character: 3,
+    })
 
     resolveIlHover?.({
       contents: { kind: 'plaintext', value: 'IL semantic details' },
@@ -228,22 +206,23 @@ describe('CodeDocumentView', () => {
         ariaLabel="Mapped IL output"
         fontSize={14}
         lineTooltips={[
-          { startLine: 1, endLine: 1, heading: 'Program.cs:1', body: 'mapped source' },
+          {
+            startLine: 1,
+            endLine: 1,
+            heading: 'Program.cs:1',
+            body: 'mapped source',
+          },
         ]}
       />,
     )
-    const editor = screen
-      .getByRole('textbox', { name: 'Mapped IL output' })
-      .closest<HTMLElement>('.cm-editor')
+    const editor = screen.getByRole('textbox', { name: 'Mapped IL output' }).closest<HTMLElement>('.cm-editor')
     if (!editor) throw new Error('The mapped IL output editor was not rendered.')
     const editorView = EditorView.findFromDOM(editor)
     if (!editorView) throw new Error('The mapped IL output editor view was not available.')
 
     act(() => activateHover(editorView, 3, 1))
 
-    expect(rendered.container.querySelector('.code-document-source-tooltip')).toHaveTextContent(
-      'mapped source',
-    )
+    expect(rendered.container.querySelector('.code-document-source-tooltip')).toHaveTextContent('mapped source')
     expect(rendered.container.querySelector('.cm-lsp-hover')).toBeNull()
 
     await act(async () => {
@@ -258,13 +237,9 @@ describe('CodeDocumentView', () => {
     })
 
     await waitFor(() => {
-      expect(rendered.container.querySelector('.cm-lsp-hover')).toHaveTextContent(
-        'IL semantic details',
-      )
+      expect(rendered.container.querySelector('.cm-lsp-hover')).toHaveTextContent('IL semantic details')
     })
-    expect(rendered.container.querySelector('.code-document-source-tooltip')).toHaveTextContent(
-      'mapped source',
-    )
+    expect(rendered.container.querySelector('.code-document-source-tooltip')).toHaveTextContent('mapped source')
   })
 
   it('projects JIT structure into CodeMirror fold ranges without changing the document', () => {
@@ -308,9 +283,7 @@ describe('CodeDocumentView', () => {
       />,
     )
     const marker = await waitFor(() => {
-      const candidate = Array.from(
-        container.querySelectorAll<HTMLElement>('.cm-foldGutter .cm-gutterElement'),
-      ).find((element) => element.style.visibility !== 'hidden' && element.textContent?.trim())
+      const candidate = Array.from(container.querySelectorAll<HTMLElement>('.cm-foldGutter .cm-gutterElement')).find((element) => element.style.visibility !== 'hidden' && element.textContent?.trim())
       expect(candidate).toBeDefined()
       return candidate
     })
@@ -341,9 +314,7 @@ describe('CodeDocumentView', () => {
     expect(editorView.state.doc.toString()).toBe(text)
 
     const closedMarker = await waitFor(() => {
-      const candidate = Array.from(
-        container.querySelectorAll<HTMLElement>('.cm-foldGutter .cm-gutterElement'),
-      ).find((element) => element.style.visibility !== 'hidden' && element.textContent?.trim())
+      const candidate = Array.from(container.querySelectorAll<HTMLElement>('.cm-foldGutter .cm-gutterElement')).find((element) => element.style.visibility !== 'hidden' && element.textContent?.trim())
       expect(candidate).toBeDefined()
       return candidate
     })
@@ -357,22 +328,21 @@ describe('CodeDocumentView', () => {
     })
     if (!mappedLine) throw new Error('The mapped JIT line was not restored after unfolding.')
     editorView.dispatch({ selection: { anchor: 0 } })
-    fireEvent.click(mappedLine, { button: 0, detail: 1, clientX: 20, clientY: 20 })
+    fireEvent.click(mappedLine, {
+      button: 0,
+      detail: 1,
+      clientX: 20,
+      clientY: 20,
+    })
     await waitFor(() => expect(onActivate).toHaveBeenCalledOnce())
   })
 
   it('loads the Monaco renderer only when Monaco is selected', async () => {
-    render(
-      <CodeDocumentView
-        text="mov eax, 1"
-        languageId="asm"
-        ariaLabel="Monaco result"
-        fontSize={14}
-        editorKind="monaco"
-      />,
-    )
+    render(<CodeDocumentView text="mov eax, 1" languageId="asm" ariaLabel="Monaco result" fontSize={14} editorKind="monaco" />)
 
-    const output = await screen.findByRole('textbox', { name: 'Monaco result' })
+    const output = await screen.findByRole('textbox', {
+      name: 'Monaco result',
+    })
     expect(output).toHaveAttribute('data-output-editor', 'monaco')
     expect(output).toHaveValue('mov eax, 1')
     expect(document.querySelector('.cm-editor')).not.toBeInTheDocument()
@@ -385,12 +355,7 @@ describe('CodeDocumentView', () => {
     render(
       <>
         <span>Outside result controls</span>
-        <CodeDocumentView
-          text={text}
-          languageId={languageId}
-          ariaLabel="Result code"
-          fontSize={14}
-        />
+        <CodeDocumentView text={text} languageId={languageId} ariaLabel="Result code" fontSize={14} />
       </>,
     )
     const textbox = screen.getByRole('textbox', { name: 'Result code' })
@@ -424,15 +389,11 @@ describe('CodeDocumentView', () => {
   it('remeasures shared font-size changes without recreating the result editor', () => {
     const requestMeasure = vi.spyOn(EditorView.prototype, 'requestMeasure')
     const text = `line 1\n${'long output '.repeat(80)}\nline 3`
-    const view = render(
-      <CodeDocumentView text={text} languageId="csharp" ariaLabel="Result code" fontSize={14} />,
-    )
+    const view = render(<CodeDocumentView text={text} languageId="csharp" ariaLabel="Result code" fontSize={14} />)
     const editor = screen.getByRole('textbox', { name: 'Result code' }).closest('.cm-editor')
     const callsBeforeResize = requestMeasure.mock.calls.length
 
-    view.rerender(
-      <CodeDocumentView text={text} languageId="csharp" ariaLabel="Result code" fontSize={18} />,
-    )
+    view.rerender(<CodeDocumentView text={text} languageId="csharp" ariaLabel="Result code" fontSize={18} />)
 
     expect(screen.getByRole('textbox', { name: 'Result code' }).closest('.cm-editor')).toBe(editor)
     expect(document.querySelector('.code-document-view')).toHaveStyle({
@@ -481,12 +442,22 @@ describe('CodeDocumentView', () => {
     const instruction = lines[1]
     if (!instruction) throw new Error('Mapped instruction line was not rendered.')
 
-    fireEvent.click(instruction, { button: 0, detail: 1, clientX: 20, clientY: 20 })
+    fireEvent.click(instruction, {
+      button: 0,
+      detail: 1,
+      clientX: 20,
+      clientY: 20,
+    })
     fireEvent.scroll(editorView.scrollDOM)
     await new Promise((resolve) => window.setTimeout(resolve, 450))
     expect(onActivate).not.toHaveBeenCalled()
 
-    fireEvent.click(instruction, { button: 0, detail: 1, clientX: 20, clientY: 20 })
+    fireEvent.click(instruction, {
+      button: 0,
+      detail: 1,
+      clientX: 20,
+      clientY: 20,
+    })
     await waitFor(() => expect(onActivate).toHaveBeenCalledOnce())
     expect(instruction).toHaveClass('source-association')
     fireEvent.mouseMove(instruction)
@@ -496,13 +467,33 @@ describe('CodeDocumentView', () => {
 
     onActivate.mockClear()
     editorView.dispatch({ selection: { anchor: 0, head: 8 } })
-    fireEvent.click(instruction, { button: 0, detail: 1, clientX: 40, clientY: 20 })
+    fireEvent.click(instruction, {
+      button: 0,
+      detail: 1,
+      clientX: 40,
+      clientY: 20,
+    })
     expect(onActivate).not.toHaveBeenCalled()
 
     editorView.dispatch({ selection: { anchor: 0 } })
-    fireEvent.click(instruction, { button: 0, detail: 1, clientX: 20, clientY: 20 })
-    fireEvent.click(instruction, { button: 0, detail: 2, clientX: 20, clientY: 20 })
-    fireEvent.doubleClick(instruction, { button: 0, detail: 2, clientX: 20, clientY: 20 })
+    fireEvent.click(instruction, {
+      button: 0,
+      detail: 1,
+      clientX: 20,
+      clientY: 20,
+    })
+    fireEvent.click(instruction, {
+      button: 0,
+      detail: 2,
+      clientX: 20,
+      clientY: 20,
+    })
+    fireEvent.doubleClick(instruction, {
+      button: 0,
+      detail: 2,
+      clientX: 20,
+      clientY: 20,
+    })
     await new Promise((resolve) => window.setTimeout(resolve, 200))
     expect(onActivate).not.toHaveBeenCalled()
 
@@ -527,9 +518,7 @@ describe('CodeDocumentView', () => {
       />,
     )
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalledOnce())
-    expect(editor.querySelectorAll<HTMLElement>('.cm-line')[1]).toHaveClass(
-      'cm-source-association-active',
-    )
+    expect(editor.querySelectorAll<HTMLElement>('.cm-line')[1]).toHaveClass('cm-source-association-active')
     const scroller = editor.querySelector<HTMLElement>('.cm-scroller')
     if (!scroller) throw new Error('The result scroller was not rendered.')
     scroller.scrollTop = 120
@@ -593,13 +582,16 @@ describe('CodeDocumentView', () => {
       fontSize: 14 as const,
       generationKey: 'workflow-1',
       lineActions: [
-        { startLine: 1, endLine: 2, ariaLabel: 'Open Program.cs:1', onActivate: firstAction },
+        {
+          startLine: 1,
+          endLine: 2,
+          ariaLabel: 'Open Program.cs:1',
+          onActivate: firstAction,
+        },
       ],
     }
     const view = render(<CodeDocumentView {...props} />)
-    const editor = screen
-      .getByRole('textbox', { name: 'Generation-safe result' })
-      .closest<HTMLElement>('.cm-editor')
+    const editor = screen.getByRole('textbox', { name: 'Generation-safe result' }).closest<HTMLElement>('.cm-editor')
     if (!editor) throw new Error('Result editor was not rendered.')
     const line = editor.querySelector<HTMLElement>('.cm-line')
     if (!line) throw new Error('Result line was not rendered.')
@@ -609,7 +601,12 @@ describe('CodeDocumentView', () => {
       <CodeDocumentView
         {...props}
         lineActions={[
-          { startLine: 1, endLine: 2, ariaLabel: 'Open Program.cs:1', onActivate: latestAction },
+          {
+            startLine: 1,
+            endLine: 2,
+            ariaLabel: 'Open Program.cs:1',
+            onActivate: latestAction,
+          },
         ]}
       />,
     )
@@ -623,7 +620,12 @@ describe('CodeDocumentView', () => {
         {...props}
         generationKey="workflow-2"
         lineActions={[
-          { startLine: 1, endLine: 2, ariaLabel: 'Open Program.cs:1', onActivate: latestAction },
+          {
+            startLine: 1,
+            endLine: 2,
+            ariaLabel: 'Open Program.cs:1',
+            onActivate: latestAction,
+          },
         ]}
       />,
     )
@@ -633,9 +635,7 @@ describe('CodeDocumentView', () => {
 
   it('reveals a referenced JIT block label with a selection-safe click', async () => {
     const text = 'G_M000_IG01:\n  jne G_M000_IG01\n  ret'
-    render(
-      <CodeDocumentView text={text} languageId="asm" ariaLabel="Label navigation" fontSize={14} />,
-    )
+    render(<CodeDocumentView text={text} languageId="asm" ariaLabel="Label navigation" fontSize={14} />)
     const textbox = screen.getByRole('textbox', { name: 'Label navigation' })
     const editor = textbox.closest<HTMLElement>('.cm-editor')
     if (!editor) throw new Error('Result editor was not rendered.')
@@ -647,14 +647,7 @@ describe('CodeDocumentView', () => {
 
     fireEvent.click(referenceLine, { button: 0, detail: 1 })
 
-    await waitFor(() =>
-      expect(
-        editorView.state.sliceDoc(
-          editorView.state.selection.main.from,
-          editorView.state.selection.main.to,
-        ),
-      ).toBe('G_M000_IG01'),
-    )
+    await waitFor(() => expect(editorView.state.sliceDoc(editorView.state.selection.main.from, editorView.state.selection.main.to)).toBe('G_M000_IG01'))
     expect(editorView.state.selection.main.from).toBe(0)
 
     editorView.dispatch({ selection: { anchor: text.length } })

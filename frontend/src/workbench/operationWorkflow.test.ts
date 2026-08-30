@@ -2,13 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PipelineStageKind, ResolveSelectionResponse } from '../api/types'
 import { createFollowupOperation, createInitialPipelineOperation } from './operationWorkflow'
 
-function resolution(
-  outputId: string,
-  kind: PipelineStageKind,
-  providerId: string,
-  runtimeId: string | null = null,
-  securityPolicyId = runtimeId ? 'runtime-job-default' : 'compiler-default',
-): ResolveSelectionResponse {
+function resolution(outputId: string, kind: PipelineStageKind, providerId: string, runtimeId: string | null = null, securityPolicyId = runtimeId ? 'runtime-job-default' : 'compiler-default'): ResolveSelectionResponse {
   return {
     effectiveSelection: {
       languageId: 'csharp',
@@ -54,9 +48,7 @@ function resolution(
 
 describe('createFollowupOperation', () => {
   beforeEach(() => {
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
-      '00000000-0000-4000-8000-000000000001',
-    )
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-000000000001')
   })
 
   it('starts Explain directly without an artifact build', () => {
@@ -92,10 +84,7 @@ describe('createFollowupOperation', () => {
   })
 
   it('builds an artifact render request from the resolved stage', () => {
-    const followup = createFollowupOperation(
-      resolution('decompiled-csharp', 'render', 'artifacts-default'),
-      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    )
+    const followup = createFollowupOperation(resolution('decompiled-csharp', 'render', 'artifacts-default'), 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
 
     expect(followup?.start.kind).toBe('render')
     if (followup?.start.kind !== 'render') throw new Error('Expected render request.')
@@ -124,10 +113,7 @@ describe('createFollowupOperation', () => {
       outputArtifactFormat: 'dotnet-managed-pe-v1',
     })
 
-    const transform = createFollowupOperation(
-      value,
-      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    )
+    const transform = createFollowupOperation(value, 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
     expect(transform?.start.kind).toBe('transform')
     if (transform?.start.kind !== 'transform') throw new Error('Expected transform request.')
     expect(transform.start.request).toMatchObject({
@@ -136,16 +122,10 @@ describe('createFollowupOperation', () => {
       options: { rewriterProfileId: 'execution-flow-v1' },
     })
 
-    const run = createFollowupOperation(
-      value,
-      'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-      2,
-    )
+    const run = createFollowupOperation(value, 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 2)
     expect(run?.start.kind).toBe('run')
     if (run?.start.kind !== 'run') throw new Error('Expected run request.')
-    expect(run.start.request.artifactRef).toBe(
-      'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-    )
+    expect(run.start.request.artifactRef).toBe('sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
     expect(run.start.request.options.instrumentation).toBe('execution-flow')
   })
 
@@ -159,17 +139,10 @@ describe('createFollowupOperation', () => {
       outputArtifactFormat: 'dotnet-managed-pe-v1',
     })
 
-    const transform = createFollowupOperation(
-      value,
-      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    )
+    const transform = createFollowupOperation(value, 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
     expect(transform?.start.kind).toBe('transform')
 
-    const render = createFollowupOperation(
-      value,
-      'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-      2,
-    )
+    const render = createFollowupOperation(value, 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 2)
     expect(render?.start.kind).toBe('render')
     if (render?.start.kind !== 'render') throw new Error('Expected run-il render request.')
     expect(render.start.request).toMatchObject({
@@ -189,20 +162,14 @@ describe('createFollowupOperation', () => {
       outputArtifactFormat: 'dotnet-managed-pe-v1',
     })
 
-    const transform = createFollowupOperation(
-      value,
-      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    )
+    const transform = createFollowupOperation(value, 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
     expect(transform?.start.kind).toBe('transform')
     if (transform?.start.kind !== 'transform') throw new Error('Expected transform request.')
     expect(transform.start.request.options.rewriterProfileId).toBeNull()
   })
 
   it('uses the worker-supported IL verification profile and limits', () => {
-    const followup = createFollowupOperation(
-      resolution('il-verify', 'verify', 'artifacts-default'),
-      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    )
+    const followup = createFollowupOperation(resolution('il-verify', 'verify', 'artifacts-default'), 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
 
     expect(followup?.start.kind).toBe('verify')
     if (followup?.start.kind !== 'verify') throw new Error('Expected verify request.')
@@ -214,10 +181,7 @@ describe('createFollowupOperation', () => {
   })
 
   it('uses the resolved runtime and security policy for Run', () => {
-    const followup = createFollowupOperation(
-      resolution('run', 'run', 'dotnet-10-linux-x64', 'dotnet-10-linux-x64'),
-      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    )
+    const followup = createFollowupOperation(resolution('run', 'run', 'dotnet-10-linux-x64', 'dotnet-10-linux-x64'), 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
 
     expect(followup?.start.kind).toBe('run')
     if (followup?.start.kind !== 'run') throw new Error('Expected run request.')
@@ -233,16 +197,7 @@ describe('createFollowupOperation', () => {
   })
 
   it('passes the dedicated Wine security policy through to Run', () => {
-    const followup = createFollowupOperation(
-      resolution(
-        'run',
-        'run',
-        'wine-netfx48-linux-x64',
-        'wine-netfx48-linux-x64',
-        'runtime-job-wine-netfx',
-      ),
-      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    )
+    const followup = createFollowupOperation(resolution('run', 'run', 'wine-netfx48-linux-x64', 'wine-netfx48-linux-x64', 'runtime-job-wine-netfx'), 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
 
     expect(followup?.start.kind).toBe('run')
     if (followup?.start.kind !== 'run') throw new Error('Expected run request.')
@@ -255,10 +210,7 @@ describe('createFollowupOperation', () => {
   })
 
   it('uses deterministic JIT settings for comparable assembly', () => {
-    const followup = createFollowupOperation(
-      resolution('jit-asm', 'jit', 'dotnet-11-preview-linux-x64', 'dotnet-11-preview-linux-x64'),
-      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    )
+    const followup = createFollowupOperation(resolution('jit-asm', 'jit', 'dotnet-11-preview-linux-x64', 'dotnet-11-preview-linux-x64'), 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
 
     expect(followup?.start.kind).toBe('jit')
     if (followup?.start.kind !== 'jit') throw new Error('Expected JIT request.')
@@ -272,11 +224,7 @@ describe('createFollowupOperation', () => {
   })
 
   it('always inspects all user methods for the compact JIT document', () => {
-    const followup = createFollowupOperation(
-      resolution('jit-asm', 'jit', 'dotnet-10-linux-x64', 'dotnet-10-linux-x64'),
-      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      1,
-    )
+    const followup = createFollowupOperation(resolution('jit-asm', 'jit', 'dotnet-10-linux-x64', 'dotnet-10-linux-x64'), 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1)
 
     expect(followup?.start.kind).toBe('jit')
     if (followup?.start.kind !== 'jit') throw new Error('Expected JIT request.')

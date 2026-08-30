@@ -7,12 +7,12 @@
  * before BuildKit is allowed to resolve either Dockerfile FROM instruction.
  */
 
-import { spawnSync } from 'node:child_process'
-import crypto from 'node:crypto'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   isCandidateSourceUri,
@@ -35,17 +35,8 @@ const safeId = /^[a-z0-9][a-z0-9._-]{0,127}$/
 const imageTag = /^(?:[A-Za-z0-9][A-Za-z0-9._-]*(?::[0-9]+)?\/)?[A-Za-z0-9][A-Za-z0-9._/-]*(?::[A-Za-z0-9][A-Za-z0-9._-]*)?$/
 const imageDigest = /^sha256:[0-9a-f]{64}$/
 const rowMountMarker = '    # SHARPLABNEXT_FRAMEWORK_ROW_MOUNTS'
-const requiredFrameworkRows = Object.freeze([
-  'netfx20', 'netfx30', 'netfx35', 'netfx40', 'netfx45', 'netfx451',
-  'netfx452', 'netfx46', 'netfx461', 'netfx462', 'netfx47', 'netfx471',
-  'netfx472', 'netfx48',
-])
-const parentSourceFiles = Object.freeze([
-  'deploy/docker/Dockerfile.operator-wine-framework-matrix-parent',
-  'deploy/docker/assemble-framework-prefix-matrix.py',
-  'deploy/docker/dedupe-wine-prefixes.py',
-  'deploy/docker/wine-netfx-framework-preflight.sh',
-])
+const requiredFrameworkRows = Object.freeze(['netfx20', 'netfx30', 'netfx35', 'netfx40', 'netfx45', 'netfx451', 'netfx452', 'netfx46', 'netfx461', 'netfx462', 'netfx47', 'netfx471', 'netfx472', 'netfx48'])
+const parentSourceFiles = Object.freeze(['deploy/docker/Dockerfile.operator-wine-framework-matrix-parent', 'deploy/docker/assemble-framework-prefix-matrix.py', 'deploy/docker/dedupe-wine-prefixes.py', 'deploy/docker/wine-netfx-framework-preflight.sh'])
 
 function hasRegistryHost(value) {
   if (typeof value !== 'string') return false
@@ -71,9 +62,7 @@ function immutableDockerSourceReference(value) {
   return isDigestPinnedImageReference(reference) ? reference : undefined
 }
 
-function fail(message) {
-  throw new Error(message)
-}
+function fail(message) { throw new Error(message); }
 
 function realDirectory(value, label) {
   if (typeof value !== 'string' || !path.isAbsolute(value)) {
@@ -212,13 +201,7 @@ function copyContainerMetadata(spawn, containerId, source, destination) {
   }
 }
 
-export function inspectMetadataImage(
-  reference,
-  expectedDigest,
-  expectedRowCount,
-  expectedRevision,
-  spawn = spawnSync,
-) {
+export function inspectMetadataImage(reference, expectedDigest, expectedRowCount, expectedRevision, spawn = spawnSync) {
   const result = spawn('docker', ['image', 'inspect', reference], {
     cwd: repositoryRoot,
     encoding: 'utf8',
@@ -257,12 +240,7 @@ export function inspectMetadataImage(
   }
 }
 
-function inspectDockerMatrixInput(
-  reference,
-  expectedDigest,
-  expectedRevision,
-  spawn = spawnSync,
-) {
+function inspectDockerMatrixInput(reference, expectedDigest, expectedRevision, spawn = spawnSync) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-framework-metadata-'))
   let containerId
   let primaryError
@@ -305,8 +283,7 @@ function inspectDockerMatrixInput(
       fail(`${matrixInputName} in the immutable context image is invalid JSON: ${error.message}`)
     }
     validateMatrixDocument(manifest, `${matrixInputName} in the immutable context image`)
-    const actualManifestDigest = `sha256:${crypto.createHash('sha256')
-      .update(fs.readFileSync(manifestPath)).digest('hex')}`
+    const actualManifestDigest = `sha256:${crypto.createHash('sha256').update(fs.readFileSync(manifestPath)).digest('hex')}`
     if (actualManifestDigest !== expectedDigest) {
       fail(`FRAMEWORK_MATRIX_INPUT_SHA256 does not match immutable context matrix-input.json (${actualManifestDigest})`)
     }
@@ -498,10 +475,7 @@ function parseArguments(arguments_) {
       fail(`unknown or incomplete argument '${argument}'`)
     }
     const name = argument.slice(2).replaceAll('-', '_').toUpperCase()
-    const allowed = new Set([
-      'CONTEXT', 'ROOT_IMAGE', 'WINE_IMAGE', 'FRAMEWORK_MATRIX_SOURCE_URI',
-      'FRAMEWORK_MATRIX_INPUT_SHA256', 'SOURCE_REVISION', 'IMAGE', 'VERSION',
-    ])
+    const allowed = new Set(['CONTEXT', 'ROOT_IMAGE', 'WINE_IMAGE', 'FRAMEWORK_MATRIX_SOURCE_URI', 'FRAMEWORK_MATRIX_INPUT_SHA256', 'SOURCE_REVISION', 'IMAGE', 'VERSION'])
     if (!allowed.has(name)) fail(`unknown argument '${argument}'`)
     values[name] = arguments_[++index]
   }
@@ -522,11 +496,7 @@ function usage() {
   `A host context is accepted only for local development.`
 }
 
-function inspectGitSource(
-  spawn = spawnSync,
-  fallbackRevision = undefined,
-  environment = process.env,
-) {
+function inspectGitSource(spawn = spawnSync, fallbackRevision = undefined, environment = process.env) {
   if (String(environment?.[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() === contentSourceIdentityMode &&
       isGitCommitIdentity(fallbackRevision)) {
     return { headRevision: fallbackRevision, isDirty: true }
@@ -782,10 +752,7 @@ export function runParentBuild(argv, values = process.env, spawn = spawnSync, ou
   let dockerArguments
   try {
     const sourceRoot = sourceContext ?? repositoryRoot
-    const templatePath = path.join(
-      sourceRoot,
-      'deploy', 'docker', 'Dockerfile.operator-wine-framework-matrix-parent',
-    )
+    const templatePath = path.join(sourceRoot, 'deploy', 'docker', 'Dockerfile.operator-wine-framework-matrix-parent')
     const template = fs.readFileSync(templatePath, 'utf8')
     const generatedDockerfile = path.join(metadataDirectory, 'Dockerfile.framework-parent.generated')
     fs.writeFileSync(

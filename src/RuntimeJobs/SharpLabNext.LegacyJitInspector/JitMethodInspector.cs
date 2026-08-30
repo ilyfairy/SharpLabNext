@@ -26,9 +26,7 @@ namespace SharpLabNext.LegacyJitInspector
                     {
                         if (results.Count >= MaximumMethods)
                             return results;
-                        if (method.IsAbstract ||
-                            method.ContainsGenericParameters ||
-                            (method.GetMethodImplementationFlags() & MethodImplAttributes.InternalCall) != 0)
+                        if (method.IsAbstract || method.ContainsGenericParameters || (method.GetMethodImplementationFlags() & MethodImplAttributes.InternalCall) != 0)
                         {
                             continue;
                         }
@@ -41,23 +39,11 @@ namespace SharpLabNext.LegacyJitInspector
                         {
                             RuntimeHelpers.PrepareMethod(method.MethodHandle);
                             IntPtr address = method.MethodHandle.GetFunctionPointer();
-                            results.Add(new JitMethodResult(
-                                GetMethodIdentity(method),
-                                method.MetadataToken,
-                                displayName,
-                                "prepared",
-                                FormatAddress(address),
-                                null));
+                            results.Add(new JitMethodResult(GetMethodIdentity(method), method.MetadataToken, displayName, "prepared", FormatAddress(address), null));
                         }
                         catch (Exception exception)
                         {
-                            results.Add(new JitMethodResult(
-                                GetMethodIdentity(method),
-                                method.MetadataToken,
-                                displayName,
-                                "failed",
-                                null,
-                                exception.GetType().Name + ": " + exception.Message));
+                            results.Add(new JitMethodResult(GetMethodIdentity(method), method.MetadataToken, displayName, "failed", null, exception.GetType().Name + ": " + exception.Message));
                         }
                     }
                 }
@@ -71,8 +57,7 @@ namespace SharpLabNext.LegacyJitInspector
             if (string.IsNullOrWhiteSpace(methodFilter))
                 return true;
             return methodFilter.IndexOf('*') >= 0 || methodFilter.IndexOf('?') >= 0
-                ? MatchesWildcard(methodFilter, displayName)
-                : displayName.IndexOf(methodFilter, StringComparison.OrdinalIgnoreCase) >= 0;
+                ? MatchesWildcard(methodFilter, displayName) : displayName.IndexOf(methodFilter, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static IEnumerable<Type> ExpandTypes(Assembly assembly)
@@ -87,8 +72,7 @@ namespace SharpLabNext.LegacyJitInspector
 
                 foreach (Type[] arguments in ReadJitGenericArguments(type.GetCustomAttributesData()))
                 {
-                    if (arguments.Length != type.GetGenericArguments().Length ||
-                        arguments.Any(argument => argument.ContainsGenericParameters))
+                    if (arguments.Length != type.GetGenericArguments().Length || arguments.Any(argument => argument.ContainsGenericParameters))
                     {
                         continue;
                     }
@@ -98,9 +82,7 @@ namespace SharpLabNext.LegacyJitInspector
                     {
                         constructed = type.MakeGenericType(arguments);
                     }
-                    catch (ArgumentException)
-                    {
-                    }
+                    catch (ArgumentException) { }
 
                     if (constructed != null)
                         yield return constructed;
@@ -135,8 +117,7 @@ namespace SharpLabNext.LegacyJitInspector
 
             foreach (Type[] arguments in ReadJitGenericArguments(genericMethod.GetCustomAttributesData()))
             {
-                if (arguments.Length != genericMethod.GetGenericArguments().Length ||
-                    arguments.Any(argument => argument.ContainsGenericParameters))
+                if (arguments.Length != genericMethod.GetGenericArguments().Length || arguments.Any(argument => argument.ContainsGenericParameters))
                 {
                     continue;
                 }
@@ -146,25 +127,18 @@ namespace SharpLabNext.LegacyJitInspector
                 {
                     constructed = genericMethod.MakeGenericMethod(arguments);
                 }
-                catch (ArgumentException)
-                {
-                }
+                catch (ArgumentException) { }
 
                 if (constructed != null)
                     yield return constructed;
             }
         }
 
-        private static IEnumerable<Type[]> ReadJitGenericArguments(
-            IList<CustomAttributeData> attributes)
+        private static IEnumerable<Type[]> ReadJitGenericArguments(IList<CustomAttributeData> attributes)
         {
             foreach (CustomAttributeData attribute in attributes)
             {
-                if (!string.Equals(
-                    attribute.AttributeType.FullName,
-                    JitGenericAttributeName,
-                    StringComparison.Ordinal) ||
-                    attribute.ConstructorArguments.Count != 1)
+                if (!string.Equals(attribute.AttributeType.FullName, JitGenericAttributeName, StringComparison.Ordinal) || attribute.ConstructorArguments.Count != 1)
                 {
                     continue;
                 }
@@ -191,8 +165,7 @@ namespace SharpLabNext.LegacyJitInspector
             if (!method.IsGenericMethod || method.IsGenericMethodDefinition)
                 return token;
 
-            string arguments = string.Join(",", method.GetGenericArguments()
-                .Select(argument => argument.FullName ?? argument.Name));
+            string arguments = string.Join(",", method.GetGenericArguments().Select(argument => argument.FullName ?? argument.Name));
             return token + "[" + arguments + "]";
         }
 
@@ -204,8 +177,7 @@ namespace SharpLabNext.LegacyJitInspector
         private static string FormatAddress(IntPtr address)
         {
             ulong value = IntPtr.Size == 8
-                ? unchecked((ulong)address.ToInt64())
-                : unchecked((uint)address.ToInt32());
+                ? unchecked((ulong)address.ToInt64()) : unchecked((uint)address.ToInt32());
             return "0x" + value.ToString("x", CultureInfo.InvariantCulture);
         }
 
@@ -217,9 +189,7 @@ namespace SharpLabNext.LegacyJitInspector
             int starValueIndex = -1;
             while (valueIndex < value.Length)
             {
-                if (patternIndex < pattern.Length &&
-                    (pattern[patternIndex] == '?' ||
-                     char.ToUpperInvariant(pattern[patternIndex]) == char.ToUpperInvariant(value[valueIndex])))
+                if (patternIndex < pattern.Length && (pattern[patternIndex] == '?' || char.ToUpperInvariant(pattern[patternIndex]) == char.ToUpperInvariant(value[valueIndex])))
                 {
                     patternIndex++;
                     valueIndex++;

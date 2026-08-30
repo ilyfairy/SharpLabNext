@@ -23,11 +23,7 @@ internal static class RoslynMainTestSettings
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            var candidate = Path.Combine(
-                directory.FullName,
-                "deploy",
-                "secrets",
-                "internal-service-token.dev");
+            var candidate = Path.Combine(directory.FullName, "deploy", "secrets", "internal-service-token.dev");
             if (File.Exists(candidate))
                 return candidate;
             directory = directory.Parent;

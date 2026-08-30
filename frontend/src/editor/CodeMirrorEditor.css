@@ -76,7 +76,6 @@
   /* CodeMirror positions this layer from glyph bounds, which are shorter than
      the configured 1.5 line-height. Expand it to cover the complete row. */
   --selection-extra-height: clamp(4px, calc(var(--editor-font-size, 14px) * 0.36), 10px);
-  /* biome-ignore lint/complexity/noImportantStyles: CodeMirror writes the glyph-height inline. */
   min-height: calc(var(--editor-font-size, 14px) * 1.5) !important;
   transform: translateY(calc(var(--selection-extra-height) * -0.4));
   pointer-events: none;
@@ -88,9 +87,7 @@
 
 .codemirror-host .cm-editor .cm-content .cm-line::selection,
 .codemirror-host .cm-editor .cm-content .cm-line *::selection {
-  /* biome-ignore lint/complexity/noImportantStyles: drawSelection hides native selection at highest precedence. */
   color: inherit !important;
-  /* biome-ignore lint/complexity/noImportantStyles: drawSelection is the only visible selection layer. */
   background: transparent !important;
 }
 

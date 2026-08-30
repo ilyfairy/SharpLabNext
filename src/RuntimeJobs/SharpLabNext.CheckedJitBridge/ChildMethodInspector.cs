@@ -29,9 +29,7 @@ internal static class ChildMethodInspector
                 {
                     if (results.Count >= MaximumMethods)
                         return results;
-                    if (method.IsAbstract ||
-                        method.ContainsGenericParameters ||
-                        (method.GetMethodImplementationFlags() & MethodImplAttributes.InternalCall) != 0)
+                    if (method.IsAbstract || method.ContainsGenericParameters || (method.GetMethodImplementationFlags() & MethodImplAttributes.InternalCall) != 0)
                     {
                         continue;
                     }
@@ -47,12 +45,8 @@ internal static class ChildMethodInspector
                     {
                         declaringTypeArguments = GetGenericArguments(type);
                         methodArguments = method.IsGenericMethod
-                            ? GetGenericArguments(method.GetGenericArguments())
-                            : Array.Empty<ChildGenericArgument>();
-                        methodIdentity = JitMethodSignatures.CreateMethodIdentity(
-                            method.MetadataToken,
-                            declaringTypeArguments,
-                            methodArguments);
+                            ? GetGenericArguments(method.GetGenericArguments()) : Array.Empty<ChildGenericArgument>();
+                        methodIdentity = JitMethodSignatures.CreateMethodIdentity(method.MetadataToken, declaringTypeArguments, methodArguments);
                     }
                     catch (ArgumentException)
                     {
@@ -63,27 +57,11 @@ internal static class ChildMethodInspector
                     {
                         RuntimeHelpers.PrepareMethod(method.MethodHandle);
                         var address = method.MethodHandle.GetFunctionPointer();
-                        results.Add(new ChildMethodRecord(
-                            methodIdentity,
-                            method.MetadataToken,
-                            Bound(displayName, 2_048),
-                            declaringTypeArguments,
-                            methodArguments,
-                            "prepared",
-                            FormatAddress(address),
-                            null));
+                        results.Add(new ChildMethodRecord(methodIdentity, method.MetadataToken, Bound(displayName, 2_048), declaringTypeArguments, methodArguments, "prepared", FormatAddress(address), null));
                     }
                     catch (Exception exception)
                     {
-                        results.Add(new ChildMethodRecord(
-                            methodIdentity,
-                            method.MetadataToken,
-                            Bound(displayName, 2_048),
-                            declaringTypeArguments,
-                            methodArguments,
-                            "failed",
-                            null,
-                            Bound(exception.GetType().Name + ": " + exception.Message, 4_096)));
+                        results.Add(new ChildMethodRecord(methodIdentity, method.MetadataToken, Bound(displayName, 2_048), declaringTypeArguments, methodArguments, "failed", null, Bound(exception.GetType().Name + ": " + exception.Message, 4_096)));
                     }
                 }
             }
@@ -96,8 +74,7 @@ internal static class ChildMethodInspector
         if (string.IsNullOrWhiteSpace(methodFilter))
             return true;
         return methodFilter.Contains('*') || methodFilter.Contains('?')
-            ? MatchesWildcard(methodFilter, displayName)
-            : displayName.Contains(methodFilter, StringComparison.OrdinalIgnoreCase);
+            ? MatchesWildcard(methodFilter, displayName) : displayName.Contains(methodFilter, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IEnumerable<Type> ExpandTypes(Assembly assembly)
@@ -112,8 +89,7 @@ internal static class ChildMethodInspector
 
             foreach (var arguments in ReadJitGenericArguments(type.GetCustomAttributesData()))
             {
-                if (arguments.Length != type.GetGenericArguments().Length ||
-                    arguments.Any(argument => argument.ContainsGenericParameters))
+                if (arguments.Length != type.GetGenericArguments().Length || arguments.Any(argument => argument.ContainsGenericParameters))
                 {
                     continue;
                 }
@@ -123,9 +99,7 @@ internal static class ChildMethodInspector
                 {
                     constructed = type.MakeGenericType(arguments);
                 }
-                catch (ArgumentException)
-                {
-                }
+                catch (ArgumentException) { }
                 if (constructed is not null)
                     yield return constructed;
             }
@@ -158,8 +132,7 @@ internal static class ChildMethodInspector
 
         foreach (var arguments in ReadJitGenericArguments(genericMethod.GetCustomAttributesData()))
         {
-            if (arguments.Length != genericMethod.GetGenericArguments().Length ||
-                arguments.Any(argument => argument.ContainsGenericParameters))
+            if (arguments.Length != genericMethod.GetGenericArguments().Length || arguments.Any(argument => argument.ContainsGenericParameters))
             {
                 continue;
             }
@@ -169,9 +142,7 @@ internal static class ChildMethodInspector
             {
                 constructed = genericMethod.MakeGenericMethod(arguments);
             }
-            catch (ArgumentException)
-            {
-            }
+            catch (ArgumentException) { }
             if (constructed is not null)
                 yield return constructed;
         }
@@ -181,8 +152,7 @@ internal static class ChildMethodInspector
     {
         foreach (var attribute in attributes)
         {
-            if (!string.Equals(attribute.AttributeType.FullName, JitGenericAttributeName, StringComparison.Ordinal) ||
-                attribute.ConstructorArguments.Count != 1)
+            if (!string.Equals(attribute.AttributeType.FullName, JitGenericAttributeName, StringComparison.Ordinal) || attribute.ConstructorArguments.Count != 1)
             {
                 continue;
             }
@@ -204,8 +174,7 @@ internal static class ChildMethodInspector
 
     private static ChildGenericArgument[] GetGenericArguments(Type type) =>
         type.IsGenericType && !type.IsGenericTypeDefinition
-            ? GetGenericArguments(type.GetGenericArguments())
-            : Array.Empty<ChildGenericArgument>();
+            ? GetGenericArguments(type.GetGenericArguments()) : Array.Empty<ChildGenericArgument>();
 
     private static ChildGenericArgument[] GetGenericArguments(Type[] types) =>
         types.Select(JitMethodSignatures.CreateGenericArgument).ToArray();
@@ -213,8 +182,7 @@ internal static class ChildMethodInspector
     private static string FormatAddress(IntPtr address)
     {
         var value = IntPtr.Size == 8
-            ? unchecked((ulong)address.ToInt64())
-            : unchecked((uint)address.ToInt32());
+            ? unchecked((ulong)address.ToInt64()) : unchecked((uint)address.ToInt32());
         return "0x" + value.ToString("x", CultureInfo.InvariantCulture);
     }
 
@@ -226,9 +194,7 @@ internal static class ChildMethodInspector
         var starValueIndex = -1;
         while (valueIndex < value.Length)
         {
-            if (patternIndex < pattern.Length &&
-                (pattern[patternIndex] == '?' ||
-                 char.ToUpperInvariant(pattern[patternIndex]) == char.ToUpperInvariant(value[valueIndex])))
+            if (patternIndex < pattern.Length && (pattern[patternIndex] == '?' || char.ToUpperInvariant(pattern[patternIndex]) == char.ToUpperInvariant(value[valueIndex])))
             {
                 patternIndex++;
                 valueIndex++;
@@ -266,8 +232,7 @@ internal sealed class ChildUserAssemblyLoader : IDisposable
     public ChildUserAssemblyLoader(string assemblyPath)
     {
         _assemblyPath = assemblyPath ?? throw new ArgumentNullException(nameof(assemblyPath));
-        _artifactDirectory = Path.GetDirectoryName(assemblyPath)
-            ?? throw new ArgumentException("The entry assembly has no parent directory.", nameof(assemblyPath));
+        _artifactDirectory = Path.GetDirectoryName(assemblyPath) ?? throw new ArgumentException("The entry assembly has no parent directory.", nameof(assemblyPath));
         _helperDirectory = AppContext.BaseDirectory;
         AssemblyLoadContext.Default.Resolving += Resolve;
     }
@@ -323,10 +288,7 @@ internal static class ChildNativeStreamFlusher
         {
             return flush() == 0;
         }
-        catch (Exception exception) when (exception is
-            DllNotFoundException or
-            EntryPointNotFoundException or
-            BadImageFormatException)
+        catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
             return false;
         }

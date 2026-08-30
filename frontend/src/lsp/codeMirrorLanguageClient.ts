@@ -1,8 +1,4 @@
-import {
-  closeLanguageSession,
-  languageSessionWebSocketUrl,
-  openLanguageSession,
-} from '../api/client'
+import { closeLanguageSession, languageSessionWebSocketUrl, openLanguageSession } from '../api/client'
 import type { GatewayLanguageSession } from '../api/types'
 import { createLanguageDocumentUri } from './languageDocumentUri'
 import {
@@ -56,15 +52,7 @@ export const lspSemanticTokenTypes = [
   'invalid',
 ] as const
 
-export const lspSemanticTokenModifiers = [
-  'static',
-  'deprecated',
-  'readonly',
-  'abstract',
-  'async',
-  'declaration',
-  'definition',
-] as const
+export const lspSemanticTokenModifiers = ['static', 'deprecated', 'readonly', 'abstract', 'async', 'declaration', 'definition'] as const
 
 export interface CodeMirrorLanguageClientFeatureProfile {
   synchronizeDocuments: boolean
@@ -78,31 +66,29 @@ export interface CodeMirrorLanguageClientFeatureProfile {
   semanticTokens: boolean
 }
 
-export const defaultCodeMirrorLanguageClientFeatureProfile: Readonly<CodeMirrorLanguageClientFeatureProfile> =
-  Object.freeze({
-    synchronizeDocuments: true,
-    diagnostics: true,
-    completion: true,
-    hover: true,
-    signatureHelp: true,
-    codeActions: true,
-    documentSymbols: true,
-    foldingRanges: true,
-    semanticTokens: true,
-  })
+export const defaultCodeMirrorLanguageClientFeatureProfile: Readonly<CodeMirrorLanguageClientFeatureProfile> = Object.freeze({
+  synchronizeDocuments: true,
+  diagnostics: true,
+  completion: true,
+  hover: true,
+  signatureHelp: true,
+  codeActions: true,
+  documentSymbols: true,
+  foldingRanges: true,
+  semanticTokens: true,
+})
 
-export const readOnlyIlOutputLanguageClientFeatureProfile: Readonly<CodeMirrorLanguageClientFeatureProfile> =
-  Object.freeze({
-    synchronizeDocuments: false,
-    diagnostics: false,
-    completion: false,
-    hover: true,
-    signatureHelp: false,
-    codeActions: false,
-    documentSymbols: false,
-    foldingRanges: false,
-    semanticTokens: true,
-  })
+export const readOnlyIlOutputLanguageClientFeatureProfile: Readonly<CodeMirrorLanguageClientFeatureProfile> = Object.freeze({
+  synchronizeDocuments: false,
+  diagnostics: false,
+  completion: false,
+  hover: true,
+  signatureHelp: false,
+  codeActions: false,
+  documentSymbols: false,
+  foldingRanges: false,
+  semanticTokens: true,
+})
 
 export interface CodeMirrorLspDiagnostic {
   range: LspRange
@@ -203,26 +189,10 @@ export interface CodeMirrorLspFoldingRange {
 }
 
 export interface CodeMirrorLanguageSink {
-  publishDiagnostics: (
-    documentPath: string,
-    documentVersion: number | undefined,
-    diagnostics: readonly CodeMirrorLspDiagnostic[],
-  ) => void
-  publishSemanticTokens: (
-    documentPath: string,
-    documentVersion: number,
-    tokens: readonly CodeMirrorSemanticToken[],
-  ) => void
-  publishDocumentSymbols: (
-    documentPath: string,
-    documentVersion: number,
-    symbols: readonly CodeMirrorDocumentSymbol[] | null,
-  ) => void
-  publishFoldingRanges: (
-    documentPath: string,
-    documentVersion: number,
-    ranges: readonly CodeMirrorLspFoldingRange[] | null,
-  ) => void
+  publishDiagnostics: (documentPath: string, documentVersion: number | undefined, diagnostics: readonly CodeMirrorLspDiagnostic[]) => void
+  publishSemanticTokens: (documentPath: string, documentVersion: number, tokens: readonly CodeMirrorSemanticToken[]) => void
+  publishDocumentSymbols: (documentPath: string, documentVersion: number, symbols: readonly CodeMirrorDocumentSymbol[] | null) => void
+  publishFoldingRanges: (documentPath: string, documentVersion: number, ranges: readonly CodeMirrorLspFoldingRange[] | null) => void
   clearDocument: (documentPath: string) => void
 }
 
@@ -237,17 +207,9 @@ interface ActiveCodeMirrorClient {
   isReady(): boolean
   changeDocument(path: string, text: string, version: number): void
   completion(path: string, request: CompletionRequest): Promise<CodeMirrorLspCompletionList | null>
-  resolveCompletion(
-    path: string,
-    item: CodeMirrorLspCompletionItem,
-  ): Promise<CodeMirrorLspCompletionItem | null>
+  resolveCompletion(path: string, item: CodeMirrorLspCompletionItem): Promise<CodeMirrorLspCompletionItem | null>
   hover(path: string, position: LspPosition): Promise<CodeMirrorLspHover | null>
-  signatureHelp(
-    path: string,
-    position: LspPosition,
-    triggerCharacter?: string,
-    isRetrigger?: boolean,
-  ): Promise<CodeMirrorLspSignatureHelp | null>
+  signatureHelp(path: string, position: LspPosition, triggerCharacter?: string, isRetrigger?: boolean): Promise<CodeMirrorLspSignatureHelp | null>
 }
 
 interface ReadyClientWaiter {
@@ -288,10 +250,7 @@ export class CodeMirrorLanguageBridge {
     this.client?.changeDocument(path, text, version)
   }
 
-  async completion(
-    path: string,
-    request: CompletionRequest,
-  ): Promise<CodeMirrorLspCompletionList | null> {
+  async completion(path: string, request: CompletionRequest): Promise<CodeMirrorLspCompletionList | null> {
     const deadline = Date.now() + languageClientReadyTimeoutMs
     let transientRetries = 0
     while (true) {
@@ -321,10 +280,7 @@ export class CodeMirrorLanguageBridge {
     }
   }
 
-  resolveCompletion(
-    path: string,
-    item: CodeMirrorLspCompletionItem,
-  ): Promise<CodeMirrorLspCompletionItem | null> {
+  resolveCompletion(path: string, item: CodeMirrorLspCompletionItem): Promise<CodeMirrorLspCompletionItem | null> {
     return this.client?.resolveCompletion(path, item) ?? Promise.resolve(null)
   }
 
@@ -332,16 +288,8 @@ export class CodeMirrorLanguageBridge {
     return this.client?.hover(path, position) ?? Promise.resolve(null)
   }
 
-  signatureHelp(
-    path: string,
-    position: LspPosition,
-    triggerCharacter?: string,
-    isRetrigger = triggerCharacter === ',',
-  ): Promise<CodeMirrorLspSignatureHelp | null> {
-    return (
-      this.client?.signatureHelp(path, position, triggerCharacter, isRetrigger) ??
-      Promise.resolve(null)
-    )
+  signatureHelp(path: string, position: LspPosition, triggerCharacter?: string, isRetrigger = triggerCharacter === ','): Promise<CodeMirrorLspSignatureHelp | null> {
+    return this.client?.signatureHelp(path, position, triggerCharacter, isRetrigger) ?? Promise.resolve(null)
   }
 
   private readyClient(deadline: number): Promise<ActiveCodeMirrorClient | null> {
@@ -382,17 +330,12 @@ export class CodeMirrorLanguageBridge {
   }
 }
 
-export function createCodeMirrorLanguageSessionDependencies(
-  bridge: CodeMirrorLanguageBridge,
-  sink: CodeMirrorLanguageSink,
-  featureProfile: Readonly<CodeMirrorLanguageClientFeatureProfile> = defaultCodeMirrorLanguageClientFeatureProfile,
-): LanguageSessionLifecycleDependencies {
+export function createCodeMirrorLanguageSessionDependencies(bridge: CodeMirrorLanguageBridge, sink: CodeMirrorLanguageSink, featureProfile: Readonly<CodeMirrorLanguageClientFeatureProfile> = defaultCodeMirrorLanguageClientFeatureProfile): LanguageSessionLifecycleDependencies {
   return {
     open: (request, signal) => openLanguageSession(request, signal),
     close: closeLanguageSession,
     createSocket: (path) => new WebSocket(languageSessionWebSocketUrl(path)),
-    createClient: (plan, descriptor, socket, isCurrent) =>
-      new CodeMirrorLspClient(plan, descriptor, socket, isCurrent, bridge, sink, featureProfile),
+    createClient: (plan, descriptor, socket, isCurrent) => new CodeMirrorLspClient(plan, descriptor, socket, isCurrent, bridge, sink, featureProfile),
     schedule: (callback, delay) => window.setTimeout(callback, delay),
     cancelSchedule: (handle) => window.clearTimeout(handle),
   }
@@ -402,11 +345,7 @@ export function codeMirrorDocumentUri(workspaceUri: string, path: string): strin
   return createLanguageDocumentUri(workspaceUri, path)
 }
 
-export function decodeSemanticTokens(
-  data: readonly number[],
-  tokenTypes: readonly string[],
-  tokenModifiers: readonly string[],
-): CodeMirrorSemanticToken[] {
+export function decodeSemanticTokens(data: readonly number[], tokenTypes: readonly string[], tokenModifiers: readonly string[]): CodeMirrorSemanticToken[] {
   if (data.length % 5 !== 0) return []
   const result: CodeMirrorSemanticToken[] = []
   let line = 0
@@ -417,23 +356,21 @@ export function decodeSemanticTokens(
     const length = data[index + 2]
     const typeIndex = data[index + 3]
     const modifierBits = data[index + 4]
-    if (
-      !isNonNegativeInteger(deltaLine) ||
-      !isNonNegativeInteger(deltaCharacter) ||
-      !isPositiveInteger(length) ||
-      !isNonNegativeInteger(typeIndex) ||
-      !isNonNegativeInteger(modifierBits)
-    ) {
+    if (!isNonNegativeInteger(deltaLine) || !isNonNegativeInteger(deltaCharacter) || !isPositiveInteger(length) || !isNonNegativeInteger(typeIndex) || !isNonNegativeInteger(modifierBits)) {
       return []
     }
     const tokenType = tokenTypes[typeIndex]
     if (!tokenType) return []
     line += deltaLine
     character = deltaLine === 0 ? character + deltaCharacter : deltaCharacter
-    const modifiers = tokenModifiers.filter(
-      (_modifier, modifierIndex) => (modifierBits & (2 ** modifierIndex)) !== 0,
-    )
-    result.push({ line, character, length, tokenType, tokenModifiers: modifiers })
+    const modifiers = tokenModifiers.filter((_modifier, modifierIndex) => (modifierBits & (2 ** modifierIndex)) !== 0)
+    result.push({
+      line,
+      character,
+      length,
+      tokenType,
+      tokenModifiers: modifiers,
+    })
   }
   return result
 }
@@ -582,10 +519,7 @@ class CodeMirrorLspClient implements LanguageClientHandle, ActiveCodeMirrorClien
     this.scheduleStructure(path, 180)
   }
 
-  async completion(
-    path: string,
-    request: CompletionRequest,
-  ): Promise<CodeMirrorLspCompletionList | null> {
+  async completion(path: string, request: CompletionRequest): Promise<CodeMirrorLspCompletionList | null> {
     const document = this.documents.get(path)
     if (!document || !this.initialized || !this.completionSupported || !this.isCurrent()) {
       return null
@@ -603,17 +537,9 @@ class CodeMirrorLspClient implements LanguageClientHandle, ActiveCodeMirrorClien
     return parseCompletionItems(result, version)
   }
 
-  async resolveCompletion(
-    path: string,
-    item: CodeMirrorLspCompletionItem,
-  ): Promise<CodeMirrorLspCompletionItem | null> {
+  async resolveCompletion(path: string, item: CodeMirrorLspCompletionItem): Promise<CodeMirrorLspCompletionItem | null> {
     const document = this.documents.get(path)
-    if (
-      !document ||
-      !this.initialized ||
-      !this.isCurrent() ||
-      document.version !== item.documentVersion
-    ) {
+    if (!document || !this.initialized || !this.isCurrent() || document.version !== item.documentVersion) {
       return null
     }
     if (!this.completionResolveSupported) return item
@@ -640,12 +566,7 @@ class CodeMirrorLspClient implements LanguageClientHandle, ActiveCodeMirrorClien
     }
   }
 
-  async signatureHelp(
-    path: string,
-    position: LspPosition,
-    triggerCharacter?: string,
-    isRetrigger = triggerCharacter === ',',
-  ): Promise<CodeMirrorLspSignatureHelp | null> {
+  async signatureHelp(path: string, position: LspPosition, triggerCharacter?: string, isRetrigger = triggerCharacter === ','): Promise<CodeMirrorLspSignatureHelp | null> {
     const document = this.documents.get(path)
     if (!document || !this.initialized || !this.signatureHelpSupported || !this.isCurrent()) {
       return null
@@ -689,43 +610,20 @@ class CodeMirrorLspClient implements LanguageClientHandle, ActiveCodeMirrorClien
   }
 
   private readServerCapabilities(result: unknown): void {
-    const capabilities =
-      isRecord(result) && isRecord(result.capabilities) ? result.capabilities : {}
-    const completionProvider = isRecord(capabilities.completionProvider)
-      ? capabilities.completionProvider
-      : null
-    this.completionSupported =
-      this.featureProfile.completion &&
-      (capabilities.completionProvider === true || completionProvider !== null)
-    this.completionResolveSupported =
-      this.featureProfile.completion && completionProvider?.resolveProvider === true
-    this.hoverSupported =
-      this.featureProfile.hover &&
-      (capabilities.hoverProvider === true || isRecord(capabilities.hoverProvider))
-    this.signatureHelpSupported =
-      this.featureProfile.signatureHelp &&
-      (capabilities.signatureHelpProvider === true || isRecord(capabilities.signatureHelpProvider))
-    this.codeActionSupported =
-      this.featureProfile.codeActions &&
-      (capabilities.codeActionProvider === true || isRecord(capabilities.codeActionProvider))
-    this.documentSymbolSupported =
-      this.featureProfile.documentSymbols &&
-      (capabilities.documentSymbolProvider === true ||
-        isRecord(capabilities.documentSymbolProvider))
-    this.foldingRangeSupported =
-      this.featureProfile.foldingRanges &&
-      (capabilities.foldingRangeProvider === true || isRecord(capabilities.foldingRangeProvider))
-    const semanticProvider = isRecord(capabilities.semanticTokensProvider)
-      ? capabilities.semanticTokensProvider
-      : null
-    const legend =
-      semanticProvider && isRecord(semanticProvider.legend) ? semanticProvider.legend : null
+    const capabilities = isRecord(result) && isRecord(result.capabilities) ? result.capabilities : {}
+    const completionProvider = isRecord(capabilities.completionProvider) ? capabilities.completionProvider : null
+    this.completionSupported = this.featureProfile.completion && (capabilities.completionProvider === true || completionProvider !== null)
+    this.completionResolveSupported = this.featureProfile.completion && completionProvider?.resolveProvider === true
+    this.hoverSupported = this.featureProfile.hover && (capabilities.hoverProvider === true || isRecord(capabilities.hoverProvider))
+    this.signatureHelpSupported = this.featureProfile.signatureHelp && (capabilities.signatureHelpProvider === true || isRecord(capabilities.signatureHelpProvider))
+    this.codeActionSupported = this.featureProfile.codeActions && (capabilities.codeActionProvider === true || isRecord(capabilities.codeActionProvider))
+    this.documentSymbolSupported = this.featureProfile.documentSymbols && (capabilities.documentSymbolProvider === true || isRecord(capabilities.documentSymbolProvider))
+    this.foldingRangeSupported = this.featureProfile.foldingRanges && (capabilities.foldingRangeProvider === true || isRecord(capabilities.foldingRangeProvider))
+    const semanticProvider = isRecord(capabilities.semanticTokensProvider) ? capabilities.semanticTokensProvider : null
+    const legend = semanticProvider && isRecord(semanticProvider.legend) ? semanticProvider.legend : null
     const tokenTypes = legend ? stringArray(legend.tokenTypes) : null
     const tokenModifiers = legend ? stringArray(legend.tokenModifiers) : null
-    this.semanticLegend =
-      this.featureProfile.semanticTokens && tokenTypes && tokenModifiers
-        ? { tokenTypes, tokenModifiers }
-        : null
+    this.semanticLegend = this.featureProfile.semanticTokens && tokenTypes && tokenModifiers ? { tokenTypes, tokenModifiers } : null
   }
 
   private scheduleSemanticTokens(path: string, delay: number): void {
@@ -745,35 +643,19 @@ class CodeMirrorLspClient implements LanguageClientHandle, ActiveCodeMirrorClien
   private async refreshSemanticTokens(path: string, generation: number): Promise<void> {
     const document = this.documents.get(path)
     const legend = this.semanticLegend
-    if (
-      !document ||
-      !legend ||
-      document.semanticGeneration !== generation ||
-      this.disposed ||
-      !this.initialized ||
-      !this.isCurrent()
-    ) {
+    if (!document || !legend || document.semanticGeneration !== generation || this.disposed || !this.initialized || !this.isCurrent()) {
       return
     }
     const version = document.version
     const result = await this.request('textDocument/semanticTokens/full', {
       textDocument: { uri: document.uri },
     }).catch(() => null)
-    if (
-      !this.isCurrent() ||
-      document.version !== version ||
-      document.semanticGeneration !== generation ||
-      !isRecord(result)
-    ) {
+    if (!this.isCurrent() || document.version !== version || document.semanticGeneration !== generation || !isRecord(result)) {
       return
     }
     const data = numberArray(result.data)
     if (!data) return
-    this.sink.publishSemanticTokens(
-      document.path,
-      version,
-      decodeSemanticTokens(data, legend.tokenTypes, legend.tokenModifiers),
-    )
+    this.sink.publishSemanticTokens(document.path, version, decodeSemanticTokens(data, legend.tokenTypes, legend.tokenModifiers))
   }
 
   private scheduleStructure(path: string, delay: number): void {
@@ -825,23 +707,13 @@ class CodeMirrorLspClient implements LanguageClientHandle, ActiveCodeMirrorClien
 
   private request(method: string, parameters: unknown, timeoutMs = 10_000): Promise<unknown> {
     if (this.disposed || this.socket.readyState !== WebSocket.OPEN) {
-      return Promise.reject(
-        new LanguageSessionTransportError(
-          'websocket-not-open',
-          'Language server connection is not open.',
-        ),
-      )
+      return Promise.reject(new LanguageSessionTransportError('websocket-not-open', 'Language server connection is not open.'))
     }
     const id = this.nextRequestId++
     return new Promise((resolve, reject) => {
       const timeout = window.setTimeout(() => {
         this.pending.delete(id)
-        reject(
-          new LanguageSessionTransportError(
-            method === 'initialize' ? 'initialize-timeout' : 'request-timeout',
-            `Language server request '${method}' timed out.`,
-          ),
-        )
+        reject(new LanguageSessionTransportError(method === 'initialize' ? 'initialize-timeout' : 'request-timeout', `Language server request '${method}' timed out.`))
       }, timeoutMs)
       this.pending.set(id, { resolve, reject, timeout })
       this.send({ jsonrpc: '2.0', id, method, params: parameters })
@@ -858,15 +730,11 @@ class CodeMirrorLspClient implements LanguageClientHandle, ActiveCodeMirrorClien
   }
 
   private readonly handleMessage = (event: MessageEvent<unknown>): void => {
-    this.messageQueue = this.messageQueue
-      .then(async () => this.receive(await messageText(event.data)))
-      .catch(() => undefined)
+    this.messageQueue = this.messageQueue.then(async () => this.receive(await messageText(event.data))).catch(() => undefined)
   }
 
   private readonly handleClose = (): void => {
-    this.rejectPending(
-      new LanguageSessionTransportError('websocket-closed', 'Language server connection closed.'),
-    )
+    this.rejectPending(new LanguageSessionTransportError('websocket-closed', 'Language server connection closed.'))
   }
 
   private async receive(text: string): Promise<void> {
@@ -884,13 +752,7 @@ class CodeMirrorLspClient implements LanguageClientHandle, ActiveCodeMirrorClien
       this.pending.delete(message.id)
       window.clearTimeout(pending.timeout)
       if (isRecord(message.error)) {
-        pending.reject(
-          new LanguageSessionProtocolError(
-            typeof message.error.message === 'string'
-              ? message.error.message
-              : 'Language server request failed.',
-          ),
-        )
+        pending.reject(new LanguageSessionProtocolError(typeof message.error.message === 'string' ? message.error.message : 'Language server request failed.'))
       } else {
         pending.resolve(message.result)
       }
@@ -905,26 +767,21 @@ class CodeMirrorLspClient implements LanguageClientHandle, ActiveCodeMirrorClien
     this.handleNotification(message.method, message.params)
   }
 
-  private async handleServerRequest(
-    id: number | string,
-    method: string,
-    parameters: unknown,
-  ): Promise<void> {
+  private async handleServerRequest(id: number | string, method: string, parameters: unknown): Promise<void> {
     let result: unknown = null
     if (method === 'workspace/configuration') {
       const items = isRecord(parameters) && Array.isArray(parameters.items) ? parameters.items : []
       result = items.map(() => null)
     } else if (method === 'workspace/workspaceFolders') {
       result = [{ uri: this.plan.workspaceUri, name: 'SharpLabNext' }]
-    } else if (
-      method !== 'client/registerCapability' &&
-      method !== 'client/unregisterCapability' &&
-      method !== 'window/workDoneProgress/create'
-    ) {
+    } else if (method !== 'client/registerCapability' && method !== 'client/unregisterCapability' && method !== 'window/workDoneProgress/create') {
       this.send({
         jsonrpc: '2.0',
         id,
-        error: { code: -32601, message: `Method '${method}' is not supported by this client.` },
+        error: {
+          code: -32601,
+          message: `Method '${method}' is not supported by this client.`,
+        },
       })
       return
     }
@@ -950,10 +807,7 @@ class CodeMirrorLspClient implements LanguageClientHandle, ActiveCodeMirrorClien
     const diagnostics = Array.isArray(parameters.diagnostics)
       ? parameters.diagnostics.flatMap((value) => {
           const diagnostic = parseDiagnostic(value)
-          return diagnostic &&
-            isCurrentLspDiagnostic(diagnostic.data, this.plan.selectionRevision, document.version)
-            ? [diagnostic]
-            : []
+          return diagnostic && isCurrentLspDiagnostic(diagnostic.data, this.plan.selectionRevision, document.version) ? [diagnostic] : []
         })
       : []
     this.sink.publishDiagnostics(document.path, version, diagnostics)
@@ -965,11 +819,7 @@ class CodeMirrorLspClient implements LanguageClientHandle, ActiveCodeMirrorClien
     }
   }
 
-  private async publishCodeActions(
-    document: LspDocument,
-    diagnostics: readonly CodeMirrorLspDiagnostic[],
-    generation: number,
-  ): Promise<void> {
+  private async publishCodeActions(document: LspDocument, diagnostics: readonly CodeMirrorLspDiagnostic[], generation: number): Promise<void> {
     const version = document.version
     const end = positionAtTextEnd(document.text)
     const result = await this.request('textDocument/codeAction', {
@@ -980,11 +830,7 @@ class CodeMirrorLspClient implements LanguageClientHandle, ActiveCodeMirrorClien
         only: ['quickfix'],
       },
     }).catch(() => null)
-    if (
-      !this.isCurrent() ||
-      document.version !== version ||
-      document.diagnosticGeneration !== generation
-    ) {
+    if (!this.isCurrent() || document.version !== version || document.diagnosticGeneration !== generation) {
       return
     }
     const actions = parseCodeActions(result, this.documentsByUri)
@@ -1005,9 +851,7 @@ class CodeMirrorLspClient implements LanguageClientHandle, ActiveCodeMirrorClien
   }
 }
 
-function clientCapabilities(
-  featureProfile: Readonly<CodeMirrorLanguageClientFeatureProfile>,
-): object {
+function clientCapabilities(featureProfile: Readonly<CodeMirrorLanguageClientFeatureProfile>): object {
   const textDocument: Record<string, unknown> = {}
   if (featureProfile.synchronizeDocuments) {
     textDocument.synchronization = {
@@ -1024,19 +868,16 @@ function clientCapabilities(
         snippetSupport: true,
         documentationFormat: ['markdown', 'plaintext'],
         resolveSupport: {
-          properties: [
-            'detail',
-            'documentation',
-            'insertTextFormat',
-            'textEdit',
-            'additionalTextEdits',
-          ],
+          properties: ['detail', 'documentation', 'insertTextFormat', 'textEdit', 'additionalTextEdits'],
         },
       },
     }
   }
   if (featureProfile.hover) {
-    textDocument.hover = { dynamicRegistration: false, contentFormat: ['markdown', 'plaintext'] }
+    textDocument.hover = {
+      dynamicRegistration: false,
+      contentFormat: ['markdown', 'plaintext'],
+    }
   }
   if (featureProfile.signatureHelp) {
     textDocument.signatureHelp = {
@@ -1087,16 +928,9 @@ function clientCapabilities(
   }
 }
 
-function parseCompletionItems(
-  result: unknown,
-  documentVersion: number,
-): CodeMirrorLspCompletionList | null {
+function parseCompletionItems(result: unknown, documentVersion: number): CodeMirrorLspCompletionList | null {
   const completionList = isRecord(result) ? result : null
-  const values = Array.isArray(result)
-    ? result
-    : completionList && Array.isArray(completionList.items)
-      ? completionList.items
-      : null
+  const values = Array.isArray(result) ? result : completionList && Array.isArray(completionList.items) ? completionList.items : null
   if (!values) return null
   return {
     isIncomplete: !Array.isArray(result) && completionList?.isIncomplete === true,
@@ -1107,11 +941,7 @@ function parseCompletionItems(
   }
 }
 
-function parseCompletionItem(
-  value: unknown,
-  documentVersion: number,
-  strictEdits: boolean,
-): CodeMirrorLspCompletionItem | null {
+function parseCompletionItem(value: unknown, documentVersion: number, strictEdits: boolean): CodeMirrorLspCompletionItem | null {
   if (!isRecord(value) || typeof value.label !== 'string') return null
 
   const textEdit = 'textEdit' in value ? parseTextEdit(value.textEdit) : undefined
@@ -1138,9 +968,7 @@ function parseCompletionItem(
     ...(typeof value.detail === 'string' ? { detail: value.detail } : {}),
     ...('documentation' in value ? { documentation: value.documentation } : {}),
     ...(typeof value.insertText === 'string' ? { insertText: value.insertText } : {}),
-    ...(typeof value.insertTextFormat === 'number'
-      ? { insertTextFormat: value.insertTextFormat }
-      : {}),
+    ...(typeof value.insertTextFormat === 'number' ? { insertTextFormat: value.insertTextFormat } : {}),
     ...(typeof value.kind === 'number' ? { kind: value.kind } : {}),
     ...(typeof value.sortText === 'string' ? { sortText: value.sortText } : {}),
     ...(typeof value.filterText === 'string' ? { filterText: value.filterText } : {}),
@@ -1173,36 +1001,20 @@ function parseSignatureHelp(result: unknown): CodeMirrorLspSignatureHelp | null 
         label: value.label,
         ...('documentation' in value ? { documentation: value.documentation } : {}),
         parameters,
-        ...(isNonNegativeInteger(value.activeParameter)
-          ? { activeParameter: value.activeParameter }
-          : {}),
+        ...(isNonNegativeInteger(value.activeParameter) ? { activeParameter: value.activeParameter } : {}),
       } satisfies CodeMirrorLspSignatureInformation,
     ]
   })
   if (signatures.length === 0) return null
-  const activeSignature = Math.min(
-    isNonNegativeInteger(result.activeSignature) ? result.activeSignature : 0,
-    signatures.length - 1,
-  )
+  const activeSignature = Math.min(isNonNegativeInteger(result.activeSignature) ? result.activeSignature : 0, signatures.length - 1)
   const signature = signatures[activeSignature]
-  const activeParameter = Math.min(
-    isNonNegativeInteger(result.activeParameter)
-      ? result.activeParameter
-      : (signature?.activeParameter ?? 0),
-    Math.max(0, (signature?.parameters.length ?? 1) - 1),
-  )
+  const activeParameter = Math.min(isNonNegativeInteger(result.activeParameter) ? result.activeParameter : (signature?.activeParameter ?? 0), Math.max(0, (signature?.parameters.length ?? 1) - 1))
   return { signatures, activeSignature, activeParameter }
 }
 
 function parseParameterLabel(value: unknown): string | readonly [number, number] | null {
   if (typeof value === 'string') return value
-  if (
-    Array.isArray(value) &&
-    value.length === 2 &&
-    isNonNegativeInteger(value[0]) &&
-    isNonNegativeInteger(value[1]) &&
-    value[1] >= value[0]
-  ) {
+  if (Array.isArray(value) && value.length === 2 && isNonNegativeInteger(value[0]) && isNonNegativeInteger(value[1]) && value[1] >= value[0]) {
     return [value[0], value[1]]
   }
   return null
@@ -1241,20 +1053,13 @@ function parseDocumentSymbol(value: unknown, depth: number): CodeMirrorDocumentS
 function parseFoldingRanges(result: unknown): CodeMirrorLspFoldingRange[] {
   if (!Array.isArray(result)) return []
   return result.flatMap((value) => {
-    if (
-      !isRecord(value) ||
-      !isNonNegativeInteger(value.startLine) ||
-      !isNonNegativeInteger(value.endLine) ||
-      value.endLine < value.startLine
-    ) {
+    if (!isRecord(value) || !isNonNegativeInteger(value.startLine) || !isNonNegativeInteger(value.endLine) || value.endLine < value.startLine) {
       return []
     }
     return [
       {
         startLine: value.startLine,
-        ...(isNonNegativeInteger(value.startCharacter)
-          ? { startCharacter: value.startCharacter }
-          : {}),
+        ...(isNonNegativeInteger(value.startCharacter) ? { startCharacter: value.startCharacter } : {}),
         endLine: value.endLine,
         ...(isNonNegativeInteger(value.endCharacter) ? { endCharacter: value.endCharacter } : {}),
         ...(typeof value.kind === 'string' ? { kind: value.kind } : {}),
@@ -1263,10 +1068,7 @@ function parseFoldingRanges(result: unknown): CodeMirrorLspFoldingRange[] {
   })
 }
 
-function parseCodeActions(
-  result: unknown,
-  documentsByUri: ReadonlyMap<string, LspDocument>,
-): CodeMirrorLspCodeAction[] {
+function parseCodeActions(result: unknown, documentsByUri: ReadonlyMap<string, LspDocument>): CodeMirrorLspCodeAction[] {
   if (!Array.isArray(result)) return []
   return result.flatMap((value) => {
     if (!isRecord(value) || typeof value.title !== 'string') return []
@@ -1281,9 +1083,7 @@ function parseCodeActions(
           return [
             {
               range,
-              ...(typeof diagnostic.code === 'string' || typeof diagnostic.code === 'number'
-                ? { code: diagnostic.code }
-                : {}),
+              ...(typeof diagnostic.code === 'string' || typeof diagnostic.code === 'number' ? { code: diagnostic.code } : {}),
             },
           ]
         })
@@ -1300,10 +1100,7 @@ function parseCodeActions(
   })
 }
 
-function parseWorkspaceEdit(
-  value: unknown,
-  documentsByUri: ReadonlyMap<string, LspDocument>,
-): CodeMirrorWorkspaceDocumentEdit[] {
+function parseWorkspaceEdit(value: unknown, documentsByUri: ReadonlyMap<string, LspDocument>): CodeMirrorWorkspaceDocumentEdit[] {
   if (!isRecord(value)) return []
   const edits = new Map<string, CodeMirrorLspTextEdit[]>()
   if (isRecord(value.changes)) {
@@ -1350,22 +1147,11 @@ function parseTextEdit(value: unknown): CodeMirrorLspTextEdit | null {
   return range ? { range, newText: value.newText } : null
 }
 
-function codeActionMatchesDiagnostic(
-  action: CodeMirrorLspCodeAction,
-  diagnostic: CodeMirrorLspDiagnostic,
-): boolean {
+function codeActionMatchesDiagnostic(action: CodeMirrorLspCodeAction, diagnostic: CodeMirrorLspDiagnostic): boolean {
   if (action.diagnostics.length > 0) {
-    return action.diagnostics.some(
-      (candidate) =>
-        (candidate.code === undefined ||
-          diagnostic.code === undefined ||
-          String(candidate.code) === String(diagnostic.code)) &&
-        rangesIntersect(candidate.range, diagnostic.range),
-    )
+    return action.diagnostics.some((candidate) => (candidate.code === undefined || diagnostic.code === undefined || String(candidate.code) === String(diagnostic.code)) && rangesIntersect(candidate.range, diagnostic.range))
   }
-  return action.documentEdits.some((document) =>
-    document.edits.some((edit) => rangesIntersect(edit.range, diagnostic.range)),
-  )
+  return action.documentEdits.some((document) => document.edits.some((edit) => rangesIntersect(edit.range, diagnostic.range)))
 }
 
 function rangesIntersect(left: LspRange, right: LspRange): boolean {
@@ -1391,9 +1177,7 @@ function parseDiagnostic(value: unknown): CodeMirrorLspDiagnostic | null {
     message: value.message,
     ...(typeof value.severity === 'number' ? { severity: value.severity } : {}),
     ...(typeof value.source === 'string' ? { source: value.source } : {}),
-    ...(typeof value.code === 'string' || typeof value.code === 'number'
-      ? { code: value.code }
-      : {}),
+    ...(typeof value.code === 'string' || typeof value.code === 'number' ? { code: value.code } : {}),
     ...('data' in value ? { data: value.data } : {}),
     raw: value,
   }
@@ -1407,11 +1191,7 @@ function parseRange(value: unknown): LspRange | null {
 }
 
 function parsePosition(value: unknown): LspPosition | null {
-  return isRecord(value) &&
-    isNonNegativeInteger(value.line) &&
-    isNonNegativeInteger(value.character)
-    ? { line: value.line, character: value.character }
-    : null
+  return isRecord(value) && isNonNegativeInteger(value.line) && isNonNegativeInteger(value.character) ? { line: value.line, character: value.character } : null
 }
 
 function stringArray(value: unknown): string[] | null {
@@ -1435,12 +1215,7 @@ async function messageText(data: unknown): Promise<string> {
 function waitForSocketOpen(socket: WebSocket): Promise<void> {
   if (socket.readyState === WebSocket.OPEN) return Promise.resolve()
   if (socket.readyState !== WebSocket.CONNECTING) {
-    return Promise.reject(
-      new LanguageSessionTransportError(
-        'websocket-closed',
-        'Language server connection closed before it opened.',
-      ),
-    )
+    return Promise.reject(new LanguageSessionTransportError('websocket-closed', 'Language server connection closed before it opened.'))
   }
   return new Promise((resolve, reject) => {
     const cleanup = () => {
@@ -1454,21 +1229,11 @@ function waitForSocketOpen(socket: WebSocket): Promise<void> {
     }
     const onError = () => {
       cleanup()
-      reject(
-        new LanguageSessionTransportError(
-          'websocket-open-failed',
-          'Language server WebSocket failed to open.',
-        ),
-      )
+      reject(new LanguageSessionTransportError('websocket-open-failed', 'Language server WebSocket failed to open.'))
     }
     const onClose = () => {
       cleanup()
-      reject(
-        new LanguageSessionTransportError(
-          'websocket-closed',
-          'Language server connection closed before it opened.',
-        ),
-      )
+      reject(new LanguageSessionTransportError('websocket-closed', 'Language server connection closed before it opened.'))
     }
     socket.addEventListener('open', onOpen)
     socket.addEventListener('error', onError)

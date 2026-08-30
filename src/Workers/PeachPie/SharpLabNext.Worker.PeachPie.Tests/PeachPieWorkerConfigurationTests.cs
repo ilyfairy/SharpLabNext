@@ -10,9 +10,7 @@ public sealed class PeachPieWorkerConfigurationTests
         var root = PeachPieTestSettings.CreateRoot();
         try
         {
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(PeachPieTestSettings.WebHostConfiguration(root))
-                .Build();
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(PeachPieTestSettings.WebHostConfiguration(root)).Build();
 
             var settings = PeachPieWorkerSettings.FromConfiguration(configuration);
 
@@ -20,10 +18,7 @@ public sealed class PeachPieWorkerConfigurationTests
             Assert.Equal(PeachPieToolchain.CompilerCommit, settings.Identity.CompilerCommit);
             Assert.Equal("net10-ref", Assert.Single(settings.ReferenceSets).Id);
             Assert.True(settings.BuildProcess.Enabled);
-            Assert.EndsWith(
-                PeachPieToolchain.MonoUnixNativePackagePath.Replace('/', Path.DirectorySeparatorChar),
-                settings.MonoUnixNativeLibraryPath,
-                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+            Assert.EndsWith(PeachPieToolchain.MonoUnixNativePackagePath.Replace('/', Path.DirectorySeparatorChar), settings.MonoUnixNativeLibraryPath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
         }
         finally
         {
@@ -39,8 +34,7 @@ public sealed class PeachPieWorkerConfigurationTests
         var root = PeachPieTestSettings.CreateRoot();
         try
         {
-            var values = PeachPieTestSettings.WebHostConfiguration(root)
-                .ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal);
+            var values = PeachPieTestSettings.WebHostConfiguration(root).ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal);
             values["PeachPie:CompilerVersion"] = version;
             values["PeachPie:CompilerCommit"] = commit;
             var configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
@@ -72,21 +66,11 @@ public sealed class PeachPieWorkerConfigurationTests
     [Fact]
     public void DependencyGraphExcludesUnlicensedCompilerDiagnosticsPackage()
     {
-        var projectDirectory = Path.Combine(
-            PeachPieTestSettings.RepositoryRoot,
-            "src",
-            "Workers",
-            "PeachPie",
-            "SharpLabNext.Worker.PeachPie");
-        var project = File.ReadAllText(Path.Combine(
-            projectDirectory,
-            "SharpLabNext.Worker.PeachPie.csproj"));
+        var projectDirectory = Path.Combine(PeachPieTestSettings.RepositoryRoot, "src", "Workers", "PeachPie", "SharpLabNext.Worker.PeachPie");
+        var project = File.ReadAllText(Path.Combine(projectDirectory, "SharpLabNext.Worker.PeachPie.csproj"));
         var lockFile = File.ReadAllText(Path.Combine(projectDirectory, "packages.lock.json"));
 
-        Assert.Contains(
-            "<PackageDownload Include=\"Peachpie.CodeAnalysis\"",
-            project,
-            StringComparison.Ordinal);
+        Assert.Contains("<PackageDownload Include=\"Peachpie.CodeAnalysis\"", project, StringComparison.Ordinal);
         Assert.DoesNotContain("Peachpie.Compiler.Diagnostics", project, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Peachpie.Compiler.Diagnostics", lockFile, StringComparison.OrdinalIgnoreCase);
     }

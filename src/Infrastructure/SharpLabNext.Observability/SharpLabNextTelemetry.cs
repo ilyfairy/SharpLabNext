@@ -11,9 +11,7 @@ public static class SharpLabNextTelemetry
     public const string MeterName = "SharpLabNext.Observability";
 
     private static readonly string InstrumentationVersion =
-        typeof(SharpLabNextTelemetry).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion ?? "0.0.0";
+        typeof(SharpLabNextTelemetry).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
 
     public static ActivitySource ActivitySource { get; } = new(ActivitySourceName, InstrumentationVersion);
 

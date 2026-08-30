@@ -11,14 +11,14 @@ import {
   buildRuntimeMatrixDeploymentBridge,
   renameSyncWithRetry,
   runRuntimeMatrixDeploymentBridgeCli,
-} from './runtime-matrix-deployment-bridge.mjs'
+} from '../smoke/runtime-matrix-deployment-bridge.mjs'
 import {
   formalRuntimeCandidateProfileIds,
   readRuntimeMatrix,
-} from './runtime-candidate-environment.mjs'
-import { validateJsonSchemaInstance } from './json-schema-instance-validation.mjs'
+} from '../runtime-candidate-environment.mjs'
+import { validateJsonSchemaInstance } from '../release/json-schema-instance-validation.mjs'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const sourceMatrix = path.join(repositoryRoot, 'profiles', 'runtime-matrix.json')
 const sourceCatalog = path.join(repositoryRoot, 'profiles', 'catalog', 'catalog.json')
 const sourceLock = path.join(repositoryRoot, 'profiles', 'lock.json')
@@ -186,8 +186,7 @@ test('bridge transaction binds all canonical runtime identities into every gener
   const profiles = new Map(overlay.RuntimeSupervisorProfileOverlay.Profiles.map(profile => [profile.id, profile]))
   for (const row of fixture.rows) {
     const runtime = catalog.runtimes.find(value => value.id === row.profileId)
-    const declaredCapabilities = matrixBindings(readRuntimeMatrix(fixture.options.matrixPath))
-      .get(row.profileId).declaredCapabilities
+    const declaredCapabilities = matrixBindings(readRuntimeMatrix(fixture.options.matrixPath)).get(row.profileId).declaredCapabilities;
     assert.equal(runtime.runtimeImageId, row.image.imageId)
     assert.deepEqual(runtime.capabilities, declaredCapabilities)
     assert.equal(lock.components[row.profileId].imageId, row.image.imageId)
@@ -196,10 +195,8 @@ test('bridge transaction binds all canonical runtime identities into every gener
     assert.deepEqual(profiles.get(row.profileId).capabilities, declaredCapabilities)
     assert.equal(profiles.get(row.profileId).securityPolicies, undefined)
   }
-  assert.deepEqual(profiles.get('dotnet-10-linux-x64').capabilities,
-    ['run', 'jit-asm', 'inspection', 'execution-flow'])
-  assert.deepEqual(profiles.get('dotnet-11-preview-linux-x64').capabilities,
-    ['run', 'jit-asm', 'inspection', 'execution-flow'])
+  assert.deepEqual(profiles.get('dotnet-10-linux-x64').capabilities, ['run', 'jit-asm', 'inspection', 'execution-flow']);
+  assert.deepEqual(profiles.get('dotnet-11-preview-linux-x64').capabilities, ['run', 'jit-asm', 'inspection', 'execution-flow']);
   for (const [filename, digest] of Object.entries(manifest.files)) {
     assert.equal(hash(fs.readFileSync(path.join(fixture.options.outputDirectory, filename))), digest)
   }
@@ -215,9 +212,7 @@ test('bridge transaction binds all canonical runtime identities into every gener
   for (const [filename, digest] of fixture.inputHashes) assert.equal(hash(fs.readFileSync(filename)), digest)
 
   fs.writeFileSync(path.join(fixture.options.outputDirectory, 'stale.txt'), 'stale')
-  const first = new Map(fs.readdirSync(fixture.options.outputDirectory)
-    .filter(name => name !== 'stale.txt')
-    .map(name => [name, hash(fs.readFileSync(path.join(fixture.options.outputDirectory, name)))]))
+  const first = new Map(fs.readdirSync(fixture.options.outputDirectory).filter(name => name !== 'stale.txt').map(name => [name, hash(fs.readFileSync(path.join(fixture.options.outputDirectory, name)))]));
   buildRuntimeMatrixDeploymentBridge(fixture.options)
   assert.equal(fs.existsSync(path.join(fixture.options.outputDirectory, 'stale.txt')), false)
   for (const [name, digest] of first) {

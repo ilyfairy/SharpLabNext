@@ -1,5 +1,6 @@
 #:sdk Microsoft.NET.Sdk
 #:property TargetFramework=net10.0
+#:property RestorePackagesWithLockFile=false
 
 using System.Diagnostics;
 using System.Text.RegularExpressions;
@@ -45,10 +46,7 @@ using (process)
         return process.ExitCode;
     }
 
-    var matches = Regex.Matches(
-        output,
-        @"BuildKit version:\s*v?(?<major>\d+)\.(?<minor>\d+)(?:\.(?<patch>\d+))?",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    var matches = Regex.Matches(output, @"BuildKit version:\s*v?(?<major>\d+)\.(?<minor>\d+)(?:\.(?<patch>\d+))?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     if (matches.Count == 0)
     {
         Console.Error.WriteLine("Could not determine the active builder's BuildKit version from 'docker buildx inspect --bootstrap'.");
@@ -56,25 +54,15 @@ using (process)
     }
 
     var minimum = new Version(0, 13, 0);
-    var detected = matches
-        .Select(static match => new Version(
-            int.Parse(match.Groups["major"].Value, System.Globalization.CultureInfo.InvariantCulture),
-            int.Parse(match.Groups["minor"].Value, System.Globalization.CultureInfo.InvariantCulture),
-            match.Groups["patch"].Success
-                ? int.Parse(match.Groups["patch"].Value, System.Globalization.CultureInfo.InvariantCulture)
-                : 0))
-        .ToArray();
+    var detected = matches.Select(static match => new Version(int.Parse(match.Groups["major"].Value, System.Globalization.CultureInfo.InvariantCulture), int.Parse(match.Groups["minor"].Value, System.Globalization.CultureInfo.InvariantCulture), match.Groups["patch"].Success ? int.Parse(match.Groups["patch"].Value, System.Globalization.CultureInfo.InvariantCulture) : 0)).ToArray();
     var unsupported = detected.Where(version => version < minimum).ToArray();
     if (unsupported.Length > 0)
     {
-        Console.Error.WriteLine(
-            $"BuildKit {minimum} or newer is required for deterministic timestamp rewriting. " +
-            $"Detected: {string.Join(", ", detected.Select(static version => version.ToString()))}.");
+        Console.Error.WriteLine($"BuildKit {minimum} or newer is required for deterministic timestamp rewriting. Detected: {string.Join(", ", detected.Select(static version => version.ToString()))}.");
         return 1;
     }
 
-    Console.WriteLine(
-        $"BuildKit capability check passed (minimum {minimum}; detected {string.Join(", ", detected.Select(static version => version.ToString()))}).");
+    Console.WriteLine($"BuildKit capability check passed (minimum {minimum}; detected {string.Join(", ", detected.Select(static version => version.ToString()))}).");
 }
 
 return 0;

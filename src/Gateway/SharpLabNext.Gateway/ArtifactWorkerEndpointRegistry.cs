@@ -2,12 +2,7 @@ using System.Collections.ObjectModel;
 
 namespace SharpLabNext.Gateway;
 
-public sealed record ArtifactWorkerEndpoint(
-    string WorkerId,
-    Uri BaseAddress,
-    string ExpectedReleaseId,
-    string? ExpectedWorkerImageId,
-    string? ServiceToken);
+public sealed record ArtifactWorkerEndpoint(string WorkerId, Uri BaseAddress, string ExpectedReleaseId, string? ExpectedWorkerImageId, string? ServiceToken);
 
 public sealed class ArtifactWorkerEndpointRegistry
 {
@@ -25,11 +20,7 @@ public sealed class ArtifactWorkerEndpointRegistry
 
     public IReadOnlyCollection<ArtifactWorkerEndpoint> Endpoints => _endpoints.Values;
 
-    public static ArtifactWorkerEndpointRegistry FromConfiguration(
-        IConfiguration configuration,
-        string releaseId,
-        IEnumerable<string> catalogWorkerIds,
-        string? defaultServiceToken = null)
+    public static ArtifactWorkerEndpointRegistry FromConfiguration(IConfiguration configuration, string releaseId, IEnumerable<string> catalogWorkerIds, string? defaultServiceToken = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentException.ThrowIfNullOrWhiteSpace(releaseId);
@@ -41,29 +32,18 @@ public sealed class ArtifactWorkerEndpointRegistry
             var workerId = child.Key;
             if (!allowedWorkerIds.Contains(workerId))
             {
-                throw new InvalidOperationException(
-                    $"Services:ArtifactWorkers:{workerId} does not match a workerId in the active catalog.");
+                throw new InvalidOperationException($"Services:ArtifactWorkers:{workerId} does not match a workerId in the active catalog.");
             }
-            endpoints.Add(new ArtifactWorkerEndpoint(
-                workerId,
-                ParseBaseAddress(child["BaseAddress"], $"Services:ArtifactWorkers:{workerId}:BaseAddress"),
-                releaseId,
-                NullIfWhiteSpace(child["ExpectedWorkerImageId"]),
-                ReadServiceToken(child, workerId) ?? defaultServiceToken));
+            endpoints.Add(new ArtifactWorkerEndpoint(workerId, ParseBaseAddress(child["BaseAddress"], $"Services:ArtifactWorkers:{workerId}:BaseAddress"), releaseId, NullIfWhiteSpace(child["ExpectedWorkerImageId"]), ReadServiceToken(child, workerId) ?? defaultServiceToken));
         }
         return new ArtifactWorkerEndpointRegistry(endpoints);
     }
 
     private static Uri ParseBaseAddress(string? value, string configurationKey)
     {
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
-            !string.IsNullOrEmpty(uri.UserInfo) ||
-            !string.IsNullOrEmpty(uri.Query) ||
-            !string.IsNullOrEmpty(uri.Fragment))
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) || !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
         {
-            throw new InvalidOperationException(
-                $"{configurationKey} must be an absolute HTTP(S) service URI without credentials, query, or fragment.");
+            throw new InvalidOperationException($"{configurationKey} must be an absolute HTTP(S) service URI without credentials, query, or fragment.");
         }
         return uri;
     }

@@ -43,10 +43,7 @@ namespace SharpLabNext.LegacyJitInspector
         private bool _outputLimitReached;
         private bool _emitted;
 
-        private RunOutputCapture(
-            string stdoutPath,
-            string stderrPath,
-            RuntimeFrameWriter frameWriter)
+        private RunOutputCapture(string stdoutPath, string stderrPath, RuntimeFrameWriter frameWriter)
         {
             _stdoutPath = stdoutPath;
             _stderrPath = stderrPath;
@@ -74,9 +71,7 @@ namespace SharpLabNext.LegacyJitInspector
             if (frameWriter == null)
                 throw new ArgumentNullException(nameof(frameWriter));
             string token = Guid.NewGuid().ToString("N");
-            string directory = ResolveCaptureDirectory(
-                Environment.GetEnvironmentVariable("SHARPLABNEXT_CAPTURE_DIRECTORY"),
-                RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
+            string directory = ResolveCaptureDirectory(Environment.GetEnvironmentVariable("SHARPLABNEXT_CAPTURE_DIRECTORY"), RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
             string stdoutPath = Path.Combine(directory, "sharplabnext-run-" + token + ".stdout");
             string stderrPath = Path.Combine(directory, "sharplabnext-run-" + token + ".stderr");
             RedirectNativeOutput(stdoutPath, stderrPath);
@@ -87,11 +82,9 @@ namespace SharpLabNext.LegacyJitInspector
         {
             if (string.IsNullOrWhiteSpace(configuredDirectory))
                 return Path.GetTempPath();
-            if (!isWindows ||
-                !string.Equals(configuredDirectory, @"Z:\tmp", StringComparison.OrdinalIgnoreCase))
+            if (!isWindows || !string.Equals(configuredDirectory, @"Z:\tmp", StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException(
-                    "SHARPLABNEXT_CAPTURE_DIRECTORY must be the fixed Wine path 'Z:\\tmp'.");
+                throw new InvalidOperationException("SHARPLABNEXT_CAPTURE_DIRECTORY must be the fixed Wine path 'Z:\\tmp'.");
             }
             return configuredDirectory;
         }
@@ -124,9 +117,7 @@ namespace SharpLabNext.LegacyJitInspector
                 _stdoutWriter.Flush();
                 _stderrWriter.Flush();
             }
-            catch (ObjectDisposedException)
-            {
-            }
+            catch (ObjectDisposedException) { }
 
             // Do not restore fd 1/2 before process exit. A user thread that
             // keeps running after Main must not regain access to the frame
@@ -154,9 +145,7 @@ namespace SharpLabNext.LegacyJitInspector
                 // handles; never turn a completed user run into a cleanup
                 // failure or expose a second unframed error.
             }
-            catch (UnauthorizedAccessException)
-            {
-            }
+            catch (UnauthorizedAccessException) { }
         }
 
         private static void TryRedirectNativeOutputToNull()
@@ -165,10 +154,7 @@ namespace SharpLabNext.LegacyJitInspector
             {
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
                 {
-                    int descriptor = OpenLinux(
-                        "/dev/null",
-                        LinuxWriteOnly,
-                        Convert.ToInt32("600", 8));
+                    int descriptor = OpenLinux("/dev/null", LinuxWriteOnly, Convert.ToInt32("600", 8));
                     if (descriptor >= 0)
                     {
                         _ = DuplicateLinux(descriptor, 1);
@@ -181,10 +167,7 @@ namespace SharpLabNext.LegacyJitInspector
                 if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                     return;
 
-                int ucrtDescriptor = OpenUcrt(
-                    "NUL",
-                    UcrtWriteOnly | UcrtCreate | Binary,
-                    OwnerRead | OwnerWrite);
+                int ucrtDescriptor = OpenUcrt("NUL", UcrtWriteOnly | UcrtCreate | Binary, OwnerRead | OwnerWrite);
                 if (ucrtDescriptor >= 0)
                 {
                     _ = DuplicateDescriptorUcrt(ucrtDescriptor, 1);
@@ -200,10 +183,7 @@ namespace SharpLabNext.LegacyJitInspector
 
                 // UCRT and the compatibility MSVCRT keep independent fd
                 // tables. Redirect the latter as well when available.
-                int msvcrtDescriptor = OpenMsvcrt(
-                    "NUL",
-                    UcrtWriteOnly | Binary,
-                    OwnerRead | OwnerWrite);
+                int msvcrtDescriptor = OpenMsvcrt("NUL", UcrtWriteOnly | Binary, OwnerRead | OwnerWrite);
                 if (msvcrtDescriptor >= 0)
                 {
                     _ = DuplicateDescriptorMsvcrt(msvcrtDescriptor, 1);
@@ -221,10 +201,7 @@ namespace SharpLabNext.LegacyJitInspector
 
         private static StreamWriter CreateManagedWriter(Stream stream)
         {
-            return new StreamWriter(
-                stream,
-                new UTF8Encoding(false),
-                4 * 1024)
+            return new StreamWriter(stream, new UTF8Encoding(false), 4 * 1024)
             {
                 AutoFlush = true
             };
@@ -239,10 +216,10 @@ namespace SharpLabNext.LegacyJitInspector
                 _descriptor = descriptor;
             }
 
-            public override bool CanRead { get { return false; } }
-            public override bool CanSeek { get { return false; } }
-            public override bool CanWrite { get { return true; } }
-            public override long Length { get { throw new NotSupportedException(); } }
+            public override bool CanRead => false;
+            public override bool CanSeek => false;
+            public override bool CanWrite => true;
+            public override long Length => throw new NotSupportedException();
             public override long Position
             {
                 get { throw new NotSupportedException(); }
@@ -255,20 +232,11 @@ namespace SharpLabNext.LegacyJitInspector
                 // StreamWriter owns the only managed buffer.
             }
 
-            public override int Read(byte[] buffer, int offset, int count)
-            {
-                throw new NotSupportedException();
-            }
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
-            public override long Seek(long offset, SeekOrigin origin)
-            {
-                throw new NotSupportedException();
-            }
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
 
-            public override void SetLength(long value)
-            {
-                throw new NotSupportedException();
-            }
+            public override void SetLength(long value) => throw new NotSupportedException();
 
             public override void Write(byte[] buffer, int offset, int count)
             {
@@ -312,10 +280,7 @@ namespace SharpLabNext.LegacyJitInspector
                     long result;
                     if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
                     {
-                        result = WriteLinux(
-                            _descriptor,
-                            segment,
-                            new UIntPtr((uint)remaining)).ToInt64();
+                        result = WriteLinux(_descriptor, segment, new UIntPtr((uint)remaining)).ToInt64();
                     }
                     else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                     {
@@ -323,8 +288,7 @@ namespace SharpLabNext.LegacyJitInspector
                     }
                     else
                     {
-                        throw new PlatformNotSupportedException(
-                            "Native descriptor output supports Linux and Windows only.");
+                        throw new PlatformNotSupportedException("Native descriptor output supports Linux and Windows only.");
                     }
 
                     if (result <= 0 || result > remaining)
@@ -343,14 +307,8 @@ namespace SharpLabNext.LegacyJitInspector
                 {
                     while (Thread.VolatileRead(ref _stopRequested) == 0)
                     {
-                        var progressed = DrainAvailable(
-                            stdout,
-                            RuntimeFrameKind.Stdout,
-                            ref _stdoutOffset) |
-                            DrainAvailable(
-                                stderr,
-                                RuntimeFrameKind.Stderr,
-                                ref _stderrOffset);
+                        var progressed = DrainAvailable(stdout, RuntimeFrameKind.Stdout, ref _stdoutOffset) |
+                            DrainAvailable(stderr, RuntimeFrameKind.Stderr, ref _stderrOffset);
                         if (!progressed)
                             Thread.Sleep(PumpIntervalMilliseconds);
                     }
@@ -366,11 +324,7 @@ namespace SharpLabNext.LegacyJitInspector
             }
         }
 
-        private bool DrainAvailable(
-            FileStream stream,
-            RuntimeFrameKind kind,
-            ref long offset,
-            bool allowAfterStop = false)
+        private bool DrainAvailable(FileStream stream, RuntimeFrameKind kind, ref long offset, bool allowAfterStop = false)
         {
             bool progressed = false;
             while (allowAfterStop || Thread.VolatileRead(ref _stopRequested) == 0)
@@ -395,10 +349,7 @@ namespace SharpLabNext.LegacyJitInspector
             return progressed;
         }
 
-        private void DrainFile(
-            RuntimeFrameKind kind,
-            string path,
-            ref long offset)
+        private void DrainFile(RuntimeFrameKind kind, string path, ref long offset)
         {
             if (!File.Exists(path) || _outputLimitReached)
                 return;
@@ -434,8 +385,7 @@ namespace SharpLabNext.LegacyJitInspector
                 // terminate the container immediately instead of waiting for
                 // the user entry point to return.
                 long overflowBoundary = remaining == long.MaxValue
-                    ? long.MaxValue
-                    : remaining + 1;
+                    ? long.MaxValue : remaining + 1;
                 long requested = Math.Min((long)count, overflowBoundary);
                 int emitCount = (int)Math.Min(requested, int.MaxValue);
                 _frameWriter.Write(kind, bytes, 0, emitCount);
@@ -456,20 +406,12 @@ namespace SharpLabNext.LegacyJitInspector
             Interlocked.Exchange(ref _stopRequested, 1);
         }
 
-        private static FileStream OpenCaptureReader(string path) => new FileStream(
-            path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite | FileShare.Delete,
-            PumpBufferSize,
-            FileOptions.SequentialScan);
+        private static FileStream OpenCaptureReader(string path) => new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, PumpBufferSize, FileOptions.SequentialScan);
 
         private static long ReadMaximumOutputBytes()
         {
             var value = Environment.GetEnvironmentVariable("SHARPLABNEXT_MAX_OUTPUT_BYTES");
-            if (long.TryParse(value, System.Globalization.NumberStyles.None,
-                    System.Globalization.CultureInfo.InvariantCulture, out var parsed) &&
-                parsed > 0)
+            if (long.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var parsed) && parsed > 0)
             {
                 return parsed;
             }
@@ -498,17 +440,13 @@ namespace SharpLabNext.LegacyJitInspector
             int flags = LinuxWriteOnly | LinuxCreate | (append ? LinuxAppend : LinuxTruncate);
             int descriptor = OpenLinux(path, flags, Convert.ToInt32("600", 8));
             if (descriptor < 0)
-                throw new IOException(
-                    "The Linux run output file could not be opened (errno " +
-                    Marshal.GetLastWin32Error().ToString(System.Globalization.CultureInfo.InvariantCulture) + ").");
+                throw new IOException("The Linux run output file could not be opened (errno " + Marshal.GetLastWin32Error().ToString(System.Globalization.CultureInfo.InvariantCulture) + ").");
             try
             {
                 // POSIX dup2 returns the destination descriptor on success,
                 // not zero (unlike the Windows _dup2 wrappers).
                 if (DuplicateLinux(descriptor, destination) < 0)
-                    throw new IOException(
-                        "The Linux native output descriptor could not be redirected (errno " +
-                        Marshal.GetLastWin32Error().ToString(System.Globalization.CultureInfo.InvariantCulture) + ").");
+                    throw new IOException("The Linux native output descriptor could not be redirected (errno " + Marshal.GetLastWin32Error().ToString(System.Globalization.CultureInfo.InvariantCulture) + ").");
             }
             catch
             {
@@ -534,17 +472,8 @@ namespace SharpLabNext.LegacyJitInspector
                 // CoreCLR uses UCRT, while user P/Invokes can use MSVCRT.
                 // Duplicate the already-open kernel handle instead of opening
                 // the path a second time (Windows sharing modes can reject it).
-                IntPtr ucrtHandle = GetOsFileHandleUcrt(
-                    standardHandle == StandardOutputHandle ? 1 : 2);
-                if (ucrtHandle == IntPtr.Zero || ucrtHandle == new IntPtr(-1) ||
-                    !DuplicateHandle(
-                        GetCurrentProcess(),
-                        ucrtHandle,
-                        GetCurrentProcess(),
-                        out IntPtr msvcrtHandle,
-                        0,
-                        false,
-                        DuplicateSameAccess))
+                IntPtr ucrtHandle = GetOsFileHandleUcrt(standardHandle == StandardOutputHandle ? 1 : 2);
+                if (ucrtHandle == IntPtr.Zero || ucrtHandle == new IntPtr(-1) || !DuplicateHandle(GetCurrentProcess(), ucrtHandle, GetCurrentProcess(), out IntPtr msvcrtHandle, 0, false, DuplicateSameAccess))
                 {
                     throw new IOException("The Windows output file handle could not be duplicated for msvcrt.");
                 }
@@ -553,9 +482,7 @@ namespace SharpLabNext.LegacyJitInspector
                 {
                     _ = CloseHandle(msvcrtHandle);
                 }
-                else if (DuplicateDescriptorMsvcrt(
-                    msvcrtDescriptor,
-                    standardHandle == StandardOutputHandle ? 1 : 2) != 0)
+                else if (DuplicateDescriptorMsvcrt(msvcrtDescriptor, standardHandle == StandardOutputHandle ? 1 : 2) != 0)
                 {
                     // Some modern compatibility msvcrt builds expose no live
                     // fd 1/2 table. In that case _write on those descriptors
@@ -564,10 +491,8 @@ namespace SharpLabNext.LegacyJitInspector
                     msvcrtDescriptor = -1;
                 }
 
-                IntPtr outputHandle = GetOsFileHandleUcrt(
-                    standardHandle == StandardOutputHandle ? 1 : 2);
-                if (outputHandle == IntPtr.Zero || outputHandle == new IntPtr(-1) ||
-                    !SetStdHandle(standardHandle, outputHandle))
+                IntPtr outputHandle = GetOsFileHandleUcrt(standardHandle == StandardOutputHandle ? 1 : 2);
+                if (outputHandle == IntPtr.Zero || outputHandle == new IntPtr(-1) || !SetStdHandle(standardHandle, outputHandle))
                 {
                     throw new IOException("The Windows standard output handle could not be redirected.");
                 }
@@ -591,15 +516,7 @@ namespace SharpLabNext.LegacyJitInspector
                 throw new IOException("ucrtbase could not close the run output descriptor.");
         }
 
-        [DllImport(
-            "libc",
-            EntryPoint = "open",
-            CallingConvention = CallingConvention.Cdecl,
-            CharSet = CharSet.Ansi,
-            ExactSpelling = true,
-            BestFitMapping = false,
-            ThrowOnUnmappableChar = true,
-            SetLastError = true)]
+        [DllImport("libc", EntryPoint = "open", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, ExactSpelling = true, BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
         private static extern int OpenLinux([MarshalAs(UnmanagedType.LPStr)] string path, int flags, int mode);
 
         [DllImport("libc", EntryPoint = "dup2", CallingConvention = CallingConvention.Cdecl, SetLastError = true)]
@@ -612,10 +529,7 @@ namespace SharpLabNext.LegacyJitInspector
         private static extern IntPtr WriteLinux(int descriptor, byte[] buffer, UIntPtr count);
 
         [DllImport("ucrtbase.dll", EntryPoint = "_wopen", CallingConvention = CallingConvention.Cdecl)]
-        private static extern int OpenUcrt(
-            [MarshalAs(UnmanagedType.LPWStr)] string path,
-            int flags,
-            int permissionMode);
+        private static extern int OpenUcrt([MarshalAs(UnmanagedType.LPWStr)] string path, int flags, int permissionMode);
 
         [DllImport("ucrtbase.dll", EntryPoint = "_dup2", CallingConvention = CallingConvention.Cdecl)]
         private static extern int DuplicateDescriptorUcrt(int source, int destination);
@@ -633,10 +547,7 @@ namespace SharpLabNext.LegacyJitInspector
         private static extern int OpenOsHandleMsvcrt(IntPtr handle, int flags);
 
         [DllImport("msvcrt.dll", EntryPoint = "_wopen", CallingConvention = CallingConvention.Cdecl)]
-        private static extern int OpenMsvcrt(
-            [MarshalAs(UnmanagedType.LPWStr)] string path,
-            int flags,
-            int permissionMode);
+        private static extern int OpenMsvcrt([MarshalAs(UnmanagedType.LPWStr)] string path, int flags, int permissionMode);
 
         [DllImport("msvcrt.dll", EntryPoint = "_dup2", CallingConvention = CallingConvention.Cdecl)]
         private static extern int DuplicateDescriptorMsvcrt(int source, int destination);
@@ -659,13 +570,6 @@ namespace SharpLabNext.LegacyJitInspector
 
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool DuplicateHandle(
-            IntPtr sourceProcess,
-            IntPtr sourceHandle,
-            IntPtr targetProcess,
-            out IntPtr targetHandle,
-            uint desiredAccess,
-            [MarshalAs(UnmanagedType.Bool)] bool inheritHandle,
-            uint options);
+        private static extern bool DuplicateHandle(IntPtr sourceProcess, IntPtr sourceHandle, IntPtr targetProcess, out IntPtr targetHandle, uint desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint options);
     }
 }

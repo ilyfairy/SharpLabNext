@@ -50,12 +50,16 @@ describe('URL v3 golden vectors', () => {
 
   it('is byte-for-byte deterministic', async () => {
     const first = await encodeV3(goldenState, { profile: 'share' })
-    const second = await encodeV3(structuredClone(goldenState), { profile: 'share' })
+    const second = await encodeV3(structuredClone(goldenState), {
+      profile: 'share',
+    })
     expect(second).toEqual(first)
   })
 
   it('decodes fflate streams produced at every RFC 1951 compression level', async () => {
-    const payload = encodeCanonicalPayload(goldenState, { ...defaultUrlCodecLimits })
+    const payload = encodeCanonicalPayload(goldenState, {
+      ...defaultUrlCodecLimits,
+    })
     for (const level of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const) {
       const envelope = await createV3Envelope(payload, 1, level)
       await expect(decodeV3(`#v3:${encodeBase64Url(envelope)}`)).resolves.toMatchObject({

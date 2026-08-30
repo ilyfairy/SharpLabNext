@@ -18,11 +18,8 @@ var lspJsonOptions = CreateLspJsonOptions();
 await EnsureSuccessAsync(await http.GetAsync("/health/ready", timeout.Token), "health");
 var describe = await http.GetFromJsonAsync<JsonElement>("/api/v1/worker/describe", jsonOptions, timeout.Token);
 Require(describe.GetProperty("Service").GetProperty("Id").GetString() == "roslyn-const-generics", "Worker identity is incorrect.");
-var expectedCompilerCommit = describe.GetProperty("CompilerIdentity").GetProperty("CompilerCommit").GetString()
-    ?? throw new InvalidOperationException("Worker describe returned no loaded compiler commit.");
-Require(describe.GetProperty("Capabilities").EnumerateArray().Any(static capability =>
-    capability.GetProperty("Id").GetString() == "completion" && capability.GetProperty("Available").GetBoolean()),
-    "Completion is not available.");
+var expectedCompilerCommit = describe.GetProperty("CompilerIdentity").GetProperty("CompilerCommit").GetString() ?? throw new InvalidOperationException("Worker describe returned no loaded compiler commit.");
+Require(describe.GetProperty("Capabilities").EnumerateArray().Any(static capability => capability.GetProperty("Id").GetString() == "completion" && capability.GetProperty("Available").GetBoolean()), "Completion is not available.");
 
 const string featureSource = """
     using System;
@@ -34,30 +31,17 @@ const string featureSource = """
 
     public static class Program
     {
-        public static void Main() =>
-            Console.WriteLine(FixedValue<42>.GetValue());
+        public static void Main() => Console.WriteLine(FixedValue<42>.GetValue());
     }
     """;
-var options = new
-{
-    configuration = "release",
-    optimize = true,
-    outputKind = "console",
-    allowUnsafe = false,
-    emitPortablePdb = true,
-    nullableContext = "enable",
-    languageVersion = "preview",
-    preprocessorSymbols = Array.Empty<string>(),
-    checkOverflow = false
-};
+var options = new { configuration = "release", optimize = true, outputKind = "console", allowUnsafe = false, emitPortablePdb = true, nullableContext = "enable", languageVersion = "preview", preprocessorSymbols = Array.Empty<string>(), checkOverflow = false };
 var workspace = CreateWorkspace(featureSource, options);
 
 using (var compileCheck = await BuildAsync("compile-check", workspace, options))
 {
     var result = compileCheck.RootElement.GetProperty("Result");
     Require(result.GetProperty("CompilationSucceeded").GetBoolean(), "Const-generics compile check failed.");
-    Require(result.GetProperty("Identity").GetProperty("CompilerCommit").GetString() ==
-        expectedCompilerCommit, "Compile check did not use the compiler reported by worker describe.");
+    Require(result.GetProperty("Identity").GetProperty("CompilerCommit").GetString() == expectedCompilerCommit, "Compile check did not use the compiler reported by worker describe.");
 }
 
 using (var artifact = await BuildAsync("artifact", workspace, options))
@@ -68,35 +52,23 @@ using (var artifact = await BuildAsync("artifact", workspace, options))
     var pe = Convert.FromBase64String(envelope.GetProperty("PeImageBase64").GetString()!);
     Require(pe.Length > 2 && pe[0] == (byte)'M' && pe[1] == (byte)'Z', "Artifact response did not contain a PE image.");
     var manifest = envelope.GetProperty("Manifest");
-    Require(manifest.GetProperty("RuntimeRequirement").GetProperty("Family").GetString() == "coreclr-const-generics",
-        "Artifact runtime family is incorrect.");
-    Require(manifest.GetProperty("MetadataFeatureTags").EnumerateArray().Any(static tag =>
-        tag.GetString() == "metadata.const-generics.v1"), "Artifact metadata feature tag is missing.");
+    Require(manifest.GetProperty("RuntimeRequirement").GetProperty("Family").GetString() == "coreclr-const-generics", "Artifact runtime family is incorrect.");
+    Require(manifest.GetProperty("MetadataFeatureTags").EnumerateArray().Any(static tag => tag.GetString() == "metadata.const-generics.v1"), "Artifact metadata feature tag is missing.");
 }
 
 using (var ast = await BuildAsync("ast", workspace, options))
 {
     var resultText = ast.RootElement.GetProperty("Result").GetRawText();
-    Require(resultText.Contains("LiteralTypeArgument", StringComparison.Ordinal),
-        "Const-generics AST did not expose LiteralTypeArgument.");
+    Require(resultText.Contains("LiteralTypeArgument", StringComparison.Ordinal), "Const-generics AST did not expose LiteralTypeArgument.");
 }
 
 const string completionSource = "using System; class Demo { void Run() { Console. } }";
 var completionWorkspace = CreateWorkspace(completionSource, options);
-var openRequest = new
-{
-    requestId = $"const-lsp-{Guid.NewGuid():N}",
-    pipelineResolutionId = "const-smoke-pipeline",
-    languageId = "csharp",
-    toolchainId = "roslyn-const-generics",
-    referenceSetId = "const-generics-ref",
-    workspace = completionWorkspace
-};
+var openRequest = new { requestId = $"const-lsp-{Guid.NewGuid():N}", pipelineResolutionId = "const-smoke-pipeline", languageId = "csharp", toolchainId = "roslyn-const-generics", referenceSetId = "const-generics-ref", workspace = completionWorkspace };
 var opened = await http.PostAsJsonAsync("/api/v1/language-sessions", openRequest, jsonOptions, timeout.Token);
 await EnsureSuccessAsync(opened, "open language session");
 using var openedJson = JsonDocument.Parse(await opened.Content.ReadAsByteArrayAsync(timeout.Token));
-var sessionId = openedJson.RootElement.GetProperty("SessionId").GetString()
-    ?? throw new InvalidOperationException("Language session returned no ID.");
+var sessionId = openedJson.RootElement.GetProperty("SessionId").GetString() ?? throw new InvalidOperationException("Language session returned no ID.");
 
 using var socket = new ClientWebSocket();
 var socketUri = new UriBuilder(baseAddress)
@@ -105,87 +77,35 @@ var socketUri = new UriBuilder(baseAddress)
     Path = $"/api/v1/language-sessions/{sessionId}/lsp"
 }.Uri;
 await socket.ConnectAsync(socketUri, timeout.Token);
-await SendAsync(socket, new
-{
-    jsonrpc = "2.0",
-    id = 1,
-    method = "initialize",
-    @params = new { processId = (int?)null, capabilities = new { }, rootUri = (string?)null }
-}, timeout.Token);
+await SendAsync(socket, new { jsonrpc = "2.0", id = 1, method = "initialize", @params = new { processId = (int?)null, capabilities = new { }, rootUri = (string?)null } }, timeout.Token);
 using (var initialized = await ReceiveUntilAsync(socket, static root => HasId(root, 1), timeout.Token))
 {
-    Require(initialized.RootElement.GetProperty("result").GetProperty("capabilities")
-        .GetProperty("completionProvider").GetProperty("resolveProvider").GetBoolean(),
-        "LSP completion was not advertised.");
+    Require(initialized.RootElement.GetProperty("result").GetProperty("capabilities").GetProperty("completionProvider").GetProperty("resolveProvider").GetBoolean(), "LSP completion was not advertised.");
 }
 
 const string uri = "file:///Program.cs";
-await SendAsync(socket, new
-{
-    jsonrpc = "2.0",
-    method = "textDocument/didOpen",
-    @params = new { textDocument = new { uri, languageId = "csharp", version = 2, text = completionSource } }
-}, timeout.Token);
-using (await ReceiveUntilAsync(socket, static root =>
-    root.TryGetProperty("method", out var method) && method.GetString() == "textDocument/publishDiagnostics", timeout.Token))
-{
-}
-await SendAsync(socket, new
-{
-    jsonrpc = "2.0",
-    id = 2,
-    method = "textDocument/completion",
-    @params = new
-    {
-        textDocument = new { uri },
-        position = new { line = 0, character = 48 },
-        context = new { triggerKind = 1, triggerCharacter = (string?)null }
-    }
-}, timeout.Token);
+await SendAsync(socket, new { jsonrpc = "2.0", method = "textDocument/didOpen", @params = new { textDocument = new { uri, languageId = "csharp", version = 2, text = completionSource } } }, timeout.Token);
+using (await ReceiveUntilAsync(socket, static root => root.TryGetProperty("method", out var method) && method.GetString() == "textDocument/publishDiagnostics", timeout.Token)) { }
+await SendAsync(socket, new { jsonrpc = "2.0", id = 2, method = "textDocument/completion", @params = new { textDocument = new { uri }, position = new { line = 0, character = 48 }, context = new { triggerKind = 1, triggerCharacter = (string?)null } } }, timeout.Token);
 using (var completion = await ReceiveUntilAsync(socket, static root => HasId(root, 2), timeout.Token))
 {
-    Require(completion.RootElement.GetProperty("result").GetProperty("items").EnumerateArray().Any(static item =>
-        item.GetProperty("label").GetString() == "WriteLine"), "Const-generics LSP completion did not return WriteLine.");
+    Require(completion.RootElement.GetProperty("result").GetProperty("items").EnumerateArray().Any(static item => item.GetProperty("label").GetString() == "WriteLine"), "Const-generics LSP completion did not return WriteLine.");
 }
 
 await SendAsync(socket, new { jsonrpc = "2.0", id = 3, method = "shutdown", @params = new { } }, timeout.Token);
-using (await ReceiveUntilAsync(socket, static root => HasId(root, 3), timeout.Token))
-{
-}
+using (await ReceiveUntilAsync(socket, static root => HasId(root, 3), timeout.Token)) { }
 await SendAsync(socket, new { jsonrpc = "2.0", method = "exit", @params = new { } }, timeout.Token);
 Console.WriteLine("ConstGenerics Roslyn Kestrel smoke passed: health/describe, compile-check, PE artifact, fork AST and LSP completion.");
 
 async Task<JsonDocument> BuildAsync(string target, object buildWorkspace, object buildOptions)
 {
-    var request = new
-    {
-        requestId = $"const-{target}-{Guid.NewGuid():N}",
-        idempotencyKey = $"const-{target}-idempotency-{Guid.NewGuid():N}",
-        pipelineResolutionId = "const-smoke-pipeline",
-        toolchainId = "roslyn-const-generics",
-        referenceSetId = "const-generics-ref",
-        workspace = buildWorkspace,
-        deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45),
-        options = buildOptions,
-        target
-    };
+    var request = new { requestId = $"const-{target}-{Guid.NewGuid():N}", idempotencyKey = $"const-{target}-idempotency-{Guid.NewGuid():N}", pipelineResolutionId = "const-smoke-pipeline", toolchainId = "roslyn-const-generics", referenceSetId = "const-generics-ref", workspace = buildWorkspace, deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45), options = buildOptions, target };
     var response = await http.PostAsJsonAsync("/api/v1/build", request, jsonOptions, timeout.Token);
     await EnsureSuccessAsync(response, target);
     return JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(timeout.Token));
 }
 
-static object CreateWorkspace(string source, object options) => new
-{
-    schemaVersion = 1,
-    revision = 7,
-    selectionRevision = 3,
-    languageId = "csharp",
-    files = new[] { new { path = "Program.cs", version = 1, text = source } },
-    activeFile = "Program.cs",
-    sourceOrder = new[] { "Program.cs" },
-    referenceSetId = "const-generics-ref",
-    buildOptions = options
-};
+static object CreateWorkspace(string source, object options) => new { schemaVersion = 1, revision = 7, selectionRevision = 3, languageId = "csharp", files = new[] { new { path = "Program.cs", version = 1, text = source } }, activeFile = "Program.cs", sourceOrder = new[] { "Program.cs" }, referenceSetId = "const-generics-ref", buildOptions = options };
 
 static async Task EnsureSuccessAsync(HttpResponseMessage response, string operation)
 {
@@ -195,14 +115,9 @@ static async Task EnsureSuccessAsync(HttpResponseMessage response, string operat
     throw new InvalidOperationException($"{operation} failed with {(int)response.StatusCode}: {body}");
 }
 
-static void Require(bool condition, string message)
-{
-    if (!condition)
-        throw new InvalidOperationException(message);
-}
+static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
 
-static bool HasId(JsonElement root, int expected) =>
-    root.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number && id.GetInt32() == expected;
+static bool HasId(JsonElement root, int expected) => root.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number && id.GetInt32() == expected;
 
 static async Task SendAsync(ClientWebSocket socket, object payload, CancellationToken cancellationToken)
 {
@@ -222,10 +137,7 @@ static JsonSerializerOptions CreateLspJsonOptions() => new(JsonSerializerDefault
     TypeInfoResolver = new DefaultJsonTypeInfoResolver()
 };
 
-static async Task<JsonDocument> ReceiveUntilAsync(
-    ClientWebSocket socket,
-    Func<JsonElement, bool> predicate,
-    CancellationToken cancellationToken)
+static async Task<JsonDocument> ReceiveUntilAsync(ClientWebSocket socket, Func<JsonElement, bool> predicate, CancellationToken cancellationToken)
 {
     for (var attempt = 0; attempt < 20; attempt++)
     {
@@ -254,6 +166,5 @@ sealed class PascalCaseJsonNamingPolicy : JsonNamingPolicy
 
     public override string ConvertName(string name) =>
         name.Length == 0 || char.IsUpper(name[0])
-            ? name
-            : char.ToUpperInvariant(name[0]) + name[1..];
+            ? name : char.ToUpperInvariant(name[0]) + name[1..];
 }

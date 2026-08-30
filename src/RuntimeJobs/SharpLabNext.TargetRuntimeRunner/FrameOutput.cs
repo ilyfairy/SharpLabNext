@@ -51,18 +51,9 @@ namespace SharpLabNext.TargetRuntimeRunner
             if (standardOutput == IntPtr.Zero || standardOutput == new IntPtr(-1))
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "The runtime frame stdout handle is invalid.");
             IntPtr duplicate;
-            if (!DuplicateHandle(
-                currentProcess,
-                standardOutput,
-                currentProcess,
-                out duplicate,
-                0,
-                false,
-                DuplicateSameAccess))
+            if (!DuplicateHandle(currentProcess, standardOutput, currentProcess, out duplicate, 0, false, DuplicateSameAccess))
             {
-                throw new Win32Exception(
-                    Marshal.GetLastWin32Error(),
-                    "The runtime frame stdout handle could not be duplicated.");
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "The runtime frame stdout handle could not be duplicated.");
             }
             return NativeFrameStream.ForWindowsHandle(duplicate);
         }
@@ -78,14 +69,7 @@ namespace SharpLabNext.TargetRuntimeRunner
 
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool DuplicateHandle(
-            IntPtr sourceProcess,
-            IntPtr sourceHandle,
-            IntPtr targetProcess,
-            out IntPtr targetHandle,
-            uint desiredAccess,
-            [MarshalAs(UnmanagedType.Bool)] bool inheritHandle,
-            uint options);
+        private static extern bool DuplicateHandle(IntPtr sourceProcess, IntPtr sourceHandle, IntPtr targetProcess, out IntPtr targetHandle, uint desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint options);
     }
 
     internal sealed class NativeFrameStream : Stream
@@ -102,20 +86,14 @@ namespace SharpLabNext.TargetRuntimeRunner
             _windows = windows;
         }
 
-        public static Stream ForUnixDescriptor(int descriptor)
-        {
-            return new NativeFrameStream(descriptor, IntPtr.Zero, false);
-        }
+        public static Stream ForUnixDescriptor(int descriptor) => new NativeFrameStream(descriptor, IntPtr.Zero, false);
 
-        public static Stream ForWindowsHandle(IntPtr handle)
-        {
-            return new NativeFrameStream(-1, handle, true);
-        }
+        public static Stream ForWindowsHandle(IntPtr handle) => new NativeFrameStream(-1, handle, true);
 
-        public override bool CanRead { get { return false; } }
-        public override bool CanSeek { get { return false; } }
-        public override bool CanWrite { get { return !_disposed; } }
-        public override long Length { get { throw new NotSupportedException(); } }
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => !_disposed;
+        public override long Length => throw new NotSupportedException();
         public override long Position
         {
             get { throw new NotSupportedException(); }
@@ -161,17 +139,12 @@ namespace SharpLabNext.TargetRuntimeRunner
                 {
                     if (!WriteFile(_windowsHandle, segment, remaining, out result, IntPtr.Zero))
                     {
-                        throw new Win32Exception(
-                            Marshal.GetLastWin32Error(),
-                            "The runtime frame write failed.");
+                        throw new Win32Exception(Marshal.GetLastWin32Error(), "The runtime frame write failed.");
                     }
                 }
                 else
                 {
-                    long nativeResult = WriteUnix(
-                        _unixDescriptor,
-                        segment,
-                        new UIntPtr((uint)remaining)).ToInt64();
+                    long nativeResult = WriteUnix(_unixDescriptor, segment, new UIntPtr((uint)remaining)).ToInt64();
                     result = nativeResult > int.MaxValue ? -1 : (int)nativeResult;
                 }
 
@@ -215,12 +188,7 @@ namespace SharpLabNext.TargetRuntimeRunner
 
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool WriteFile(
-            IntPtr handle,
-            byte[] buffer,
-            int bytesToWrite,
-            out int bytesWritten,
-            IntPtr overlapped);
+        private static extern bool WriteFile(IntPtr handle, byte[] buffer, int bytesToWrite, out int bytesWritten, IntPtr overlapped);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]

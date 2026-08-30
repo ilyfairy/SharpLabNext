@@ -4,14 +4,7 @@ import { validateDeflateRaw } from './deflate'
 import { bytesEqual, sha256Prefix } from './digest'
 import { ShareUrlError } from './errors'
 import { classifyUrlLength, resolveUrlCodecLimits } from './limits'
-import type {
-  DecodedV3Share,
-  EncodedV3Share,
-  EncodeV3Options,
-  ShareWorkspaceState,
-  UrlCodecId,
-  UrlCodecLimits,
-} from './types'
+import type { DecodedV3Share, EncodedV3Share, EncodeV3Options, ShareWorkspaceState, UrlCodecId, UrlCodecLimits } from './types'
 import { decodeCanonicalPayload, encodeCanonicalPayload } from './workspace'
 
 const magic = new Uint8Array([0x53, 0x4c, 0x4e, 0x33])
@@ -27,12 +20,7 @@ interface Candidate {
   encodedPayloadLength: number
 }
 
-const writeEnvelope = (
-  payload: Uint8Array,
-  encodedPayload: Uint8Array,
-  codecId: UrlCodecId,
-  digest: Uint8Array,
-): Uint8Array => {
+const writeEnvelope = (payload: Uint8Array, encodedPayload: Uint8Array, codecId: UrlCodecId, digest: Uint8Array): Uint8Array => {
   const envelope = new Uint8Array(fixedHeaderLength + encodedPayload.length)
   envelope.set(magic, 0)
   envelope[4] = envelopeRevision
@@ -47,14 +35,7 @@ const writeEnvelope = (
   return envelope
 }
 
-const toCandidate = (
-  payload: Uint8Array,
-  encodedPayload: Uint8Array,
-  codecId: UrlCodecId,
-  compressionLevel: 6 | 9 | null,
-  priority: number,
-  digest: Uint8Array,
-): Candidate => {
+const toCandidate = (payload: Uint8Array, encodedPayload: Uint8Array, codecId: UrlCodecId, compressionLevel: 6 | 9 | null, priority: number, digest: Uint8Array): Candidate => {
   const envelope = writeEnvelope(payload, encodedPayload, codecId, digest)
   return {
     codecId,
@@ -66,11 +47,7 @@ const toCandidate = (
   }
 }
 
-export const createV3Envelope = async (
-  payload: Uint8Array,
-  codecId: UrlCodecId,
-  compressionLevel: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 = 6,
-): Promise<Uint8Array> => {
+export const createV3Envelope = async (payload: Uint8Array, codecId: UrlCodecId, compressionLevel: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 = 6): Promise<Uint8Array> => {
   if (payload.length > 0xffff_ffff) {
     throw new ShareUrlError('payload-too-large', 'The v3 payload cannot fit in the envelope.')
   }
@@ -78,10 +55,7 @@ export const createV3Envelope = async (
   return writeEnvelope(payload, encodedPayload, codecId, await sha256Prefix(payload))
 }
 
-export const encodeV3 = async (
-  state: ShareWorkspaceState,
-  options: EncodeV3Options = {},
-): Promise<EncodedV3Share> => {
+export const encodeV3 = async (state: ShareWorkspaceState, options: EncodeV3Options = {}): Promise<EncodedV3Share> => {
   const limits = resolveUrlCodecLimits(options.limits)
   const payload = encodeCanonicalPayload(state, limits)
   const digest = await sha256Prefix(payload)
@@ -91,9 +65,7 @@ export const encodeV3 = async (
     candidates.push(toCandidate(payload, deflateSync(payload, { level: 9 }), 1, 9, 2, digest))
   }
 
-  candidates.sort(
-    (left, right) => left.fragment.length - right.fragment.length || left.priority - right.priority,
-  )
+  candidates.sort((left, right) => left.fragment.length - right.fragment.length || left.priority - right.priority)
   const selected = candidates[0]
   if (!selected) throw new ShareUrlError('worker-failed', 'No URL codec candidate was produced.')
 
@@ -134,19 +106,13 @@ const validateExtensions = (envelope: Uint8Array, headerLength: number): void =>
       throw new ShareUrlError('invalid-header', 'A v3 extension exceeds the declared header.')
     }
     if ((type & 0x80) !== 0) {
-      throw new ShareUrlError(
-        'unsupported-critical-extension',
-        `The v3 envelope uses unsupported critical extension ${type}.`,
-      )
+      throw new ShareUrlError('unsupported-critical-extension', `The v3 envelope uses unsupported critical extension ${type}.`)
     }
     offset += length
   }
 }
 
-const decodeEnvelopePayload = async (
-  envelope: Uint8Array,
-  limits: UrlCodecLimits,
-): Promise<{ payload: Uint8Array; codecId: UrlCodecId }> => {
+const decodeEnvelopePayload = async (envelope: Uint8Array, limits: UrlCodecLimits): Promise<{ payload: Uint8Array; codecId: UrlCodecId }> => {
   if (envelope.length < fixedHeaderLength) {
     throw new ShareUrlError('envelope-truncated', 'The v3 envelope is shorter than 24 bytes.')
   }
@@ -154,10 +120,7 @@ const decodeEnvelopePayload = async (
     throw new ShareUrlError('unknown-magic', 'The URL does not contain an SLN3 envelope.')
   }
   if (envelope[4] !== envelopeRevision) {
-    throw new ShareUrlError(
-      'unsupported-revision',
-      `Envelope revision ${envelope[4]} is not supported.`,
-    )
+    throw new ShareUrlError('unsupported-revision', `Envelope revision ${envelope[4]} is not supported.`)
   }
   const codec = envelope[5]
   if (codec !== 0 && codec !== 1) {
@@ -177,16 +140,10 @@ const decodeEnvelopePayload = async (
   const expectedLength = view.getUint32(8, true)
   const encodedLength = view.getUint32(12, true)
   if (expectedLength > limits.maxUncompressedBytes) {
-    throw new ShareUrlError(
-      'payload-too-large',
-      `The v3 payload declares ${expectedLength} bytes, exceeding the configured limit.`,
-    )
+    throw new ShareUrlError('payload-too-large', `The v3 payload declares ${expectedLength} bytes, exceeding the configured limit.`)
   }
   if (encodedLength !== envelope.length - headerLength) {
-    throw new ShareUrlError(
-      'length-mismatch',
-      'The v3 encoded payload length does not match its envelope.',
-    )
+    throw new ShareUrlError('length-mismatch', 'The v3 encoded payload length does not match its envelope.')
   }
 
   const encodedPayload = envelope.subarray(headerLength)
@@ -199,17 +156,16 @@ const decodeEnvelopePayload = async (
   } else {
     validateDeflateRaw(encodedPayload, expectedLength)
     try {
-      payload = inflateSync(encodedPayload, { out: new Uint8Array(expectedLength) })
+      payload = inflateSync(encodedPayload, {
+        out: new Uint8Array(expectedLength),
+      })
     } catch (error) {
       throw new ShareUrlError('decompression-failed', 'The raw DEFLATE payload is invalid.', {
         cause: error,
       })
     }
     if (payload.length !== expectedLength) {
-      throw new ShareUrlError(
-        'length-mismatch',
-        'The decoded payload length does not match its envelope.',
-      )
+      throw new ShareUrlError('length-mismatch', 'The decoded payload length does not match its envelope.')
     }
   }
 
@@ -221,10 +177,7 @@ const decodeEnvelopePayload = async (
   return { payload, codecId: codec }
 }
 
-export const decodeV3 = async (
-  fragment: string,
-  providedLimits?: UrlCodecLimits,
-): Promise<DecodedV3Share> => {
+export const decodeV3 = async (fragment: string, providedLimits?: UrlCodecLimits): Promise<DecodedV3Share> => {
   const limits = resolveUrlCodecLimits(providedLimits)
   const base64 = normalizeV3Fragment(fragment, limits)
   const envelope = decodeBase64Url(base64)

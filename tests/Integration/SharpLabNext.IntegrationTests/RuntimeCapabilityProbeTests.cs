@@ -9,10 +9,7 @@ public sealed class RuntimeCapabilityProbeTests
     [Fact]
     public void ProbeProducerUsesBuildCompatibleLockedRestoreProperty()
     {
-        var source = File.ReadAllText(Path.Combine(
-            FindRepositoryRoot(),
-            "eng",
-            "runtime-capability-probe.cs"));
+        var source = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "eng", "tools", "runtime-capability-probe.cs"));
 
         Assert.Contains("start.ArgumentList.Add(\"-p:RestoreLockedMode=true\")", source, StringComparison.Ordinal);
         Assert.DoesNotContain("start.ArgumentList.Add(\"--locked-mode\")", source, StringComparison.Ordinal);
@@ -22,23 +19,11 @@ public sealed class RuntimeCapabilityProbeTests
     [Fact]
     public void CapabilityPreflightBindsCandidateProfileToCanonicalPath()
     {
-        var source = File.ReadAllText(Path.Combine(
-            FindRepositoryRoot(),
-            "eng",
-            "runtime-capability-preflight.cs"));
+        var source = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "eng", "tools", "runtime-capability-preflight.cs"));
 
-        Assert.Contains(
-            "RuntimeCapabilityProbeContract.ExecutionFlowOptionsDigest",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "profiles/runtimes/candidates/{context.ProfileId}.json",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "profilePath,\n            $\"profiles/runtimes/candidates/{context.ProfileId}.json\",",
-            source,
-            StringComparison.Ordinal);
+        Assert.Contains("RuntimeCapabilityProbeContract.ExecutionFlowOptionsDigest", source, StringComparison.Ordinal);
+        Assert.Contains("profiles/runtimes/candidates/{context.ProfileId}.json", source, StringComparison.Ordinal);
+        Assert.Contains("profilePath,\n            $\"profiles/runtimes/candidates/{context.ProfileId}.json\",", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -47,24 +32,8 @@ public sealed class RuntimeCapabilityProbeTests
         var root = FindRepositoryRoot();
         var configuration = Configuration();
 
-        Assert.True(File.Exists(Path.Combine(
-            root,
-            "tests",
-            "Fixtures",
-            "SharpLabNext.RuntimeCapabilityProbe",
-            "bin",
-            configuration,
-            "netcoreapp2.0",
-            "SharpLabNext.RuntimeCapabilityProbe.dll")));
-        Assert.True(File.Exists(Path.Combine(
-            root,
-            "tests",
-            "Fixtures",
-            "SharpLabNext.RuntimeCapabilityProbe",
-            "bin",
-            configuration,
-            "net20",
-            "SharpLabNext.RuntimeCapabilityProbe.exe")));
+        Assert.True(File.Exists(Path.Combine(root, "tests", "Fixtures", "SharpLabNext.RuntimeCapabilityProbe", "bin", configuration, "netcoreapp2.0", "SharpLabNext.RuntimeCapabilityProbe.dll")));
+        Assert.True(File.Exists(Path.Combine(root, "tests", "Fixtures", "SharpLabNext.RuntimeCapabilityProbe", "bin", configuration, "net20", "SharpLabNext.RuntimeCapabilityProbe.exe")));
     }
 
     [Fact]
@@ -108,13 +77,11 @@ public sealed class RuntimeCapabilityProbeTests
         startInfo.ArgumentList.Add(runnerPath);
         startInfo.ArgumentList.Add(CoreClrProbePath());
         startInfo.ArgumentList.Add("inspection");
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Runtime Runner did not start.");
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Runtime Runner did not start.");
         var stderr = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
         var frames = new List<RuntimeFrame>();
         var reader = new RuntimeFrameLogReader(process.StandardOutput.BaseStream);
-        while (await reader.ReadAsync(
-                   cancellationToken: TestContext.Current.CancellationToken) is { } frame)
+        while (await reader.ReadAsync(cancellationToken: TestContext.Current.CancellationToken) is { } frame)
         {
             frames.Add(frame);
         }
@@ -155,9 +122,7 @@ public sealed class RuntimeCapabilityProbeTests
         var maximumVisiblePoints = 0;
         foreach (var handle in reader.MethodDebugInformation)
         {
-            var visible = reader.GetMethodDebugInformation(handle)
-                .GetSequencePoints()
-                .Count(static point => !point.IsHidden);
+            var visible = reader.GetMethodDebugInformation(handle).GetSequencePoints().Count(static point => !point.IsHidden);
             maximumVisiblePoints = Math.Max(maximumVisiblePoints, visible);
         }
 
@@ -175,23 +140,13 @@ public sealed class RuntimeCapabilityProbeTests
         };
         start.ArgumentList.Add(probe);
         start.ArgumentList.Add(mode);
-        return Process.Start(start)
-            ?? throw new InvalidOperationException("Runtime capability probe did not start.");
+        return Process.Start(start) ?? throw new InvalidOperationException("Runtime capability probe did not start.");
     }
 
-    private static string CoreClrProbePath() => Path.Combine(
-        FindRepositoryRoot(),
-        "tests",
-        "Fixtures",
-        "SharpLabNext.RuntimeCapabilityProbe",
-        "bin",
-        Configuration(),
-        "netcoreapp2.0",
-        "SharpLabNext.RuntimeCapabilityProbe.dll");
+    private static string CoreClrProbePath() => Path.Combine(FindRepositoryRoot(), "tests", "Fixtures", "SharpLabNext.RuntimeCapabilityProbe", "bin", Configuration(), "netcoreapp2.0", "SharpLabNext.RuntimeCapabilityProbe.dll");
 
     private static string Configuration() =>
-        new DirectoryInfo(AppContext.BaseDirectory).Parent?.Name
-        ?? throw new InvalidOperationException("Test build configuration could not be resolved.");
+        new DirectoryInfo(AppContext.BaseDirectory).Parent?.Name ?? throw new InvalidOperationException("Test build configuration could not be resolved.");
 
     private static string FindRepositoryRoot()
     {

@@ -1,85 +1,17 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  AlertTriangle,
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  ChevronDown,
-  FileCode2,
-  FilePlus2,
-  GitFork,
-  Link2,
-  LoaderCircle,
-  Minus,
-  Pencil,
-  Play,
-  Plus,
-  Settings,
-  Square,
-  WifiOff,
-  X,
-  XCircle,
-} from 'lucide-react'
-import {
-  type CSSProperties,
-  lazy,
-  type ReactNode,
-  type PointerEvent as ReactPointerEvent,
-  Suspense,
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronDown, FileCode2, FilePlus2, GitFork, Link2, LoaderCircle, Minus, Pencil, Play, Plus, Settings, Square, WifiOff, X, XCircle } from 'lucide-react'
+import { type CSSProperties, lazy, type ReactNode, type PointerEvent as ReactPointerEvent, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ApiError, cancelOperation, getGist, getOperationContent } from './api/client'
-import {
-  isOperationTerminal,
-  operationQueryKeys,
-  useCatalogQuery,
-  useGatewayConnectionStatus,
-  useOperationEvents,
-  useOperationState,
-} from './api/queries'
-import type {
-  AstResult,
-  BuildConfiguration,
-  GistDocument,
-  OperationEvent,
-  OperationResult,
-  OutputManifest,
-  ResolveSelectionResponse,
-  RunResult,
-  SelectionChange,
-} from './api/types'
+import { isOperationTerminal, operationQueryKeys, useCatalogQuery, useGatewayConnectionStatus, useOperationEvents, useOperationState } from './api/queries'
+import type { AstResult, BuildConfiguration, GistDocument, OperationEvent, OperationResult, OutputManifest, ResolveSelectionResponse, RunResult, SelectionChange } from './api/types'
 import { CodeMirrorEditor } from './editor/CodeMirrorEditor'
 import { editorFontSizeOptions, useEditorPreference } from './editor/editorPreference'
 import { createAstSourceMap } from './results/astSourceMapModel'
-import {
-  createExecutionFlowSourceModel,
-  currentExecutionFlowSourceModel,
-  type ExecutionFlowNavigationRequest,
-  type ExecutionFlowSourceTarget,
-  validateSourceRange,
-} from './results/executionFlowModel'
-import {
-  AstStatus,
-  findTypedResult,
-  type GeneratedSourceContentView,
-  JitStatus,
-  type OperationContentView,
-  OperationResults,
-  RunStatus,
-} from './results/OperationResults'
+import { createExecutionFlowSourceModel, currentExecutionFlowSourceModel, type ExecutionFlowNavigationRequest, type ExecutionFlowSourceTarget, validateSourceRange } from './results/executionFlowModel'
+import { AstStatus, findTypedResult, type GeneratedSourceContentView, JitStatus, type OperationContentView, OperationResults, RunStatus } from './results/OperationResults'
 import { summarizeResultIdentities } from './results/resultIdentity'
 import { createResultIdentityPresentation } from './results/resultIdentityPresentation'
-import {
-  type SourceAssociation,
-  type SourceAssociationActivation,
-  sourceAssociationActivationKey,
-  sourceAssociationKey,
-} from './results/sourceAssociationModel'
+import { type SourceAssociation, type SourceAssociationActivation, sourceAssociationActivationKey, sourceAssociationKey } from './results/sourceAssociationModel'
 import { decodeShareFragment, encodeV3 } from './share'
 import { GistDialog } from './share/GistDialog'
 import { gistFragment, parseGistFragment } from './share/gist'
@@ -98,13 +30,7 @@ import {
   toolchainOptionsFor,
 } from './workbench/catalog'
 import { createGistWorkspaceState, decodeWorkbenchGist } from './workbench/gistState'
-import {
-  createFollowupOperation,
-  createInitialPipelineOperation,
-  type PipelineOperationKind,
-  type PipelineOperationStart,
-  startPipelineOperation,
-} from './workbench/operationWorkflow'
+import { createFollowupOperation, createInitialPipelineOperation, type PipelineOperationKind, type PipelineOperationStart, startPipelineOperation } from './workbench/operationWorkflow'
 import { PaneSplitSeparator } from './workbench/PaneSplitSeparator'
 import { usePaneSplitPreference } from './workbench/paneSplitPreference'
 import { createShareWorkspaceState, decodeWorkbenchShare } from './workbench/shareState'
@@ -123,18 +49,12 @@ interface ShareErrorState {
   error: Error
 }
 
-const normalizeError = (error: unknown, fallback: string): Error =>
-  error instanceof Error ? error : new Error(fallback)
+const normalizeError = (error: unknown, fallback: string): Error => (error instanceof Error ? error : new Error(fallback))
 
 function isGatewayTransportFailure(error: unknown): error is Error {
   if (error instanceof ApiError) return error.status >= 500
   if (error instanceof TypeError) return true
-  return (
-    error instanceof Error &&
-    /(?:gateway (?:request|command) failed \(5\d\d\)|websocket (?:disconnected|closed before opening|failed to open|is not open)|network error|failed to fetch)/i.test(
-      error.message,
-    )
-  )
+  return error instanceof Error && /(?:gateway (?:request|command) failed \(5\d\d\)|websocket (?:disconnected|closed before opening|failed to open|is not open)|network error|failed to fetch)/i.test(error.message)
 }
 
 function firstVisibleFailure(...failures: Array<Error | null | undefined>): Error | null {
@@ -170,31 +90,13 @@ interface SelectFieldProps {
   disabled?: boolean
 }
 
-function SelectField({
-  label,
-  description,
-  value,
-  children,
-  onChange,
-  className,
-  compact = false,
-  disabled = false,
-}: SelectFieldProps) {
+function SelectField({ label, description, value, children, onChange, className, compact = false, disabled = false }: SelectFieldProps) {
   const id = useId()
-  const classes = ['select-field', compact ? 'select-field--compact' : null, className]
-    .filter(Boolean)
-    .join(' ')
+  const classes = ['select-field', compact ? 'select-field--compact' : null, className].filter(Boolean).join(' ')
   return (
     <label className={classes} htmlFor={id}>
       <span className="visually-hidden">{label}</span>
-      <select
-        id={id}
-        aria-label={label}
-        title={description}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
+      <select id={id} aria-label={label} title={description} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
         {children}
       </select>
       <ChevronDown className="select-field__chevron" aria-hidden="true" />
@@ -242,27 +144,9 @@ function actionLabel(output: OutputManifest | undefined): string {
   return 'Build'
 }
 
-const liveCompilationOutputs = new Set([
-  'compile-check',
-  'ast',
-  'generated-source',
-  'generated-il',
-  'il',
-  'decompiled-csharp',
-  'il-verify',
-  'javascript',
-  'jit-asm',
-  'explain',
-])
+const liveCompilationOutputs = new Set(['compile-check', 'ast', 'generated-source', 'generated-il', 'il', 'decompiled-csharp', 'il-verify', 'javascript', 'jit-asm', 'explain'])
 
-const sourceAssociationOutputs = new Set([
-  'execution-flow',
-  'ast',
-  'jit-asm',
-  'il',
-  'run-il',
-  'generated-il',
-])
+const sourceAssociationOutputs = new Set(['execution-flow', 'ast', 'jit-asm', 'il', 'run-il', 'generated-il'])
 
 function supportsSourceAssociations(outputId: string | null | undefined): boolean {
   return outputId !== null && outputId !== undefined && sourceAssociationOutputs.has(outputId)
@@ -285,15 +169,7 @@ function liveOperationDebounceMs(outputId: string): number | null {
   return liveCompilationOutputs.has(outputId) ? 450 : null
 }
 
-type WorkflowStatus =
-  | 'starting'
-  | 'accepted'
-  | 'running'
-  | 'cancelling'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'stale'
+type WorkflowStatus = 'starting' | 'accepted' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'stale'
 
 interface WorkflowStageResult {
   operationId: string
@@ -316,7 +192,11 @@ interface OperationWorkflow {
   outputId: string
   buildMode: BuildConfiguration
   catalogRevision: string
-  referenceSetSnapshot: { id: string; displayName: string; digest: string } | null
+  referenceSetSnapshot: {
+    id: string
+    displayName: string
+    digest: string
+  } | null
   workspaceRevision: number
   selectionRevision: number
   workspaceFiles: WorkspaceFileState[]
@@ -340,19 +220,10 @@ function workflowResultsFrom(workflow: OperationWorkflow | null): OperationResul
 }
 
 function outputChunkExists(events: readonly OperationEvent[], channel: string): boolean {
-  return events.some(
-    (event) =>
-      event.payload.kind === 'output-chunk' &&
-      event.payload.chunk.channel === channel &&
-      event.payload.chunk.data.length > 0,
-  )
+  return events.some((event) => event.payload.kind === 'output-chunk' && event.payload.chunk.channel === channel && event.payload.chunk.data.length > 0)
 }
 
-function workflowHasStableTarget(
-  workflow: OperationWorkflow | null,
-  results: readonly OperationResult[],
-  events: readonly OperationEvent[],
-): boolean {
+function workflowHasStableTarget(workflow: OperationWorkflow | null, results: readonly OperationResult[], events: readonly OperationEvent[]): boolean {
   if (!workflow || workflow.error || !['completed', 'stale'].includes(workflow.status)) return false
   switch (workflow.outputId) {
     case 'ast':
@@ -361,9 +232,7 @@ function workflowHasStableTarget(
       return (
         results.some((result) => result.resultType === 'generated-source') &&
         workflow.generatedSourceContents.length > 0 &&
-        workflow.generatedSourceContents.every(
-          (document) => !document.loading && !document.error,
-        ) &&
+        workflow.generatedSourceContents.every((document) => !document.loading && !document.error) &&
         workflow.generatedSourceContents.some((document) => document.text !== null)
       )
     case 'explain':
@@ -372,29 +241,15 @@ function workflowHasStableTarget(
     case 'run-il':
     case 'generated-il':
     case 'decompiled-csharp':
-      return (
-        workflow.content?.loading === false &&
-        !workflow.content.error &&
-        workflow.content.text !== null
-      )
+      return workflow.content?.loading === false && !workflow.content.error && workflow.content.text !== null
     case 'il-verify':
-      return results.some(
-        (result) =>
-          result.resultType === 'artifact-verification' &&
-          (result.outcome === 'valid' || result.outcome === 'findings'),
-      )
+      return results.some((result) => result.resultType === 'artifact-verification' && (result.outcome === 'valid' || result.outcome === 'findings'))
     case 'run':
       return results.some((result) => result.resultType === 'run' && result.status === 'completed')
     case 'execution-flow':
-      return (
-        results.some((result) => result.resultType === 'run' && result.status === 'completed') &&
-        outputChunkExists(events, 'flow')
-      )
+      return results.some((result) => result.resultType === 'run' && result.status === 'completed') && outputChunkExists(events, 'flow')
     case 'jit-asm':
-      return (
-        results.some((result) => result.resultType === 'jit' && result.status === 'completed') &&
-        (workflow.content?.text != null || outputChunkExists(events, 'jit'))
-      )
+      return results.some((result) => result.resultType === 'jit' && result.status === 'completed') && (workflow.content?.text != null || outputChunkExists(events, 'jit'))
     default:
       return results.length > 0
   }
@@ -403,22 +258,14 @@ function workflowHasStableTarget(
 function unsuccessfulResultMessage(result: OperationResult): string | null {
   switch (result.resultType) {
     case 'build':
-      return result.outcome === 'succeeded'
-        ? null
-        : 'Compilation failed. Fix the reported errors and try again.'
+      return result.outcome === 'succeeded' ? null : 'Compilation failed. Fix the reported errors and try again.'
     case 'compile-check':
-      return result.compilationSucceeded
-        ? null
-        : 'Compilation failed. Fix the reported errors and try again.'
+      return result.compilationSucceeded ? null : 'Compilation failed. Fix the reported errors and try again.'
     case 'artifact-transform':
     case 'artifact-render':
-      return result.outcome === 'succeeded'
-        ? null
-        : `The artifact stage finished with ${result.outcome}.`
+      return result.outcome === 'succeeded' ? null : `The artifact stage finished with ${result.outcome}.`
     case 'artifact-verification':
-      return result.outcome === 'valid' || result.outcome === 'findings'
-        ? null
-        : `Verification finished with ${result.outcome}.`
+      return result.outcome === 'valid' || result.outcome === 'findings' ? null : `Verification finished with ${result.outcome}.`
     case 'run':
       return result.status === 'completed' ? null : `Run finished with ${result.status}.`
     case 'jit':
@@ -428,35 +275,23 @@ function unsuccessfulResultMessage(result: OperationResult): string | null {
   }
 }
 
-function workflowFailure(
-  workflow: OperationWorkflow | null,
-  results: readonly OperationResult[],
-  events: readonly OperationEvent[],
-  targetReady: boolean,
-): Error | null {
+function workflowFailure(workflow: OperationWorkflow | null, results: readonly OperationResult[], events: readonly OperationEvent[], targetReady: boolean): Error | null {
   if (!workflow) return null
   if (workflow.error) return workflow.error
   if (workflow.content?.error) return workflow.content.error
-  const generatedSourceError = workflow.generatedSourceContents.find(
-    (document) => document.error,
-  )?.error
+  const generatedSourceError = workflow.generatedSourceContents.find((document) => document.error)?.error
   if (generatedSourceError) return generatedSourceError
   const resultMessage = results.map(unsuccessfulResultMessage).find((message) => message !== null)
   if (resultMessage) return new Error(resultMessage)
   if (workflow.status === 'failed') return new Error('The operation failed.')
-  if (
-    workflow.content?.loading ||
-    workflow.generatedSourceContents.some((document) => document.loading)
-  ) {
+  if (workflow.content?.loading || workflow.generatedSourceContents.some((document) => document.loading)) {
     return null
   }
   if (workflow.status === 'completed' && !workflow.active && !targetReady) {
     return new Error('The selected output was not produced. See the diagnostics below.')
   }
   const failedEvent = [...events].reverse().find((event) => event.payload.kind === 'failed')
-  return failedEvent?.payload.kind === 'failed'
-    ? new Error(failedEvent.payload.error.publicMessage)
-    : null
+  return failedEvent?.payload.kind === 'failed' ? new Error(failedEvent.payload.error.publicMessage) : null
 }
 
 interface StartWorkflowOperation {
@@ -530,23 +365,13 @@ function App() {
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const [editorSettingsOpen, setEditorSettingsOpen] = useState(false)
   const [currentGist, setCurrentGist] = useState<GistDocument | null>(null)
-  const [sourceNavigation, setSourceNavigation] = useState<ExecutionFlowNavigationRequest | null>(
-    null,
-  )
+  const [sourceNavigation, setSourceNavigation] = useState<ExecutionFlowNavigationRequest | null>(null)
   const [sourceAssociations, setSourceAssociations] = useState<readonly SourceAssociation[]>([])
-  const [activeSourceAssociation, setActiveSourceAssociation] =
-    useState<SourceAssociationActivation | null>(null)
+  const [activeSourceAssociation, setActiveSourceAssociation] = useState<SourceAssociationActivation | null>(null)
   const [activeSourceAssociationRevision, setActiveSourceAssociationRevision] = useState(0)
-  const [hoveredSourceAssociation, setHoveredSourceAssociation] =
-    useState<SourceAssociationActivation | null>(null)
-  const activeSourceAssociationKey = sourceAssociationActivationKey(
-    activeSourceAssociation,
-    workflow?.id ?? null,
-  )
-  const hoveredSourceAssociationKey = sourceAssociationActivationKey(
-    hoveredSourceAssociation,
-    workflow?.id ?? null,
-  )
+  const [hoveredSourceAssociation, setHoveredSourceAssociation] = useState<SourceAssociationActivation | null>(null)
+  const activeSourceAssociationKey = sourceAssociationActivationKey(activeSourceAssociation, workflow?.id ?? null)
+  const hoveredSourceAssociationKey = sourceAssociationActivationKey(hoveredSourceAssociation, workflow?.id ?? null)
   const shareDecodeStarted = useRef(false)
   const gistBaseline = useRef<{
     id: string
@@ -564,14 +389,11 @@ function App() {
   const sourceNavigationRevision = useRef(0)
   const runBuildRef = useRef<(trigger?: 'live' | 'manual') => void>(() => {})
   const supersededLiveOperation = useRef<string | null>(null)
-  const updateWorkflow = useCallback(
-    (update: (current: OperationWorkflow | null) => OperationWorkflow | null) => {
-      const next = update(workflowRef.current)
-      workflowRef.current = next
-      setWorkflow(next)
-    },
-    [],
-  )
+  const updateWorkflow = useCallback((update: (current: OperationWorkflow | null) => OperationWorkflow | null) => {
+    const next = update(workflowRef.current)
+    workflowRef.current = next
+    setWorkflow(next)
+  }, [])
   const activeOperationId = workflow?.active?.operationId ?? null
   const operationStateQuery = useOperationState(activeOperationId)
   const operationEvents = useOperationEvents(activeOperationId)
@@ -596,7 +418,10 @@ function App() {
     try {
       parsedGist = parseGistFragment(initialShareFragment)
     } catch (error) {
-      setShareError({ action: 'restore', error: normalizeError(error, 'The Gist URL is invalid.') })
+      setShareError({
+        action: 'restore',
+        error: normalizeError(error, 'The Gist URL is invalid.'),
+      })
       setShareReady(true)
       return
     }
@@ -664,12 +489,7 @@ function App() {
   useEffect(() => {
     if (!catalog || !shareReady) return
     const baseline = gistBaseline.current
-    if (
-      currentGist &&
-      baseline?.id === currentGist.id &&
-      baseline.workspaceRevision === workspaceRevision &&
-      baseline.selectionRevision === selectionRevision
-    ) {
+    if (currentGist && baseline?.id === currentGist.id && baseline.workspaceRevision === workspaceRevision && baseline.selectionRevision === selectionRevision) {
       return
     }
     const writeGeneration = ++shareUrlWriteGeneration.current
@@ -688,7 +508,10 @@ function App() {
       })
       let encode: ReturnType<typeof encodeV3>
       if (typeof Worker === 'undefined') {
-        encode = encodeV3(state, { profile: 'live', baseUrl: currentBaseUrl() })
+        encode = encodeV3(state, {
+          profile: 'live',
+          baseUrl: currentBaseUrl(),
+        })
       } else {
         const codec = urlCodec.current ?? new UrlCodecWorkerClient()
         urlCodec.current = codec
@@ -711,21 +534,7 @@ function App() {
       cancelled = true
       window.clearTimeout(timeout)
     }
-  }, [
-    activeFile,
-    buildMode,
-    catalog,
-    currentGist,
-    files,
-    languageId,
-    outputId,
-    referenceSetId,
-    runtimeId,
-    shareReady,
-    selectionRevision,
-    toolchainId,
-    workspaceRevision,
-  ])
+  }, [activeFile, buildMode, catalog, currentGist, files, languageId, outputId, referenceSetId, runtimeId, shareReady, selectionRevision, toolchainId, workspaceRevision])
 
   const startOperationMutation = useMutation({
     mutationFn: async (input: StartWorkflowOperation) => ({
@@ -750,11 +559,7 @@ function App() {
       setMobilePane('result')
     },
     onError: (error, input) => {
-      updateWorkflow((current) =>
-        current?.id === input.workflowId
-          ? { ...current, active: null, status: 'failed', error }
-          : current,
-      )
+      updateWorkflow((current) => (current?.id === input.workflowId ? { ...current, active: null, status: 'failed', error } : current))
     },
   })
   const cancelMutation = useMutation({
@@ -781,22 +586,14 @@ function App() {
   const sourceOrderIndex = sourceOrder.indexOf(activeFile)
   const showSourceOrderControls = language.capabilities.includes('source-order') && files.length > 1
   const canMoveSourceEarlier = showSourceOrderControls && sourceOrderIndex > 0
-  const canMoveSourceLater =
-    showSourceOrderControls && sourceOrderIndex >= 0 && sourceOrderIndex < sourceOrder.length - 1
+  const canMoveSourceLater = showSourceOrderControls && sourceOrderIndex >= 0 && sourceOrderIndex < sourceOrder.length - 1
   const toolchain = catalog ? toolchainById(catalog, toolchainId) : undefined
   const output = catalog ? outputById(catalog, outputId) : undefined
   const availableToolchains = catalog ? toolchainOptionsFor(catalog, languageId) : []
   const availableReferenceSets = catalog ? referenceSetOptionsFor(catalog, toolchainId) : []
-  const availableOutputs = catalog
-    ? outputOptionsFor(catalog, languageId, toolchainId, referenceSetId)
-    : []
-  const availableRuntimes = catalog
-    ? runtimeOptionsFor(catalog, toolchainId, referenceSetId, outputId)
-    : []
-  const languageServerEnabled =
-    toolchain?.availability.installed === true &&
-    toolchain.availability.health === 'healthy' &&
-    toolchain.capabilities.includes('lsp')
+  const availableOutputs = catalog ? outputOptionsFor(catalog, languageId, toolchainId, referenceSetId) : []
+  const availableRuntimes = catalog ? runtimeOptionsFor(catalog, toolchainId, referenceSetId, outputId) : []
+  const languageServerEnabled = toolchain?.availability.installed === true && toolchain.availability.health === 'healthy' && toolchain.capabilities.includes('lsp')
   const editorLanguageSession = {
     enabled: languageServerEnabled,
     resolution: resolutionState.resolution,
@@ -827,38 +624,15 @@ function App() {
   }
 
   const typedResult = findTypedResult(operationEvents.events)
-  const workflowIsStale = Boolean(
-    workflow &&
-      (workflow.workspaceRevision !== workspaceRevision ||
-        workflow.selectionRevision !== selectionRevision),
-  )
-  const operationStatus =
-    workflow?.active && operationStateQuery.data?.status
-      ? operationStateQuery.data.status
-      : startOperationMutation.isPending
-        ? 'starting'
-        : (workflow?.status ?? 'idle')
+  const workflowIsStale = Boolean(workflow && (workflow.workspaceRevision !== workspaceRevision || workflow.selectionRevision !== selectionRevision))
+  const operationStatus = workflow?.active && operationStateQuery.data?.status ? operationStateQuery.data.status : startOperationMutation.isPending ? 'starting' : (workflow?.status ?? 'idle')
   const operationIsTerminal = isOperationTerminal(operationStateQuery.data?.status)
   const profileUnavailable = unavailableReason(resolutionState.selectionChanges)
-  const runDisabled =
-    !resolutionState.resolution ||
-    resolutionState.isResolving ||
-    profileUnavailable !== null ||
-    startOperationMutation.isPending ||
-    workflow?.active != null
+  const runDisabled = !resolutionState.resolution || resolutionState.isResolving || profileUnavailable !== null || startOperationMutation.isPending || workflow?.active != null
 
-  const workflowEvents = useMemo(
-    () => [
-      ...(workflow?.completedStages.flatMap((stage) => stage.events) ?? []),
-      ...(workflow?.active ? operationEvents.events : []),
-    ],
-    [operationEvents.events, workflow?.active, workflow?.completedStages],
-  )
+  const workflowEvents = useMemo(() => [...(workflow?.completedStages.flatMap((stage) => stage.events) ?? []), ...(workflow?.active ? operationEvents.events : [])], [operationEvents.events, workflow?.active, workflow?.completedStages])
   const executionFlowModel = useMemo(
-    () =>
-      workflow?.outputId === 'execution-flow'
-        ? createExecutionFlowSourceModel(workflowEvents, workflow.workspaceFiles)
-        : createExecutionFlowSourceModel([], []),
+    () => (workflow?.outputId === 'execution-flow' ? createExecutionFlowSourceModel(workflowEvents, workflow.workspaceFiles) : createExecutionFlowSourceModel([], [])),
     [workflow?.outputId, workflow?.workspaceFiles, workflowEvents],
   )
   const activeExecutionFlow = currentExecutionFlowSourceModel(
@@ -873,10 +647,7 @@ function App() {
     { outputId, workspaceRevision, selectionRevision },
   )
   const workflowResults = useMemo(
-    () => [
-      ...(workflow?.completedStages.flatMap((stage) => (stage.result ? [stage.result] : [])) ?? []),
-      ...(workflow?.active && typedResult ? [typedResult] : []),
-    ],
+    () => [...(workflow?.completedStages.flatMap((stage) => (stage.result ? [stage.result] : [])) ?? []), ...(workflow?.active && typedResult ? [typedResult] : [])],
     [typedResult, workflow?.active, workflow?.completedStages],
   )
   const workflowTargetReady = workflowHasStableTarget(workflow, workflowResults, workflowEvents)
@@ -885,76 +656,27 @@ function App() {
   }, [workflow, workflowTargetReady])
 
   const currentWorkflowMatchesSelection = workflow?.selectionRevision === selectionRevision
-  const retainedWorkflow =
-    stableWorkflow?.selectionRevision === selectionRevision &&
-    stableWorkflow.outputId === (workflow?.outputId ?? outputId)
-      ? stableWorkflow
-      : null
-  const presentationWorkflow =
-    workflowTargetReady && currentWorkflowMatchesSelection
-      ? workflow
-      : (retainedWorkflow ?? (currentWorkflowMatchesSelection ? workflow : null))
+  const retainedWorkflow = stableWorkflow?.selectionRevision === selectionRevision && stableWorkflow.outputId === (workflow?.outputId ?? outputId) ? stableWorkflow : null
+  const presentationWorkflow = workflowTargetReady && currentWorkflowMatchesSelection ? workflow : (retainedWorkflow ?? (currentWorkflowMatchesSelection ? workflow : null))
   const presentationMatchesCurrentWorkspace = Boolean(
-    presentationWorkflow &&
-      presentationWorkflow === workflow &&
-      presentationWorkflow.workspaceRevision === workspaceRevision &&
-      presentationWorkflow.selectionRevision === selectionRevision &&
-      presentationWorkflow.outputId === outputId,
+    presentationWorkflow && presentationWorkflow === workflow && presentationWorkflow.workspaceRevision === workspaceRevision && presentationWorkflow.selectionRevision === selectionRevision && presentationWorkflow.outputId === outputId,
   )
-  const presentationSourceNavigationEnabled = Boolean(
-    presentationMatchesCurrentWorkspace &&
-      supportsSourceAssociations(presentationWorkflow?.outputId),
-  )
-  const presentationSourceAssociationsRetained = Boolean(
-    !presentationSourceNavigationEnabled &&
-      presentationWorkflow &&
-      presentationWorkflow !== workflow &&
-      presentationWorkflow.outputId === outputId &&
-      supportsSourceAssociations(presentationWorkflow.outputId),
-  )
-  const presentationResults = useMemo(
-    () =>
-      presentationWorkflow === workflow
-        ? workflowResults
-        : workflowResultsFrom(presentationWorkflow),
-    [presentationWorkflow, workflow, workflowResults],
-  )
-  const presentationAstResult = presentationResults.find(
-    (result): result is AstResult => result.resultType === 'ast',
-  )
-  const presentationAstSourceMap = useMemo(
-    () => (presentationAstResult ? createAstSourceMap(presentationAstResult.document) : null),
-    [presentationAstResult],
-  )
-  const presentationRunResult = presentationResults.find(
-    (result): result is RunResult => result.resultType === 'run',
-  )
+  const presentationSourceNavigationEnabled = Boolean(presentationMatchesCurrentWorkspace && supportsSourceAssociations(presentationWorkflow?.outputId))
+  const presentationSourceAssociationsRetained = Boolean(!presentationSourceNavigationEnabled && presentationWorkflow && presentationWorkflow !== workflow && presentationWorkflow.outputId === outputId && supportsSourceAssociations(presentationWorkflow.outputId));
+  const presentationResults = useMemo(() => (presentationWorkflow === workflow ? workflowResults : workflowResultsFrom(presentationWorkflow)), [presentationWorkflow, workflow, workflowResults])
+  const presentationAstResult = presentationResults.find((result): result is AstResult => result.resultType === 'ast')
+  const presentationAstSourceMap = useMemo(() => (presentationAstResult ? createAstSourceMap(presentationAstResult.document) : null), [presentationAstResult])
+  const presentationRunResult = presentationResults.find((result): result is RunResult => result.resultType === 'run')
   const presentationJitResult = presentationResults.find((result) => result.resultType === 'jit')
-  const presentationEvents = useMemo(
-    () =>
-      presentationWorkflow === workflow ? workflowEvents : workflowEventsFrom(presentationWorkflow),
-    [presentationWorkflow, workflow, workflowEvents],
-  )
+  const presentationEvents = useMemo(() => (presentationWorkflow === workflow ? workflowEvents : workflowEventsFrom(presentationWorkflow)), [presentationWorkflow, workflow, workflowEvents])
   const presentationExecutionFlowModel = useMemo(
-    () =>
-      presentationWorkflow?.outputId === 'execution-flow'
-        ? createExecutionFlowSourceModel(presentationEvents, presentationWorkflow.workspaceFiles)
-        : createExecutionFlowSourceModel([], []),
+    () => (presentationWorkflow?.outputId === 'execution-flow' ? createExecutionFlowSourceModel(presentationEvents, presentationWorkflow.workspaceFiles) : createExecutionFlowSourceModel([], [])),
     [presentationEvents, presentationWorkflow],
   )
-  const resultIdentitySummary = useMemo(
-    () => summarizeResultIdentities(presentationResults),
-    [presentationResults],
-  )
+  const resultIdentitySummary = useMemo(() => summarizeResultIdentities(presentationResults), [presentationResults])
   const workflowOutput = catalog && workflow ? outputById(catalog, workflow.outputId) : output
   const resultSelection = presentationWorkflow?.resolution.effectiveSelection
-  const workflowOperationIds = useMemo(
-    () => [
-      ...(presentationWorkflow?.completedStages.map((stage) => stage.operationId) ?? []),
-      ...(presentationWorkflow?.active ? [presentationWorkflow.active.operationId] : []),
-    ],
-    [presentationWorkflow],
-  )
+  const workflowOperationIds = useMemo(() => [...(presentationWorkflow?.completedStages.map((stage) => stage.operationId) ?? []), ...(presentationWorkflow?.active ? [presentationWorkflow.active.operationId] : [])], [presentationWorkflow])
   const identityPresentation = useMemo(
     () =>
       createResultIdentityPresentation({
@@ -994,59 +716,18 @@ function App() {
       workflowOutput,
     ],
   )
-  const workflowError = workflowFailure(
-    workflow,
-    workflowResults,
-    workflowEvents,
-    workflowTargetReady,
-  )
-  const currentFailure = firstVisibleFailure(
-    resolutionState.error,
-    ...(workflowIsStale
-      ? []
-      : [
-          workflowError,
-          startOperationMutation.error,
-          operationStateQuery.error,
-          operationEvents.streamError,
-        ]),
-  )
-  const operationTransportDisconnected =
-    gatewayConnectionStatus === 'reconnecting' ||
-    gatewayConnectionStatus === 'closed' ||
-    (activeOperationId !== null && operationEvents.streamStatus === 'error')
-  const gatewayTransportFailure = [
-    catalogQuery.error,
-    resolutionState.error,
-    workflowError,
-    startOperationMutation.error,
-    operationStateQuery.error,
-    operationEvents.streamError,
-  ].find(isGatewayTransportFailure)
+  const workflowError = workflowFailure(workflow, workflowResults, workflowEvents, workflowTargetReady)
+  const currentFailure = firstVisibleFailure(resolutionState.error, ...(workflowIsStale ? [] : [workflowError, startOperationMutation.error, operationStateQuery.error, operationEvents.streamError]))
+  const operationTransportDisconnected = gatewayConnectionStatus === 'reconnecting' || gatewayConnectionStatus === 'closed' || (activeOperationId !== null && operationEvents.streamStatus === 'error')
+  const gatewayTransportFailure = [catalogQuery.error, resolutionState.error, workflowError, startOperationMutation.error, operationStateQuery.error, operationEvents.streamError].find(isGatewayTransportFailure)
   const currentHasErrorDiagnostic =
-    workflowResults.some(
-      (result) =>
-        'diagnostics' in result &&
-        Array.isArray(result.diagnostics) &&
-        result.diagnostics.some((diagnostic) => diagnostic.severity === 'error'),
-    ) ||
-    workflowEvents.some(
-      (event) =>
-        event.payload.kind === 'diagnostic' && event.payload.diagnostic.severity === 'error',
-    )
-  const resultAttentionKey = resolutionState.error
-    ? `selection-resolution:${selectionRevision}:${resolutionState.error.message}`
-    : !workflowIsStale && workflow && (currentFailure || currentHasErrorDiagnostic)
-      ? workflow.id
-      : null
+    workflowResults.some((result) => 'diagnostics' in result && Array.isArray(result.diagnostics) && result.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) ||
+    workflowEvents.some((event) => event.payload.kind === 'diagnostic' && event.payload.diagnostic.severity === 'error')
+  const resultAttentionKey = resolutionState.error ? `selection-resolution:${selectionRevision}:${resolutionState.error.message}` : !workflowIsStale && workflow && (currentFailure || currentHasErrorDiagnostic) ? workflow.id : null
   const resultRecoveryKey =
     !resolutionState.error && resolutionState.resolution
       ? `selection-resolution:${resolutionState.resolution.pipelineResolutionId}`
-      : !workflowIsStale &&
-          workflow &&
-          workflowTargetReady &&
-          !currentFailure &&
-          !currentHasErrorDiagnostic
+      : !workflowIsStale && workflow && workflowTargetReady && !currentFailure && !currentHasErrorDiagnostic
         ? workflow.id
         : null
   const resultPending = workflow?.active != null || startOperationMutation.isPending
@@ -1055,13 +736,7 @@ function App() {
   const navigateToResultSource = useCallback((target: ExecutionFlowSourceTarget) => {
     const current = workflowRef.current
     const state = useWorkbenchStore.getState()
-    const supportedOutput =
-      current?.outputId === 'execution-flow' ||
-      current?.outputId === 'ast' ||
-      current?.outputId === 'jit-asm' ||
-      current?.outputId === 'il' ||
-      current?.outputId === 'run-il' ||
-      current?.outputId === 'generated-il'
+    const supportedOutput = current?.outputId === 'execution-flow' || current?.outputId === 'ast' || current?.outputId === 'jit-asm' || current?.outputId === 'il' || current?.outputId === 'run-il' || current?.outputId === 'generated-il'
     const sourceFile = state.files.find((file) => file.path === target.documentPath)
     if (
       !current ||
@@ -1083,24 +758,19 @@ function App() {
     })
     setActiveSourceAssociationRevision((revision) => revision + 1)
     sourceNavigationRevision.current += 1
-    setSourceNavigation({ ...target, revision: sourceNavigationRevision.current })
+    setSourceNavigation({
+      ...target,
+      revision: sourceNavigationRevision.current,
+    })
   }, [])
 
-  const handleSourceAssociationsChange = useCallback(
-    (associations: readonly SourceAssociation[]) => setSourceAssociations(associations),
-    [],
-  )
+  const handleSourceAssociationsChange = useCallback((associations: readonly SourceAssociation[]) => setSourceAssociations(associations), [])
 
   const updateAssociatedOutput = useCallback(
     (associationKey: string, revealResult: boolean) => {
       const current = workflowRef.current
       const state = useWorkbenchStore.getState()
-      if (
-        !current ||
-        current.workspaceRevision !== state.workspaceRevision ||
-        current.selectionRevision !== state.selectionRevision ||
-        !sourceAssociations.some((association) => association.key === associationKey)
-      ) {
+      if (!current || current.workspaceRevision !== state.workspaceRevision || current.selectionRevision !== state.selectionRevision || !sourceAssociations.some((association) => association.key === associationKey)) {
         return
       }
       setActiveSourceAssociation({ associationKey, generationId: current.id })
@@ -1109,14 +779,8 @@ function App() {
     },
     [sourceAssociations],
   )
-  const navigateToAssociatedOutput = useCallback(
-    (associationKey: string) => updateAssociatedOutput(associationKey, true),
-    [updateAssociatedOutput],
-  )
-  const previewAssociatedOutput = useCallback(
-    (associationKey: string) => updateAssociatedOutput(associationKey, false),
-    [updateAssociatedOutput],
-  )
+  const navigateToAssociatedOutput = useCallback((associationKey: string) => updateAssociatedOutput(associationKey, true), [updateAssociatedOutput])
+  const previewAssociatedOutput = useCallback((associationKey: string) => updateAssociatedOutput(associationKey, false), [updateAssociatedOutput])
 
   useEffect(() => {
     if (presentationSourceNavigationEnabled || presentationSourceAssociationsRetained) return
@@ -1127,71 +791,41 @@ function App() {
   }, [presentationSourceAssociationsRetained, presentationSourceNavigationEnabled])
 
   useEffect(() => {
-    if (
-      activeSourceAssociation &&
-      (activeSourceAssociation.generationId !== workflow?.id ||
-        !sourceAssociations.some(
-          (association) => association.key === activeSourceAssociation.associationKey,
-        ))
-    ) {
+    if (activeSourceAssociation && (activeSourceAssociation.generationId !== workflow?.id || !sourceAssociations.some((association) => association.key === activeSourceAssociation.associationKey))) {
       setActiveSourceAssociation(null)
     }
   }, [activeSourceAssociation, sourceAssociations, workflow?.id])
 
   useEffect(() => {
-    if (
-      hoveredSourceAssociation &&
-      (hoveredSourceAssociation.generationId !== workflow?.id ||
-        !sourceAssociations.some(
-          (association) => association.key === hoveredSourceAssociation.associationKey,
-        ))
-    ) {
+    if (hoveredSourceAssociation && (hoveredSourceAssociation.generationId !== workflow?.id || !sourceAssociations.some((association) => association.key === hoveredSourceAssociation.associationKey))) {
       setHoveredSourceAssociation(null)
     }
   }, [hoveredSourceAssociation, sourceAssociations, workflow?.id])
 
   const handleSourceAssociationHover = useCallback((associationKey: string | null) => {
     const generationId = workflowRef.current?.id
-    setHoveredSourceAssociation(
-      associationKey && generationId ? { associationKey, generationId } : null,
-    )
+    setHoveredSourceAssociation(associationKey && generationId ? { associationKey, generationId } : null)
   }, [])
 
-  const handleWorkbenchPointerDownCapture = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (isSourceAssociationInteractionTarget(event.target)) return
-      setActiveSourceAssociation(null)
-      setHoveredSourceAssociation(null)
-    },
-    [],
-  )
+  const handleWorkbenchPointerDownCapture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (isSourceAssociationInteractionTarget(event.target)) return
+    setActiveSourceAssociation(null)
+    setHoveredSourceAssociation(null)
+  }, [])
 
   useEffect(() => {
     const current = workflowRef.current
     const active = current?.active
     if (!current || !active || processedOperations.current.has(active.operationId)) return
 
-    const terminalEvent = [...operationEvents.events]
-      .reverse()
-      .find((event) => event.payload.kind === 'completed' || event.payload.kind === 'failed')
+    const terminalEvent = [...operationEvents.events].reverse().find((event) => event.payload.kind === 'completed' || event.payload.kind === 'failed')
     const stateStatus = operationStateQuery.data?.status
     const stateIsTerminal = isOperationTerminal(stateStatus)
     if (!terminalEvent && !stateIsTerminal) return
 
     const terminalStatus: WorkflowStatus =
-      stateStatus === 'failed' || terminalEvent?.payload.kind === 'failed'
-        ? 'failed'
-        : stateStatus === 'cancelled' ||
-            (terminalEvent?.payload.kind === 'completed' &&
-              terminalEvent.payload.status === 'cancelled')
-          ? 'cancelled'
-          : 'completed'
-    if (
-      terminalStatus === 'completed' &&
-      !typedResult &&
-      operationEvents.streamStatus !== 'closed' &&
-      operationEvents.streamStatus !== 'error'
-    ) {
+      stateStatus === 'failed' || terminalEvent?.payload.kind === 'failed' ? 'failed' : stateStatus === 'cancelled' || (terminalEvent?.payload.kind === 'completed' && terminalEvent.payload.status === 'cancelled') ? 'cancelled' : 'completed'
+    if (terminalStatus === 'completed' && !typedResult && operationEvents.streamStatus !== 'closed' && operationEvents.streamStatus !== 'error') {
       return
     }
 
@@ -1202,40 +836,25 @@ function App() {
       result: typedResult,
     }
     const store = useWorkbenchStore.getState()
-    const stale =
-      store.workspaceRevision !== current.workspaceRevision ||
-      store.selectionRevision !== current.selectionRevision
+    const stale = store.workspaceRevision !== current.workspaceRevision || store.selectionRevision !== current.selectionRevision
     const missingTypedResult = terminalStatus === 'completed' && !typedResult
     const effectiveTerminalStatus = missingTypedResult ? 'failed' : terminalStatus
     const terminalError = missingTypedResult
       ? new Error('The operation completed without its required typed result.')
       : terminalStatus === 'failed'
-        ? new Error(
-            operationStateQuery.data?.error?.publicMessage ??
-              (terminalEvent?.payload.kind === 'failed'
-                ? terminalEvent.payload.error.publicMessage
-                : 'The operation failed.'),
-          )
+        ? new Error(operationStateQuery.data?.error?.publicMessage ?? (terminalEvent?.payload.kind === 'failed' ? terminalEvent.payload.error.publicMessage : 'The operation failed.'))
         : null
 
     const producedArtifactRef =
-      active.kind === 'build' &&
-      typedResult?.resultType === 'build' &&
-      typedResult.outcome === 'succeeded'
+      active.kind === 'build' && typedResult?.resultType === 'build' && typedResult.outcome === 'succeeded'
         ? typedResult.artifactRef
-        : active.kind === 'transform' &&
-            typedResult?.resultType === 'artifact-transform' &&
-            typedResult.outcome === 'succeeded'
+        : active.kind === 'transform' && typedResult?.resultType === 'artifact-transform' && typedResult.outcome === 'succeeded'
           ? typedResult.artifactRef
           : null
     if (terminalStatus === 'completed' && producedArtifactRef) {
       let followup: ReturnType<typeof createFollowupOperation>
       try {
-        followup = createFollowupOperation(
-          current.resolution,
-          producedArtifactRef,
-          current.completedStages.length + 1,
-        )
+        followup = createFollowupOperation(current.resolution, producedArtifactRef, current.completedStages.length + 1)
       } catch (error) {
         updateWorkflow((candidate) =>
           candidate?.id === current.id
@@ -1281,13 +900,13 @@ function App() {
         mediaType: typedResult.mediaType,
       }
     } else if (typedResult?.resultType === 'jit' && typedResult.rawTextRef) {
-      contentDescriptor = { contentRef: typedResult.rawTextRef, mediaType: 'text/x-asm' }
+      contentDescriptor = {
+        contentRef: typedResult.rawTextRef,
+        mediaType: 'text/x-asm',
+      }
     }
 
-    const missingRenderedContent =
-      typedResult?.resultType === 'artifact-render' &&
-      typedResult.outcome === 'succeeded' &&
-      !typedResult.contentRef
+    const missingRenderedContent = typedResult?.resultType === 'artifact-render' && typedResult.outcome === 'succeeded' && !typedResult.contentRef
     const content: OperationContentView | null = contentDescriptor
       ? {
           ...contentDescriptor,
@@ -1333,18 +952,18 @@ function App() {
       const controller = new AbortController()
       contentRequest.current = controller
       if (contentDescriptor) {
-        void getOperationContent(
-          active.operationId,
-          contentDescriptor.contentRef,
-          controller.signal,
-        )
+        void getOperationContent(active.operationId, contentDescriptor.contentRef, controller.signal)
           .then((text) => {
             updateWorkflow((candidate) =>
-              candidate?.id === current.id &&
-              candidate.content?.contentRef === contentDescriptor.contentRef
+              candidate?.id === current.id && candidate.content?.contentRef === contentDescriptor.contentRef
                 ? {
                     ...candidate,
-                    content: { ...candidate.content, text, loading: false, error: null },
+                    content: {
+                      ...candidate.content,
+                      text,
+                      loading: false,
+                      error: null,
+                    },
                   }
                 : candidate,
             )
@@ -1352,17 +971,13 @@ function App() {
           .catch((error: unknown) => {
             if (controller.signal.aborted) return
             updateWorkflow((candidate) =>
-              candidate?.id === current.id &&
-              candidate.content?.contentRef === contentDescriptor.contentRef
+              candidate?.id === current.id && candidate.content?.contentRef === contentDescriptor.contentRef
                 ? {
                     ...candidate,
                     content: {
                       ...candidate.content,
                       loading: false,
-                      error:
-                        error instanceof Error
-                          ? error
-                          : new Error('The generated content could not be loaded.'),
+                      error: error instanceof Error ? error : new Error('The generated content could not be loaded.'),
                     },
                   }
                 : candidate,
@@ -1373,20 +988,18 @@ function App() {
         void getOperationContent(active.operationId, document.contentRef, controller.signal)
           .then((text) => {
             updateWorkflow((candidate) =>
-              candidate?.id === current.id &&
-              candidate.generatedSourceContents.some(
-                (candidateDocument) =>
-                  candidateDocument.contentRef === document.contentRef &&
-                  candidateDocument.path === document.path,
-              )
+              candidate?.id === current.id && candidate.generatedSourceContents.some((candidateDocument) => candidateDocument.contentRef === document.contentRef && candidateDocument.path === document.path)
                 ? {
                     ...candidate,
-                    generatedSourceContents: candidate.generatedSourceContents.map(
-                      (candidateDocument) =>
-                        candidateDocument.contentRef === document.contentRef &&
-                        candidateDocument.path === document.path
-                          ? { ...candidateDocument, text, loading: false, error: null }
-                          : candidateDocument,
+                    generatedSourceContents: candidate.generatedSourceContents.map((candidateDocument) =>
+                      candidateDocument.contentRef === document.contentRef && candidateDocument.path === document.path
+                        ? {
+                            ...candidateDocument,
+                            text,
+                            loading: false,
+                            error: null,
+                          }
+                        : candidateDocument,
                     ),
                   }
                 : candidate,
@@ -1395,27 +1008,17 @@ function App() {
           .catch((error: unknown) => {
             if (controller.signal.aborted) return
             updateWorkflow((candidate) =>
-              candidate?.id === current.id &&
-              candidate.generatedSourceContents.some(
-                (candidateDocument) =>
-                  candidateDocument.contentRef === document.contentRef &&
-                  candidateDocument.path === document.path,
-              )
+              candidate?.id === current.id && candidate.generatedSourceContents.some((candidateDocument) => candidateDocument.contentRef === document.contentRef && candidateDocument.path === document.path)
                 ? {
                     ...candidate,
-                    generatedSourceContents: candidate.generatedSourceContents.map(
-                      (candidateDocument) =>
-                        candidateDocument.contentRef === document.contentRef &&
-                        candidateDocument.path === document.path
-                          ? {
-                              ...candidateDocument,
-                              loading: false,
-                              error:
-                                error instanceof Error
-                                  ? error
-                                  : new Error('The generated source could not be loaded.'),
-                            }
-                          : candidateDocument,
+                    generatedSourceContents: candidate.generatedSourceContents.map((candidateDocument) =>
+                      candidateDocument.contentRef === document.contentRef && candidateDocument.path === document.path
+                        ? {
+                            ...candidateDocument,
+                            loading: false,
+                            error: error instanceof Error ? error : new Error('The generated source could not be loaded.'),
+                          }
+                        : candidateDocument,
                     ),
                   }
                 : candidate,
@@ -1423,14 +1026,7 @@ function App() {
           })
       }
     }
-  }, [
-    operationEvents.events,
-    operationEvents.streamStatus,
-    operationStateQuery.data,
-    startOperationMutation,
-    typedResult,
-    updateWorkflow,
-  ])
+  }, [operationEvents.events, operationEvents.streamStatus, operationStateQuery.data, startOperationMutation, typedResult, updateWorkflow])
 
   const copyShareUrl = async () => {
     if (!catalog || !navigator.clipboard) return
@@ -1462,11 +1058,7 @@ function App() {
       }
       const url = `${currentBaseUrl()}${encoded.fragment}`
       await navigator.clipboard.writeText(url)
-      setShareWarnings(
-        encoded.lengthDisposition === 'explicit-warning'
-          ? ['This workspace exceeds the preferred URL length; use a Gist for reliable sharing.']
-          : [],
-      )
+      setShareWarnings(encoded.lengthDisposition === 'explicit-warning' ? ['This workspace exceeds the preferred URL length; use a Gist for reliable sharing.'] : [])
       setShareCopied(true)
       window.setTimeout(() => setShareCopied(false), 1_500)
     } catch (error) {
@@ -1481,9 +1073,7 @@ function App() {
     if (!resolutionState.resolution) return
     const snapshot = getWorkbenchSnapshot()
     const workflowId = `workflow_${globalThis.crypto?.randomUUID?.() ?? Date.now().toString(36)}`
-    const selectedReferenceSet = catalog?.referenceSets.find(
-      (candidate) => candidate.id === resolutionState.resolution?.effectiveSelection.referenceSetId,
-    )
+    const selectedReferenceSet = catalog?.referenceSets.find((candidate) => candidate.id === resolutionState.resolution?.effectiveSelection.referenceSetId)
     const next: OperationWorkflow = {
       id: workflowId,
       trigger,
@@ -1541,15 +1131,11 @@ function App() {
     const current = workflowRef.current
     const active = current?.active
     if (current?.trigger !== 'live' || !active || active.operationId !== activeOperationId) return
-    const stale =
-      current.workspaceRevision !== workspaceRevision ||
-      current.selectionRevision !== selectionRevision
+    const stale = current.workspaceRevision !== workspaceRevision || current.selectionRevision !== selectionRevision
     if (!stale || supersededLiveOperation.current === active.operationId) return
 
     supersededLiveOperation.current = active.operationId
-    updateWorkflow((candidate) =>
-      candidate?.id === current.id ? { ...candidate, status: 'cancelling' } : candidate,
-    )
+    updateWorkflow((candidate) => (candidate?.id === current.id ? { ...candidate, status: 'cancelling' } : candidate))
     void cancelOperation(active.operationId).catch(() => {
       // A failed cancellation still remains revision-guarded and cannot publish a follow-up Run.
     })
@@ -1563,63 +1149,34 @@ function App() {
 
   useEffect(() => {
     const resolution = resolutionState.resolution
-    const debounceMs = resolution
-      ? liveOperationDebounceMs(resolution.effectiveSelection.outputId)
-      : null
+    const debounceMs = resolution ? liveOperationDebounceMs(resolution.effectiveSelection.outputId) : null
     if (!shareReady || !catalog || !resolution || resolutionState.isResolving) {
       return
     }
 
     const isBootstrapResolution = resolutionState.isInitialSnapshot
     const operationDelayMs = isBootstrapResolution ? 0 : debounceMs
-    if (
-      profileUnavailable !== null ||
-      startOperationMutation.isPending ||
-      operationDelayMs === null
-    ) {
+    if (profileUnavailable !== null || startOperationMutation.isPending || operationDelayMs === null) {
       return
     }
 
     const current = workflow
-    const currentRevisionAlreadyRequested = Boolean(
-      current &&
-        current.workspaceRevision === workspaceRevision &&
-        current.selectionRevision === selectionRevision &&
-        current.outputId === resolution.effectiveSelection.outputId,
-    )
+    const currentRevisionAlreadyRequested = Boolean(current && current.workspaceRevision === workspaceRevision && current.selectionRevision === selectionRevision && current.outputId === resolution.effectiveSelection.outputId)
     if (currentRevisionAlreadyRequested || current?.active) return
 
     const timer = window.setTimeout(() => {
       const state = useWorkbenchStore.getState()
-      if (
-        state.workspaceRevision !== workspaceRevision ||
-        state.selectionRevision !== selectionRevision
-      ) {
+      if (state.workspaceRevision !== workspaceRevision || state.selectionRevision !== selectionRevision) {
         return
       }
       const currentWorkflow = workflowRef.current
-      if (
-        currentWorkflow?.workspaceRevision === workspaceRevision &&
-        currentWorkflow.selectionRevision === selectionRevision &&
-        currentWorkflow.outputId === resolution.effectiveSelection.outputId
-      ) {
+      if (currentWorkflow?.workspaceRevision === workspaceRevision && currentWorkflow.selectionRevision === selectionRevision && currentWorkflow.outputId === resolution.effectiveSelection.outputId) {
         return
       }
       runBuildRef.current('live')
     }, operationDelayMs)
     return () => window.clearTimeout(timer)
-  }, [
-    catalog,
-    profileUnavailable,
-    resolutionState.isResolving,
-    resolutionState.isInitialSnapshot,
-    resolutionState.resolution,
-    selectionRevision,
-    shareReady,
-    startOperationMutation.isPending,
-    workflow,
-    workspaceRevision,
-  ])
+  }, [catalog, profileUnavailable, resolutionState.isResolving, resolutionState.isInitialSnapshot, resolutionState.resolution, selectionRevision, shareReady, startOperationMutation.isPending, workflow, workspaceRevision])
 
   const gistWorkspace = useMemo(
     () =>
@@ -1636,18 +1193,7 @@ function App() {
             sourceOrder,
           })
         : null,
-    [
-      activeFile,
-      buildMode,
-      catalog,
-      files,
-      languageId,
-      outputId,
-      referenceSetId,
-      runtimeId,
-      sourceOrder,
-      toolchainId,
-    ],
+    [activeFile, buildMode, catalog, files, languageId, outputId, referenceSetId, runtimeId, sourceOrder, toolchainId],
   )
 
   const onGistSaved = (gist: GistDocument) => {
@@ -1665,10 +1211,7 @@ function App() {
   }
 
   const createFile = () => {
-    const path = nextFileName(
-      language.defaultFileName,
-      files.map((file) => file.path),
-    )
+    const path = nextFileName(language.defaultFileName, files.map((file) => file.path))
     addFile(path)
   }
 
@@ -1719,7 +1262,11 @@ function App() {
   return (
     <div
       className="workbench"
-      style={{ '--code-font-size': `${editorPreference.fontSize}px` } as CSSProperties}
+      style={
+        {
+          '--code-font-size': `${editorPreference.fontSize}px`,
+        } as CSSProperties
+      }
       onPointerDownCapture={handleWorkbenchPointerDownCapture}
     >
       <header className="app-bar" data-health-state={healthState}>
@@ -1727,59 +1274,24 @@ function App() {
           <img className="brand-mark" src="/logo-mark.svg" alt="" aria-hidden="true" />
         </div>
         <div className="mobile-command-bar">
-          <SelectField
-            label="View"
-            description="Output view"
-            value={outputId}
-            compact
-            disabled={!catalog}
-            onChange={(value) => updateSelection({ outputId: value })}
-          >
+          <SelectField label="View" description="Output view" value={outputId} compact disabled={!catalog} onChange={(value) => updateSelection({ outputId: value })}>
             {availableOutputs.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.displayName}
               </option>
             ))}
           </SelectField>
-          <button
-            className="run-button"
-            type="button"
-            disabled={runDisabled}
-            title={resolutionState.error?.message}
-            onClick={() => runBuild('manual')}
-          >
-            {startOperationMutation.isPending ? (
-              <LoaderCircle className="spin" aria-hidden="true" size={15} />
-            ) : (
-              <Play aria-hidden="true" size={15} fill="currentColor" />
-            )}
+          <button className="run-button" type="button" disabled={runDisabled} title={resolutionState.error?.message} onClick={() => runBuild('manual')}>
+            {startOperationMutation.isPending ? <LoaderCircle className="spin" aria-hidden="true" size={15} /> : <Play aria-hidden="true" size={15} fill="currentColor" />}
             <span>{actionLabel(output)}</span>
           </button>
         </div>
         <div className="app-bar-actions">
-          <button
-            className="app-bar-button"
-            type="button"
-            title="Save to GitHub Gist"
-            aria-label="Save to GitHub Gist"
-            disabled={!catalog || !shareReady}
-            onClick={() => setGistDialogOpen(true)}
-          >
+          <button className="app-bar-button" type="button" title="Save to GitHub Gist" aria-label="Save to GitHub Gist" disabled={!catalog || !shareReady} onClick={() => setGistDialogOpen(true)}>
             <GitFork aria-hidden="true" size={15} />
           </button>
-          <button
-            className="app-bar-button"
-            type="button"
-            title="Copy share URL"
-            aria-label="Copy share URL"
-            disabled={!catalog || !shareReady}
-            onClick={() => void copyShareUrl()}
-          >
-            {shareCopied ? (
-              <Check aria-hidden="true" size={15} />
-            ) : (
-              <Link2 aria-hidden="true" size={15} />
-            )}
+          <button className="app-bar-button" type="button" title="Copy share URL" aria-label="Copy share URL" disabled={!catalog || !shareReady} onClick={() => void copyShareUrl()}>
+            {shareCopied ? <Check aria-hidden="true" size={15} /> : <Link2 aria-hidden="true" size={15} />}
           </button>
           {editorPreference.isMobileViewport && (
             <button
@@ -1817,31 +1329,17 @@ function App() {
               className="app-health"
               data-state={healthState}
               role="status"
-              aria-label={
-                healthState === 'warning' ? (profileUnavailable ?? healthLabel) : healthLabel
-              }
+              aria-label={healthState === 'warning' ? (profileUnavailable ?? healthLabel) : healthLabel}
               title={healthState === 'warning' ? (profileUnavailable ?? healthLabel) : healthLabel}
             >
-              {healthState === 'error' ? (
-                <WifiOff aria-hidden="true" size={14} />
-              ) : healthState === 'pending' ? (
-                <LoaderCircle className="spin" aria-hidden="true" size={14} />
-              ) : (
-                <AlertTriangle aria-hidden="true" size={14} />
-              )}
+              {healthState === 'error' ? <WifiOff aria-hidden="true" size={14} /> : healthState === 'pending' ? <LoaderCircle className="spin" aria-hidden="true" size={14} /> : <AlertTriangle aria-hidden="true" size={14} />}
             </div>
           )}
         </div>
 
         <div className="selector-bar" data-mobile-open={mobileSettingsOpen}>
           <div className="selector-group selector-group--source">
-            <SelectField
-              label="Language"
-              description="Source language"
-              value={languageId}
-              disabled={!catalog}
-              onChange={updateLanguage}
-            >
+            <SelectField label="Language" description="Source language" value={languageId} disabled={!catalog} onChange={updateLanguage}>
               {catalog ? (
                 catalog.languages.map((option) => (
                   <option key={option.id} value={option.id}>
@@ -1852,21 +1350,9 @@ function App() {
                 <option value={languageId}>Catalog unavailable</option>
               )}
             </SelectField>
-            <SelectField
-              label="Toolchain"
-              description="Compiler toolchain"
-              className="select-field--toolchain"
-              value={toolchainId ?? ''}
-              disabled={!catalog}
-              onChange={(value) => updateSelection({ toolchainId: value, runtimeId: null })}
-            >
+            <SelectField label="Toolchain" description="Compiler toolchain" className="select-field--toolchain" value={toolchainId ?? ''} disabled={!catalog} onChange={(value) => updateSelection({ toolchainId: value, runtimeId: null })}>
               {availableToolchains.map((option) => (
-                <option
-                  key={option.id}
-                  value={option.id}
-                  disabled={!option.availability.installed}
-                  title={option.availability.reason}
-                >
+                <option key={option.id} value={option.id} disabled={!option.availability.installed} title={option.availability.reason}>
                   {option.displayName}
                   {availabilityLabel(option.availability.health)}
                 </option>
@@ -1882,12 +1368,7 @@ function App() {
               onChange={(value) => updateSelection({ referenceSetId: value, runtimeId: null })}
             >
               {availableReferenceSets.map((option) => (
-                <option
-                  key={option.id}
-                  value={option.id}
-                  disabled={!option.availability.installed}
-                  title={option.availability.reason}
-                >
+                <option key={option.id} value={option.id} disabled={!option.availability.installed} title={option.availability.reason}>
                   {referenceSetDisplayName(option)}
                   {availabilityLabel(option.availability.health)}
                 </option>
@@ -1897,18 +1378,8 @@ function App() {
 
           <div className="selector-divider" aria-hidden="true" />
 
-          <div
-            className={`selector-group selector-group--result${
-              output?.requiresRuntime ? ' selector-group--result-with-runtime' : ''
-            }`}
-          >
-            <SelectField
-              label="Output"
-              description="Output view"
-              value={outputId}
-              disabled={!catalog}
-              onChange={(value) => updateSelection({ outputId: value })}
-            >
+          <div className={`selector-group selector-group--result${output?.requiresRuntime ? ' selector-group--result-with-runtime' : ''}`}>
+            <SelectField label="Output" description="Output view" value={outputId} disabled={!catalog} onChange={(value) => updateSelection({ outputId: value })}>
               {availableOutputs.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.displayName}
@@ -1916,21 +1387,9 @@ function App() {
               ))}
             </SelectField>
             {output?.requiresRuntime && (
-              <SelectField
-                label="Runtime"
-                description="Runtime used for Run and JIT"
-                className="select-field--runtime"
-                value={runtimeId ?? ''}
-                disabled={!catalog}
-                onChange={(value) => updateSelection({ runtimeId: value })}
-              >
+              <SelectField label="Runtime" description="Runtime used for Run and JIT" className="select-field--runtime" value={runtimeId ?? ''} disabled={!catalog} onChange={(value) => updateSelection({ runtimeId: value })}>
                 {availableRuntimes.map((option) => (
-                  <option
-                    key={option.id}
-                    value={option.id}
-                    disabled={!option.availability.installed}
-                    title={option.availability.reason}
-                  >
+                  <option key={option.id} value={option.id} disabled={!option.availability.installed} title={option.availability.reason}>
                     {option.displayName}
                     {availabilityLabel(option.availability.health)}
                     {nativeRuntimeOptionEndSpacing}
@@ -1943,29 +1402,15 @@ function App() {
               <button
                 className="mode-toggle"
                 type="button"
-                aria-label={`Build mode: ${buildMode === 'debug' ? 'Debug' : 'Release'}. Click to switch to ${
-                  buildMode === 'debug' ? 'Release' : 'Debug'
-                }`}
-                title={`Build mode: ${buildMode === 'debug' ? 'Debug' : 'Release'}. Click to switch to ${
-                  buildMode === 'debug' ? 'Release' : 'Debug'
-                }`}
+                aria-label={`Build mode: ${buildMode === 'debug' ? 'Debug' : 'Release'}. Click to switch to ${buildMode === 'debug' ? 'Release' : 'Debug'}`}
+                title={`Build mode: ${buildMode === 'debug' ? 'Debug' : 'Release'}. Click to switch to ${buildMode === 'debug' ? 'Release' : 'Debug'}`}
                 onClick={() => setBuildMode(buildMode === 'debug' ? 'release' : 'debug')}
               >
                 {buildMode === 'debug' ? 'Debug' : 'Release'}
               </button>
             </fieldset>
-            <button
-              className="run-button"
-              type="button"
-              disabled={runDisabled}
-              title={resolutionState.error?.message}
-              onClick={() => runBuild('manual')}
-            >
-              {startOperationMutation.isPending ? (
-                <LoaderCircle className="spin" aria-hidden="true" size={15} />
-              ) : (
-                <Play aria-hidden="true" size={15} fill="currentColor" />
-              )}
+            <button className="run-button" type="button" disabled={runDisabled} title={resolutionState.error?.message} onClick={() => runBuild('manual')}>
+              {startOperationMutation.isPending ? <LoaderCircle className="spin" aria-hidden="true" size={15} /> : <Play aria-hidden="true" size={15} fill="currentColor" />}
               <span>{actionLabel(output)}</span>
             </button>
           </div>
@@ -1982,20 +1427,9 @@ function App() {
           } as CSSProperties
         }
       >
-        <section
-          className="pane source-pane"
-          data-active={mobilePane === 'code'}
-          data-workbench-pane="source"
-          aria-label="Source pane"
-        >
+        <section className="pane source-pane" data-active={mobilePane === 'code'} data-workbench-pane="source" aria-label="Source pane">
           <div className="file-tabs" data-mobile-expanded={mobileFilesExpanded}>
-            <div
-              id="workspace-file-tabs"
-              className="file-tabs-list"
-              role="tablist"
-              aria-label="Workspace files"
-              hidden={editorPreference.isMobileViewport && !mobileFilesExpanded}
-            >
+            <div id="workspace-file-tabs" className="file-tabs-list" role="tablist" aria-label="Workspace files" hidden={editorPreference.isMobileViewport && !mobileFilesExpanded}>
               {showSourceOrderControls && (
                 <fieldset className="source-order-actions">
                   <legend className="visually-hidden">Source order</legend>
@@ -2008,13 +1442,7 @@ function App() {
                   >
                     <ArrowLeft aria-hidden="true" size={13} />
                   </button>
-                  <button
-                    type="button"
-                    title={`Move ${activeFile} later in source order`}
-                    aria-label={`Move ${activeFile} later in source order`}
-                    disabled={!canMoveSourceLater}
-                    onClick={() => moveFileInSourceOrder(activeFile, 'later')}
-                  >
+                  <button type="button" title={`Move ${activeFile} later in source order`} aria-label={`Move ${activeFile} later in source order`} disabled={!canMoveSourceLater} onClick={() => moveFileInSourceOrder(activeFile, 'later')}>
                     <ArrowRight aria-hidden="true" size={13} />
                   </button>
                 </fieldset>
@@ -2052,13 +1480,7 @@ function App() {
                     </button>
                   )}
                   {activeFile === file.path && renamingPath !== file.path && (
-                    <button
-                      className="file-tab-action"
-                      type="button"
-                      title="Rename file"
-                      aria-label={`Rename ${file.path}`}
-                      onClick={() => beginRename(file.path)}
-                    >
+                    <button className="file-tab-action" type="button" title="Rename file" aria-label={`Rename ${file.path}`} onClick={() => beginRename(file.path)}>
                       <Pencil aria-hidden="true" size={12} />
                     </button>
                   )}
@@ -2107,9 +1529,7 @@ function App() {
                   languageSession={editorLanguageSession}
                   executionFlow={activeExecutionFlow}
                   sourceAssociations={sourceAssociations}
-                  activeSourceAssociationKey={
-                    hoveredSourceAssociationKey ?? activeSourceAssociationKey
-                  }
+                  activeSourceAssociationKey={hoveredSourceAssociationKey ?? activeSourceAssociationKey}
                   sourceNavigation={sourceNavigation}
                   fontSize={editorPreference.fontSize}
                   onChange={setFileSource}
@@ -2123,9 +1543,7 @@ function App() {
                   languageSession={editorLanguageSession}
                   executionFlow={activeExecutionFlow}
                   sourceAssociations={sourceAssociations}
-                  activeSourceAssociationKey={
-                    hoveredSourceAssociationKey ?? activeSourceAssociationKey
-                  }
+                  activeSourceAssociationKey={hoveredSourceAssociationKey ?? activeSourceAssociationKey}
                   sourceNavigation={sourceNavigation}
                   fontSize={editorPreference.fontSize}
                   onChange={setFileSource}
@@ -2145,12 +1563,7 @@ function App() {
           onReset={paneSplitPreference.resetSourcePercent}
         />
 
-        <section
-          className="pane result-pane"
-          data-active={mobilePane === 'result'}
-          data-workbench-pane="result"
-          aria-label="Result pane"
-        >
+        <section className="pane result-pane" data-active={mobilePane === 'result'} data-workbench-pane="result" aria-label="Result pane">
           <dl className="identity-strip identity-strip--hidden">
             {identityPresentation.items.map((item) => (
               <div key={item.id} data-identity={item.id}>
@@ -2175,11 +1588,7 @@ function App() {
             {shareError && (
               <div className="result-error" role="alert">
                 <XCircle aria-hidden="true" size={20} />
-                <strong>
-                  {shareError.action === 'restore'
-                    ? 'Share URL could not be restored'
-                    : 'Share URL could not be created'}
-                </strong>
+                <strong>{shareError.action === 'restore' ? 'Share URL could not be restored' : 'Share URL could not be created'}</strong>
                 <span>{shareError.error.message}</span>
               </div>
             )}
@@ -2206,8 +1615,7 @@ function App() {
                 presentationWorkflow
                   ? {
                       catalogRevision: presentationWorkflow.catalogRevision,
-                      referenceSetId:
-                        presentationWorkflow.resolution.effectiveSelection.referenceSetId,
+                      referenceSetId: presentationWorkflow.resolution.effectiveSelection.referenceSetId,
                       buildMode: presentationWorkflow.buildMode,
                       workspaceRevision: presentationWorkflow.workspaceRevision,
                       selectionRevision: presentationWorkflow.selectionRevision,
@@ -2216,28 +1624,16 @@ function App() {
               }
               toolbarActions={
                 <>
-                  {(resultPending ||
-                    resultVisualStatus === 'stale' ||
-                    resultVisualStatus === 'failed') && (
+                  {(resultPending || resultVisualStatus === 'stale' || resultVisualStatus === 'failed') && (
                     <span
                       className="result-state-slot"
                       role="status"
                       aria-label={`Result ${resultVisualStatus}`}
-                      title={
-                        resultVisualStatus === 'stale'
-                          ? 'Showing the previous result while the current revision updates'
-                          : resultVisualStatus === 'failed'
-                            ? 'The latest operation failed; diagnostics are selected'
-                            : 'Updating result'
-                      }
+                      title={resultVisualStatus === 'stale' ? 'Showing the previous result while the current revision updates' : resultVisualStatus === 'failed' ? 'The latest operation failed; diagnostics are selected' : 'Updating result'}
                       data-state={resultVisualStatus}
                     >
                       {resultPending ? (
-                        <LoaderCircle
-                          className="result-state-spinner"
-                          aria-hidden="true"
-                          size={14}
-                        />
+                        <LoaderCircle className="result-state-spinner" aria-hidden="true" size={14} />
                       ) : resultVisualStatus === 'stale' ? (
                         <AlertTriangle aria-hidden="true" size={14} />
                       ) : (
@@ -2248,34 +1644,17 @@ function App() {
                   <span className="operation-state visually-hidden" data-state={operationStatus}>
                     {operationStatus}
                   </span>
-                  {activeOperationId && operationEvents.streamStatus !== 'idle' && (
-                    <span className="stream-state visually-hidden">
-                      WebSocket {operationEvents.streamStatus}
-                    </span>
-                  )}
+                  {activeOperationId && operationEvents.streamStatus !== 'idle' && <span className="stream-state visually-hidden">WebSocket {operationEvents.streamStatus}</span>}
                   {activeOperationId && !operationIsTerminal && (
-                    <button
-                      className="icon-button result-stop-button"
-                      type="button"
-                      title="Cancel operation"
-                      aria-label="Cancel operation"
-                      disabled={cancelMutation.isPending}
-                      onClick={() => cancelMutation.mutate()}
-                    >
+                    <button className="icon-button result-stop-button" type="button" title="Cancel operation" aria-label="Cancel operation" disabled={cancelMutation.isPending} onClick={() => cancelMutation.mutate()}>
                       <Square aria-hidden="true" size={13} fill="currentColor" />
                     </button>
                   )}
                 </>
               }
-              onNavigateToSource={
-                presentationSourceNavigationEnabled ? navigateToResultSource : undefined
-              }
-              onSourceAssociationsChange={
-                presentationSourceNavigationEnabled ? handleSourceAssociationsChange : undefined
-              }
-              onSourceAssociationHover={
-                presentationSourceNavigationEnabled ? handleSourceAssociationHover : undefined
-              }
+              onNavigateToSource={presentationSourceNavigationEnabled ? navigateToResultSource : undefined}
+              onSourceAssociationsChange={presentationSourceNavigationEnabled ? handleSourceAssociationsChange : undefined}
+              onSourceAssociationHover={presentationSourceNavigationEnabled ? handleSourceAssociationHover : undefined}
             />
           </div>
         </section>
@@ -2283,12 +1662,7 @@ function App() {
 
       <footer className="status-bar">
         <div className="status-result-bar">
-          {outputId === 'ast' && presentationAstResult && (
-            <AstStatus
-              document={presentationAstResult.document}
-              nodeCount={presentationAstSourceMap?.nodeCount ?? 0}
-            />
-          )}
+          {outputId === 'ast' && presentationAstResult && <AstStatus document={presentationAstResult.document} nodeCount={presentationAstSourceMap?.nodeCount ?? 0} />}
           <RunStatus result={presentationRunResult} />
           <JitStatus result={presentationJitResult} />
           <div className="status-editor-settings">
@@ -2310,17 +1684,9 @@ function App() {
               <button
                 className="status-editor-switch"
                 type="button"
-                aria-label={`Editor: ${editorPreference.editor === 'monaco' ? 'Monaco' : 'CodeMirror'}. Click to switch to ${
-                  editorPreference.editor === 'monaco' ? 'CodeMirror' : 'Monaco'
-                }`}
-                title={`Editor: ${editorPreference.editor === 'monaco' ? 'Monaco' : 'CodeMirror'}. Click to switch to ${
-                  editorPreference.editor === 'monaco' ? 'CodeMirror' : 'Monaco'
-                }`}
-                onClick={() =>
-                  editorPreference.selectEditor(
-                    editorPreference.editor === 'monaco' ? 'codemirror' : 'monaco',
-                  )
-                }
+                aria-label={`Editor: ${editorPreference.editor === 'monaco' ? 'Monaco' : 'CodeMirror'}. Click to switch to ${editorPreference.editor === 'monaco' ? 'CodeMirror' : 'Monaco'}`}
+                title={`Editor: ${editorPreference.editor === 'monaco' ? 'Monaco' : 'CodeMirror'}. Click to switch to ${editorPreference.editor === 'monaco' ? 'CodeMirror' : 'Monaco'}`}
+                onClick={() => editorPreference.selectEditor(editorPreference.editor === 'monaco' ? 'codemirror' : 'monaco')}
               >
                 <span className="status-editor-switch-label">Editor:</span>
                 <span>{editorPreference.editor === 'monaco' ? 'Monaco' : 'CodeMirror'}</span>
@@ -2346,10 +1712,7 @@ function App() {
                   type="button"
                   title="Increase code font size"
                   aria-label="Increase code font size"
-                  disabled={
-                    editorPreference.fontSize ===
-                    editorFontSizeOptions[editorFontSizeOptions.length - 1]
-                  }
+                  disabled={editorPreference.fontSize === editorFontSizeOptions[editorFontSizeOptions.length - 1]}
                   onClick={() => {
                     const index = editorFontSizeOptions.indexOf(editorPreference.fontSize)
                     const next = editorFontSizeOptions[index + 1]
@@ -2363,13 +1726,7 @@ function App() {
           </div>
         </div>
       </footer>
-      <GistDialog
-        open={gistDialogOpen}
-        workspace={gistWorkspace}
-        currentGist={currentGist}
-        onClose={() => setGistDialogOpen(false)}
-        onSaved={onGistSaved}
-      />
+      <GistDialog open={gistDialogOpen} workspace={gistWorkspace} currentGist={currentGist} onClose={() => setGistDialogOpen(false)} onSaved={onGistSaved} />
     </div>
   )
 }

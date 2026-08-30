@@ -18,10 +18,7 @@ public sealed record FSharpCompiledArtifact(
     IReadOnlyList<ArtifactFileDescriptor> Files,
     BuildIdentity Identity);
 
-public sealed record FSharpWorkerBuildHttpResponse(
-    string RequestId,
-    OperationResult Result,
-    FSharpDevelopmentArtifactEnvelope? DevelopmentArtifact);
+public sealed record FSharpWorkerBuildHttpResponse(string RequestId, OperationResult Result, FSharpDevelopmentArtifactEnvelope? DevelopmentArtifact);
 
 public sealed record FSharpDevelopmentArtifactEnvelope(
     ArtifactRef ArtifactRef,
@@ -35,29 +32,14 @@ public sealed record FSharpDevelopmentArtifactEnvelope(
     IReadOnlyList<ArtifactFileDescriptor> Files,
     IReadOnlyDictionary<string, string>? FileContentsBase64 = null)
 {
-    public static FSharpDevelopmentArtifactEnvelope FromArtifact(
-        FSharpCompiledArtifact artifact,
-        FSharpDevelopmentArtifactEnvelopeOptions options)
+    public static FSharpDevelopmentArtifactEnvelope FromArtifact(FSharpCompiledArtifact artifact, FSharpDevelopmentArtifactEnvelopeOptions options)
     {
-        var totalBytes = checked(
-            artifact.PeImage.Length +
-            artifact.PortablePdb.Length +
-            artifact.FSharpCoreImage.Length);
+        var totalBytes = checked(artifact.PeImage.Length + artifact.PortablePdb.Length + artifact.FSharpCoreImage.Length);
         if (!options.Enabled)
             throw new FSharpDevelopmentArtifactEnvelopeException("The development artifact envelope is disabled.");
         if (totalBytes > options.MaxBytes)
             throw new FSharpDevelopmentArtifactEnvelopeException($"The artifact exceeds the {options.MaxBytes} byte envelope limit.");
-        return new FSharpDevelopmentArtifactEnvelope(
-            artifact.ArtifactRef,
-            artifact.ArtifactFormat,
-            artifact.AssemblyName,
-            artifact.ReferenceSetId,
-            artifact.TargetFramework,
-            null,
-            null,
-            artifact.Manifest,
-            artifact.Files,
-            CreateFileContents(artifact));
+        return new FSharpDevelopmentArtifactEnvelope(artifact.ArtifactRef, artifact.ArtifactFormat, artifact.AssemblyName, artifact.ReferenceSetId, artifact.TargetFramework, null, null, artifact.Manifest, artifact.Files, CreateFileContents(artifact));
     }
 
     private static Dictionary<string, string> CreateFileContents(FSharpCompiledArtifact artifact)
@@ -90,5 +72,4 @@ public sealed class FSharpReferenceSetUnavailableException : FSharpWorkerExcepti
 public sealed class FSharpBuildOutputLimitExceededException(string message) : FSharpWorkerException(message);
 public sealed class FSharpDevelopmentArtifactEnvelopeException(string message) : FSharpWorkerException(message);
 public sealed class FSharpCompilerFailureException(string message) : FSharpWorkerException(message);
-public sealed class FSharpBuildDeadlineExceededException(string message, CancellationToken cancellationToken)
-    : OperationCanceledException(message, cancellationToken);
+public sealed class FSharpBuildDeadlineExceededException(string message, CancellationToken cancellationToken) : OperationCanceledException(message, cancellationToken);

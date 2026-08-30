@@ -11,29 +11,14 @@ public sealed class ConstGenericsArtifactProcessorTests
     [Fact]
     public void ProtocolIdentityComesFromAssemblyMetadata()
     {
-        var metadata = typeof(ConstGenericsProcessorProtocol).Assembly
-            .GetCustomAttributes<AssemblyMetadataAttribute>()
-            .ToDictionary(attribute => attribute.Key, attribute => attribute.Value, StringComparer.Ordinal);
+        var metadata = typeof(ConstGenericsProcessorProtocol).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().ToDictionary(attribute => attribute.Key, attribute => attribute.Value, StringComparer.Ordinal);
 
-        Assert.Equal(
-            ConstGenericsProcessorProtocol.IlSpyCommit,
-            metadata["SharpLabNext.ConstGenericsIlSpyCommit"]);
-        Assert.Equal(
-            ConstGenericsProcessorProtocol.RuntimeCommit,
-            metadata["SharpLabNext.ConstGenericsRuntimeCommit"]);
-        Assert.Equal(
-            ConstGenericsProcessorProtocol.IlSpyProcessorVersion,
-            metadata["SharpLabNext.ConstGenericsIlSpyProcessorVersion"]);
-        Assert.Equal(
-            ConstGenericsProcessorProtocol.VerificationProcessorVersion,
-            metadata["SharpLabNext.ConstGenericsVerificationProcessorVersion"]);
-        Assert.Equal(
-            ConstGenericsProcessorProtocol.IlSpyCommit,
-            ConstGenericsProcessorProtocol.IlSpyProcessorVersion);
-        Assert.StartsWith(
-            ConstGenericsProcessorProtocol.RuntimeCommit + "+",
-            ConstGenericsProcessorProtocol.VerificationProcessorVersion,
-            StringComparison.Ordinal);
+        Assert.Equal(ConstGenericsProcessorProtocol.IlSpyCommit, metadata["SharpLabNext.ConstGenericsIlSpyCommit"]);
+        Assert.Equal(ConstGenericsProcessorProtocol.RuntimeCommit, metadata["SharpLabNext.ConstGenericsRuntimeCommit"]);
+        Assert.Equal(ConstGenericsProcessorProtocol.IlSpyProcessorVersion, metadata["SharpLabNext.ConstGenericsIlSpyProcessorVersion"]);
+        Assert.Equal(ConstGenericsProcessorProtocol.VerificationProcessorVersion, metadata["SharpLabNext.ConstGenericsVerificationProcessorVersion"]);
+        Assert.Equal(ConstGenericsProcessorProtocol.IlSpyCommit, ConstGenericsProcessorProtocol.IlSpyProcessorVersion);
+        Assert.StartsWith(ConstGenericsProcessorProtocol.RuntimeCommit + "+", ConstGenericsProcessorProtocol.VerificationProcessorVersion, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -47,29 +32,16 @@ public sealed class ConstGenericsArtifactProcessorTests
             var settings = ConstGenericsTestInfrastructure.Settings(root);
             var capability = ConstGenericsTestInfrastructure.CapabilityManifest();
             var runner = new ConstGenericsProcessorRunner(settings, capability);
-            var processor = new ConstGenericsArtifactProcessor(
-                new ConstGenericsArtifactMaterializer(client, settings, capability),
-                runner,
-                client,
-                settings,
-                capability);
+            var processor = new ConstGenericsArtifactProcessor(new ConstGenericsArtifactMaterializer(client, settings, capability), runner, client, settings, capability);
 
-            var il = await processor.RenderAsync(
-                ConstGenericsTestInfrastructure.RenderRequest(handler.ArtifactRef, "il"),
-                "op_il",
-                ConstGenericsProcessorOperation.Il,
-                TestContext.Current.CancellationToken);
+            var il = await processor.RenderAsync(ConstGenericsTestInfrastructure.RenderRequest(handler.ArtifactRef, "il"), "op_il", ConstGenericsProcessorOperation.Il, TestContext.Current.CancellationToken);
             var ilResult = Assert.IsType<RenderArtifactResult>(il.Result);
             Assert.Equal(ArtifactJobOutcome.Succeeded, ilResult.Outcome);
             Assert.Equal("artifacts-const-generics", ilResult.Identity?.ProcessorId);
             Assert.Equal(ConstGenericsProcessorProtocol.IlSpyProcessorVersion, ilResult.Identity?.ProcessorVersion);
             var ilContent = Encoding.UTF8.GetString(handler.GetUploadedContent(Assert.IsType<ContentRef>(ilResult.ContentRef)));
-            Assert.Contains(
-                $"ConstGenerics ILSpy {ConstGenericsProcessorProtocol.IlSpyCommit}",
-                ilContent);
-            var assemblyIndex = ilContent.IndexOf(
-                ".assembly SharpLabNext.Worker.Artifacts.Default.Fixture",
-                StringComparison.Ordinal);
+            Assert.Contains($"ConstGenerics ILSpy {ConstGenericsProcessorProtocol.IlSpyCommit}", ilContent);
+            var assemblyIndex = ilContent.IndexOf(".assembly SharpLabNext.Worker.Artifacts.Default.Fixture", StringComparison.Ordinal);
             var classIndex = ilContent.IndexOf(".class", StringComparison.Ordinal);
             Assert.True(assemblyIndex >= 0, "Generated IL does not contain the assembly manifest.");
             Assert.True(classIndex > assemblyIndex, "The assembly manifest must precede type definitions.");
@@ -78,40 +50,23 @@ public sealed class ConstGenericsArtifactProcessorTests
             Assert.DoesNotContain("// sequence point:", ilContent, StringComparison.Ordinal);
             Assert.DoesNotContain('\t', ilContent);
 
-            var csharp = await processor.RenderAsync(
-                ConstGenericsTestInfrastructure.RenderRequest(handler.ArtifactRef, "decompiled-csharp"),
-                "op_csharp",
-                ConstGenericsProcessorOperation.DecompiledCSharp,
-                TestContext.Current.CancellationToken);
+            var csharp = await processor.RenderAsync(ConstGenericsTestInfrastructure.RenderRequest(handler.ArtifactRef, "decompiled-csharp"), "op_csharp", ConstGenericsProcessorOperation.DecompiledCSharp, TestContext.Current.CancellationToken);
             var csharpResult = Assert.IsType<RenderArtifactResult>(csharp.Result);
             Assert.Equal(ArtifactJobOutcome.Succeeded, csharpResult.Outcome);
-            var csharpContent = Encoding.UTF8.GetString(
-                handler.GetUploadedContent(Assert.IsType<ContentRef>(csharpResult.ContentRef)));
+            var csharpContent = Encoding.UTF8.GetString(handler.GetUploadedContent(Assert.IsType<ContentRef>(csharpResult.ContentRef)));
             Assert.Contains("Decompiled with ConstGenerics ILSpy", csharpContent);
             Assert.Contains("class Program", csharpContent);
             Assert.Contains("GeneratedHelper", csharpContent, StringComparison.Ordinal);
             Assert.Equal(1, CountOccurrences(csharpContent, "GeneratedHelper"));
-            Assert.DoesNotContain(
-                "Explicit compiler-generated members",
-                csharpContent,
-                StringComparison.Ordinal);
+            Assert.DoesNotContain("Explicit compiler-generated members", csharpContent, StringComparison.Ordinal);
             Assert.DoesNotContain('\t', csharpContent);
 
-            var verification = await processor.VerifyAsync(
-                ConstGenericsTestInfrastructure.VerifyRequest(handler.ArtifactRef),
-                "op_verify",
-                TestContext.Current.CancellationToken);
+            var verification = await processor.VerifyAsync(ConstGenericsTestInfrastructure.VerifyRequest(handler.ArtifactRef), "op_verify", TestContext.Current.CancellationToken);
             var verificationResult = Assert.IsType<VerifyArtifactResult>(verification.Result);
-            Assert.True(
-                verificationResult.Outcome is ArtifactVerificationOutcome.Valid or ArtifactVerificationOutcome.Findings,
-                $"Unexpected verification outcome: {verificationResult.Outcome}");
+            Assert.True(verificationResult.Outcome is ArtifactVerificationOutcome.Valid or ArtifactVerificationOutcome.Findings, $"Unexpected verification outcome: {verificationResult.Outcome}");
             Assert.Equal("ilverification-const-generics", verificationResult.VerifierId);
-            Assert.Equal(
-                ConstGenericsProcessorProtocol.VerificationProcessorVersion,
-                verificationResult.VerifierVersion);
-            Assert.Equal(
-                ConstGenericsProcessorProtocol.VerificationProcessorVersion,
-                verificationResult.Identity?.ProcessorVersion);
+            Assert.Equal(ConstGenericsProcessorProtocol.VerificationProcessorVersion, verificationResult.VerifierVersion);
+            Assert.Equal(ConstGenericsProcessorProtocol.VerificationProcessorVersion, verificationResult.Identity?.ProcessorVersion);
 
             Assert.Equal(3, runner.StartedProcessCount);
             Assert.Equal(3, handler.LeaseAcquisitionCount);
@@ -142,32 +97,13 @@ public sealed class ConstGenericsArtifactProcessorTests
 
             var handler = new ConstGenericsArtifactStoreHandler();
             var client = ConstGenericsTestInfrastructure.CreateClient(handler);
-            var runner = new ConstGenericsProcessorRunner(
-                ConstGenericsTestInfrastructure.Settings(root),
-                ConstGenericsTestInfrastructure.CapabilityManifest());
-            var artifact = new MaterializedConstGenericsArtifact(
-                handler.ArtifactRef,
-                artifactRoot,
-                assemblyPath,
-                pdbPath,
-                handler.Bundle.Manifest,
-                "unused",
-                client);
+            var runner = new ConstGenericsProcessorRunner(ConstGenericsTestInfrastructure.Settings(root), ConstGenericsTestInfrastructure.CapabilityManifest());
+            var artifact = new MaterializedConstGenericsArtifact(handler.ArtifactRef, artifactRoot, assemblyPath, pdbPath, handler.Bundle.Manifest, "unused", client);
 
-            var result = await runner.RunAsync(
-                artifact,
-                ConstGenericsProcessorOperation.Il,
-                includeSequencePoints: true,
-                includeCompilerGeneratedMembers: true,
-                includeMetadataTokens: true,
-                maxCharacters: 1_000_000,
-                maxFindings: 1_000,
-                TestContext.Current.CancellationToken);
+            var result = await runner.RunAsync(artifact, ConstGenericsProcessorOperation.Il, includeSequencePoints: true, includeCompilerGeneratedMembers: true, includeMetadataTokens: true, maxCharacters: 1_000_000, maxFindings: 1_000, TestContext.Current.CancellationToken);
 
             Assert.Equal(ConstGenericsProcessorOutcome.Succeeded, result.Response.Outcome);
-            var content = await File.ReadAllTextAsync(
-                result.OutputPath,
-                TestContext.Current.CancellationToken);
+            var content = await File.ReadAllTextAsync(result.OutputPath, TestContext.Current.CancellationToken);
             Assert.DoesNotContain("// sequence point:", content, StringComparison.Ordinal);
             Assert.NotEmpty(result.Response.LinkedRanges);
             var visibleLines = content.Split('\n');
@@ -175,9 +111,7 @@ public sealed class ConstGenericsArtifactProcessorTests
             {
                 Assert.InRange(range.OutputRange.StartLine, 0, visibleLines.Length - 1);
                 var linkedLine = visibleLines[range.OutputRange.StartLine].TrimStart();
-                Assert.True(
-                    linkedLine.StartsWith("IL_", StringComparison.Ordinal),
-                    $"Linked range points to a non-instruction line: '{linkedLine}'.");
+                Assert.True(linkedLine.StartsWith("IL_", StringComparison.Ordinal), $"Linked range points to a non-instruction line: '{linkedLine}'.");
             });
         }
         finally
@@ -192,9 +126,7 @@ public sealed class ConstGenericsArtifactProcessorTests
         var root = ConstGenericsTestInfrastructure.CreateRoot();
         try
         {
-            var runner = new ConstGenericsProcessorRunner(
-                ConstGenericsTestInfrastructure.Settings(root),
-                ConstGenericsTestInfrastructure.CapabilityManifest());
+            var runner = new ConstGenericsProcessorRunner(ConstGenericsTestInfrastructure.Settings(root), ConstGenericsTestInfrastructure.CapabilityManifest());
             var health = await runner.CheckHealthAsync(TestContext.Current.CancellationToken);
 
             Assert.True(health.IsHealthy, health.Message);

@@ -12,19 +12,9 @@ public sealed class OperationRegistryTests
         var root = TestSettings.CreateRoot();
         try
         {
-            using var registry = new ArtifactOperationRegistry(
-                TestSettings.Create(root),
-                NullLogger<ArtifactOperationRegistry>.Instance);
-            var first = registry.Start(
-                "request-1",
-                "same-key",
-                OperationKind.RenderArtifact,
-                static (_, _) => Task.FromResult(Success()));
-            var second = registry.Start(
-                "request-2",
-                "same-key",
-                OperationKind.RenderArtifact,
-                static (_, _) => throw new InvalidOperationException("Must not execute."));
+            using var registry = new ArtifactOperationRegistry(TestSettings.Create(root), NullLogger<ArtifactOperationRegistry>.Instance);
+            var first = registry.Start("request-1", "same-key", OperationKind.RenderArtifact, static (_, _) => Task.FromResult(Success()));
+            var second = registry.Start("request-2", "same-key", OperationKind.RenderArtifact, static (_, _) => throw new InvalidOperationException("Must not execute."));
             Assert.False(first.IsExisting);
             Assert.True(second.IsExisting);
             Assert.Equal(first.OperationId, second.OperationId);
@@ -47,9 +37,7 @@ public sealed class OperationRegistryTests
         var root = TestSettings.CreateRoot();
         try
         {
-            using var registry = new ArtifactOperationRegistry(
-                TestSettings.Create(root),
-                NullLogger<ArtifactOperationRegistry>.Instance);
+            using var registry = new ArtifactOperationRegistry(TestSettings.Create(root), NullLogger<ArtifactOperationRegistry>.Instance);
             var handle = registry.Start(
                 "request-cancel",
                 "cancel-key",
@@ -71,16 +59,9 @@ public sealed class OperationRegistryTests
         }
     }
 
-    private static ArtifactJobExecution Success() => new(new RenderArtifactResult(
-        ArtifactJobOutcome.Succeeded,
-        null,
-        "text/plain",
-        [],
-        []));
+    private static ArtifactJobExecution Success() => new(new RenderArtifactResult(ArtifactJobOutcome.Succeeded, null, "text/plain", [], []));
 
-    private static async Task<OperationState> WaitForTerminalAsync(
-        ArtifactOperationRegistry registry,
-        string operationId)
+    private static async Task<OperationState> WaitForTerminalAsync(ArtifactOperationRegistry registry, string operationId)
     {
         for (var attempt = 0; attempt < 100; attempt++)
         {

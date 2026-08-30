@@ -41,9 +41,7 @@ public static partial class Inspect
     public static void Allocations<T>(Func<T> action)
     {
         if (action is null)
-        {
             throw new ArgumentNullException(nameof(action));
-        }
         Allocations((Action)(() =>
         {
             _ = action();
@@ -53,9 +51,7 @@ public static partial class Inspect
     public static void Allocations(Action action)
     {
         if (action is null)
-        {
             throw new ArgumentNullException(nameof(action));
-        }
         var before = GC.GetAllocatedBytesForCurrentThread();
         try
         {
@@ -64,10 +60,7 @@ public static partial class Inspect
         finally
         {
             var allocated = Math.Max(0, GC.GetAllocatedBytesForCurrentThread() - before);
-            RuntimeServices.Write(new InspectionRecord(
-                InspectionKind.Allocations,
-                "Allocations",
-                new AllocationInspection(allocated)));
+            RuntimeServices.Write(new InspectionRecord(InspectionKind.Allocations, "Allocations", new AllocationInspection(allocated)));
         }
     }
 

@@ -11,7 +11,7 @@ import {
   maximumWineOperatorSizeBytes,
   wineCoreClrOperatorCommittedFiles,
   wineCoreClrOperatorReceiptPublicKeyPath,
-} from './wine-coreclr-operator-receipt.mjs'
+} from '../release/wine-coreclr-operator-receipt.mjs'
 
 function receipt() {
   return createWineCoreClrOperatorReceipt({
@@ -98,6 +98,5 @@ test('operator receipt canonical JSON uses ordinal label order and bounds image 
   value.operator.sizeBytes = maximumWineOperatorSizeBytes
   assert.doesNotThrow(() => createWineCoreClrOperatorReceipt(value))
   value.operator.sizeBytes++
-  assert.throws(() => createWineCoreClrOperatorReceipt(value),
-    /operator\.sizeBytes must be between 1 and 17179869184/)
+  assert.throws(() => createWineCoreClrOperatorReceipt(value), /operator\.sizeBytes must be between 1 and 17179869184/)
 })

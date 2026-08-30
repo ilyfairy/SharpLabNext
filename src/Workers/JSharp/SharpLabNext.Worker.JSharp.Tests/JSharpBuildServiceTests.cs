@@ -14,18 +14,10 @@ public sealed class JSharpBuildServiceTests
         var root = JSharpTestSettings.CreateRoot();
         try
         {
-            var compiler = new FakeJSharpCompilerProcess(new JSharpCompilerInvocation(
-                true,
-                JSharpTestSettings.CreateClr2ManagedPe(),
-                []));
-            var service = new JSharpBuildService(
-                compiler,
-                JSharpTestSettings.CreateSettings(root),
-                JSharpTestSettings.LoadManifest());
+            var compiler = new FakeJSharpCompilerProcess(new JSharpCompilerInvocation(true, JSharpTestSettings.CreateClr2ManagedPe(), []));
+            var service = new JSharpBuildService(compiler, JSharpTestSettings.CreateSettings(root), JSharpTestSettings.LoadManifest());
 
-            var execution = await service.BuildAsync(
-                JSharpTestSettings.CreateRequest(BuildTarget.Artifact),
-                TestContext.Current.CancellationToken);
+            var execution = await service.BuildAsync(JSharpTestSettings.CreateRequest(BuildTarget.Artifact), TestContext.Current.CancellationToken);
 
             var result = Assert.IsType<BuildResult>(execution.Result);
             Assert.Equal(BuildOutcome.Succeeded, result.Outcome);
@@ -34,12 +26,8 @@ public sealed class JSharpBuildServiceTests
             Assert.Equal(JSharpToolchain.TargetFramework, envelope.TargetFramework);
             Assert.Equal(JSharpToolchain.RuntimeFamily, envelope.Manifest.RuntimeRequirement.Family);
             Assert.Equal(JSharpToolchain.Architecture, envelope.Manifest.RuntimeRequirement.Architecture);
-            Assert.Equal(
-                [JSharpToolchain.RuntimeFeatureTag],
-                envelope.Manifest.RuntimeRequirement.RequiredRuntimeFeatureTags);
-            Assert.Equal(
-                new FrameworkRequirement(JSharpToolchain.FrameworkName, JSharpToolchain.FrameworkVersion),
-                Assert.Single(envelope.Manifest.RuntimeRequirement.Frameworks));
+            Assert.Equal([JSharpToolchain.RuntimeFeatureTag], envelope.Manifest.RuntimeRequirement.RequiredRuntimeFeatureTags);
+            Assert.Equal(new FrameworkRequirement(JSharpToolchain.FrameworkName, JSharpToolchain.FrameworkVersion), Assert.Single(envelope.Manifest.RuntimeRequirement.Frameworks));
             Assert.Equal("Program::main", envelope.Manifest.EntryPoint);
             Assert.Equal(JSharpToolchain.OutputFileName, envelope.Manifest.EntryAssembly);
             Assert.Equal("primary-assembly", Assert.Single(envelope.Files).Role);
@@ -61,18 +49,10 @@ public sealed class JSharpBuildServiceTests
         var root = JSharpTestSettings.CreateRoot();
         try
         {
-            var compiler = new FakeJSharpCompilerProcess(new JSharpCompilerInvocation(
-                true,
-                JSharpTestSettings.CreateClr2ManagedPe(),
-                []));
-            var service = new JSharpBuildService(
-                compiler,
-                JSharpTestSettings.CreateSettings(root),
-                JSharpTestSettings.LoadManifest());
+            var compiler = new FakeJSharpCompilerProcess(new JSharpCompilerInvocation(true, JSharpTestSettings.CreateClr2ManagedPe(), []));
+            var service = new JSharpBuildService(compiler, JSharpTestSettings.CreateSettings(root), JSharpTestSettings.LoadManifest());
 
-            var execution = await service.BuildAsync(
-                JSharpTestSettings.CreateRequest(BuildTarget.CompileCheck),
-                TestContext.Current.CancellationToken);
+            var execution = await service.BuildAsync(JSharpTestSettings.CreateRequest(BuildTarget.CompileCheck), TestContext.Current.CancellationToken);
 
             Assert.True(Assert.IsType<CompilationCheckResult>(execution.Result).CompilationSucceeded);
             Assert.Null(execution.Artifact);
@@ -90,26 +70,11 @@ public sealed class JSharpBuildServiceTests
         var root = JSharpTestSettings.CreateRoot();
         try
         {
-            var diagnostic = new Diagnostic(
-                "vjc",
-                "VJS1234",
-                DiagnosticSeverity.Error,
-                "synthetic failure",
-                "Program.jsl",
-                new TextRange(1, 2, 1, 3),
-                [],
-                [],
-                7,
-                3);
+            var diagnostic = new Diagnostic("vjc", "VJS1234", DiagnosticSeverity.Error, "synthetic failure", "Program.jsl", new TextRange(1, 2, 1, 3), [], [], 7, 3);
             var compiler = new FakeJSharpCompilerProcess(new JSharpCompilerInvocation(false, [], [diagnostic]));
-            var service = new JSharpBuildService(
-                compiler,
-                JSharpTestSettings.CreateSettings(root),
-                JSharpTestSettings.LoadManifest());
+            var service = new JSharpBuildService(compiler, JSharpTestSettings.CreateSettings(root), JSharpTestSettings.LoadManifest());
 
-            var execution = await service.BuildAsync(
-                JSharpTestSettings.CreateRequest(BuildTarget.Artifact, "DIAGNOSTIC"),
-                TestContext.Current.CancellationToken);
+            var execution = await service.BuildAsync(JSharpTestSettings.CreateRequest(BuildTarget.Artifact, "DIAGNOSTIC"), TestContext.Current.CancellationToken);
 
             var result = Assert.IsType<BuildResult>(execution.Result);
             Assert.Equal(BuildOutcome.CompilationFailed, result.Outcome);
@@ -133,17 +98,9 @@ public sealed class JSharpBuildServiceTests
                 await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
                 throw new InvalidOperationException("unreachable");
             });
-            var service = new JSharpBuildService(
-                compiler,
-                JSharpTestSettings.CreateSettings(root),
-                JSharpTestSettings.LoadManifest());
+            var service = new JSharpBuildService(compiler, JSharpTestSettings.CreateSettings(root), JSharpTestSettings.LoadManifest());
 
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                service.BuildAsync(
-                    JSharpTestSettings.CreateRequest(
-                        BuildTarget.Artifact,
-                        deadlineUtc: DateTimeOffset.UtcNow.AddMilliseconds(100)),
-                    CancellationToken.None));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.BuildAsync(JSharpTestSettings.CreateRequest(BuildTarget.Artifact, deadlineUtc: DateTimeOffset.UtcNow.AddMilliseconds(100)), CancellationToken.None));
         }
         finally
         {
@@ -157,27 +114,12 @@ public sealed class JSharpBuildServiceTests
         var root = JSharpTestSettings.CreateRoot();
         try
         {
-            var compiler = new FakeJSharpCompilerProcess(new JSharpCompilerInvocation(
-                true,
-                JSharpTestSettings.CreateClr2ManagedPe(),
-                []));
-            var service = new JSharpBuildService(
-                compiler,
-                JSharpTestSettings.CreateSettings(root),
-                JSharpTestSettings.LoadManifest());
+            var compiler = new FakeJSharpCompilerProcess(new JSharpCompilerInvocation(true, JSharpTestSettings.CreateClr2ManagedPe(), []));
+            var service = new JSharpBuildService(compiler, JSharpTestSettings.CreateSettings(root), JSharpTestSettings.LoadManifest());
             var request = JSharpTestSettings.CreateRequest(BuildTarget.CompileCheck);
-            request = request with
-            {
-                Workspace = request.Workspace with
-                {
-                    Files = [new WorkspaceFile("../Program.jsl", 1, request.Workspace.Files[0].Text)],
-                    ActiveFile = "../Program.jsl",
-                    SourceOrder = ["../Program.jsl"]
-                }
-            };
+            request = request with { Workspace = request.Workspace with { Files = [new WorkspaceFile("../Program.jsl", 1, request.Workspace.Files[0].Text)], ActiveFile = "../Program.jsl", SourceOrder = ["../Program.jsl"] } };
 
-            var exception = await Assert.ThrowsAsync<LanguageWorkerRequestException>(() =>
-                service.BuildAsync(request, TestContext.Current.CancellationToken));
+            var exception = await Assert.ThrowsAsync<LanguageWorkerRequestException>(() => service.BuildAsync(request, TestContext.Current.CancellationToken));
 
             Assert.Equal("invalid-workspace", exception.Code);
             Assert.Equal(0, compiler.CallCount);
@@ -191,10 +133,8 @@ public sealed class JSharpBuildServiceTests
     [Fact]
     public void AnyCpuAndModernClrAssembliesAreRejected()
     {
-        var anyCpu = Assert.Throws<LanguageWorkerRequestException>(() =>
-            JSharpBuildService.InspectManagedClr2Pe(JSharpTestSettings.CreateClr2ManagedPe(Machine.I386)));
-        var modernClr = Assert.Throws<LanguageWorkerRequestException>(() =>
-            JSharpBuildService.InspectManagedClr2Pe(File.ReadAllBytes(typeof(JSharpBuildServiceTests).Assembly.Location)));
+        var anyCpu = Assert.Throws<LanguageWorkerRequestException>(() => JSharpBuildService.InspectManagedClr2Pe(JSharpTestSettings.CreateClr2ManagedPe(Machine.I386)));
+        var modernClr = Assert.Throws<LanguageWorkerRequestException>(() => JSharpBuildService.InspectManagedClr2Pe(File.ReadAllBytes(typeof(JSharpBuildServiceTests).Assembly.Location)));
 
         Assert.Equal("compiler-invalid-output", anyCpu.Code);
         Assert.Equal("compiler-invalid-output", modernClr.Code);
@@ -203,9 +143,7 @@ public sealed class JSharpBuildServiceTests
     [Fact]
     public void Preferred32BitClrFlagIsRejected()
     {
-        var exception = Assert.Throws<LanguageWorkerRequestException>(() =>
-            JSharpBuildService.InspectManagedClr2Pe(JSharpTestSettings.CreateClr2ManagedPe(
-                flags: CorFlags.ILOnly | CorFlags.Prefers32Bit)));
+        var exception = Assert.Throws<LanguageWorkerRequestException>(() => JSharpBuildService.InspectManagedClr2Pe(JSharpTestSettings.CreateClr2ManagedPe(flags: CorFlags.ILOnly | CorFlags.Prefers32Bit)));
 
         Assert.Equal("compiler-invalid-output", exception.Code);
     }

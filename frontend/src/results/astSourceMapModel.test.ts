@@ -19,18 +19,33 @@ const document: AstDocument = {
         children: [
           {
             kind: 'IdentifierName',
-            range: { startLine: 0, startCharacter: 0, endLine: 0, endCharacter: 7 },
+            range: {
+              startLine: 0,
+              startCharacter: 0,
+              endLine: 0,
+              endCharacter: 7,
+            },
             properties: { isNode: 'true' },
             children: [
               {
                 kind: 'IdentifierToken',
-                range: { startLine: 0, startCharacter: 0, endLine: 0, endCharacter: 7 },
+                range: {
+                  startLine: 0,
+                  startCharacter: 0,
+                  endLine: 0,
+                  endCharacter: 7,
+                },
                 properties: { isToken: 'true' },
                 children: [],
               },
               {
                 kind: 'WhitespaceTrivia',
-                range: { startLine: 0, startCharacter: 7, endLine: 0, endCharacter: 8 },
+                range: {
+                  startLine: 0,
+                  startCharacter: 7,
+                  endLine: 0,
+                  endCharacter: 8,
+                },
                 properties: { isTrivia: 'true' },
                 children: [],
               },

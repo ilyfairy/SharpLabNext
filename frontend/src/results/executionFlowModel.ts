@@ -72,23 +72,11 @@ interface ParsedFlowPayload {
 
 const invalidPayloadMessage = 'The runtime returned an invalid execution-flow payload.'
 
-export function currentExecutionFlowSourceModel(
-  model: ExecutionFlowSourceModel,
-  result: ExecutionFlowRevisionIdentity | null,
-  current: ExecutionFlowRevisionIdentity,
-): ExecutionFlowSourceModel | null {
-  return result?.outputId === 'execution-flow' &&
-    current.outputId === 'execution-flow' &&
-    result.workspaceRevision === current.workspaceRevision &&
-    result.selectionRevision === current.selectionRevision
-    ? model
-    : null
+export function currentExecutionFlowSourceModel(model: ExecutionFlowSourceModel, result: ExecutionFlowRevisionIdentity | null, current: ExecutionFlowRevisionIdentity): ExecutionFlowSourceModel | null {
+  return result?.outputId === 'execution-flow' && current.outputId === 'execution-flow' && result.workspaceRevision === current.workspaceRevision && result.selectionRevision === current.selectionRevision ? model : null
 }
 
-export function createExecutionFlowSourceModel(
-  events: readonly OperationEvent[],
-  files: readonly WorkspaceFile[],
-): ExecutionFlowSourceModel {
+export function createExecutionFlowSourceModel(events: readonly OperationEvent[], files: readonly WorkspaceFile[]): ExecutionFlowSourceModel {
   const filesByPath = new Map(files.map((file) => [file.path, file]))
   const timeline: ExecutionFlowTimelineEntry[] = []
   const hits = new Map<string, ExecutionFlowSourceHit>()
@@ -123,14 +111,7 @@ export function createExecutionFlowSourceModel(
     })
 
     if (!target) continue
-    const key = JSON.stringify([
-      target.documentPath,
-      target.range.startLine,
-      target.range.startColumn,
-      target.range.endLine,
-      target.range.endColumn,
-      payload.eventKind,
-    ])
+    const key = JSON.stringify([target.documentPath, target.range.startLine, target.range.startColumn, target.range.endLine, target.range.endColumn, payload.eventKind])
     const existing = hits.get(key)
     if (existing) {
       existing.count += 1
@@ -152,39 +133,26 @@ export function toEditorRange(range: RuntimeFlowRange) {
 }
 
 export function validateSourceRange(text: string, range: RuntimeFlowRange): string | null {
-  if (
-    ![range.startLine, range.startColumn, range.endLine, range.endColumn].every(isPositiveInteger)
-  ) {
+  if (![range.startLine, range.startColumn, range.endLine, range.endColumn].every(isPositiveInteger)) {
     return 'Execution-flow ranges must use positive 1-based coordinates.'
   }
   const lines = text.split(/\r\n|\r|\n/)
   if (range.startLine > lines.length || range.endLine > lines.length) {
     return 'The execution-flow range is outside the source document.'
   }
-  if (
-    range.endLine < range.startLine ||
-    (range.endLine === range.startLine && range.endColumn < range.startColumn)
-  ) {
+  if (range.endLine < range.startLine || (range.endLine === range.startLine && range.endColumn < range.startColumn)) {
     return 'The execution-flow range ends before it starts.'
   }
 
   const startText = lines[range.startLine - 1]
   const endText = lines[range.endLine - 1]
-  if (
-    startText === undefined ||
-    endText === undefined ||
-    range.startColumn > startText.length + 1 ||
-    range.endColumn > endText.length + 1
-  ) {
+  if (startText === undefined || endText === undefined || range.startColumn > startText.length + 1 || range.endColumn > endText.length + 1) {
     return 'The execution-flow range is outside the source document.'
   }
   return null
 }
 
-function validateSourceTarget(
-  payload: RuntimeFlowPayload,
-  filesByPath: ReadonlyMap<string, WorkspaceFile>,
-): { target: ExecutionFlowSourceTarget | null; error: string | null } {
+function validateSourceTarget(payload: RuntimeFlowPayload, filesByPath: ReadonlyMap<string, WorkspaceFile>): { target: ExecutionFlowSourceTarget | null; error: string | null } {
   if (!payload.documentPath || !payload.range) return { target: null, error: null }
   const documentPath = resolveWorkspacePath(payload.documentPath, filesByPath)
   if (!documentPath) {
@@ -196,25 +164,17 @@ function validateSourceTarget(
   const file = filesByPath.get(documentPath)
   if (!file) throw new Error('Resolved execution-flow workspace path is missing.')
   const error = validateSourceRange(file.text, payload.range)
-  return error
-    ? { target: null, error }
-    : { target: { documentPath, range: payload.range }, error: null }
+  return error ? { target: null, error } : { target: { documentPath, range: payload.range }, error: null }
 }
 
-function resolveWorkspacePath(
-  documentPath: string,
-  filesByPath: ReadonlyMap<string, WorkspaceFile>,
-): string | null {
+function resolveWorkspacePath(documentPath: string, filesByPath: ReadonlyMap<string, WorkspaceFile>): string | null {
   if (filesByPath.has(documentPath)) return documentPath
 
   const normalizedDocumentPath = normalizePath(documentPath)
   const matches: string[] = []
   for (const workspacePath of filesByPath.keys()) {
     const normalizedWorkspacePath = normalizePath(workspacePath)
-    if (
-      normalizedDocumentPath === normalizedWorkspacePath ||
-      normalizedDocumentPath.endsWith(`/${normalizedWorkspacePath}`)
-    ) {
+    if (normalizedDocumentPath === normalizedWorkspacePath || normalizedDocumentPath.endsWith(`/${normalizedWorkspacePath}`)) {
       matches.push(workspacePath)
     }
   }
@@ -282,12 +242,11 @@ function parseRange(value: unknown): ParsedRange {
     endLine: value.EndLine as number,
     endColumn: value.EndColumn as number,
   }
-  if (
-    runtimeRange.endLine < runtimeRange.startLine ||
-    (runtimeRange.endLine === runtimeRange.startLine &&
-      runtimeRange.endColumn < runtimeRange.startColumn)
-  ) {
-    return { range: null, error: 'The execution-flow range ends before it starts.' }
+  if (runtimeRange.endLine < runtimeRange.startLine || (runtimeRange.endLine === runtimeRange.startLine && runtimeRange.endColumn < runtimeRange.startColumn)) {
+    return {
+      range: null,
+      error: 'The execution-flow range ends before it starts.',
+    }
   }
   return {
     range: {

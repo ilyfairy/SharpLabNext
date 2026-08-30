@@ -3,17 +3,7 @@ import { outputFoldingRanges } from './outputFoldingModel'
 
 describe('output folding model', () => {
   it('folds JIT methods and nested basic-block labels', () => {
-    const text = [
-      'Program:A():int:',
-      '  mov eax, 1',
-      '  ret',
-      '',
-      'Program:B(int,int):double:',
-      'G_M000_IG01:',
-      '  add edi, esi',
-      'G_M000_IG02:',
-      '  ret',
-    ].join('\n')
+    const text = ['Program:A():int:', '  mov eax, 1', '  ret', '', 'Program:B(int,int):double:', 'G_M000_IG01:', '  add edi, esi', 'G_M000_IG02:', '  ret'].join('\n')
 
     expect(outputFoldingRanges(text, 'asm')).toEqual([
       { startLine: 1, endLine: 3, kind: 'method' },

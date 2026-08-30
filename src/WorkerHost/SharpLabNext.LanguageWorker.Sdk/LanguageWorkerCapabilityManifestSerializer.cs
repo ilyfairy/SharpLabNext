@@ -24,15 +24,12 @@ public static partial class LanguageWorkerCapabilityManifestSerializer
     public static LanguageWorkerCapabilityManifest Load(Stream content)
     {
         ArgumentNullException.ThrowIfNull(content);
-        var manifest = JsonSerializer.Deserialize<LanguageWorkerCapabilityManifest>(content, JsonOptions)
-            ?? throw new InvalidDataException("The language worker capability manifest is empty.");
+        var manifest = JsonSerializer.Deserialize<LanguageWorkerCapabilityManifest>(content, JsonOptions) ?? throw new InvalidDataException("The language worker capability manifest is empty.");
         Validate(manifest);
         return manifest;
     }
 
-    public static void Validate(
-        LanguageWorkerCapabilityManifest manifest,
-        ServiceIdentity? serviceIdentity = null)
+    public static void Validate(LanguageWorkerCapabilityManifest manifest, ServiceIdentity? serviceIdentity = null)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         if (manifest.SchemaVersion != 2)
@@ -86,12 +83,7 @@ public static partial class LanguageWorkerCapabilityManifestSerializer
     private static void ValidateLimits(LanguageWorkerLimits limits)
     {
         ArgumentNullException.ThrowIfNull(limits);
-        if (limits.MaximumFiles <= 0 ||
-            limits.MaximumSourceUtf8Bytes <= 0 ||
-            limits.MaximumArtifactBytes <= 0 ||
-            limits.MaximumConcurrentBuilds <= 0 ||
-            limits.MaximumBuildMilliseconds <= 0 ||
-            limits.MaximumLspMessageBytes <= 0)
+        if (limits.MaximumFiles <= 0 || limits.MaximumSourceUtf8Bytes <= 0 || limits.MaximumArtifactBytes <= 0 || limits.MaximumConcurrentBuilds <= 0 || limits.MaximumBuildMilliseconds <= 0 || limits.MaximumLspMessageBytes <= 0)
         {
             throw new ArgumentException("Every language worker limit must be positive.", nameof(limits));
         }

@@ -33,12 +33,7 @@ namespace SharpLabNext.TargetRuntimeRunner
             return Encoding.UTF8.GetBytes(json.ToString());
         }
 
-        private static void WriteExceptionObject(
-            StringBuilder json,
-            Exception exception,
-            int depth,
-            bool includeElapsed,
-            double elapsedMilliseconds)
+        private static void WriteExceptionObject(StringBuilder json, Exception exception, int depth, bool includeElapsed, double elapsedMilliseconds)
         {
             json.Append('{');
             WritePropertyName(json, "TypeName");
@@ -66,9 +61,7 @@ namespace SharpLabNext.TargetRuntimeRunner
 
         private static void WriteFiniteDouble(StringBuilder json, double value)
         {
-            json.Append(double.IsNaN(value) || double.IsInfinity(value)
-                ? "0"
-                : value.ToString("R", CultureInfo.InvariantCulture));
+            json.Append(double.IsNaN(value) || double.IsInfinity(value) ? "0" : value.ToString("R", CultureInfo.InvariantCulture));
         }
 
         private static void WritePropertyName(StringBuilder json, string name)

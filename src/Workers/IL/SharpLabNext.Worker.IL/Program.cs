@@ -8,13 +8,9 @@ using SharpLabNext.Worker.IL;
 using SharpLabNext.WorkerHost;
 
 var builder = WebApplication.CreateBuilder(args);
-var internalServiceAuthentication = InternalServiceAuthenticationOptions.FromConfiguration(
-    builder.Configuration,
-    builder.Environment);
+var internalServiceAuthentication = InternalServiceAuthenticationOptions.FromConfiguration(builder.Configuration, builder.Environment);
 var settings = IlWorkerSettings.FromConfiguration(builder.Configuration);
-builder.AddSharpLabNextObservability(
-    settings.Identity.ToolchainId,
-    settings.Identity.ReleaseId);
+builder.AddSharpLabNextObservability(settings.Identity.ToolchainId, settings.Identity.ReleaseId);
 builder.Services.AddSingleton(settings);
 builder.Services.AddSingleton(settings.Identity);
 builder.Services.AddSingleton(settings.CompilationLimits);
@@ -27,10 +23,7 @@ builder.Services.AddHttpClient<IArtifactStoreClient, ArtifactStoreClient>(client
     client.Timeout = Timeout.InfiniteTimeSpan;
     internalServiceAuthentication.ConfigureClient(client);
 });
-builder.Services.AddSingleton(new IlReferenceSetProvider(
-    settings.ReferenceSets,
-    builder.Environment.IsProduction() ||
-    builder.Configuration.GetValue("ReferenceSetAttestation:Required", false)));
+builder.Services.AddSingleton(new IlReferenceSetProvider(settings.ReferenceSets, builder.Environment.IsProduction() || builder.Configuration.GetValue("ReferenceSetAttestation:Required", false)));
 builder.Services.AddSingleton<IlAssemblerProcess>();
 builder.Services.AddSingleton<IlBuildService>();
 builder.Services.AddSingleton<IlArtifactPublisher>();
@@ -38,13 +31,7 @@ builder.Services.AddSingleton<IlLanguageService>();
 builder.Services.AddSingleton<IlLanguageSessionManager>();
 builder.Services.AddSingleton(IlWorkerProcessIdentity.Create());
 builder.Services.AddSingleton<IlWorkerHealthService>();
-builder.Services.AddSharpLabNextWorker(new ServiceIdentity(
-    settings.Identity.ToolchainId,
-    ServiceKind.ToolchainWorker,
-    settings.Identity.ReleaseId,
-    ProtocolVersion.WorkerV1,
-    ["compile-check", "managed-pe", "multi-file", "lsp"],
-    "starting"));
+builder.Services.AddSharpLabNextWorker(new ServiceIdentity(settings.Identity.ToolchainId, ServiceKind.ToolchainWorker, settings.Identity.ReleaseId, ProtocolVersion.WorkerV1, ["compile-check", "managed-pe", "multi-file", "lsp"], "starting"));
 
 var app = builder.Build();
 app.UseSharpLabNextInternalServiceAuthentication(internalServiceAuthentication);
@@ -54,25 +41,16 @@ app.MapGet("/health/ready", async (IlWorkerHealthService health, CancellationTok
 {
     var result = await health.CheckAsync(cancellationToken);
     return result.Status == HealthStatus.Healthy
-        ? Results.Ok(result)
-        : Results.Json(
-            result,
-            ContractJson.CreateSerializerOptions(),
-            statusCode: StatusCodes.Status503ServiceUnavailable);
+        ? Results.Ok(result) : Results.Json(result, ContractJson.CreateSerializerOptions(), statusCode: StatusCodes.Status503ServiceUnavailable);
 });
-app.MapGet("/api/v1/worker/describe", async (
-    IlWorkerHealthService health,
-    CancellationToken cancellationToken) => await health.DescribeAsync(cancellationToken));
+app.MapGet("/api/v1/worker/describe", async (IlWorkerHealthService health, CancellationToken cancellationToken) => await health.DescribeAsync(cancellationToken));
 app.MapPost("/api/v1/build", HandleBuildAsync);
 app.MapPost("/api/v1/language-sessions", HandleOpenLanguageSessionAsync);
 app.MapDelete("/api/v1/language-sessions/{sessionId}", HandleCloseLanguageSession);
 app.MapGet("/api/v1/language-sessions/{sessionId}/lsp", HandleLanguageWebSocketAsync);
 app.Run();
 
-static async Task<IResult> HandleOpenLanguageSessionAsync(
-    OpenLanguageSessionRequest request,
-    IlLanguageSessionManager sessions,
-    HttpContext context)
+static async Task<IResult> HandleOpenLanguageSessionAsync(OpenLanguageSessionRequest request, IlLanguageSessionManager sessions, HttpContext context)
 {
     try
     {
@@ -92,19 +70,11 @@ static async Task<IResult> HandleOpenLanguageSessionAsync(
     }
 }
 
-static IResult HandleCloseLanguageSession(
-    string sessionId,
-    IlLanguageSessionManager sessions,
-    HttpContext context) =>
+static IResult HandleCloseLanguageSession(string sessionId, IlLanguageSessionManager sessions, HttpContext context) =>
     sessions.Close(sessionId)
-        ? Results.NoContent()
-        : Problem(context, "not-found", "The IL language session does not exist.", StatusCodes.Status404NotFound);
+        ? Results.NoContent() : Problem(context, "not-found", "The IL language session does not exist.", StatusCodes.Status404NotFound);
 
-static async Task HandleLanguageWebSocketAsync(
-    string sessionId,
-    IlLanguageSessionManager sessions,
-    IlLspLimits limits,
-    HttpContext context)
+static async Task HandleLanguageWebSocketAsync(string sessionId, IlLanguageSessionManager sessions, IlLspLimits limits, HttpContext context)
 {
     if (!context.WebSockets.IsWebSocketRequest)
     {
@@ -122,28 +92,17 @@ static async Task HandleLanguageWebSocketAsync(
     {
         await connection.RunAsync();
     }
-    catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
-    {
-    }
+    catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested) { }
     catch (IlLspSessionUnavailableException)
     {
         if (socket.State == WebSocketState.Open)
         {
-            await socket.CloseOutputAsync(
-                WebSocketCloseStatus.PolicyViolation,
-                "IL language session unavailable.",
-                CancellationToken.None);
+            await socket.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, "IL language session unavailable.", CancellationToken.None);
         }
     }
 }
 
-static async Task<IResult> HandleBuildAsync(
-    BuildRequest request,
-    IlBuildService buildService,
-    IlArtifactPublisher artifactPublisher,
-    IlDevelopmentArtifactEnvelopeOptions envelopeOptions,
-    HttpContext context,
-    ILogger<Program> logger)
+static async Task<IResult> HandleBuildAsync(BuildRequest request, IlBuildService buildService, IlArtifactPublisher artifactPublisher, IlDevelopmentArtifactEnvelopeOptions envelopeOptions, HttpContext context, ILogger<Program> logger)
 {
     try
     {
@@ -153,22 +112,15 @@ static async Task<IResult> HandleBuildAsync(
         {
             if (envelopeOptions.Enabled)
             {
-                envelope = IlDevelopmentArtifactEnvelope.FromArtifact(
-                    execution.Artifact,
-                    envelopeOptions);
+                envelope = IlDevelopmentArtifactEnvelope.FromArtifact(execution.Artifact, envelopeOptions);
             }
             else
             {
-                var publishedRef = await PublishArtifactAsync(
-                    request,
-                    execution.Artifact,
-                    artifactPublisher,
-                    context.RequestAborted);
+                var publishedRef = await PublishArtifactAsync(request, execution.Artifact, artifactPublisher, context.RequestAborted);
                 if (execution.Result is not BuildResult { ArtifactRef: { } resultRef } ||
                     resultRef != publishedRef)
                 {
-                    throw new InvalidOperationException(
-                        "The published IL artifact identity does not match the build result.");
+                    throw new InvalidOperationException("The published IL artifact identity does not match the build result.");
                 }
             }
         }
@@ -199,21 +151,9 @@ static async Task<IResult> HandleBuildAsync(
     {
         return exception.Failure switch
         {
-            ArtifactBundlePublicationFailure.ResourceExhausted => Problem(
-                context,
-                "resource-exhausted",
-                exception.Message,
-                StatusCodes.Status413PayloadTooLarge),
-            ArtifactBundlePublicationFailure.Unavailable => Problem(
-                context,
-                "artifact-store-unavailable",
-                exception.Message,
-                StatusCodes.Status503ServiceUnavailable),
-            _ => Problem(
-                context,
-                "artifact-store-rejected-artifact",
-                exception.Message,
-                StatusCodes.Status502BadGateway)
+            ArtifactBundlePublicationFailure.ResourceExhausted => Problem(context, "resource-exhausted", exception.Message, StatusCodes.Status413PayloadTooLarge),
+            ArtifactBundlePublicationFailure.Unavailable => Problem(context, "artifact-store-unavailable", exception.Message, StatusCodes.Status503ServiceUnavailable),
+            _ => Problem(context, "artifact-store-rejected-artifact", exception.Message, StatusCodes.Status502BadGateway)
         };
     }
     catch (IlBuildDeadlineExceededException exception)
@@ -231,17 +171,11 @@ static async Task<IResult> HandleBuildAsync(
     }
 }
 
-static async Task<ArtifactRef> PublishArtifactAsync(
-    BuildRequest request,
-    IlCompiledArtifact artifact,
-    IlArtifactPublisher publisher,
-    CancellationToken cancellationToken)
+static async Task<ArtifactRef> PublishArtifactAsync(BuildRequest request, IlCompiledArtifact artifact, IlArtifactPublisher publisher, CancellationToken cancellationToken)
 {
     var remaining = request.DeadlineUtc - DateTimeOffset.UtcNow;
     if (remaining <= TimeSpan.Zero)
-        throw new IlBuildDeadlineExceededException(
-            "The build deadline elapsed before artifact publication.",
-            cancellationToken);
+        throw new IlBuildDeadlineExceededException("The build deadline elapsed before artifact publication.", cancellationToken);
 
     using var deadline = new CancellationTokenSource(remaining);
     using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
@@ -249,13 +183,9 @@ static async Task<ArtifactRef> PublishArtifactAsync(
     {
         return await publisher.PublishAsync(artifact, linked.Token).ConfigureAwait(false);
     }
-    catch (OperationCanceledException) when (
-        deadline.IsCancellationRequested &&
-        !cancellationToken.IsCancellationRequested)
+    catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
     {
-        throw new IlBuildDeadlineExceededException(
-            "The build deadline elapsed while publishing the artifact.",
-            deadline.Token);
+        throw new IlBuildDeadlineExceededException("The build deadline elapsed while publishing the artifact.", deadline.Token);
     }
 }
 

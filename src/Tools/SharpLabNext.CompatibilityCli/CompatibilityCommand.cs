@@ -102,32 +102,19 @@ public sealed record CompatibilityCommand(
             }
         }
 
-        if (kind == CompatibilityCommandKind.Resolve &&
-            (string.IsNullOrWhiteSpace(languageId) || string.IsNullOrWhiteSpace(outputId)))
+        if (kind == CompatibilityCommandKind.Resolve && (string.IsNullOrWhiteSpace(languageId) || string.IsNullOrWhiteSpace(outputId)))
         {
             throw new CompatibilityUsageException("resolve requires --language and --output.");
         }
 
-        return new CompatibilityCommand(
-            kind,
-            Path.GetFullPath(catalogPath),
-            Path.GetFullPath(lockPath),
-            format,
-            outputPath,
-            languageId,
-            toolchainId,
-            referenceSetId,
-            outputId,
-            runtimeId,
-            mode);
+        return new CompatibilityCommand(kind, Path.GetFullPath(catalogPath), Path.GetFullPath(lockPath), format, outputPath, languageId, toolchainId, referenceSetId, outputId, runtimeId, mode);
     }
 
     private static string RequiredValue(string[] args, ref int index)
     {
         index++;
         return index < args.Length && !string.IsNullOrWhiteSpace(args[index])
-            ? args[index]
-            : throw new CompatibilityUsageException("An option value is missing.");
+            ? args[index] : throw new CompatibilityUsageException("An option value is missing.");
     }
 
     private static string FindRepositoryRoot()

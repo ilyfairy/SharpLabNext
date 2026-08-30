@@ -9,19 +9,10 @@ namespace SharpLabNext.Worker.Artifacts.JSIL;
 
 internal interface IJsilArtifactMaterializer
 {
-    Task<JsilMaterializedArtifact> MaterializeAsync(
-        ArtifactRef artifactRef,
-        string operationId,
-        CancellationToken cancellationToken);
+    Task<JsilMaterializedArtifact> MaterializeAsync(ArtifactRef artifactRef, string operationId, CancellationToken cancellationToken);
 }
 
-internal sealed class JsilMaterializedArtifact(
-    string rootPath,
-    string assemblyPath,
-    ArtifactManifest manifest,
-    JsilReferenceSet referenceSet,
-    string leaseToken,
-    IArtifactStoreClient storeClient) : IAsyncDisposable
+internal sealed class JsilMaterializedArtifact(string rootPath, string assemblyPath, ArtifactManifest manifest, JsilReferenceSet referenceSet, string leaseToken, IArtifactStoreClient storeClient) : IAsyncDisposable
 {
     public string RootPath { get; } = rootPath;
 
@@ -37,9 +28,7 @@ internal sealed class JsilMaterializedArtifact(
         {
             await storeClient.ReleaseLeaseAsync(leaseToken).ConfigureAwait(false);
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
-        {
-        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException) { }
         finally
         {
             JsilTemporaryDirectory.Delete(RootPath);
@@ -47,30 +36,19 @@ internal sealed class JsilMaterializedArtifact(
     }
 }
 
-internal sealed class JsilArtifactMaterializer(
-    IArtifactStoreClient storeClient,
-    JsilWorkerSettings settings,
-    ArtifactWorkerCapabilityManifest capabilityManifest) : IJsilArtifactMaterializer
+internal sealed class JsilArtifactMaterializer(IArtifactStoreClient storeClient, JsilWorkerSettings settings, ArtifactWorkerCapabilityManifest capabilityManifest) : IJsilArtifactMaterializer
 {
     private const int MaximumArtifactFiles = 32;
 
-    public async Task<JsilMaterializedArtifact> MaterializeAsync(
-        ArtifactRef artifactRef,
-        string operationId,
-        CancellationToken cancellationToken)
+    public async Task<JsilMaterializedArtifact> MaterializeAsync(ArtifactRef artifactRef, string operationId, CancellationToken cancellationToken)
     {
         var root = JsilTemporaryDirectory.Create(settings.WorkRoot, operationId);
         string? leaseToken = null;
         try
         {
-            var lease = await storeClient.AcquireLeaseAsync(
-                artifactRef,
-                $"artifacts-jsil:{operationId}",
-                TimeSpan.FromMilliseconds(capabilityManifest.Limits.MaximumOperationMilliseconds + 30_000),
-                cancellationToken).ConfigureAwait(false);
+            var lease = await storeClient.AcquireLeaseAsync(artifactRef, $"artifacts-jsil:{operationId}", TimeSpan.FromMilliseconds(capabilityManifest.Limits.MaximumOperationMilliseconds + 30_000), cancellationToken).ConfigureAwait(false);
             leaseToken = lease.LeaseToken;
-            var bundle = await storeClient.GetArtifactAsync(artifactRef, cancellationToken).ConfigureAwait(false)
-                ?? throw new ArtifactWorkerArtifactNotFoundException("The requested managed artifact was not found.");
+            var bundle = await storeClient.GetArtifactAsync(artifactRef, cancellationToken).ConfigureAwait(false) ?? throw new ArtifactWorkerArtifactNotFoundException("The requested managed artifact was not found.");
             var referenceSet = ValidateBundle(artifactRef, bundle);
             var manifestFiles = bundle.Manifest.Files.ToDictionary(static file => file.Path, StringComparer.Ordinal);
             string? assemblyPath = null;
@@ -80,12 +58,7 @@ internal sealed class JsilArtifactMaterializer(
                     continue;
                 var destination = JsilTemporaryDirectory.ResolvePath(root, entry.Path);
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                await DownloadAndVerifyAsync(
-                    artifactRef,
-                    entry,
-                    manifestFiles[entry.Path],
-                    destination,
-                    cancellationToken).ConfigureAwait(false);
+                await DownloadAndVerifyAsync(artifactRef, entry, manifestFiles[entry.Path], destination, cancellationToken).ConfigureAwait(false);
                 if (StringComparer.Ordinal.Equals(entry.Path, bundle.Manifest.EntryAssembly))
                     assemblyPath = destination;
             }
@@ -93,13 +66,7 @@ internal sealed class JsilArtifactMaterializer(
                 throw new ArtifactWorkerIncompatibleArtifactException("The managed entry assembly is unavailable.");
 
             LinkReferenceAssemblies(Path.GetDirectoryName(assemblyPath)!, referenceSet);
-            return new JsilMaterializedArtifact(
-                root,
-                assemblyPath,
-                bundle.Manifest,
-                referenceSet,
-                leaseToken,
-                storeClient);
+            return new JsilMaterializedArtifact(root, assemblyPath, bundle.Manifest, referenceSet, leaseToken, storeClient);
         }
         catch
         {
@@ -109,9 +76,7 @@ internal sealed class JsilArtifactMaterializer(
                 {
                     await storeClient.ReleaseLeaseAsync(leaseToken, CancellationToken.None).ConfigureAwait(false);
                 }
-                catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
-                {
-                }
+                catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException) { }
             }
             JsilTemporaryDirectory.Delete(root);
             throw;
@@ -128,15 +93,11 @@ internal sealed class JsilArtifactMaterializer(
         {
             throw new ArtifactWorkerIncompatibleArtifactException("The artifact manifest is invalid.", exception);
         }
-        if (bundle.Manifest.ArtifactId != requestedRef ||
-            !StringComparer.Ordinal.Equals(bundle.Manifest.ArtifactFormat, "dotnet-managed-pe-v1") ||
-            bundle.Manifest.MetadataFeatureTags.Count != 0)
+        if (bundle.Manifest.ArtifactId != requestedRef || !StringComparer.Ordinal.Equals(bundle.Manifest.ArtifactFormat, "dotnet-managed-pe-v1") || bundle.Manifest.MetadataFeatureTags.Count != 0)
         {
-            throw new ArtifactWorkerIncompatibleArtifactException(
-                "JSIL accepts ordinary managed PE artifacts without experimental metadata extensions.");
+            throw new ArtifactWorkerIncompatibleArtifactException("JSIL accepts ordinary managed PE artifacts without experimental metadata extensions.");
         }
-        if (bundle.Manifest.Files.Count is 0 or > MaximumArtifactFiles ||
-            bundle.Entries.Count != bundle.Manifest.Files.Count)
+        if (bundle.Manifest.Files.Count is 0 or > MaximumArtifactFiles || bundle.Entries.Count != bundle.Manifest.Files.Count)
         {
             throw new ArtifactWorkerLimitExceededException("The managed artifact file count exceeds the JSIL limit.");
         }
@@ -145,11 +106,7 @@ internal sealed class JsilArtifactMaterializer(
         long total = 0;
         foreach (var entry in bundle.Entries)
         {
-            if (!manifestByPath.TryGetValue(entry.Path, out var manifestFile) ||
-                manifestFile.Size != entry.Size ||
-                !StringComparer.Ordinal.Equals(manifestFile.Digest, entry.Digest) ||
-                !StringComparer.Ordinal.Equals(entry.Digest, entry.ContentRef.Value) ||
-                !StringComparer.Ordinal.Equals(manifestFile.Role, entry.Role))
+            if (!manifestByPath.TryGetValue(entry.Path, out var manifestFile) || manifestFile.Size != entry.Size || !StringComparer.Ordinal.Equals(manifestFile.Digest, entry.Digest) || !StringComparer.Ordinal.Equals(entry.Digest, entry.ContentRef.Value) || !StringComparer.Ordinal.Equals(manifestFile.Role, entry.Role))
             {
                 throw new ArtifactWorkerIncompatibleArtifactException("The artifact bundle does not match its manifest.");
             }
@@ -157,34 +114,18 @@ internal sealed class JsilArtifactMaterializer(
             if (total > capabilityManifest.Limits.MaximumInputArtifactBytes)
                 throw new ArtifactWorkerLimitExceededException("The managed artifact exceeds the JSIL input limit.");
         }
-        var entryAssembly = bundle.Manifest.Files.FirstOrDefault(file =>
-            StringComparer.Ordinal.Equals(file.Path, bundle.Manifest.EntryAssembly));
-        if (entryAssembly is null ||
-            Path.GetExtension(entryAssembly.Path).ToLowerInvariant() is not (".dll" or ".exe"))
+        var entryAssembly = bundle.Manifest.Files.FirstOrDefault(file => StringComparer.Ordinal.Equals(file.Path, bundle.Manifest.EntryAssembly));
+        if (entryAssembly is null || Path.GetExtension(entryAssembly.Path).ToLowerInvariant() is not (".dll" or ".exe"))
         {
             throw new ArtifactWorkerIncompatibleArtifactException("The artifact entry assembly is invalid.");
         }
         return settings.GetReferenceSet(bundle.Manifest.ReferenceSetId, bundle.Manifest.TargetFramework);
     }
 
-    private async Task DownloadAndVerifyAsync(
-        ArtifactRef artifactRef,
-        ArtifactBundleEntry entry,
-        ArtifactFileDescriptor manifestFile,
-        string destination,
-        CancellationToken cancellationToken)
+    private async Task DownloadAndVerifyAsync(ArtifactRef artifactRef, ArtifactBundleEntry entry, ArtifactFileDescriptor manifestFile, string destination, CancellationToken cancellationToken)
     {
-        await using var response = await storeClient.OpenArtifactFileReadAsync(
-            artifactRef,
-            entry.Path,
-            cancellationToken).ConfigureAwait(false);
-        await using var output = new FileStream(
-            destination,
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None,
-            64 * 1024,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var response = await storeClient.OpenArtifactFileReadAsync(artifactRef, entry.Path, cancellationToken).ConfigureAwait(false);
+        await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
         long total = 0;
@@ -207,8 +148,7 @@ internal sealed class JsilArtifactMaterializer(
             ArrayPool<byte>.Shared.Return(buffer);
         }
         var digest = Convert.ToHexStringLower(hash.GetHashAndReset());
-        if (total != entry.Size || total != manifestFile.Size ||
-            !StringComparer.Ordinal.Equals(digest, ArtifactStoreProtocol.GetDigest(entry.ContentRef)))
+        if (total != entry.Size || total != manifestFile.Size || !StringComparer.Ordinal.Equals(digest, ArtifactStoreProtocol.GetDigest(entry.ContentRef)))
         {
             throw new ArtifactWorkerIncompatibleArtifactException("Artifact content failed integrity validation.");
         }
@@ -261,8 +201,7 @@ internal static class JsilTemporaryDirectory
                 Directory.Delete(path, recursive: true);
                 return;
             }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException && attempt < 6)
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException && attempt < 6)
             {
                 Thread.Sleep(TimeSpan.FromMilliseconds(25 * attempt));
             }

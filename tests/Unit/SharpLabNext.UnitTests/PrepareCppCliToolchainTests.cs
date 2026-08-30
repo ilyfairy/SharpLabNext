@@ -7,15 +7,8 @@ namespace SharpLabNext.UnitTests;
 public sealed class PrepareCppCliToolchainTests
 {
     private static readonly string RepositoryRoot = FindRepositoryRoot();
-    private static readonly string ScriptPath = Path.Combine(
-        RepositoryRoot,
-        "eng",
-        "prepare-cppcli-toolchain.cs");
-    private static readonly string DockerfilePath = Path.Combine(
-        RepositoryRoot,
-        "deploy",
-        "docker",
-        "Dockerfile.operator-cppcli-base");
+    private static readonly string ScriptPath = Path.Combine(RepositoryRoot, "eng", "tools", "prepare-cppcli-toolchain.cs");
+    private static readonly string DockerfilePath = Path.Combine(RepositoryRoot, "deploy", "docker", "Dockerfile.operator-cppcli-base");
 
     [Fact]
     public async Task DryRunPassesVerifiedInputsOnlyAsDockerContexts()
@@ -28,38 +21,14 @@ public sealed class PrepareCppCliToolchainTests
         Assert.Empty(result.StandardError);
         Assert.Contains("docker buildx build", result.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("Dockerfile.operator-cppcli-base", result.StandardOutput, StringComparison.Ordinal);
-        Assert.Contains(
-            $"FRAMEWORK_SEED_IMAGE=localhost:5000/framework-clr4@sha256:{new string('a', 64)}",
-            result.StandardOutput,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "cppcli-prerequisite-context=<direct-input-directory>",
-            result.StandardOutput,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "MSVC_WINE_SOURCE_FILE=msvc-wine-source.bin",
-            result.StandardOutput,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "VISUAL_STUDIO_MANIFEST_FILE=visual-studio-manifest.bin",
-            result.StandardOutput,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "NETFX48_DEVELOPER_PACK_FILE=netfx48-developer-pack.bin",
-            result.StandardOutput,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            fixture.MsvcWinePath,
-            result.CombinedOutput,
-            StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(
-            fixture.VisualStudioManifestPath,
-            result.CombinedOutput,
-            StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(
-            fixture.DeveloperPackPath,
-            result.CombinedOutput,
-            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains($"FRAMEWORK_SEED_IMAGE=localhost:5000/framework-clr4@sha256:{new string('a', 64)}", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("cppcli-prerequisite-context=<direct-input-directory>", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("MSVC_WINE_SOURCE_FILE=msvc-wine-source.bin", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("VISUAL_STUDIO_MANIFEST_FILE=visual-studio-manifest.bin", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("NETFX48_DEVELOPER_PACK_FILE=netfx48-developer-pack.bin", result.StandardOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain(fixture.MsvcWinePath, result.CombinedOutput, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(fixture.VisualStudioManifestPath, result.CombinedOutput, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(fixture.DeveloperPackPath, result.CombinedOutput, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(".exe --", result.StandardOutput, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -70,8 +39,7 @@ public sealed class PrepareCppCliToolchainTests
     {
         using var fixture = new RepositoryFixture();
 
-        var result = await RunAsync(
-            fixture.ValidArguments().Where(argument => argument != omitted));
+        var result = await RunAsync(fixture.ValidArguments().Where(argument => argument != omitted));
 
         Assert.Equal(64, result.ExitCode);
         Assert.Contains("required", result.StandardError, StringComparison.OrdinalIgnoreCase);
@@ -139,10 +107,7 @@ public sealed class PrepareCppCliToolchainTests
         Assert.Contains("command -v wine-stable", source, StringComparison.Ordinal);
         Assert.Contains("source /opt/msvc/bin/x64/msvcenv.sh", source, StringComparison.Ordinal);
         Assert.Contains("test -f \"${BINDIR}/cl.exe\"", source, StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "/VC/Tools/MSVC/14.51.36248/",
-            source,
-            StringComparison.Ordinal);
+        Assert.DoesNotContain("/VC/Tools/MSVC/14.51.36248/", source, StringComparison.Ordinal);
         Assert.Contains("cabextract", source, StringComparison.Ordinal);
         Assert.Contains("msiextract", source, StringComparison.Ordinal);
         Assert.Contains("mv /opt/wine-netfx-clr4 /opt/wine-dotnet", source, StringComparison.Ordinal);
@@ -168,8 +133,7 @@ public sealed class PrepareCppCliToolchainTests
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the C++/CLI preparation script.");
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the C++/CLI preparation script.");
         var outputTask = process.StandardOutput.ReadToEndAsync();
         var errorTask = process.StandardError.ReadToEndAsync();
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(1));
@@ -202,16 +166,12 @@ public sealed class PrepareCppCliToolchainTests
     {
         public RepositoryFixture()
         {
-            Root = Path.Combine(
-                Path.GetTempPath(),
-                $"SharpLabNext.CppCliPreparation.Tests.{Guid.NewGuid():N}");
+            Root = Path.Combine(Path.GetTempPath(), $"SharpLabNext.CppCliPreparation.Tests.{Guid.NewGuid():N}");
             Directory.CreateDirectory(Path.Combine(Root, "eng"));
             Directory.CreateDirectory(Path.Combine(Root, "deploy", "docker"));
             Directory.CreateDirectory(Path.Combine(Root, "downloads"));
             File.WriteAllText(Path.Combine(Root, "SharpLabNext.slnx"), string.Empty);
-            File.WriteAllText(
-                Path.Combine(Root, "deploy", "docker", "Dockerfile.operator-cppcli-base"),
-                "FROM scratch\n");
+            File.WriteAllText(Path.Combine(Root, "deploy", "docker", "Dockerfile.operator-cppcli-base"), "FROM scratch\n");
             MsvcWinePath = WriteInput("msvc-wine-source", 0x11);
             VisualStudioManifestPath = WriteInput("visual-studio-manifest", 0x22);
             DeveloperPackPath = WriteInput("netfx48-developer-pack", 0x33);
@@ -246,29 +206,11 @@ public sealed class PrepareCppCliToolchainTests
 
         public void WriteManifest(string? nonFileId = null)
         {
-            object Download(string id, string path) => new
-            {
-                kind = id == nonFileId ? "nuget-package" : "file",
-                id,
-                path = $"downloads/{Path.GetFileName(path)}",
-                url = id == "msvc-wine-source"
-                    ? "https://codeload.github.com/mstorsjo/msvc-wine/tar.gz/test"
-                    : $"https://download.microsoft.com/{id}",
-                sizeBytes = 1,
-                sha256 = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path))),
-                license = "test license"
-            };
+            object Download(string id, string path) => new { kind = id == nonFileId ? "nuget-package" : "file", id, path = $"downloads/{Path.GetFileName(path)}", url = id == "msvc-wine-source" ? "https://codeload.github.com/mstorsjo/msvc-wine/tar.gz/test" : $"https://download.microsoft.com/{id}", sizeBytes = 1, sha256 = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path))), license = "test license" };
             var manifest = new
             {
                 schemaVersion = 3,
-                localRegistry = new
-                {
-                    image = $"registry@sha256:{new string('c', 64)}",
-                    imageId = $"sha256:{new string('c', 64)}",
-                    containerName = "sharplabnext-release-registry",
-                    host = "127.0.0.1",
-                    port = 5000
-                },
+                localRegistry = new { image = $"registry@sha256:{new string('c', 64)}", imageId = $"sha256:{new string('c', 64)}", containerName = "sharplabnext-release-registry", host = "127.0.0.1", port = 5000 },
                 downloads = new[]
                 {
                     Download("msvc-wine-source", MsvcWinePath),
@@ -278,25 +220,11 @@ public sealed class PrepareCppCliToolchainTests
                 repositoryFiles = Array.Empty<object>(),
                 generatedImages = new[]
                 {
-                    new
-                    {
-                        id = "jsharp20-development-base",
-                        reference = "sharplabnext/operator-jsharp20:source-v2",
-                        buildKind = "jsharp20",
-                        license = "test"
-                    },
-                    new
-                    {
-                        id = "cppcli-prepared-base",
-                        reference = "sharplabnext/msvc-cppcli-prepared-base:source-v2",
-                        buildKind = "cppcli",
-                        license = "test"
-                    }
+                    new { id = "jsharp20-development-base", reference = "sharplabnext/operator-jsharp20:source-v2", buildKind = "jsharp20", license = "test" },
+                    new { id = "cppcli-prepared-base", reference = "sharplabnext/msvc-cppcli-prepared-base:source-v2", buildKind = "cppcli", license = "test" }
                 }
             };
-            File.WriteAllText(
-                Path.Combine(Root, "eng", "release-prerequisites.json"),
-                JsonSerializer.Serialize(manifest));
+            File.WriteAllText(Path.Combine(Root, "eng", "release-prerequisites.json"), JsonSerializer.Serialize(manifest));
         }
 
         public void Dispose()
@@ -305,12 +233,8 @@ public sealed class PrepareCppCliToolchainTests
             {
                 Directory.Delete(Root, recursive: true);
             }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 

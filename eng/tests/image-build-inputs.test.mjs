@@ -8,15 +8,13 @@ import {
   createFrameworkSeedBuildSpec,
   createOperatorImageBuildSpec,
   frameworkSeedDefinitions,
-} from './image-build-inputs.mjs'
-import { readPrerequisiteManifest } from './prerequisite-cache.mjs'
+} from '../image-build-inputs.mjs'
+import { readPrerequisiteManifest } from '../prerequisite-cache.mjs'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const wineImage = `localhost:5000/wine@sha256:${'a'.repeat(64)}`
 const rootImage = `mcr.microsoft.com/dotnet/runtime-deps@sha256:${'b'.repeat(64)}`
-const manifest = readPrerequisiteManifest(
-  path.join(repositoryRoot, 'eng', 'release-prerequisites.json'),
-)
+const manifest = readPrerequisiteManifest(path.join(repositoryRoot, 'eng', 'release-prerequisites.json'));
 const frameworkSeeds = Object.freeze({
   clr2: `localhost:5000/framework-clr2@sha256:${'a'.repeat(64)}`,
   clr4: `localhost:5000/framework-clr4@sha256:${'b'.repeat(64)}`,
@@ -38,7 +36,7 @@ test('Framework seed build input closes exactly two shared companion identities'
     'deploy/docker/certificates/microsoft-tls-rsa-root-g2-xsign.crt',
     'deploy/docker/certificates/microsoft-tls-g2-rsa-ca-ocsp-04.crt',
     'profiles/runtime-framework-installers.json',
-    'eng/prepare-framework-runtime.cs',
+    'eng/tools/prepare-framework-runtime.cs',
     'eng/release-prerequisites.json',
     'eng/prerequisites/dotnet-framework-2.0/NetFx64.exe',
   ])
@@ -74,8 +72,8 @@ test('operator image build input binds source recipes and both Framework seeds',
     'deploy/docker/Dockerfile.operator-cppcli-base',
     'deploy/docker/cppcli-netfx-env.sh',
     'deploy/docker/extract-netfx48-sdk.py',
-    'eng/prepare-jsharp-toolchain.cs',
-    'eng/prepare-cppcli-toolchain.cs',
+    'eng/tools/prepare-jsharp-toolchain.cs',
+    'eng/tools/prepare-cppcli-toolchain.cs',
     'eng/release-prerequisites.json',
   ])
 

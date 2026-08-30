@@ -4,8 +4,7 @@ namespace SharpLabNext.UnitTests;
 
 public sealed class DockerCliTests
 {
-    private const string ImageId =
-        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    private const string ImageId = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     [Theory]
     [InlineData("relative/file.dll")]
@@ -17,12 +16,7 @@ public sealed class DockerCliTests
     {
         var docker = new DockerCli("command-must-not-run");
 
-        var exception = await Assert.ThrowsAsync<BundleValidationException>(() =>
-            docker.InspectImageFileAsync(
-                ImageId,
-                path,
-                maximumBytes: 1024,
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<BundleValidationException>(() => docker.InspectImageFileAsync(ImageId, path, maximumBytes: 1024, TestContext.Current.CancellationToken));
 
         Assert.Contains("canonical absolute container path", exception.Message, StringComparison.Ordinal);
     }
@@ -35,12 +29,7 @@ public sealed class DockerCliTests
     {
         var docker = new DockerCli("command-must-not-run");
 
-        var exception = await Assert.ThrowsAsync<BundleValidationException>(() =>
-            docker.InspectImageFileAsync(
-                image,
-                "/opt/sharplabnext/file.dll",
-                maximumBytes: 1024,
-                TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<BundleValidationException>(() => docker.InspectImageFileAsync(image, "/opt/sharplabnext/file.dll", maximumBytes: 1024, TestContext.Current.CancellationToken));
 
         Assert.Contains("captured sha256 image ID", exception.Message, StringComparison.Ordinal);
     }

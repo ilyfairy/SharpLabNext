@@ -14,8 +14,7 @@ namespace SharpLabNext.LegacyJitInspector
         public UserAssemblyLoader(string assemblyPath)
         {
             _assemblyPath = assemblyPath ?? throw new ArgumentNullException(nameof(assemblyPath));
-            _artifactDirectory = Path.GetDirectoryName(assemblyPath)
-                ?? throw new ArgumentException("The entry assembly has no parent directory.", nameof(assemblyPath));
+            _artifactDirectory = Path.GetDirectoryName(assemblyPath) ?? throw new ArgumentException("The entry assembly has no parent directory.", nameof(assemblyPath));
             _helperDirectory = AppContext.BaseDirectory;
             AssemblyLoadContext.Default.Resolving += Resolve;
         }

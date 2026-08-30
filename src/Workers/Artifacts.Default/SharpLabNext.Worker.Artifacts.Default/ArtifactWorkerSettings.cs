@@ -3,12 +3,7 @@ using SharpLabNext.ArtifactProcessing.Protocol;
 
 namespace SharpLabNext.ArtifactWorker;
 
-internal sealed record ArtifactWorkerIdentity(
-    string ReleaseId,
-    string WorkerImageId,
-    string ProcessorId,
-    string IlSpyVersion,
-    string IlVerificationVersion);
+internal sealed record ArtifactWorkerIdentity(string ReleaseId, string WorkerImageId, string ProcessorId, string IlSpyVersion, string IlVerificationVersion);
 
 internal sealed record ArtifactProcessorLimits(
     int MaxConcurrentJobs,
@@ -41,10 +36,7 @@ internal sealed record ArtifactProcessorLimits(
         MaxRetainedOperations: 512);
 }
 
-internal sealed record ArtifactReferenceSet(
-    string Id,
-    IReadOnlyList<string> Paths,
-    string? SystemModuleName);
+internal sealed record ArtifactReferenceSet(string Id, IReadOnlyList<string> Paths, string? SystemModuleName);
 
 internal static class ArtifactReferenceSetConfigurationContract
 {
@@ -53,29 +45,19 @@ internal static class ArtifactReferenceSetConfigurationContract
 
     public static void Validate(IReadOnlyDictionary<string, ArtifactReferenceSet> referenceSets)
     {
-        var missing = RequiredSystemModules.Keys
-            .Except(referenceSets.Keys, StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        var unexpected = referenceSets.Keys
-            .Except(RequiredSystemModules.Keys, StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
+        var missing = RequiredSystemModules.Keys.Except(referenceSets.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+        var unexpected = referenceSets.Keys.Except(RequiredSystemModules.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
         if (missing.Length > 0 || unexpected.Length > 0)
         {
-            throw new InvalidOperationException(
-                "ArtifactWorker:ReferenceSets must contain exactly the approved reference closure. " +
-                $"Missing: [{string.Join(", ", missing)}]; unexpected: [{string.Join(", ", unexpected)}].");
+            throw new InvalidOperationException("ArtifactWorker:ReferenceSets must contain exactly the approved reference closure. " + $"Missing: [{string.Join(", ", missing)}]; unexpected: [{string.Join(", ", unexpected)}].");
         }
 
         foreach (var (id, systemModuleName) in RequiredSystemModules)
         {
             var configured = referenceSets[id];
-            if (configured.Paths.Count == 0 ||
-                !StringComparer.Ordinal.Equals(configured.SystemModuleName, systemModuleName))
+            if (configured.Paths.Count == 0 || !StringComparer.Ordinal.Equals(configured.SystemModuleName, systemModuleName))
             {
-                throw new InvalidOperationException(
-                    $"ArtifactWorker:ReferenceSets:{id} must define at least one path and system module '{systemModuleName}'.");
+                throw new InvalidOperationException($"ArtifactWorker:ReferenceSets:{id} must define at least one path and system module '{systemModuleName}'.");
             }
         }
     }
@@ -108,12 +90,7 @@ internal sealed record ArtifactWorkerSettings(
     {
         ArgumentNullException.ThrowIfNull(configuration);
         var worker = configuration.GetSection("ArtifactWorker");
-        var identity = new ArtifactWorkerIdentity(
-            Required(worker["ReleaseId"], "ArtifactWorker:ReleaseId", "development"),
-            Required(worker["WorkerImageId"], "ArtifactWorker:WorkerImageId", "development"),
-            "artifacts-default",
-            ProcessorProtocol.IlSpyVersion,
-            ProcessorProtocol.IlVerificationVersion);
+        var identity = new ArtifactWorkerIdentity(Required(worker["ReleaseId"], "ArtifactWorker:ReleaseId", "development"), Required(worker["WorkerImageId"], "ArtifactWorker:WorkerImageId", "development"), "artifacts-default", ProcessorProtocol.IlSpyVersion, ProcessorProtocol.IlVerificationVersion);
 
         var defaults = ArtifactProcessorLimits.Default;
         var limits = worker.GetSection("Limits");
@@ -135,9 +112,7 @@ internal sealed record ArtifactWorkerSettings(
         var processorPath = worker["ProcessorAssemblyPath"];
         if (string.IsNullOrWhiteSpace(processorPath))
         {
-            processorPath = Path.Combine(
-                AppContext.BaseDirectory,
-                "SharpLabNext.Worker.Artifacts.Default.Processor.dll");
+            processorPath = Path.Combine(AppContext.BaseDirectory, "SharpLabNext.Worker.Artifacts.Default.Processor.dll");
         }
         processorPath = Path.GetFullPath(processorPath);
 
@@ -150,23 +125,10 @@ internal sealed record ArtifactWorkerSettings(
         if (string.IsNullOrWhiteSpace(dotNetHost))
             dotNetHost = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
 
-        var referenceSets = worker.GetSection("ReferenceSets")
-            .GetChildren()
-            .Select(section => new ArtifactReferenceSet(
-                section.Key,
-                section.GetSection("Paths").Get<string[]>()
-                    ?.Where(static path => !string.IsNullOrWhiteSpace(path))
-                    .Select(Path.GetFullPath)
-                    .Distinct(StringComparer.Ordinal)
-                    .ToArray() ?? [],
-                section["SystemModuleName"]))
-            .ToDictionary(static item => item.Id, StringComparer.Ordinal);
+        var referenceSets = worker.GetSection("ReferenceSets").GetChildren().Select(section => new ArtifactReferenceSet(section.Key, section.GetSection("Paths").Get<string[]>()?.Where(static path => !string.IsNullOrWhiteSpace(path)).Select(Path.GetFullPath).Distinct(StringComparer.Ordinal).ToArray() ?? [], section["SystemModuleName"])).ToDictionary(static item => item.Id, StringComparer.Ordinal);
         ArtifactReferenceSetConfigurationContract.Validate(referenceSets);
 
-        var verificationProfiles = worker.GetSection("VerificationProfiles").Get<string[]>()
-            ?.Where(static value => !string.IsNullOrWhiteSpace(value))
-            .ToHashSet(StringComparer.Ordinal)
-            ?? new HashSet<string>(["default"], StringComparer.Ordinal);
+        var verificationProfiles = worker.GetSection("VerificationProfiles").Get<string[]>()?.Where(static value => !string.IsNullOrWhiteSpace(value)).ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>(["default"], StringComparer.Ordinal);
 
         return new ArtifactWorkerSettings(
             identity,
@@ -184,20 +146,15 @@ internal sealed record ArtifactWorkerSettings(
 
     private static string Required(string? value, string key, string? fallback = null) =>
         !string.IsNullOrWhiteSpace(value)
-            ? value
-            : fallback ?? throw new InvalidOperationException($"Configuration value '{key}' is required.");
+            ? value : fallback ?? throw new InvalidOperationException($"Configuration value '{key}' is required.");
 
     private static int PositiveInt(string? value, int fallback) =>
         string.IsNullOrWhiteSpace(value)
-            ? fallback
-            : int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) && parsed > 0
-                ? parsed
-                : throw new InvalidOperationException("Artifact worker limits must be positive integers.");
+            ? fallback : int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) && parsed > 0
+                ? parsed : throw new InvalidOperationException("Artifact worker limits must be positive integers.");
 
     private static long PositiveLong(string? value, long fallback) =>
         string.IsNullOrWhiteSpace(value)
-            ? fallback
-            : long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) && parsed > 0
-                ? parsed
-                : throw new InvalidOperationException("Artifact worker limits must be positive integers.");
+            ? fallback : long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) && parsed > 0
+                ? parsed : throw new InvalidOperationException("Artifact worker limits must be positive integers.");
 }

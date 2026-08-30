@@ -7,13 +7,7 @@ public sealed class JSharpWorkerConfigurationTests
     [Fact]
     public void ProductionSettingsMatchOperatorImageExportPaths()
     {
-        var settingsPath = Path.Combine(
-            JSharpTestSettings.RepositoryRoot,
-            "src",
-            "Workers",
-            "JSharp",
-            "SharpLabNext.Worker.JSharp",
-            "appsettings.json");
+        var settingsPath = Path.Combine(JSharpTestSettings.RepositoryRoot, "src", "Workers", "JSharp", "SharpLabNext.Worker.JSharp", "appsettings.json");
         using var stream = File.OpenRead(settingsPath);
         var configuration = new ConfigurationBuilder().AddJsonStream(stream).Build();
 
@@ -58,8 +52,7 @@ public sealed class JSharpWorkerConfigurationTests
             values[key] = "relative/path";
             var configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
 
-            var exception = Assert.Throws<InvalidOperationException>(() =>
-                JSharpWorkerSettings.FromConfiguration(configuration));
+            var exception = Assert.Throws<InvalidOperationException>(() => JSharpWorkerSettings.FromConfiguration(configuration));
 
             Assert.Contains("absolute host path", exception.Message, StringComparison.Ordinal);
         }
@@ -83,8 +76,7 @@ public sealed class JSharpWorkerConfigurationTests
             values[key] = value;
             var configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
 
-            Assert.Throws<InvalidOperationException>(() =>
-                JSharpWorkerSettings.FromConfiguration(configuration));
+            Assert.Throws<InvalidOperationException>(() => JSharpWorkerSettings.FromConfiguration(configuration));
         }
         finally
         {
@@ -105,8 +97,7 @@ public sealed class JSharpWorkerConfigurationTests
         Assert.Equal(1, manifest.Limits.MaximumConcurrentBuilds);
     }
 
-    private static IConfiguration Configuration(string root) =>
-        new ConfigurationBuilder().AddInMemoryCollection(Values(root)).Build();
+    private static IConfiguration Configuration(string root) => new ConfigurationBuilder().AddInMemoryCollection(Values(root)).Build();
 
     private static Dictionary<string, string?> Values(string root)
     {

@@ -54,7 +54,7 @@ RUN set -eux; \
     do \
       cp "artifacts/bin/${name}/Release/net10.0/${name}.dll" /roslyn-main/; \
     done
-COPY eng/verify-roslyn-main.cs /tools/verify-roslyn-main.cs
+COPY eng/tools/verify-roslyn-main.cs /tools/verify-roslyn-main.cs
 COPY eng/NuGet.verifier.config /tools/NuGet.verifier.config
 WORKDIR /tools
 RUN --network=none \
@@ -120,7 +120,7 @@ COPY profiles/versions.props ./profiles/versions.props
 COPY profiles/runtime-matrix.json /inputs/runtime-matrix.json
 COPY profiles/lock.json /inputs/lock.json
 COPY src/ ./src/
-COPY eng/materialize-coreclr-reference-sets.cs /tools/materialize-coreclr-reference-sets.cs
+COPY eng/tools/materialize-coreclr-reference-sets.cs /tools/materialize-coreclr-reference-sets.cs
 COPY --from=roslyn-main /roslyn-main/ /roslyn-main/
 RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
     dotnet restore \

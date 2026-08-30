@@ -12,8 +12,7 @@ public sealed class ProfileUpdateWorkflow
 {
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
     private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
-        ? StringComparison.OrdinalIgnoreCase
-        : StringComparison.Ordinal;
+        ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
     private readonly string repositoryRoot;
     private readonly string lockPath;
     private readonly string catalogPath;
@@ -23,30 +22,19 @@ public sealed class ProfileUpdateWorkflow
     private readonly IProfileCandidateWorkspaceManager workspaceManager;
     private readonly TimeProvider timeProvider;
 
-    public ProfileUpdateWorkflow(
-        string repositoryRoot,
-        string lockPath,
-        string stateRoot,
-        IProfileSourceClient sourceClient,
-        IProfileUpdateCommandRunner commandRunner,
-        TimeProvider? timeProvider = null,
-        IProfileCandidateWorkspaceManager? workspaceManager = null)
+    public ProfileUpdateWorkflow(string repositoryRoot, string lockPath, string stateRoot, IProfileSourceClient sourceClient, IProfileUpdateCommandRunner commandRunner, TimeProvider? timeProvider = null, IProfileCandidateWorkspaceManager? workspaceManager = null)
     {
         this.repositoryRoot = Path.GetFullPath(repositoryRoot);
         this.lockPath = Path.GetFullPath(lockPath);
         catalogPath = Path.Combine(this.repositoryRoot, "profiles", "catalog", "catalog.json");
         this.stateRoot = Path.GetFullPath(stateRoot);
-        lockUpdater = new ReleaseLockUpdater(
-            sourceClient ?? throw new ArgumentNullException(nameof(sourceClient)),
-            Path.Combine(this.repositoryRoot, "profiles", "channels"));
+        lockUpdater = new ReleaseLockUpdater(sourceClient ?? throw new ArgumentNullException(nameof(sourceClient)), Path.Combine(this.repositoryRoot, "profiles", "channels"));
         this.commandRunner = commandRunner ?? throw new ArgumentNullException(nameof(commandRunner));
         this.workspaceManager = workspaceManager ?? new GitProfileCandidateWorkspaceManager(commandRunner);
         this.timeProvider = timeProvider ?? TimeProvider.System;
     }
 
-    public async Task<ProfileUpdateCheckResult> CheckAsync(
-        string? releaseId = null,
-        CancellationToken cancellationToken = default)
+    public async Task<ProfileUpdateCheckResult> CheckAsync(string? releaseId = null, CancellationToken cancellationToken = default)
     {
         var startedAt = UtcNow();
         var current = await ReadLockAsync(lockPath, cancellationToken);
@@ -55,42 +43,18 @@ public sealed class ProfileUpdateWorkflow
             var result = await lockUpdater.ResolveAsync(current.Document, releaseId, cancellationToken);
             var completedAt = UtcNow();
             var stage = SucceededStage(ProfileUpdateStage.Check, startedAt, completedAt);
-            await SaveStateAsync(
-                current.Document.ReleaseId,
-                current.Digest,
-                result.Candidate.ReleaseId,
-                null,
-                result.Changes.Count > 0,
-                null,
-                stage,
-                cancellationToken);
-            return new ProfileUpdateCheckResult(
-                current.Digest,
-                result.Candidate.ReleaseId,
-                result.Changes.Count > 0,
-                result.Changes,
-                stage);
+            await SaveStateAsync(current.Document.ReleaseId, current.Digest, result.Candidate.ReleaseId, null, result.Changes.Count > 0, null, stage, cancellationToken);
+            return new ProfileUpdateCheckResult(current.Digest, result.Candidate.ReleaseId, result.Changes.Count > 0, result.Changes, stage);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             var stage = FailedStage(ProfileUpdateStage.Check, startedAt, UtcNow(), exception.Message);
-            await SaveStateAsync(
-                current.Document.ReleaseId,
-                current.Digest,
-                null,
-                null,
-                updateAvailable: false,
-                lastKnownGoodDigest: null,
-                stage,
-                cancellationToken);
+            await SaveStateAsync(current.Document.ReleaseId, current.Digest, null, null, updateAvailable: false, lastKnownGoodDigest: null, stage, cancellationToken);
             throw;
         }
     }
 
-    public async Task<ProfileUpdateCandidateResult> ResolveAsync(
-        string? releaseId = null,
-        string? outputPath = null,
-        CancellationToken cancellationToken = default)
+    public async Task<ProfileUpdateCandidateResult> ResolveAsync(string? releaseId = null, string? outputPath = null, CancellationToken cancellationToken = default)
     {
         var startedAt = UtcNow();
         var current = await ReadLockAsync(lockPath, cancellationToken);
@@ -104,12 +68,7 @@ public sealed class ProfileUpdateWorkflow
             var workspaceRoot = GetCandidateWorkspacePath(candidateDigest);
             await workspaceManager.PrepareAsync(repositoryRoot, workspaceRoot, cancellationToken);
             var catalogTemplate = await CatalogLoader.LoadCatalogAsync(catalogPath, cancellationToken);
-            var material = await CandidateReleaseMaterializer.WriteAsync(
-                workspaceRoot,
-                catalogTemplate,
-                result.Candidate,
-                candidateDigest,
-                cancellationToken);
+            var material = await CandidateReleaseMaterializer.WriteAsync(workspaceRoot, catalogTemplate, result.Candidate, candidateDigest, cancellationToken);
             await AtomicFile.WriteAllBytesAsync(material.LockPath, candidateBytes, cancellationToken);
             var materialDigest = await ComputeMaterialDigestAsync(material, includePackageLocks: false, cancellationToken);
             if (outputPath is not null)
@@ -119,100 +78,45 @@ public sealed class ProfileUpdateWorkflow
 
             var completedAt = UtcNow();
             var stage = SucceededStage(ProfileUpdateStage.Resolve, startedAt, completedAt);
-            var receipt = new ProfileUpdateReceipt
-            {
-                SchemaVersion = 1,
-                ReleaseId = result.Candidate.ReleaseId,
-                SourceDigest = current.Digest,
-                CandidateDigest = candidateDigest,
-                CandidatePath = Path.GetRelativePath(repositoryRoot, candidatePath).Replace('\\', '/'),
-                WorkspacePath = Path.GetRelativePath(repositoryRoot, workspaceRoot).Replace('\\', '/'),
-                MaterialDigest = materialDigest,
-                CreatedAt = completedAt,
-                Changes = result.Changes,
-                Stages = [stage]
-            };
+            var receipt = new ProfileUpdateReceipt { SchemaVersion = 1, ReleaseId = result.Candidate.ReleaseId, SourceDigest = current.Digest, CandidateDigest = candidateDigest, CandidatePath = Path.GetRelativePath(repositoryRoot, candidatePath).Replace('\\', '/'), WorkspacePath = Path.GetRelativePath(repositoryRoot, workspaceRoot).Replace('\\', '/'), MaterialDigest = materialDigest, CreatedAt = completedAt, Changes = result.Changes, Stages = [stage] };
             await SaveReceiptAsync(receipt, cancellationToken);
-            await SaveStateAsync(
-                current.Document.ReleaseId,
-                current.Digest,
-                receipt.ReleaseId,
-                receipt.CandidateDigest,
-                receipt.Changes.Count > 0,
-                null,
-                stage,
-                cancellationToken);
+            await SaveStateAsync(current.Document.ReleaseId, current.Digest, receipt.ReleaseId, receipt.CandidateDigest, receipt.Changes.Count > 0, null, stage, cancellationToken);
             return new ProfileUpdateCandidateResult(candidateDigest, candidatePath, receipt);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             var stage = FailedStage(ProfileUpdateStage.Resolve, startedAt, UtcNow(), exception.Message);
-            await SaveStateAsync(
-                current.Document.ReleaseId,
-                current.Digest,
-                null,
-                null,
-                updateAvailable: false,
-                lastKnownGoodDigest: null,
-                stage,
-                cancellationToken);
+            await SaveStateAsync(current.Document.ReleaseId, current.Digest, null, null, updateAvailable: false, lastKnownGoodDigest: null, stage, cancellationToken);
             throw;
         }
     }
 
-    public async Task<ProfileUpdateStageResult> BuildAsync(
-        string? candidatePath,
-        string? candidateDigest,
-        string configuration,
-        CancellationToken cancellationToken = default)
+    public async Task<ProfileUpdateStageResult> BuildAsync(string? candidatePath, string? candidateDigest, string configuration, CancellationToken cancellationToken = default)
     {
         ValidateConfiguration(configuration);
         var candidate = await LoadCandidateAsync(candidatePath, candidateDigest, cancellationToken);
         RequireLatestStageSucceeded(candidate.Receipt, ProfileUpdateStage.Resolve);
         var commands = await CreateBuildCommandsAsync(candidate, configuration, cancellationToken);
-        var result = await RunCommandsAsync(
-            candidate,
-            ProfileUpdateStage.Build,
-            configuration,
-            testScope: null,
-            commands,
-            cancellationToken);
-        var materialDigest = await ComputeMaterialDigestAsync(
-            candidate.Material,
-            includePackageLocks: true,
-            cancellationToken);
+        var result = await RunCommandsAsync(candidate, ProfileUpdateStage.Build, configuration, testScope: null, commands, cancellationToken);
+        var materialDigest = await ComputeMaterialDigestAsync(candidate.Material, includePackageLocks: true, cancellationToken);
         var receipt = result.Receipt with { MaterialDigest = materialDigest };
         await SaveReceiptAsync(receipt, cancellationToken);
         return result with { Receipt = receipt };
     }
 
-    public async Task<ProfileUpdateStageResult> TestAsync(
-        string? candidatePath,
-        string? candidateDigest,
-        string configuration,
-        ProfileUpdateTestScope testScope,
-        CancellationToken cancellationToken = default)
+    public async Task<ProfileUpdateStageResult> TestAsync(string? candidatePath, string? candidateDigest, string configuration, ProfileUpdateTestScope testScope, CancellationToken cancellationToken = default)
     {
         ValidateConfiguration(configuration);
         var candidate = await LoadCandidateAsync(candidatePath, candidateDigest, cancellationToken);
         RequireLatestStageSucceeded(candidate.Receipt, ProfileUpdateStage.Build);
         await RequireMaterialDigestAsync(candidate, cancellationToken);
         var commands = CreateTestCommands(candidate, configuration, testScope);
-        var result = await RunCommandsAsync(
-            candidate,
-            ProfileUpdateStage.Test,
-            configuration,
-            testScope,
-            commands,
-            cancellationToken);
+        var result = await RunCommandsAsync(candidate, ProfileUpdateStage.Test, configuration, testScope, commands, cancellationToken);
         await RequireMaterialDigestAsync(candidate with { Receipt = result.Receipt }, cancellationToken);
         return result;
     }
 
-    public async Task<ProfileUpdateStageResult> PromoteAsync(
-        string? candidatePath,
-        string? candidateDigest,
-        CancellationToken cancellationToken = default)
+    public async Task<ProfileUpdateStageResult> PromoteAsync(string? candidatePath, string? candidateDigest, CancellationToken cancellationToken = default)
     {
         var candidate = await LoadCandidateAsync(candidatePath, candidateDigest, cancellationToken);
         var latestTest = candidate.Receipt.Stages.LastOrDefault(static stage => stage.Stage == ProfileUpdateStage.Test);
@@ -230,10 +134,7 @@ public sealed class ProfileUpdateWorkflow
         var startedAt = UtcNow();
         var activeLock = await ReadLockAsync(lockPath, cancellationToken);
         var successfulStage = SucceededStage(ProfileUpdateStage.Promote, startedAt, UtcNow());
-        var successfulReceipt = candidate.Receipt with
-        {
-            Stages = [.. candidate.Receipt.Stages, successfulStage]
-        };
+        var successfulReceipt = candidate.Receipt with { Stages = [..candidate.Receipt.Stages, successfulStage] };
 
         try
         {
@@ -246,51 +147,23 @@ public sealed class ProfileUpdateWorkflow
 
             await WriteActiveMaterialSnapshotAsync(previousHistoryRoot, cancellationToken);
             await WriteCandidateMaterialSnapshotAsync(candidate, candidateHistoryRoot, cancellationToken);
-            await AtomicFile.WriteAllBytesAsync(
-                Path.Combine(candidateHistoryRoot, "receipt.json"),
-                receiptBytes,
-                cancellationToken);
-            await AtomicFile.WriteAllBytesAsync(
-                Path.Combine(lastKnownGoodRoot, "previous.lock.json"),
-                activeLock.Bytes,
-                cancellationToken);
-            await AtomicFile.WriteAllBytesAsync(
-                Path.Combine(lastKnownGoodRoot, "lock.json"),
-                candidateBytes,
-                cancellationToken);
-            await WriteCandidateMaterialSnapshotAsync(
-                candidate,
-                Path.Combine(lastKnownGoodRoot, "material"),
-                cancellationToken);
-            await AtomicFile.WriteAllBytesAsync(
-                Path.Combine(lastKnownGoodRoot, "receipt.json"),
-                receiptBytes,
-                cancellationToken);
+            await AtomicFile.WriteAllBytesAsync(Path.Combine(candidateHistoryRoot, "receipt.json"), receiptBytes, cancellationToken);
+            await AtomicFile.WriteAllBytesAsync(Path.Combine(lastKnownGoodRoot, "previous.lock.json"), activeLock.Bytes, cancellationToken);
+            await AtomicFile.WriteAllBytesAsync(Path.Combine(lastKnownGoodRoot, "lock.json"), candidateBytes, cancellationToken);
+            await WriteCandidateMaterialSnapshotAsync(candidate, Path.Combine(lastKnownGoodRoot, "material"), cancellationToken);
+            await AtomicFile.WriteAllBytesAsync(Path.Combine(lastKnownGoodRoot, "receipt.json"), receiptBytes, cancellationToken);
             await SaveReceiptAsync(successfulReceipt, cancellationToken);
 
             var commitSourceDigest = ComputeDigest(await File.ReadAllBytesAsync(lockPath, cancellationToken));
             if (!string.Equals(commitSourceDigest, candidate.Receipt.SourceDigest, StringComparison.Ordinal))
             {
-                throw new ProfileUpdateValidationException(
-                    "The approved lock changed while promotion metadata was being prepared; resolve again.");
+                throw new ProfileUpdateValidationException("The approved lock changed while promotion metadata was being prepared; resolve again.");
             }
 
             var replacements = await CreatePromotionReplacementsAsync(candidate, candidateBytes, cancellationToken);
             await AtomicFile.ReplaceSetAsync(replacements, cancellationToken);
-            await SaveStateAsync(
-                candidate.Document.ReleaseId,
-                candidate.Digest,
-                candidate.Document.ReleaseId,
-                candidate.Digest,
-                updateAvailable: false,
-                lastKnownGoodDigest: candidate.Digest,
-                successfulStage,
-                cancellationToken);
-            return new ProfileUpdateStageResult(
-                candidate.Digest,
-                candidate.Path,
-                successfulReceipt,
-                successfulStage);
+            await SaveStateAsync(candidate.Document.ReleaseId, candidate.Digest, candidate.Document.ReleaseId, candidate.Digest, updateAvailable: false, lastKnownGoodDigest: candidate.Digest, successfulStage, cancellationToken);
+            return new ProfileUpdateStageResult(candidate.Digest, candidate.Path, successfulReceipt, successfulStage);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -298,33 +171,16 @@ public sealed class ProfileUpdateWorkflow
             if (!string.Equals(currentDigest, candidate.Digest, StringComparison.Ordinal))
             {
                 var failedStage = FailedStage(ProfileUpdateStage.Promote, startedAt, UtcNow(), exception.Message);
-                var failedReceipt = candidate.Receipt with
-                {
-                    Stages = [.. candidate.Receipt.Stages, failedStage]
-                };
+                var failedReceipt = candidate.Receipt with { Stages = [..candidate.Receipt.Stages, failedStage] };
                 await SaveReceiptAsync(failedReceipt, cancellationToken);
-                await SaveStateAsync(
-                    activeLock.Document.ReleaseId,
-                    activeLock.Digest,
-                    candidate.Document.ReleaseId,
-                    candidate.Digest,
-                    updateAvailable: true,
-                    lastKnownGoodDigest: null,
-                    failedStage,
-                    cancellationToken);
+                await SaveStateAsync(activeLock.Document.ReleaseId, activeLock.Digest, candidate.Document.ReleaseId, candidate.Digest, updateAvailable: true, lastKnownGoodDigest: null, failedStage, cancellationToken);
             }
 
             throw;
         }
     }
 
-    private async Task<ProfileUpdateStageResult> RunCommandsAsync(
-        CandidateContext candidate,
-        ProfileUpdateStage stageKind,
-        string configuration,
-        ProfileUpdateTestScope? testScope,
-        IReadOnlyList<ProfileUpdateExternalCommand> commands,
-        CancellationToken cancellationToken)
+    private async Task<ProfileUpdateStageResult> RunCommandsAsync(CandidateContext candidate, ProfileUpdateStage stageKind, string configuration, ProfileUpdateTestScope? testScope, IReadOnlyList<ProfileUpdateExternalCommand> commands, CancellationToken cancellationToken)
     {
         var stageStartedAt = UtcNow();
         var executed = new List<ProfileUpdateExecutedCommand>();
@@ -332,9 +188,7 @@ public sealed class ProfileUpdateWorkflow
         try
         {
             foreach (var command in commands.Where(static command => !command.AlwaysRun))
-            {
                 await RunCommandAsync(command, cancellationToken);
-            }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -351,49 +205,21 @@ public sealed class ProfileUpdateWorkflow
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
                     failure = failure is null
-                        ? exception
-                        : new InvalidOperationException(
-                            $"{failure.Message} Cleanup also failed: {exception.Message}",
-                            new AggregateException(failure, exception));
+                        ? exception : new InvalidOperationException($"{failure.Message} Cleanup also failed: {exception.Message}", new AggregateException(failure, exception));
                 }
             }
         }
 
         if (failure is not null)
         {
-            var failed = new ProfileUpdateStageReceipt
-            {
-                Stage = stageKind,
-                Status = ProfileUpdateStageStatus.Failed,
-                StartedAt = stageStartedAt,
-                CompletedAt = UtcNow(),
-                Configuration = configuration,
-                TestScope = testScope,
-                Commands = executed,
-                Error = Limit(failure.Message)
-            };
-            var receipt = candidate.Receipt with
-            {
-                Stages = [.. candidate.Receipt.Stages, failed]
-            };
+            var failed = new ProfileUpdateStageReceipt { Stage = stageKind, Status = ProfileUpdateStageStatus.Failed, StartedAt = stageStartedAt, CompletedAt = UtcNow(), Configuration = configuration, TestScope = testScope, Commands = executed, Error = Limit(failure.Message) };
+            var receipt = candidate.Receipt with { Stages = [..candidate.Receipt.Stages, failed] };
             await SaveReceiptAndStateAsync(candidate, receipt, failed, cancellationToken);
             ExceptionDispatchInfo.Capture(failure).Throw();
         }
 
-        var succeeded = new ProfileUpdateStageReceipt
-        {
-            Stage = stageKind,
-            Status = ProfileUpdateStageStatus.Succeeded,
-            StartedAt = stageStartedAt,
-            CompletedAt = UtcNow(),
-            Configuration = configuration,
-            TestScope = testScope,
-            Commands = executed
-        };
-        var successfulReceipt = candidate.Receipt with
-        {
-            Stages = [.. candidate.Receipt.Stages, succeeded]
-        };
+        var succeeded = new ProfileUpdateStageReceipt { Stage = stageKind, Status = ProfileUpdateStageStatus.Succeeded, StartedAt = stageStartedAt, CompletedAt = UtcNow(), Configuration = configuration, TestScope = testScope, Commands = executed };
+        var successfulReceipt = candidate.Receipt with { Stages = [..candidate.Receipt.Stages, succeeded] };
         await SaveReceiptAndStateAsync(candidate, successfulReceipt, succeeded, cancellationToken);
         return new ProfileUpdateStageResult(candidate.Digest, candidate.Path, successfulReceipt, succeeded);
 
@@ -408,9 +234,7 @@ public sealed class ProfileUpdateWorkflow
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 executed.Add(CommandReceipt(command, commandStartedAt, UtcNow(), -1));
-                throw new InvalidOperationException(
-                    $"External command '{command.FileName}' could not be executed: {exception.Message}",
-                    exception);
+                throw new InvalidOperationException($"External command '{command.FileName}' could not be executed: {exception.Message}", exception);
             }
 
             executed.Add(CommandReceipt(command, commandStartedAt, UtcNow(), result.ExitCode));
@@ -419,35 +243,23 @@ public sealed class ProfileUpdateWorkflow
         }
     }
 
-    private async Task<IReadOnlyList<ProfileUpdateExternalCommand>> CreateBuildCommandsAsync(
-        CandidateContext candidate,
-        string configuration,
-        CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<ProfileUpdateExternalCommand>> CreateBuildCommandsAsync(CandidateContext candidate, string configuration, CancellationToken cancellationToken)
     {
         var sourceRevision = $"candidate-{DigestHex(candidate.Digest)[..12]}";
-        var sourceDateEpoch = await SourceDateEpochResolver.ResolveAsync(
-            candidate.WorkspaceRoot,
-            sourceRevision,
-            allowUncommittedSourceForDevelopment: true,
-            cancellationToken: cancellationToken);
-        var bakeEnvironment = BakeEnvironmentResolver.Create(
-            candidate.Document,
-            Path.Combine(candidate.WorkspaceRoot, "profiles", "base-images.json"),
-            sourceRevision,
-            sourceDateEpoch,
-            "sharplabnext");
+        var sourceDateEpoch = await SourceDateEpochResolver.ResolveAsync(candidate.WorkspaceRoot, sourceRevision, allowUncommittedSourceForDevelopment: true, cancellationToken: cancellationToken);
+        var bakeEnvironment = BakeEnvironmentResolver.Create(candidate.Document, Path.Combine(candidate.WorkspaceRoot, "profiles", "base-images.json"), sourceRevision, sourceDateEpoch, "sharplabnext");
         return
         [
             Command(
                 "dotnet",
                 [
-                    "run", "eng/verify-ilsense-inputs.cs", "--",
+                    "run", "eng/tools/verify-ilsense-inputs.cs", "--",
                     "--repository-root", candidate.WorkspaceRoot,
                     "--lock", candidate.Material.LockPath,
                     "--verify-restore"
                 ],
                 workingDirectory: candidate.WorkspaceRoot),
-            Command("dotnet", ["run", "eng/verify-buildkit.cs"], workingDirectory: candidate.WorkspaceRoot),
+            Command("dotnet", ["run", "eng/tools/verify-buildkit.cs"], workingDirectory: candidate.WorkspaceRoot),
             Command("dotnet", ["restore", "SharpLabNext.slnx", "--force-evaluate", "/p:RestoreLockedMode=false"], workingDirectory: candidate.WorkspaceRoot),
             Command("dotnet", ["restore", "SharpLabNext.slnx", "--locked-mode"], workingDirectory: candidate.WorkspaceRoot),
             Command("npm", ["--prefix", "frontend", "ci", "--no-audit", "--no-fund"], workingDirectory: candidate.WorkspaceRoot),
@@ -458,23 +270,14 @@ public sealed class ProfileUpdateWorkflow
         ];
     }
 
-    private List<ProfileUpdateExternalCommand> CreateTestCommands(
-        CandidateContext candidate,
-        string configuration,
-        ProfileUpdateTestScope testScope)
+    private List<ProfileUpdateExternalCommand> CreateTestCommands(CandidateContext candidate, string configuration, ProfileUpdateTestScope testScope)
     {
         var commands = new List<ProfileUpdateExternalCommand>();
         var workingDirectory = candidate.WorkspaceRoot;
         if (testScope == ProfileUpdateTestScope.Full)
         {
-            commands.Add(Command(
-                "dotnet",
-                ["test", "SharpLabNext.slnx", "--configuration", configuration, "--no-build", "--no-restore"],
-                workingDirectory: workingDirectory));
-            commands.Add(Command(
-                "npm",
-                ["--prefix", "frontend", "run", "test", "--if-present"],
-                workingDirectory: workingDirectory));
+            commands.Add(Command("dotnet", ["test", "SharpLabNext.slnx", "--configuration", configuration, "--no-build", "--no-restore"], workingDirectory: workingDirectory));
+            commands.Add(Command("npm", ["--prefix", "frontend", "run", "test", "--if-present"], workingDirectory: workingDirectory));
         }
         else
         {
@@ -489,24 +292,14 @@ public sealed class ProfileUpdateWorkflow
                     "--no-restore"
                 ],
                 workingDirectory: workingDirectory));
-            if (candidate.Receipt.Changes.Any(static change =>
-                    change.ComponentId.StartsWith("frontend-", StringComparison.Ordinal)))
+            if (candidate.Receipt.Changes.Any(static change => change.ComponentId.StartsWith("frontend-", StringComparison.Ordinal)))
             {
-                commands.Add(Command(
-                    "npm",
-                    ["--prefix", "frontend", "run", "test", "--if-present"],
-                    workingDirectory: workingDirectory));
+                commands.Add(Command("npm", ["--prefix", "frontend", "run", "test", "--if-present"], workingDirectory: workingDirectory));
             }
         }
 
-        commands.Add(Command(
-            "node",
-            ["eng/validate-schemas.mjs", "--release-lock", candidate.Material.LockPath],
-            workingDirectory: workingDirectory));
-        commands.Add(Command(
-            "node",
-            ["eng/validate-compose.mjs"],
-            workingDirectory: workingDirectory));
+        commands.Add(Command("node", ["eng/validation/validate-schemas.mjs", "--release-lock", candidate.Material.LockPath], workingDirectory: workingDirectory));
+        commands.Add(Command("node", ["eng/validation/validate-compose.mjs"], workingDirectory: workingDirectory));
         commands.Add(Command(
             "dotnet",
             [
@@ -532,19 +325,14 @@ public sealed class ProfileUpdateWorkflow
         return commands;
     }
 
-    private void AddCandidateDeploymentCommands(
-        List<ProfileUpdateExternalCommand> commands,
-        CandidateContext candidate,
-        string configuration)
+    private void AddCandidateDeploymentCommands(List<ProfileUpdateExternalCommand> commands, CandidateContext candidate, string configuration)
     {
         var validationNumber = candidate.Receipt.Stages.Count(static stage => stage.Stage == ProfileUpdateStage.Test) + 1;
         var candidateArtifacts = Path.Combine(candidate.WorkspaceRoot, "artifacts", "profile-candidate");
         var bundleRoot = Path.Combine(candidateArtifacts, $"bundle-{validationNumber}");
         var generatedComposePath = Path.Combine(bundleRoot, "compose.generated.yaml");
         var bundlePath = Path.Combine(bundleRoot, "bundle.json");
-        var performanceReportPath = Path.Combine(
-            candidateArtifacts,
-            $"performance-report-{validationNumber}.json");
+        var performanceReportPath = Path.Combine(candidateArtifacts, $"performance-report-{validationNumber}.json");
         var projectName = $"sln-profile-{DigestHex(candidate.Digest)[..12]}-{validationNumber}";
         var endpoints = CandidateReleaseMaterializer.CreateValidationEndpoints(candidate.Digest);
         var gatewayPort = new Uri(endpoints.Gateway).Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -597,31 +385,19 @@ public sealed class ProfileUpdateWorkflow
                 "--allow-uncommitted-source-for-development"
             ],
             workingDirectory: candidate.WorkspaceRoot));
-        commands.Add(Command(
-            "docker",
-            [.. composeArguments, "config", "--quiet"],
-            composeEnvironment,
-            candidate.WorkspaceRoot));
-        commands.Add(Command(
-            "docker",
-            [.. composeArguments, "up", "--detach", "--pull", "never", "--no-build", "--wait", "--wait-timeout", "300"],
-            composeEnvironment,
-            candidate.WorkspaceRoot));
+        commands.Add(Command("docker", [..composeArguments, "config", "--quiet"], composeEnvironment, candidate.WorkspaceRoot));
+        commands.Add(Command("docker", [..composeArguments, "up", "--detach", "--pull", "never", "--no-build", "--wait", "--wait-timeout", "300"], composeEnvironment, candidate.WorkspaceRoot));
         commands.Add(Command(
             "dotnet",
             [
-                "run", "eng/verify-profile-candidate.cs", "--",
+                "run", "eng/tools/verify-profile-candidate.cs", "--",
                 "--lock", candidate.Material.LockPath,
                 "--catalog", candidate.Material.CatalogPath,
                 "--endpoints", candidate.Material.ValidationEndpointsPath,
                 "--bundle", bundlePath
             ],
             workingDirectory: candidate.WorkspaceRoot));
-        commands.Add(Command(
-            "dotnet",
-            ["run", "eng/smoke/gateway-compose.cs", "--", endpoints.Gateway, "--full"],
-            e2eEnvironment,
-            candidate.WorkspaceRoot));
+        commands.Add(Command("dotnet", ["run", "eng/smoke/gateway-compose.cs", "--", endpoints.Gateway, "--full"], e2eEnvironment, candidate.WorkspaceRoot));
         commands.Add(Command(
             "dotnet",
             [
@@ -632,33 +408,13 @@ public sealed class ProfileUpdateWorkflow
             ],
             e2eEnvironment,
             candidate.WorkspaceRoot));
-        commands.Add(Command(
-            "dotnet",
-            ["run", "eng/smoke/gateway-compose.cs", "--", endpoints.Gateway, "--security"],
-            e2eEnvironment,
-            candidate.WorkspaceRoot));
-        commands.Add(Command(
-            "dotnet",
-            ["run", "eng/smoke/runtime-failures.cs", "--", endpoints.Gateway],
-            e2eEnvironment,
-            candidate.WorkspaceRoot));
-        commands.Add(Command(
-            "npm",
-            ["--prefix", "frontend", "run", "test:e2e"],
-            e2eEnvironment,
-            candidate.WorkspaceRoot));
-        commands.Add(Command(
-            "docker",
-            cleanupArguments,
-            composeEnvironment,
-            candidate.WorkspaceRoot,
-            alwaysRun: true));
+        commands.Add(Command("dotnet", ["run", "eng/smoke/gateway-compose.cs", "--", endpoints.Gateway, "--security"], e2eEnvironment, candidate.WorkspaceRoot));
+        commands.Add(Command("dotnet", ["run", "eng/smoke/runtime-failures.cs", "--", endpoints.Gateway], e2eEnvironment, candidate.WorkspaceRoot));
+        commands.Add(Command("npm", ["--prefix", "frontend", "run", "test:e2e"], e2eEnvironment, candidate.WorkspaceRoot));
+        commands.Add(Command("docker", cleanupArguments, composeEnvironment, candidate.WorkspaceRoot, alwaysRun: true));
     }
 
-    private async Task<CandidateContext> LoadCandidateAsync(
-        string? candidatePath,
-        string? candidateDigest,
-        CancellationToken cancellationToken)
+    private async Task<CandidateContext> LoadCandidateAsync(string? candidatePath, string? candidateDigest, CancellationToken cancellationToken)
     {
         if (candidatePath is not null && candidateDigest is not null)
         {
@@ -668,22 +424,18 @@ public sealed class ProfileUpdateWorkflow
         var requestedDigest = candidateDigest is null ? null : NormalizeDigest(candidateDigest);
         if (candidatePath is null && requestedDigest is null)
         {
-            var state = await LoadStateAsync(cancellationToken)
-                ?? throw new ProfileUpdateValidationException("No latest candidate is recorded; run resolve first.");
+            var state = await LoadStateAsync(cancellationToken) ?? throw new ProfileUpdateValidationException("No latest candidate is recorded; run resolve first.");
             requestedDigest = state.LatestCandidateDigest is null
-                ? throw new ProfileUpdateValidationException("No latest candidate is recorded; run resolve first.")
-                : NormalizeDigest(state.LatestCandidateDigest);
+                ? throw new ProfileUpdateValidationException("No latest candidate is recorded; run resolve first.") : NormalizeDigest(state.LatestCandidateDigest);
         }
 
         var path = candidatePath is null
-            ? GetCandidateLockPath(requestedDigest!)
-            : Path.GetFullPath(candidatePath);
+            ? GetCandidateLockPath(requestedDigest!) : Path.GetFullPath(candidatePath);
         var candidateBytes = await File.ReadAllBytesAsync(path, cancellationToken);
         var actualDigest = ComputeDigest(candidateBytes);
         if (requestedDigest is not null && !string.Equals(requestedDigest, actualDigest, StringComparison.Ordinal))
         {
-            throw new ProfileUpdateValidationException(
-                $"Candidate lock digest mismatch: expected '{requestedDigest}', actual '{actualDigest}'.");
+            throw new ProfileUpdateValidationException($"Candidate lock digest mismatch: expected '{requestedDigest}', actual '{actualDigest}'.");
         }
 
         var canonicalPath = GetCandidateLockPath(actualDigest);
@@ -710,21 +462,15 @@ public sealed class ProfileUpdateWorkflow
         var expectedWorkspaceRoot = GetCandidateWorkspacePath(actualDigest);
         if (!string.Equals(workspaceRoot, expectedWorkspaceRoot, PathComparison))
         {
-            throw new ProfileUpdateValidationException(
-                "Candidate receipt workspace does not match the content-addressed candidate directory.");
+            throw new ProfileUpdateValidationException("Candidate receipt workspace does not match the content-addressed candidate directory.");
         }
         var material = CandidateReleaseMaterializer.Locate(workspaceRoot);
-        RequireMatchingRuntimeProfileSet(
-            CandidateReleaseMaterializer.Locate(repositoryRoot).RuntimeProfiles,
-            material.RuntimeProfiles);
-        RequireMatchingReferenceSetConfigurationSet(
-            CandidateReleaseMaterializer.Locate(repositoryRoot).ReferenceSetConfigurations,
-            material.ReferenceSetConfigurations);
+        RequireMatchingRuntimeProfileSet(CandidateReleaseMaterializer.Locate(repositoryRoot).RuntimeProfiles, material.RuntimeProfiles);
+        RequireMatchingReferenceSetConfigurationSet(CandidateReleaseMaterializer.Locate(repositoryRoot).ReferenceSetConfigurations, material.ReferenceSetConfigurations);
         var workspaceLockBytes = await File.ReadAllBytesAsync(material.LockPath, cancellationToken);
         if (!string.Equals(ComputeDigest(workspaceLockBytes), actualDigest, StringComparison.Ordinal))
         {
-            throw new ProfileUpdateValidationException(
-                "Candidate workspace lock does not match the content-addressed candidate lock.");
+            throw new ProfileUpdateValidationException("Candidate workspace lock does not match the content-addressed candidate lock.");
         }
         var candidateCatalog = await CatalogLoader.LoadCatalogAsync(material.CatalogPath, cancellationToken);
         CandidateReleaseMaterializer.ValidateIdentityClosure(document, candidateCatalog);
@@ -733,104 +479,66 @@ public sealed class ProfileUpdateWorkflow
         var activeDigest = ComputeDigest(activeBytes);
         if (!string.Equals(receipt.SourceDigest, activeDigest, StringComparison.Ordinal))
         {
-            throw new ProfileUpdateValidationException(
-                $"Candidate source digest '{receipt.SourceDigest}' does not match active lock digest '{activeDigest}'.");
+            throw new ProfileUpdateValidationException($"Candidate source digest '{receipt.SourceDigest}' does not match active lock digest '{activeDigest}'.");
         }
 
         return new CandidateContext(document, actualDigest, canonicalPath, receipt, workspaceRoot, material);
     }
 
-    private static void RequireMatchingRuntimeProfileSet(
-        IReadOnlyList<CandidateRuntimeProfileMaterial> active,
-        IReadOnlyList<CandidateRuntimeProfileMaterial> candidate)
+    private static void RequireMatchingRuntimeProfileSet(IReadOnlyList<CandidateRuntimeProfileMaterial> active, IReadOnlyList<CandidateRuntimeProfileMaterial> candidate)
     {
         var activePaths = active.Select(static profile => profile.RelativePath).Order(StringComparer.Ordinal).ToArray();
         var candidatePaths = candidate.Select(static profile => profile.RelativePath).Order(StringComparer.Ordinal).ToArray();
         if (!activePaths.SequenceEqual(candidatePaths, StringComparer.Ordinal))
         {
-            throw new ProfileUpdateValidationException(
-                "Candidate active runtime profile set does not match the approved repository profile set.");
+            throw new ProfileUpdateValidationException("Candidate active runtime profile set does not match the approved repository profile set.");
         }
     }
 
-    private static void RequireMatchingReferenceSetConfigurationSet(
-        IReadOnlyList<CandidateReferenceSetConfigurationMaterial> active,
-        IReadOnlyList<CandidateReferenceSetConfigurationMaterial> candidate)
+    private static void RequireMatchingReferenceSetConfigurationSet(IReadOnlyList<CandidateReferenceSetConfigurationMaterial> active, IReadOnlyList<CandidateReferenceSetConfigurationMaterial> candidate)
     {
-        var activePaths = active.Select(static configuration => configuration.RelativePath)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        var candidatePaths = candidate.Select(static configuration => configuration.RelativePath)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
+        var activePaths = active.Select(static configuration => configuration.RelativePath).Order(StringComparer.Ordinal).ToArray();
+        var candidatePaths = candidate.Select(static configuration => configuration.RelativePath).Order(StringComparer.Ordinal).ToArray();
         if (!activePaths.SequenceEqual(candidatePaths, StringComparer.Ordinal))
         {
-            throw new ProfileUpdateValidationException(
-                "Candidate reference-set configuration set does not match the approved repository configuration set.");
+            throw new ProfileUpdateValidationException("Candidate reference-set configuration set does not match the approved repository configuration set.");
         }
     }
 
-    private async Task SaveReceiptAndStateAsync(
-        CandidateContext candidate,
-        ProfileUpdateReceipt receipt,
-        ProfileUpdateStageReceipt stage,
-        CancellationToken cancellationToken)
+    private async Task SaveReceiptAndStateAsync(CandidateContext candidate, ProfileUpdateReceipt receipt, ProfileUpdateStageReceipt stage, CancellationToken cancellationToken)
     {
         await SaveReceiptAsync(receipt, cancellationToken);
         var active = await ReadLockAsync(lockPath, cancellationToken);
-        await SaveStateAsync(
-            active.Document.ReleaseId,
-            active.Digest,
-            candidate.Document.ReleaseId,
-            candidate.Digest,
-            candidate.Receipt.Changes.Count > 0,
-            null,
-            stage,
-            cancellationToken);
+        await SaveStateAsync(active.Document.ReleaseId, active.Digest, candidate.Document.ReleaseId, candidate.Digest, candidate.Receipt.Changes.Count > 0, null, stage, cancellationToken);
     }
 
-    private async Task SaveStateAsync(
-        string activeReleaseId,
-        string activeDigest,
-        string? candidateReleaseId,
-        string? candidateDigest,
-        bool updateAvailable,
-        string? lastKnownGoodDigest,
-        ProfileUpdateStageReceipt stage,
-        CancellationToken cancellationToken)
+    private async Task SaveStateAsync(string activeReleaseId, string activeDigest, string? candidateReleaseId, string? candidateDigest, bool updateAvailable, string? lastKnownGoodDigest, ProfileUpdateStageReceipt stage, CancellationToken cancellationToken)
     {
         var previous = await LoadStateAsync(cancellationToken);
         var clearCandidate = stage.Stage == ProfileUpdateStage.Check ||
             stage is { Stage: ProfileUpdateStage.Resolve, Status: ProfileUpdateStageStatus.Failed };
         var effectiveLastKnownGoodDigest = lastKnownGoodDigest ?? previous?.LastKnownGoodDigest ?? activeDigest;
         var effectiveLastKnownGoodReleaseId = lastKnownGoodDigest is not null
-            ? activeReleaseId
-            : previous?.LastKnownGoodReleaseId ?? activeReleaseId;
+            ? activeReleaseId : previous?.LastKnownGoodReleaseId ?? activeReleaseId;
         var state = new ProfileUpdaterState
         {
             SchemaVersion = 1,
             ActiveReleaseId = activeReleaseId,
             ActiveLockDigest = activeDigest,
             LatestCandidateReleaseId = clearCandidate
-                ? null
-                : candidateReleaseId ?? previous?.LatestCandidateReleaseId,
+                ? null : candidateReleaseId ?? previous?.LatestCandidateReleaseId,
             LatestCandidateDigest = clearCandidate
-                ? null
-                : candidateDigest ?? previous?.LatestCandidateDigest,
+                ? null : candidateDigest ?? previous?.LatestCandidateDigest,
             UpdateAvailable = updateAvailable,
             LastKnownGoodReleaseId = effectiveLastKnownGoodReleaseId,
             LastKnownGoodDigest = effectiveLastKnownGoodDigest,
             LastCheckedAt = stage.Stage is ProfileUpdateStage.Check or ProfileUpdateStage.Resolve
-                ? stage.CompletedAt
-                : previous?.LastCheckedAt,
+                ? stage.CompletedAt : previous?.LastCheckedAt,
             UpdatedAt = UtcNow(),
             LastStage = stage
         };
         await AtomicFile.WriteAllBytesAsync(StatePath, SerializeJson(state), cancellationToken);
-        await AtomicFile.WriteAllBytesAsync(
-            PublicStatusPath,
-            SerializeJson(CreatePublicStatus(state)),
-            cancellationToken);
+        await AtomicFile.WriteAllBytesAsync(PublicStatusPath, SerializeJson(CreatePublicStatus(state)), cancellationToken);
     }
 
     private static ProfileUpdateStatusDocument CreatePublicStatus(ProfileUpdaterState state)
@@ -841,56 +549,30 @@ public sealed class ProfileUpdateWorkflow
             SchemaVersion = 1,
             Status = failed
                 ? state.LastStage.Stage == ProfileUpdateStage.Check
-                    ? ProfileUpdateStatusKind.Unknown
-                    : ProfileUpdateStatusKind.CandidateFailed
-                : state.LastStage.Stage switch
+                    ? ProfileUpdateStatusKind.Unknown : ProfileUpdateStatusKind.CandidateFailed : state.LastStage.Stage switch
                 {
                     ProfileUpdateStage.Check => state.UpdateAvailable
-                        ? ProfileUpdateStatusKind.UpdateAvailable
-                        : ProfileUpdateStatusKind.UpToDate,
+                        ? ProfileUpdateStatusKind.UpdateAvailable : ProfileUpdateStatusKind.UpToDate,
                     ProfileUpdateStage.Resolve or ProfileUpdateStage.Build or ProfileUpdateStage.Test =>
                         ProfileUpdateStatusKind.CandidateInProgress,
                     ProfileUpdateStage.Promote => ProfileUpdateStatusKind.CandidateApproved,
                     _ => ProfileUpdateStatusKind.Unknown
                 },
             Checked = state.LastCheckedAt is not null,
-            Active = new ProfileUpdateReleaseStatus
-            {
-                ReleaseId = state.ActiveReleaseId,
-                LockDigest = state.ActiveLockDigest
-            },
-            LastKnownGood = CreateReleaseStatus(
-                state.LastKnownGoodReleaseId,
-                state.LastKnownGoodDigest),
-            Candidate = CreateReleaseStatus(
-                state.LatestCandidateReleaseId,
-                state.LatestCandidateDigest),
+            Active = new ProfileUpdateReleaseStatus { ReleaseId = state.ActiveReleaseId, LockDigest = state.ActiveLockDigest },
+            LastKnownGood = CreateReleaseStatus(state.LastKnownGoodReleaseId, state.LastKnownGoodDigest),
+            Candidate = CreateReleaseStatus(state.LatestCandidateReleaseId, state.LatestCandidateDigest),
             UpdateAvailable = failed && state.LastStage.Stage == ProfileUpdateStage.Check
-                ? null
-                : state.UpdateAvailable,
+                ? null : state.UpdateAvailable,
             CheckedAt = state.LastCheckedAt,
             UpdatedAt = state.UpdatedAt,
-            LastStage = new ProfileUpdatePublicStageStatus
-            {
-                Stage = PublicStage(state.LastStage.Stage),
-                Outcome = state.LastStage.Status == ProfileUpdateStageStatus.Succeeded
-                    ? ProfileUpdatePublicStageOutcome.Succeeded
-                    : ProfileUpdatePublicStageOutcome.Failed,
-                StartedAt = state.LastStage.StartedAt,
-                CompletedAt = state.LastStage.CompletedAt,
-                Error = failed ? PublicError(state.LastStage.Stage) : null
-            }
+            LastStage = new ProfileUpdatePublicStageStatus { Stage = PublicStage(state.LastStage.Stage), Outcome = state.LastStage.Status == ProfileUpdateStageStatus.Succeeded ? ProfileUpdatePublicStageOutcome.Succeeded : ProfileUpdatePublicStageOutcome.Failed, StartedAt = state.LastStage.StartedAt, CompletedAt = state.LastStage.CompletedAt, Error = failed ? PublicError(state.LastStage.Stage) : null }
         };
     }
 
     private static ProfileUpdateReleaseStatus? CreateReleaseStatus(string? releaseId, string? digest) =>
         string.IsNullOrWhiteSpace(releaseId) || string.IsNullOrWhiteSpace(digest)
-            ? null
-            : new ProfileUpdateReleaseStatus
-            {
-                ReleaseId = releaseId,
-                LockDigest = digest
-            };
+            ? null : new ProfileUpdateReleaseStatus { ReleaseId = releaseId, LockDigest = digest };
 
     private static ProfileUpdatePublicError PublicError(ProfileUpdateStage stage) => stage switch
     {
@@ -946,24 +628,16 @@ public sealed class ProfileUpdateWorkflow
         return await DeserializeAsync<ProfileUpdaterState>(StatePath, cancellationToken);
     }
 
-    private async Task SaveReceiptAsync(
-        ProfileUpdateReceipt receipt,
-        CancellationToken cancellationToken) =>
-        await AtomicFile.WriteAllBytesAsync(
-            GetReceiptPath(receipt.CandidateDigest),
-            SerializeJson(receipt),
-            cancellationToken);
+    private async Task SaveReceiptAsync(ProfileUpdateReceipt receipt, CancellationToken cancellationToken) =>
+        await AtomicFile.WriteAllBytesAsync(GetReceiptPath(receipt.CandidateDigest), SerializeJson(receipt), cancellationToken);
 
-    private async Task<ProfileUpdateReceipt> LoadReceiptAsync(
-        string digest,
-        CancellationToken cancellationToken) =>
+    private async Task<ProfileUpdateReceipt> LoadReceiptAsync(string digest, CancellationToken cancellationToken) =>
         await DeserializeAsync<ProfileUpdateReceipt>(GetReceiptPath(digest), cancellationToken);
 
     private static async Task<T> DeserializeAsync<T>(string path, CancellationToken cancellationToken)
     {
         await using var stream = File.OpenRead(path);
-        return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, cancellationToken)
-            ?? throw new InvalidDataException($"JSON document '{path}' is empty.");
+        return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, cancellationToken) ?? throw new InvalidDataException($"JSON document '{path}' is empty.");
     }
 
     private static async Task<LockContext> ReadLockAsync(string path, CancellationToken cancellationToken)
@@ -973,17 +647,9 @@ public sealed class ProfileUpdateWorkflow
         return new LockContext(document, ComputeDigest(bytes), bytes);
     }
 
-    private static async Task<string> ComputeMaterialDigestAsync(
-        CandidateReleaseMaterial material,
-        bool includePackageLocks,
-        CancellationToken cancellationToken)
+    private static async Task<string> ComputeMaterialDigestAsync(CandidateReleaseMaterial material, bool includePackageLocks, CancellationToken cancellationToken)
     {
-        var files = new List<string>
-        {
-            material.LockPath,
-            material.CatalogPath,
-            material.VersionsPath
-        };
+        var files = new List<string> { material.LockPath, material.CatalogPath, material.VersionsPath };
         files.AddRange(material.RuntimeProfiles.Select(static profile => profile.Path));
         files.AddRange(material.ReferenceSetConfigurations.Select(static configuration => configuration.Path));
         if (includePackageLocks)
@@ -992,9 +658,7 @@ public sealed class ProfileUpdateWorkflow
         }
 
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        foreach (var path in files.Distinct(PathComparer).OrderBy(
-                     path => Path.GetRelativePath(material.WorkspaceRoot, path),
-                     StringComparer.Ordinal))
+        foreach (var path in files.Distinct(PathComparer).OrderBy(path => Path.GetRelativePath(material.WorkspaceRoot, path), StringComparer.Ordinal))
         {
             var relative = Path.GetRelativePath(material.WorkspaceRoot, path).Replace('\\', '/');
             hash.AppendData(Encoding.UTF8.GetBytes(relative));
@@ -1006,146 +670,72 @@ public sealed class ProfileUpdateWorkflow
         return $"sha256:{Convert.ToHexStringLower(hash.GetHashAndReset())}";
     }
 
-    private static async Task RequireMaterialDigestAsync(
-        CandidateContext candidate,
-        CancellationToken cancellationToken)
+    private static async Task RequireMaterialDigestAsync(CandidateContext candidate, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(candidate.Receipt.MaterialDigest))
             throw new ProfileUpdateValidationException("Candidate receipt has no built material digest.");
         var actual = await ComputeMaterialDigestAsync(candidate.Material, includePackageLocks: true, cancellationToken);
         if (!string.Equals(actual, candidate.Receipt.MaterialDigest, StringComparison.Ordinal))
         {
-            throw new ProfileUpdateValidationException(
-                $"Candidate material digest mismatch: expected '{candidate.Receipt.MaterialDigest}', actual '{actual}'.");
+            throw new ProfileUpdateValidationException($"Candidate material digest mismatch: expected '{candidate.Receipt.MaterialDigest}', actual '{actual}'.");
         }
     }
 
-    private async Task<IReadOnlyList<(string Path, ReadOnlyMemory<byte> Content)>> CreatePromotionReplacementsAsync(
-        CandidateContext candidate,
-        byte[] candidateLock,
-        CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<(string Path, ReadOnlyMemory<byte> Content)>> CreatePromotionReplacementsAsync(CandidateContext candidate, byte[] candidateLock, CancellationToken cancellationToken)
     {
         var replacements = new List<(string Path, ReadOnlyMemory<byte> Content)>
         {
             (catalogPath, await File.ReadAllBytesAsync(candidate.Material.CatalogPath, cancellationToken)),
-            (Path.Combine(repositoryRoot, "profiles", "versions.props"),
-                await File.ReadAllBytesAsync(candidate.Material.VersionsPath, cancellationToken))
+            (Path.Combine(repositoryRoot, "profiles", "versions.props"), await File.ReadAllBytesAsync(candidate.Material.VersionsPath, cancellationToken))
         };
         foreach (var runtimeProfile in candidate.Material.RuntimeProfiles)
-        {
-            replacements.Add((
-                Path.Combine(repositoryRoot, runtimeProfile.RelativePath),
-                await File.ReadAllBytesAsync(runtimeProfile.Path, cancellationToken)));
-        }
+            replacements.Add((Path.Combine(repositoryRoot, runtimeProfile.RelativePath), await File.ReadAllBytesAsync(runtimeProfile.Path, cancellationToken)));
         foreach (var configuration in candidate.Material.ReferenceSetConfigurations)
-        {
-            replacements.Add((
-                Path.Combine(repositoryRoot, configuration.RelativePath),
-                await File.ReadAllBytesAsync(configuration.Path, cancellationToken)));
-        }
+            replacements.Add((Path.Combine(repositoryRoot, configuration.RelativePath), await File.ReadAllBytesAsync(configuration.Path, cancellationToken)));
         foreach (var packageLock in EnumeratePackageLocks(candidate.WorkspaceRoot))
         {
             var relative = Path.GetRelativePath(candidate.WorkspaceRoot, packageLock);
-            replacements.Add((
-                Path.Combine(repositoryRoot, relative),
-                await File.ReadAllBytesAsync(packageLock, cancellationToken)));
+            replacements.Add((Path.Combine(repositoryRoot, relative), await File.ReadAllBytesAsync(packageLock, cancellationToken)));
         }
         replacements.Add((lockPath, candidateLock));
         return replacements;
     }
 
-    private async Task WriteActiveMaterialSnapshotAsync(
-        string destinationRoot,
-        CancellationToken cancellationToken)
+    private async Task WriteActiveMaterialSnapshotAsync(string destinationRoot, CancellationToken cancellationToken)
     {
-        await AtomicFile.WriteAllBytesAsync(
-            Path.Combine(destinationRoot, "lock.json"),
-            await File.ReadAllBytesAsync(lockPath, cancellationToken),
-            cancellationToken);
-        await AtomicFile.WriteAllBytesAsync(
-            Path.Combine(destinationRoot, "catalog.json"),
-            await File.ReadAllBytesAsync(catalogPath, cancellationToken),
-            cancellationToken);
+        await AtomicFile.WriteAllBytesAsync(Path.Combine(destinationRoot, "lock.json"), await File.ReadAllBytesAsync(lockPath, cancellationToken), cancellationToken);
+        await AtomicFile.WriteAllBytesAsync(Path.Combine(destinationRoot, "catalog.json"), await File.ReadAllBytesAsync(catalogPath, cancellationToken), cancellationToken);
         var versionsPath = Path.Combine(repositoryRoot, "profiles", "versions.props");
-        await AtomicFile.WriteAllBytesAsync(
-            Path.Combine(destinationRoot, "versions.props"),
-            await File.ReadAllBytesAsync(versionsPath, cancellationToken),
-            cancellationToken);
+        await AtomicFile.WriteAllBytesAsync(Path.Combine(destinationRoot, "versions.props"), await File.ReadAllBytesAsync(versionsPath, cancellationToken), cancellationToken);
         foreach (var runtimeProfile in CandidateReleaseMaterializer.Locate(repositoryRoot).RuntimeProfiles)
-        {
-            await AtomicFile.WriteAllBytesAsync(
-                Path.Combine(destinationRoot, "runtimes", Path.GetFileName(runtimeProfile.Path)),
-                await File.ReadAllBytesAsync(runtimeProfile.Path, cancellationToken),
-                cancellationToken);
-        }
+            await AtomicFile.WriteAllBytesAsync(Path.Combine(destinationRoot, "runtimes", Path.GetFileName(runtimeProfile.Path)), await File.ReadAllBytesAsync(runtimeProfile.Path, cancellationToken), cancellationToken);
         foreach (var configuration in CandidateReleaseMaterializer.Locate(repositoryRoot).ReferenceSetConfigurations)
-        {
-            await AtomicFile.WriteAllBytesAsync(
-                Path.Combine(
-                    destinationRoot,
-                    "reference-set-configurations",
-                    configuration.RelativePath),
-                await File.ReadAllBytesAsync(configuration.Path, cancellationToken),
-                cancellationToken);
-        }
+            await AtomicFile.WriteAllBytesAsync(Path.Combine(destinationRoot, "reference-set-configurations", configuration.RelativePath), await File.ReadAllBytesAsync(configuration.Path, cancellationToken), cancellationToken);
         foreach (var packageLock in EnumeratePackageLocks(repositoryRoot))
         {
             var relative = Path.GetRelativePath(repositoryRoot, packageLock);
-            await AtomicFile.WriteAllBytesAsync(
-                Path.Combine(destinationRoot, "package-locks", relative),
-                await File.ReadAllBytesAsync(packageLock, cancellationToken),
-                cancellationToken);
+            await AtomicFile.WriteAllBytesAsync(Path.Combine(destinationRoot, "package-locks", relative), await File.ReadAllBytesAsync(packageLock, cancellationToken), cancellationToken);
         }
     }
 
-    private static async Task WriteCandidateMaterialSnapshotAsync(
-        CandidateContext candidate,
-        string destinationRoot,
-        CancellationToken cancellationToken)
+    private static async Task WriteCandidateMaterialSnapshotAsync(CandidateContext candidate, string destinationRoot, CancellationToken cancellationToken)
     {
-        await AtomicFile.WriteAllBytesAsync(
-            Path.Combine(destinationRoot, "lock.json"),
-            await File.ReadAllBytesAsync(candidate.Material.LockPath, cancellationToken),
-            cancellationToken);
-        await AtomicFile.WriteAllBytesAsync(
-            Path.Combine(destinationRoot, "catalog.json"),
-            await File.ReadAllBytesAsync(candidate.Material.CatalogPath, cancellationToken),
-            cancellationToken);
-        await AtomicFile.WriteAllBytesAsync(
-            Path.Combine(destinationRoot, "versions.props"),
-            await File.ReadAllBytesAsync(candidate.Material.VersionsPath, cancellationToken),
-            cancellationToken);
+        await AtomicFile.WriteAllBytesAsync(Path.Combine(destinationRoot, "lock.json"), await File.ReadAllBytesAsync(candidate.Material.LockPath, cancellationToken), cancellationToken);
+        await AtomicFile.WriteAllBytesAsync(Path.Combine(destinationRoot, "catalog.json"), await File.ReadAllBytesAsync(candidate.Material.CatalogPath, cancellationToken), cancellationToken);
+        await AtomicFile.WriteAllBytesAsync(Path.Combine(destinationRoot, "versions.props"), await File.ReadAllBytesAsync(candidate.Material.VersionsPath, cancellationToken), cancellationToken);
         foreach (var runtimeProfile in candidate.Material.RuntimeProfiles)
-        {
-            await AtomicFile.WriteAllBytesAsync(
-                Path.Combine(destinationRoot, "runtimes", Path.GetFileName(runtimeProfile.Path)),
-                await File.ReadAllBytesAsync(runtimeProfile.Path, cancellationToken),
-                cancellationToken);
-        }
+            await AtomicFile.WriteAllBytesAsync(Path.Combine(destinationRoot, "runtimes", Path.GetFileName(runtimeProfile.Path)), await File.ReadAllBytesAsync(runtimeProfile.Path, cancellationToken), cancellationToken);
         foreach (var configuration in candidate.Material.ReferenceSetConfigurations)
-        {
-            await AtomicFile.WriteAllBytesAsync(
-                Path.Combine(
-                    destinationRoot,
-                    "reference-set-configurations",
-                    configuration.RelativePath),
-                await File.ReadAllBytesAsync(configuration.Path, cancellationToken),
-                cancellationToken);
-        }
+            await AtomicFile.WriteAllBytesAsync(Path.Combine(destinationRoot, "reference-set-configurations", configuration.RelativePath), await File.ReadAllBytesAsync(configuration.Path, cancellationToken), cancellationToken);
         foreach (var packageLock in EnumeratePackageLocks(candidate.WorkspaceRoot))
         {
             var relative = Path.GetRelativePath(candidate.WorkspaceRoot, packageLock);
-            await AtomicFile.WriteAllBytesAsync(
-                Path.Combine(destinationRoot, "package-locks", relative),
-                await File.ReadAllBytesAsync(packageLock, cancellationToken),
-                cancellationToken);
+            await AtomicFile.WriteAllBytesAsync(Path.Combine(destinationRoot, "package-locks", relative), await File.ReadAllBytesAsync(packageLock, cancellationToken), cancellationToken);
         }
     }
 
     private static IEnumerable<string> EnumeratePackageLocks(string root) =>
-        Directory.EnumerateFiles(root, "packages*.lock.json", SearchOption.AllDirectories)
-            .Where(path => IsPackageLockFileName(Path.GetFileName(path)) && !IsGeneratedPath(root, path))
-            .OrderBy(path => Path.GetRelativePath(root, path), StringComparer.Ordinal);
+        Directory.EnumerateFiles(root, "packages*.lock.json", SearchOption.AllDirectories).Where(path => IsPackageLockFileName(Path.GetFileName(path)) && !IsGeneratedPath(root, path)).OrderBy(path => Path.GetRelativePath(root, path), StringComparer.Ordinal);
 
     private static bool IsPackageLockFileName(string fileName) =>
         string.Equals(fileName, "packages.lock.json", StringComparison.Ordinal) ||
@@ -1154,31 +744,20 @@ public sealed class ProfileUpdateWorkflow
 
     private static bool IsGeneratedPath(string root, string path)
     {
-        var segments = Path.GetRelativePath(root, path)
-            .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        var segments = Path.GetRelativePath(root, path).Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
         return segments.Any(static segment => segment is "bin" or "obj" or "node_modules" or "artifacts" or ".git");
     }
 
     private static StringComparer PathComparer => OperatingSystem.IsWindows()
-        ? StringComparer.OrdinalIgnoreCase
-        : StringComparer.Ordinal;
+        ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
-    private ProfileUpdateExternalCommand Command(
-        string fileName,
-        IReadOnlyList<string> arguments,
-        IReadOnlyDictionary<string, string>? environment = null,
-        string? workingDirectory = null,
-        bool alwaysRun = false) =>
-        new(fileName, arguments, workingDirectory ?? repositoryRoot, environment, alwaysRun);
+    private ProfileUpdateExternalCommand Command(string fileName, IReadOnlyList<string> arguments, IReadOnlyDictionary<string, string>? environment = null, string? workingDirectory = null, bool alwaysRun = false) => new(fileName, arguments, workingDirectory ?? repositoryRoot, environment, alwaysRun);
 
-    private string GetCandidateLockPath(string digest) =>
-        Path.Combine(stateRoot, "candidates", DigestHex(digest), "lock.json");
+    private string GetCandidateLockPath(string digest) => Path.Combine(stateRoot, "candidates", DigestHex(digest), "lock.json");
 
-    private string GetCandidateWorkspacePath(string digest) =>
-        Path.Combine(stateRoot, "candidates", DigestHex(digest), "workspace");
+    private string GetCandidateWorkspacePath(string digest) => Path.Combine(stateRoot, "candidates", DigestHex(digest), "workspace");
 
-    private string GetReceiptPath(string digest) =>
-        Path.Combine(stateRoot, "candidates", DigestHex(digest), "receipt.json");
+    private string GetReceiptPath(string digest) => Path.Combine(stateRoot, "candidates", DigestHex(digest), "receipt.json");
 
     private string StatePath => Path.Combine(stateRoot, "state.json");
 
@@ -1188,17 +767,11 @@ public sealed class ProfileUpdateWorkflow
 
     private static byte[] SerializeLock(ReleaseLockDocument document)
     {
-        var canonical = document with
-        {
-            Components = document.Components
-                .OrderBy(static pair => pair.Key, StringComparer.Ordinal)
-                .ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal)
-        };
+        var canonical = document with { Components = document.Components.OrderBy(static pair => pair.Key, StringComparer.Ordinal).ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal) };
         return SerializeJson(canonical);
     }
 
-    private static byte[] SerializeJson<T>(T value) =>
-        Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value, JsonOptions) + "\n");
+    private static byte[] SerializeJson<T>(T value) => Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value, JsonOptions) + "\n");
 
     private static JsonSerializerOptions CreateJsonOptions()
     {
@@ -1214,14 +787,12 @@ public sealed class ProfileUpdateWorkflow
         return options;
     }
 
-    private static string ComputeDigest(ReadOnlySpan<byte> bytes) =>
-        $"sha256:{Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant()}";
+    private static string ComputeDigest(ReadOnlySpan<byte> bytes) => $"sha256:{Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant()}";
 
     private static string NormalizeDigest(string digest)
     {
         var normalized = digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase)
-            ? $"sha256:{digest[7..].ToLowerInvariant()}"
-            : $"sha256:{digest.ToLowerInvariant()}";
+            ? $"sha256:{digest[7..].ToLowerInvariant()}" : $"sha256:{digest.ToLowerInvariant()}";
         _ = DigestHex(normalized);
         return normalized;
     }
@@ -1249,8 +820,7 @@ public sealed class ProfileUpdateWorkflow
         var latest = receipt.Stages.LastOrDefault(item => item.Stage == stage);
         if (latest is null || latest.Status != ProfileUpdateStageStatus.Succeeded)
         {
-            throw new ProfileUpdateValidationException(
-                $"Stage '{stage.ToString().ToLowerInvariant()}' must succeed before continuing.");
+            throw new ProfileUpdateValidationException($"Stage '{stage.ToString().ToLowerInvariant()}' must succeed before continuing.");
         }
     }
 
@@ -1262,11 +832,7 @@ public sealed class ProfileUpdateWorkflow
         }
     }
 
-    private static ProfileUpdateExecutedCommand CommandReceipt(
-        ProfileUpdateExternalCommand command,
-        DateTimeOffset startedAt,
-        DateTimeOffset completedAt,
-        int exitCode) =>
+    private static ProfileUpdateExecutedCommand CommandReceipt(ProfileUpdateExternalCommand command, DateTimeOffset startedAt, DateTimeOffset completedAt, int exitCode) =>
         new()
         {
             FileName = command.FileName,
@@ -1276,10 +842,7 @@ public sealed class ProfileUpdateWorkflow
             ExitCode = exitCode
         };
 
-    private static ProfileUpdateStageReceipt SucceededStage(
-        ProfileUpdateStage stage,
-        DateTimeOffset startedAt,
-        DateTimeOffset completedAt) =>
+    private static ProfileUpdateStageReceipt SucceededStage(ProfileUpdateStage stage, DateTimeOffset startedAt, DateTimeOffset completedAt) =>
         new()
         {
             Stage = stage,
@@ -1288,11 +851,7 @@ public sealed class ProfileUpdateWorkflow
             CompletedAt = completedAt
         };
 
-    private static ProfileUpdateStageReceipt FailedStage(
-        ProfileUpdateStage stage,
-        DateTimeOffset startedAt,
-        DateTimeOffset completedAt,
-        string error) =>
+    private static ProfileUpdateStageReceipt FailedStage(ProfileUpdateStage stage, DateTimeOffset startedAt, DateTimeOffset completedAt, string error) =>
         new()
         {
             Stage = stage,
@@ -1304,13 +863,7 @@ public sealed class ProfileUpdateWorkflow
 
     private static string Limit(string value) => value.Length <= 4096 ? value : value[..4096];
 
-    private sealed record CandidateContext(
-        ReleaseLockDocument Document,
-        string Digest,
-        string Path,
-        ProfileUpdateReceipt Receipt,
-        string WorkspaceRoot,
-        CandidateReleaseMaterial Material);
+    private sealed record CandidateContext(ReleaseLockDocument Document, string Digest, string Path, ProfileUpdateReceipt Receipt, string WorkspaceRoot, CandidateReleaseMaterial Material);
 
     private sealed record LockContext(ReleaseLockDocument Document, string Digest, byte[] Bytes);
 }
@@ -1360,34 +913,13 @@ public static class BakeEnvironmentResolver
             ["mono-jsil"] = "BASE_MONO_JSIL_IMAGE"
         };
 
-    public static async Task<Dictionary<string, string>> CreateAsync(
-        string lockPath,
-        string baseImageManifestPath,
-        string sourceRevision,
-        string sourceDateEpoch,
-        string imagePrefix = "sharplabnext",
-        string? controlRuntimeTargetFramework = null,
-        CancellationToken cancellationToken = default)
+    public static async Task<Dictionary<string, string>> CreateAsync(string lockPath, string baseImageManifestPath, string sourceRevision, string sourceDateEpoch, string imagePrefix = "sharplabnext", string? controlRuntimeTargetFramework = null, CancellationToken cancellationToken = default)
     {
-        var releaseLock = await CatalogLoader.LoadReleaseLockAsync(
-            Path.GetFullPath(lockPath),
-            cancellationToken);
-        return Create(
-            releaseLock,
-            baseImageManifestPath,
-            sourceRevision,
-            sourceDateEpoch,
-            imagePrefix,
-            controlRuntimeTargetFramework);
+        var releaseLock = await CatalogLoader.LoadReleaseLockAsync(Path.GetFullPath(lockPath), cancellationToken);
+        return Create(releaseLock, baseImageManifestPath, sourceRevision, sourceDateEpoch, imagePrefix, controlRuntimeTargetFramework);
     }
 
-    public static Dictionary<string, string> Create(
-        ReleaseLockDocument releaseLock,
-        string baseImageManifestPath,
-        string sourceRevision,
-        string sourceDateEpoch,
-        string imagePrefix = "sharplabnext",
-        string? controlRuntimeTargetFramework = null)
+    public static Dictionary<string, string> Create(ReleaseLockDocument releaseLock, string baseImageManifestPath, string sourceRevision, string sourceDateEpoch, string imagePrefix = "sharplabnext", string? controlRuntimeTargetFramework = null)
     {
         ArgumentNullException.ThrowIfNull(releaseLock);
         var environment = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -1401,20 +933,14 @@ public static class BakeEnvironmentResolver
             // rest of the runtime fleet.  Keep this selection in the Bake
             // environment rather than in a Dockerfile ARG default so a
             // release cannot silently switch frameworks.
-            ["WINE_CONTROL_TFM"] = ValidateControlRuntimeTargetFramework(
-                controlRuntimeTargetFramework ?? "net10.0"),
+            ["WINE_CONTROL_TFM"] = ValidateControlRuntimeTargetFramework(controlRuntimeTargetFramework ?? "net10.0"),
             ["OPERATOR_SOURCE_CONTEXT"] = DevelopmentOperatorSourceContext,
             ["OPERATOR_PROMOTION_ELIGIBLE"] = DevelopmentOperatorPromotionEligible,
             ["OPERATOR_DEVELOPMENT_ONLY"] = DevelopmentOperatorDevelopmentOnly
         };
 
         var roslynStable = RequiredComponent(releaseLock, "roslyn-stable");
-        AddPackage(
-            environment,
-            roslynStable,
-            "roslyn-stable",
-            "ROSLYN_STABLE_VERSION",
-            "ROSLYN_STABLE_SOURCE_URI");
+        AddPackage(environment, roslynStable, "roslyn-stable", "ROSLYN_STABLE_VERSION", "ROSLYN_STABLE_SOURCE_URI");
 
         var roslynMain = RequiredComponent(releaseLock, "roslyn-main");
         environment["ROSLYN_MAIN_VERSION"] = RequiredVersion(roslynMain, "roslyn-main");
@@ -1423,60 +949,22 @@ public static class BakeEnvironmentResolver
         environment["ROSLYN_MAIN_ARCHIVE_SHA256"] = DigestHex(roslynMain.Digest, "roslyn-main.digest");
         environment["ROSLYN_MAIN_SOURCE_URI"] = RequiredValue(roslynMain.SourceUri, "roslyn-main.sourceUri");
 
-        AddPackage(
-            environment,
-            RequiredComponent(releaseLock, "fsharp-stable"),
-            "fsharp-stable",
-            "FSHARP_COMPILER_SERVICE_VERSION",
-            "FSHARP_COMPILER_SERVICE_SOURCE_URI");
-        AddPackage(
-            environment,
-            RequiredComponent(releaseLock, "fsharp-core"),
-            "fsharp-core",
-            "FSHARP_CORE_VERSION",
-            "FSHARP_CORE_SOURCE_URI");
+        AddPackage(environment, RequiredComponent(releaseLock, "fsharp-stable"), "fsharp-stable", "FSHARP_COMPILER_SERVICE_VERSION", "FSHARP_COMPILER_SERVICE_SOURCE_URI");
+        AddPackage(environment, RequiredComponent(releaseLock, "fsharp-core"), "fsharp-core", "FSHARP_CORE_VERSION", "FSHARP_CORE_SOURCE_URI");
         AddGSharp(environment, releaseLock);
         AddPeachPie(environment, releaseLock);
         AddJsil(environment, releaseLock);
-        AddPackage(
-            environment,
-            RequiredComponent(releaseLock, "ilspy"),
-            "ilspy",
-            "ILSPY_VERSION",
-            "ILSPY_SOURCE_URI");
-        AddPackage(
-            environment,
-            RequiredComponent(releaseLock, "dotnet-ilverify"),
-            "dotnet-ilverify",
-            "ILVERIFICATION_VERSION",
-            "ILVERIFICATION_SOURCE_URI");
-        AddPackage(
-            environment,
-            RequiredComponent(releaseLock, "mobius-ilasm-stable"),
-            "mobius-ilasm-stable",
-            "MOBIUS_ILASM_VERSION",
-            "MOBIUS_ILASM_SOURCE_URI");
+        AddPackage(environment, RequiredComponent(releaseLock, "ilspy"), "ilspy", "ILSPY_VERSION", "ILSPY_SOURCE_URI");
+        AddPackage(environment, RequiredComponent(releaseLock, "dotnet-ilverify"), "dotnet-ilverify", "ILVERIFICATION_VERSION", "ILVERIFICATION_SOURCE_URI");
+        AddPackage(environment, RequiredComponent(releaseLock, "mobius-ilasm-stable"), "mobius-ilasm-stable", "MOBIUS_ILASM_VERSION", "MOBIUS_ILASM_SOURCE_URI");
         AddILSense(environment, releaseLock);
-        environment["MINILANG_VERSION"] = RequiredVersion(
-            RequiredComponent(releaseLock, "minilang-stable"),
-            "minilang-stable");
-        environment["ARTIFACTS_DEFAULT_VERSION"] = RequiredVersion(
-            RequiredComponent(releaseLock, "artifacts-default"),
-            "artifacts-default");
-        environment["ARTIFACTS_CONST_GENERICS_VERSION"] = RequiredVersion(
-            RequiredComponent(releaseLock, "artifacts-const-generics"),
-            "artifacts-const-generics");
-        environment["IL_ASSEMBLER_VERSION"] = RequiredVersion(
-            RequiredComponent(releaseLock, "il-assembler"),
-            "il-assembler");
+        environment["MINILANG_VERSION"] = RequiredVersion(RequiredComponent(releaseLock, "minilang-stable"), "minilang-stable");
+        environment["ARTIFACTS_DEFAULT_VERSION"] = RequiredVersion(RequiredComponent(releaseLock, "artifacts-default"), "artifacts-default");
+        environment["ARTIFACTS_CONST_GENERICS_VERSION"] = RequiredVersion(RequiredComponent(releaseLock, "artifacts-const-generics"), "artifacts-const-generics");
+        environment["IL_ASSEMBLER_VERSION"] = RequiredVersion(RequiredComponent(releaseLock, "il-assembler"), "il-assembler");
 
         AddCoreClrReferenceSets(environment, releaseLock);
-        AddReferenceSet(
-            environment,
-            releaseLock,
-            "netfx48-managed-ref",
-            "NETFX48_MANAGED_REFERENCE_VERSION",
-            "NETFX48_MANAGED");
+        AddReferenceSet(environment, releaseLock, "netfx48-managed-ref", "NETFX48_MANAGED_REFERENCE_VERSION", "NETFX48_MANAGED");
         AddFrameworkManagedReferenceDigests(environment, releaseLock);
         AddRuntime(environment, releaseLock, "dotnet-10-linux-x64", "DOTNET10");
         AddRuntime(environment, releaseLock, "dotnet-11-preview-linux-x64", "DOTNET11");
@@ -1489,100 +977,59 @@ public static class BakeEnvironmentResolver
         return environment;
     }
 
-    private static void AddWineCoreClrUserspace(
-        Dictionary<string, string> environment,
-        ReleaseLockDocument releaseLock)
+    private static void AddWineCoreClrUserspace(Dictionary<string, string> environment, ReleaseLockDocument releaseLock)
     {
         const string componentId = "wine-coreclr-userspace";
-        const string sourceUri =
-            "https://snapshot.ubuntu.com/ubuntu/20260810T000000Z/";
+        const string sourceUri = "https://snapshot.ubuntu.com/ubuntu/20260810T000000Z/";
         var component = RequiredComponent(releaseLock, componentId);
         if (!string.Equals(component.Kind, "runtime-dependency", StringComparison.Ordinal))
         {
-            throw new BakeEnvironmentValidationException(
-                $"{componentId}.kind must be runtime-dependency.");
+            throw new BakeEnvironmentValidationException($"{componentId}.kind must be runtime-dependency.");
         }
 
         var componentSourceUri = RequiredValue(component.SourceUri, $"{componentId}.sourceUri");
         if (!string.Equals(componentSourceUri, sourceUri, StringComparison.Ordinal))
         {
-            throw new BakeEnvironmentValidationException(
-                $"{componentId}.sourceUri must identify the immutable Ubuntu installation snapshot.");
+            throw new BakeEnvironmentValidationException($"{componentId}.sourceUri must identify the immutable Ubuntu installation snapshot.");
         }
 
         environment["WINE_CORECLR_USERSPACE_VERSION"] = RequiredVersion(component, componentId);
-        environment["WINE_CORECLR_USERSPACE_DIGEST"] = RequiredDigest(
-            component.Digest,
-            $"{componentId}.digest");
+        environment["WINE_CORECLR_USERSPACE_DIGEST"] = RequiredDigest(component.Digest, $"{componentId}.digest");
         environment["WINE_CORECLR_USERSPACE_SOURCE_URI"] = componentSourceUri;
     }
 
-    private static void AddJitProfilerProvenance(
-        Dictionary<string, string> environment,
-        ReleaseLockDocument releaseLock)
+    private static void AddJitProfilerProvenance(Dictionary<string, string> environment, ReleaseLockDocument releaseLock)
     {
         var scaffold = RequiredComponent(releaseLock, "jit-profiler-clr-samples");
         var runtimeHeaders = RequiredComponent(releaseLock, "jit-profiler-runtime-headers");
-        environment["JIT_PROFILER_CLR_SAMPLES_COMMIT"] = RequiredValue(
-            scaffold.Commit,
-            "jit-profiler-clr-samples.commit");
-        environment["JIT_PROFILER_CLR_SAMPLES_SOURCE_URI"] = RequiredValue(
-            scaffold.SourceUri,
-            "jit-profiler-clr-samples.sourceUri");
-        environment["JIT_PROFILER_RUNTIME_HEADERS_COMMIT"] = RequiredValue(
-            runtimeHeaders.Commit,
-            "jit-profiler-runtime-headers.commit");
-        environment["JIT_PROFILER_RUNTIME_HEADERS_SOURCE_URI"] = RequiredValue(
-            runtimeHeaders.SourceUri,
-            "jit-profiler-runtime-headers.sourceUri");
+        environment["JIT_PROFILER_CLR_SAMPLES_COMMIT"] = RequiredValue(scaffold.Commit, "jit-profiler-clr-samples.commit");
+        environment["JIT_PROFILER_CLR_SAMPLES_SOURCE_URI"] = RequiredValue(scaffold.SourceUri, "jit-profiler-clr-samples.sourceUri");
+        environment["JIT_PROFILER_RUNTIME_HEADERS_COMMIT"] = RequiredValue(runtimeHeaders.Commit, "jit-profiler-runtime-headers.commit");
+        environment["JIT_PROFILER_RUNTIME_HEADERS_SOURCE_URI"] = RequiredValue(runtimeHeaders.SourceUri, "jit-profiler-runtime-headers.sourceUri");
     }
 
-    private static void AddCppCli(
-        Dictionary<string, string> environment,
-        ReleaseLockDocument releaseLock)
+    private static void AddCppCli(Dictionary<string, string> environment, ReleaseLockDocument releaseLock)
     {
         var toolchain = RequiredComponent(releaseLock, "msvc-cppcli-netfx48");
         var msvcWineSource = RequiredComponent(releaseLock, "msvc-wine-source");
         var referenceSet = RequiredComponent(releaseLock, "netfx48-ref");
         var runtime = RequiredComponent(releaseLock, "wine-netfx48-linux-x64");
         environment["CPPCLI_COMPILER_VERSION"] = RequiredVersion(toolchain, "msvc-cppcli-netfx48");
-        environment["CPPCLI_TOOLCHAIN_DIGEST"] = RequiredDigest(
-            toolchain.Digest,
-            "msvc-cppcli-netfx48.digest");
-        environment["CPPCLI_TOOLCHAIN_SOURCE_URI"] = RequiredValue(
-            toolchain.SourceUri,
-            "msvc-cppcli-netfx48.sourceUri");
+        environment["CPPCLI_TOOLCHAIN_DIGEST"] = RequiredDigest(toolchain.Digest, "msvc-cppcli-netfx48.digest");
+        environment["CPPCLI_TOOLCHAIN_SOURCE_URI"] = RequiredValue(toolchain.SourceUri, "msvc-cppcli-netfx48.sourceUri");
         environment["MSVC_WINE_SOURCE_VERSION"] = RequiredVersion(msvcWineSource, "msvc-wine-source");
-        environment["MSVC_WINE_SOURCE_COMMIT"] = RequiredValue(
-            msvcWineSource.Commit,
-            "msvc-wine-source.commit");
-        environment["MSVC_WINE_SOURCE_DIGEST"] = RequiredDigest(
-            msvcWineSource.Digest,
-            "msvc-wine-source.digest");
-        environment["MSVC_WINE_SOURCE_URI"] = RequiredValue(
-            msvcWineSource.SourceUri,
-            "msvc-wine-source.sourceUri");
+        environment["MSVC_WINE_SOURCE_COMMIT"] = RequiredValue(msvcWineSource.Commit, "msvc-wine-source.commit");
+        environment["MSVC_WINE_SOURCE_DIGEST"] = RequiredDigest(msvcWineSource.Digest, "msvc-wine-source.digest");
+        environment["MSVC_WINE_SOURCE_URI"] = RequiredValue(msvcWineSource.SourceUri, "msvc-wine-source.sourceUri");
         environment["NETFX48_REFERENCE_VERSION"] = RequiredVersion(referenceSet, "netfx48-ref");
-        environment["NETFX48_REFERENCE_DIGEST"] = RequiredDigest(
-            referenceSet.Digest,
-            "netfx48-ref.digest");
-        environment["NETFX48_REFERENCE_SOURCE_URI"] = RequiredValue(
-            referenceSet.SourceUri,
-            "netfx48-ref.sourceUri");
-        environment["WINE_NETFX48_RUNTIME_VERSION"] = RequiredVersion(
-            runtime,
-            "wine-netfx48-linux-x64");
-        environment["WINE_NETFX48_RUNTIME_DIGEST"] = RequiredDigest(
-            runtime.Digest,
-            "wine-netfx48-linux-x64.digest");
-        environment["WINE_NETFX48_RUNTIME_SOURCE_URI"] = RequiredValue(
-            runtime.SourceUri,
-            "wine-netfx48-linux-x64.sourceUri");
+        environment["NETFX48_REFERENCE_DIGEST"] = RequiredDigest(referenceSet.Digest, "netfx48-ref.digest");
+        environment["NETFX48_REFERENCE_SOURCE_URI"] = RequiredValue(referenceSet.SourceUri, "netfx48-ref.sourceUri");
+        environment["WINE_NETFX48_RUNTIME_VERSION"] = RequiredVersion(runtime, "wine-netfx48-linux-x64");
+        environment["WINE_NETFX48_RUNTIME_DIGEST"] = RequiredDigest(runtime.Digest, "wine-netfx48-linux-x64.digest");
+        environment["WINE_NETFX48_RUNTIME_SOURCE_URI"] = RequiredValue(runtime.SourceUri, "wine-netfx48-linux-x64.sourceUri");
     }
 
-    private static void AddJSharp(
-        Dictionary<string, string> environment,
-        ReleaseLockDocument releaseLock)
+    private static void AddJSharp(Dictionary<string, string> environment, ReleaseLockDocument releaseLock)
     {
         var sourceInput = RequiredComponent(releaseLock, "jsharp20");
         var sourceDigest = RequiredDigest(sourceInput.Digest, "jsharp20.digest");
@@ -1599,37 +1046,20 @@ public static class BakeEnvironmentResolver
         environment["JSHARP_TOOLCHAIN_DIGEST"] = sourceDigest;
         environment["JSHARP_TOOLCHAIN_SOURCE_URI"] = sourceUri;
         environment["JSHARP_REFERENCE_VERSION"] = RequiredVersion(referenceSet, "jsharp20-ref");
-        environment["JSHARP_REFERENCE_DIGEST"] = RequiredDigest(
-            referenceSet.Digest,
-            "jsharp20-ref.digest");
-        environment["JSHARP_REFERENCE_SOURCE_URI"] = RequiredValue(
-            referenceSet.SourceUri,
-            "jsharp20-ref.sourceUri");
-        environment["WINE_JSHARP20_RUNTIME_VERSION"] = RequiredVersion(
-            runtime,
-            "wine-jsharp20-linux-x64");
-        environment["WINE_JSHARP20_RUNTIME_DIGEST"] = RequiredDigest(
-            runtime.Digest,
-            "wine-jsharp20-linux-x64.digest");
-        environment["WINE_JSHARP20_RUNTIME_SOURCE_URI"] = RequiredValue(
-            runtime.SourceUri,
-            "wine-jsharp20-linux-x64.sourceUri");
+        environment["JSHARP_REFERENCE_DIGEST"] = RequiredDigest(referenceSet.Digest, "jsharp20-ref.digest");
+        environment["JSHARP_REFERENCE_SOURCE_URI"] = RequiredValue(referenceSet.SourceUri, "jsharp20-ref.sourceUri");
+        environment["WINE_JSHARP20_RUNTIME_VERSION"] = RequiredVersion(runtime, "wine-jsharp20-linux-x64");
+        environment["WINE_JSHARP20_RUNTIME_DIGEST"] = RequiredDigest(runtime.Digest, "wine-jsharp20-linux-x64.digest");
+        environment["WINE_JSHARP20_RUNTIME_SOURCE_URI"] = RequiredValue(runtime.SourceUri, "wine-jsharp20-linux-x64.sourceUri");
     }
 
-    private static void AddPackage(
-        Dictionary<string, string> environment,
-        LockedComponent component,
-        string componentId,
-        string versionVariable,
-        string sourceVariable)
+    private static void AddPackage(Dictionary<string, string> environment, LockedComponent component, string componentId, string versionVariable, string sourceVariable)
     {
         environment[versionVariable] = RequiredVersion(component, componentId);
         environment[sourceVariable] = RequiredValue(component.SourceUri, $"{componentId}.sourceUri");
     }
 
-    private static void AddILSense(
-        Dictionary<string, string> environment,
-        ReleaseLockDocument releaseLock)
+    private static void AddILSense(Dictionary<string, string> environment, ReleaseLockDocument releaseLock)
     {
         var component = RequiredComponent(releaseLock, "ilsense");
         var source = RequiredComponent(releaseLock, "ilsense-source");
@@ -1643,9 +1073,7 @@ public static class BakeEnvironmentResolver
         environment["ILSENSE_SOURCE_URI"] = RequiredValue(component.SourceUri, "ilsense.sourceUri");
     }
 
-    private static void AddCoreClrReferenceSets(
-        Dictionary<string, string> environment,
-        ReleaseLockDocument releaseLock)
+    private static void AddCoreClrReferenceSets(Dictionary<string, string> environment, ReleaseLockDocument releaseLock)
     {
         foreach (var descriptor in CoreClrReferenceSets)
         {
@@ -1655,38 +1083,23 @@ public static class BakeEnvironmentResolver
             environment[$"{descriptor.EnvironmentPrefix}_REFERENCE_SOURCE_URI"] = sourceUri;
             if (descriptor.CandidateUrlVariable is not null)
                 environment[descriptor.CandidateUrlVariable] = sourceUri;
-            environment[$"{descriptor.EnvironmentPrefix}_REFERENCE_SHA512"] = RequiredValue(
-                component.Sha512,
-                $"{descriptor.Id}.sha512");
-            environment[$"{descriptor.EnvironmentPrefix}_REFERENCE_PACKAGE_CONTENT_HASH"] = RequiredValue(
-                component.PackageContentHash,
-                $"{descriptor.Id}.packageContentHash");
+            environment[$"{descriptor.EnvironmentPrefix}_REFERENCE_SHA512"] = RequiredValue(component.Sha512, $"{descriptor.Id}.sha512");
+            environment[$"{descriptor.EnvironmentPrefix}_REFERENCE_PACKAGE_CONTENT_HASH"] = RequiredValue(component.PackageContentHash, $"{descriptor.Id}.packageContentHash");
         }
     }
 
-    private static void AddReferenceSet(
-        Dictionary<string, string> environment,
-        ReleaseLockDocument releaseLock,
-        string componentId,
-        string versionVariable,
-        string variablePrefix)
+    private static void AddReferenceSet(Dictionary<string, string> environment, ReleaseLockDocument releaseLock, string componentId, string versionVariable, string variablePrefix)
     {
         var component = RequiredComponent(releaseLock, componentId);
         var sourceUri = RequiredValue(component.SourceUri, $"{componentId}.sourceUri");
         environment[versionVariable] = RequiredVersion(component, componentId);
         environment[$"{variablePrefix}_REFERENCE_URL"] = sourceUri;
         environment[$"{variablePrefix}_REFERENCE_SOURCE_URI"] = sourceUri;
-        environment[$"{variablePrefix}_REFERENCE_SHA512"] = RequiredValue(
-            component.Sha512,
-            $"{componentId}.sha512");
-        environment[$"{variablePrefix}_REFERENCE_PACKAGE_CONTENT_HASH"] = RequiredValue(
-            component.PackageContentHash,
-            $"{componentId}.packageContentHash");
+        environment[$"{variablePrefix}_REFERENCE_SHA512"] = RequiredValue(component.Sha512, $"{componentId}.sha512");
+        environment[$"{variablePrefix}_REFERENCE_PACKAGE_CONTENT_HASH"] = RequiredValue(component.PackageContentHash, $"{componentId}.packageContentHash");
     }
 
-    private static void AddFrameworkManagedReferenceDigests(
-        Dictionary<string, string> environment,
-        ReleaseLockDocument releaseLock)
+    private static void AddFrameworkManagedReferenceDigests(Dictionary<string, string> environment, ReleaseLockDocument releaseLock)
     {
         foreach (var (target, prefix, hasSource) in new (string Target, string Prefix, bool HasSource)[]
         {
@@ -1710,17 +1123,13 @@ public static class BakeEnvironmentResolver
             environment[$"{prefix}_VERSION"] = RequiredVersion(component, target);
             if (hasSource)
             {
-                environment[$"{prefix}_SOURCE_URI"] = RequiredValue(
-                    component.SourceUri,
-                    $"{target}.sourceUri");
+                environment[$"{prefix}_SOURCE_URI"] = RequiredValue(component.SourceUri, $"{target}.sourceUri");
             }
             environment[$"{prefix}_DIGEST"] = ReferenceSetIdentityResolver.ResolveLockedDigest(component, target);
         }
     }
 
-    private static void AddGSharp(
-        Dictionary<string, string> environment,
-        ReleaseLockDocument releaseLock)
+    private static void AddGSharp(Dictionary<string, string> environment, ReleaseLockDocument releaseLock)
     {
         var toolchain = RequiredComponent(releaseLock, "gsharp-stable");
         var source = RequiredComponent(releaseLock, "gsharp-source");
@@ -1745,9 +1154,7 @@ public static class BakeEnvironmentResolver
         environment["GSHARP_LEGACY_SOURCE_URI"] = RequiredValue(legacyToolchain.SourceUri, "gsharp-legacy-0.3.8.sourceUri");
     }
 
-    private static void AddPeachPie(
-        Dictionary<string, string> environment,
-        ReleaseLockDocument releaseLock)
+    private static void AddPeachPie(Dictionary<string, string> environment, ReleaseLockDocument releaseLock)
     {
         const string commitIdentity = "PeachPie package commit";
         var codeAnalysis = RequiredComponent(releaseLock, "peachpie-stable");
@@ -1767,9 +1174,7 @@ public static class BakeEnvironmentResolver
             $"https://raw.githubusercontent.com/peachpiecompiler/peachpie/{commit}/LICENSE.txt";
     }
 
-    private static void AddJsil(
-        Dictionary<string, string> environment,
-        ReleaseLockDocument releaseLock)
+    private static void AddJsil(Dictionary<string, string> environment, ReleaseLockDocument releaseLock)
     {
         var processor = RequiredComponent(releaseLock, "artifacts-jsil");
         var source = AddJsilSource(environment, releaseLock, "jsil-source", "JSIL");
@@ -1778,9 +1183,7 @@ public static class BakeEnvironmentResolver
         environment["ARTIFACTS_JSIL_VERSION"] = RequiredVersion(processor, "artifacts-jsil");
         environment["ARTIFACTS_JSIL_COMMIT"] = RequiredValue(processor.Commit, "artifacts-jsil.commit");
         environment["ARTIFACTS_JSIL_DIGEST"] = RequiredValue(processor.Digest, "artifacts-jsil.digest");
-        environment["ARTIFACTS_JSIL_SOURCE_URI"] = RequiredValue(
-            processor.SourceUri,
-            "artifacts-jsil.sourceUri");
+        environment["ARTIFACTS_JSIL_SOURCE_URI"] = RequiredValue(processor.SourceUri, "artifacts-jsil.sourceUri");
         environment["JSIL_VERSION"] = RequiredVersion(source, "jsil-source");
         AddJsilSource(environment, releaseLock, "jsil-meta-source", "JSIL_META");
         AddJsilSource(environment, releaseLock, "jsil-ilspy-source", "JSIL_ILSPY");
@@ -1788,11 +1191,7 @@ public static class BakeEnvironmentResolver
         AddJsilSource(environment, releaseLock, "jsil-cecil-source", "JSIL_CECIL");
     }
 
-    private static LockedComponent AddJsilSource(
-        Dictionary<string, string> environment,
-        ReleaseLockDocument releaseLock,
-        string componentId,
-        string variablePrefix)
+    private static LockedComponent AddJsilSource(Dictionary<string, string> environment, ReleaseLockDocument releaseLock, string componentId, string variablePrefix)
     {
         var component = RequiredComponent(releaseLock, componentId);
         environment[$"{variablePrefix}_VERSION"] = RequiredVersion(component, componentId);
@@ -1802,27 +1201,17 @@ public static class BakeEnvironmentResolver
         return component;
     }
 
-    private static void AddPeachPiePackage(
-        Dictionary<string, string> environment,
-        LockedComponent component,
-        string componentId,
-        string variablePrefix)
+    private static void AddPeachPiePackage(Dictionary<string, string> environment, LockedComponent component, string componentId, string variablePrefix)
     {
         var sourceUri = RequiredValue(component.SourceUri, $"{componentId}.sourceUri");
         environment[$"{variablePrefix}_VERSION"] = RequiredVersion(component, componentId);
         environment[$"{variablePrefix}_URL"] = sourceUri;
         environment[$"{variablePrefix}_SOURCE_URI"] = sourceUri;
         environment[$"{variablePrefix}_SHA512"] = RequiredValue(component.Sha512, $"{componentId}.sha512");
-        environment[$"{variablePrefix}_PACKAGE_CONTENT_HASH"] = RequiredValue(
-            component.PackageContentHash,
-            $"{componentId}.packageContentHash");
+        environment[$"{variablePrefix}_PACKAGE_CONTENT_HASH"] = RequiredValue(component.PackageContentHash, $"{componentId}.packageContentHash");
     }
 
-    private static void AddRuntime(
-        Dictionary<string, string> environment,
-        ReleaseLockDocument releaseLock,
-        string componentId,
-        string variablePrefix)
+    private static void AddRuntime(Dictionary<string, string> environment, ReleaseLockDocument releaseLock, string componentId, string variablePrefix)
     {
         var component = RequiredComponent(releaseLock, componentId);
         var sourceUri = RequiredValue(component.SourceUri, $"{componentId}.sourceUri");
@@ -1834,9 +1223,7 @@ public static class BakeEnvironmentResolver
         environment[$"{variablePrefix}_RUNTIME_SHA512"] = RequiredValue(component.Sha512, $"{componentId}.sha512");
     }
 
-    private static void AddConstGenerics(
-        Dictionary<string, string> environment,
-        ReleaseLockDocument releaseLock)
+    private static void AddConstGenerics(Dictionary<string, string> environment, ReleaseLockDocument releaseLock)
     {
         var runtimeSource = RequiredComponent(releaseLock, "const-generics-runtime-source");
         var runtime = RequiredComponent(releaseLock, "const-generics-linux-x64");
@@ -1846,97 +1233,55 @@ public static class BakeEnvironmentResolver
         RequireEqual(runtimeSource.Commit, reference.Commit, "const-generics reference commit");
         RequireEqual(runtimeSource.Digest, reference.Digest, "const-generics reference digest");
         environment["CONST_GENERICS_RUNTIME_VERSION"] = RequiredVersion(runtime, "const-generics-linux-x64");
-        environment["CONST_GENERICS_RUNTIME_COMMIT"] = RequiredValue(
-            runtimeSource.Commit,
-            "const-generics-runtime-source.commit");
-        environment["CONST_GENERICS_RUNTIME_ARCHIVE_URL"] = RequiredValue(
-            runtimeSource.SourceUri,
-            "const-generics-runtime-source.sourceUri");
-        environment["CONST_GENERICS_RUNTIME_ARCHIVE_SHA256"] = DigestHex(
-            runtimeSource.Digest,
-            "const-generics-runtime-source.digest");
-        environment["CONST_GENERICS_RUNTIME_SOURCE_URI"] = RequiredValue(
-            runtime.SourceUri,
-            "const-generics-linux-x64.sourceUri");
+        environment["CONST_GENERICS_RUNTIME_COMMIT"] = RequiredValue(runtimeSource.Commit, "const-generics-runtime-source.commit");
+        environment["CONST_GENERICS_RUNTIME_ARCHIVE_URL"] = RequiredValue(runtimeSource.SourceUri, "const-generics-runtime-source.sourceUri");
+        environment["CONST_GENERICS_RUNTIME_ARCHIVE_SHA256"] = DigestHex(runtimeSource.Digest, "const-generics-runtime-source.digest");
+        environment["CONST_GENERICS_RUNTIME_SOURCE_URI"] = RequiredValue(runtime.SourceUri, "const-generics-linux-x64.sourceUri");
         environment["CONST_GENERICS_REFERENCE_VERSION"] = RequiredVersion(reference, "const-generics-ref");
-        environment["CONST_GENERICS_REFERENCE_DIGEST"] = RequiredDigest(
-            reference.Digest,
-            "const-generics-ref.digest");
+        environment["CONST_GENERICS_REFERENCE_DIGEST"] = RequiredDigest(reference.Digest, "const-generics-ref.digest");
 
         var versionTools = RequiredComponent(releaseLock, "const-generics-versiontools");
-        environment["CONST_GENERICS_VERSIONTOOLS_VERSION"] = RequiredVersion(
-            versionTools,
-            "const-generics-versiontools");
-        environment["CONST_GENERICS_VERSIONTOOLS_PACKAGE_SHA256"] = DigestHex(
-            versionTools.Digest,
-            "const-generics-versiontools.digest");
-        environment["CONST_GENERICS_VERSIONTOOLS_SOURCE_URI"] = RequiredValue(
-            versionTools.SourceUri,
-            "const-generics-versiontools.sourceUri");
+        environment["CONST_GENERICS_VERSIONTOOLS_VERSION"] = RequiredVersion(versionTools, "const-generics-versiontools");
+        environment["CONST_GENERICS_VERSIONTOOLS_PACKAGE_SHA256"] = DigestHex(versionTools.Digest, "const-generics-versiontools.digest");
+        environment["CONST_GENERICS_VERSIONTOOLS_SOURCE_URI"] = RequiredValue(versionTools.SourceUri, "const-generics-versiontools.sourceUri");
 
         var roslynSource = RequiredComponent(releaseLock, "const-generics-roslyn-source");
         var roslyn = RequiredComponent(releaseLock, "roslyn-const-generics");
         RequireEqual(roslynSource.Commit, roslyn.Commit, "const-generics Roslyn commit");
         RequireEqual(roslynSource.Digest, roslyn.Digest, "const-generics Roslyn digest");
-        environment["CONST_GENERICS_ROSLYN_COMMIT"] = RequiredValue(
-            roslynSource.Commit,
-            "const-generics-roslyn-source.commit");
-        environment["CONST_GENERICS_ROSLYN_ARCHIVE_URL"] = RequiredValue(
-            roslynSource.SourceUri,
-            "const-generics-roslyn-source.sourceUri");
-        environment["CONST_GENERICS_ROSLYN_ARCHIVE_SHA256"] = DigestHex(
-            roslynSource.Digest,
-            "const-generics-roslyn-source.digest");
+        environment["CONST_GENERICS_ROSLYN_COMMIT"] = RequiredValue(roslynSource.Commit, "const-generics-roslyn-source.commit");
+        environment["CONST_GENERICS_ROSLYN_ARCHIVE_URL"] = RequiredValue(roslynSource.SourceUri, "const-generics-roslyn-source.sourceUri");
+        environment["CONST_GENERICS_ROSLYN_ARCHIVE_SHA256"] = DigestHex(roslynSource.Digest, "const-generics-roslyn-source.digest");
         var roslynComponentVersion = RequiredVersion(roslyn, "roslyn-const-generics");
         environment["CONST_GENERICS_ROSLYN_VERSION"] = ConstGenericsCompilerVersion(roslynComponentVersion);
         environment["CONST_GENERICS_ROSLYN_COMPONENT_VERSION"] = roslynComponentVersion;
-        environment["CONST_GENERICS_ROSLYN_SOURCE_URI"] = RequiredValue(
-            roslyn.SourceUri,
-            "roslyn-const-generics.sourceUri");
+        environment["CONST_GENERICS_ROSLYN_SOURCE_URI"] = RequiredValue(roslyn.SourceUri, "roslyn-const-generics.sourceUri");
 
         var ilspySource = RequiredComponent(releaseLock, "const-generics-ilspy-source");
         var artifacts = RequiredComponent(releaseLock, "artifacts-const-generics");
         RequireEqual(ilspySource.Commit, artifacts.Commit, "const-generics ILSpy commit");
         RequireEqual(ilspySource.Digest, artifacts.Digest, "const-generics ILSpy digest");
-        environment["CONST_GENERICS_ILSPY_COMMIT"] = RequiredValue(
-            ilspySource.Commit,
-            "const-generics-ilspy-source.commit");
-        environment["CONST_GENERICS_ILSPY_ARCHIVE_URL"] = RequiredValue(
-            ilspySource.SourceUri,
-            "const-generics-ilspy-source.sourceUri");
-        environment["CONST_GENERICS_ILSPY_ARCHIVE_SHA256"] = DigestHex(
-            ilspySource.Digest,
-            "const-generics-ilspy-source.digest");
-        environment["CONST_GENERICS_ILSPY_SOURCE_URI"] = RequiredValue(
-            artifacts.SourceUri,
-            "artifacts-const-generics.sourceUri");
+        environment["CONST_GENERICS_ILSPY_COMMIT"] = RequiredValue(ilspySource.Commit, "const-generics-ilspy-source.commit");
+        environment["CONST_GENERICS_ILSPY_ARCHIVE_URL"] = RequiredValue(ilspySource.SourceUri, "const-generics-ilspy-source.sourceUri");
+        environment["CONST_GENERICS_ILSPY_ARCHIVE_SHA256"] = DigestHex(ilspySource.Digest, "const-generics-ilspy-source.digest");
+        environment["CONST_GENERICS_ILSPY_SOURCE_URI"] = RequiredValue(artifacts.SourceUri, "artifacts-const-generics.sourceUri");
     }
 
-    private static void AddBaseImages(
-        Dictionary<string, string> environment,
-        string baseImageManifestPath)
+    private static void AddBaseImages(Dictionary<string, string> environment, string baseImageManifestPath)
     {
         var fullPath = Path.GetFullPath(RequiredValue(baseImageManifestPath, "baseImageManifestPath"));
         BaseImageManifest manifest;
         try
         {
-            manifest = JsonSerializer.Deserialize<BaseImageManifest>(
-                File.ReadAllText(fullPath),
-                BaseImageJsonOptions)
-                ?? throw new BakeEnvironmentValidationException("Base image manifest is empty.");
+            manifest = JsonSerializer.Deserialize<BaseImageManifest>(File.ReadAllText(fullPath), BaseImageJsonOptions) ?? throw new BakeEnvironmentValidationException("Base image manifest is empty.");
         }
         catch (Exception exception) when (exception is IOException or JsonException)
         {
-            throw new BakeEnvironmentValidationException(
-                $"Could not load base image manifest '{fullPath}': {exception.Message}",
-                exception);
+            throw new BakeEnvironmentValidationException($"Could not load base image manifest '{fullPath}': {exception.Message}", exception);
         }
 
         if (manifest.SchemaVersion != 1)
-        {
-            throw new BakeEnvironmentValidationException(
-                $"Unsupported base image manifest schema version {manifest.SchemaVersion}.");
-        }
+            throw new BakeEnvironmentValidationException($"Unsupported base image manifest schema version {manifest.SchemaVersion}.");
 
         if (manifest.Images is null)
             throw new BakeEnvironmentValidationException("Base image manifest images are required.");
@@ -1956,8 +1301,7 @@ public static class BakeEnvironmentResolver
                 throw new BakeEnvironmentValidationException($"Unknown base image id '{id}'.");
             if (!string.Equals(variable, expectedVariable, StringComparison.Ordinal))
             {
-                throw new BakeEnvironmentValidationException(
-                    $"Base image '{id}' must use Bake variable '{expectedVariable}', not '{variable}'.");
+                throw new BakeEnvironmentValidationException($"Base image '{id}' must use Bake variable '{expectedVariable}', not '{variable}'.");
             }
             ValidateBaseImageReference(reference, id);
             environment[variable] = reference;
@@ -1974,37 +1318,28 @@ public static class BakeEnvironmentResolver
     {
         if (reference.Any(char.IsWhiteSpace))
         {
-            throw new BakeEnvironmentValidationException(
-                $"Base image '{id}' reference must not contain whitespace.");
+            throw new BakeEnvironmentValidationException($"Base image '{id}' reference must not contain whitespace.");
         }
         var marker = reference.LastIndexOf(BaseImageDigestMarker, StringComparison.Ordinal);
         var repository = marker > 0 ? reference[..marker] : string.Empty;
-        if (marker <= 0 ||
-            marker + BaseImageDigestMarker.Length + 64 != reference.Length ||
-            repository.Contains("://", StringComparison.Ordinal) ||
-            repository.Contains('@', StringComparison.Ordinal))
+        if (marker <= 0 || marker + BaseImageDigestMarker.Length + 64 != reference.Length || repository.Contains("://", StringComparison.Ordinal) || repository.Contains('@', StringComparison.Ordinal))
         {
-            throw new BakeEnvironmentValidationException(
-                $"Base image '{id}' reference must be repository[:tag]@sha256:<64 lowercase hex>.");
+            throw new BakeEnvironmentValidationException($"Base image '{id}' reference must be repository[:tag]@sha256:<64 lowercase hex>.");
         }
         foreach (var character in reference.AsSpan(marker + BaseImageDigestMarker.Length))
         {
             if (!char.IsAsciiHexDigit(character) || char.IsAsciiLetterUpper(character))
             {
-                throw new BakeEnvironmentValidationException(
-                    $"Base image '{id}' reference must be repository[:tag]@sha256:<64 lowercase hex>.");
+                throw new BakeEnvironmentValidationException($"Base image '{id}' reference must be repository[:tag]@sha256:<64 lowercase hex>.");
             }
         }
     }
 
     private static LockedComponent RequiredComponent(ReleaseLockDocument document, string componentId) =>
         document.Components.TryGetValue(componentId, out var component)
-            ? component
-            : throw new BakeEnvironmentValidationException(
-                $"Release lock is missing required Bake component '{componentId}'.");
+            ? component : throw new BakeEnvironmentValidationException($"Release lock is missing required Bake component '{componentId}'.");
 
-    private static string RequiredVersion(LockedComponent component, string componentId) =>
-        RequiredValue(component.ResolvedVersion, $"{componentId}.resolvedVersion");
+    private static string RequiredVersion(LockedComponent component, string componentId) => RequiredValue(component.ResolvedVersion, $"{componentId}.resolvedVersion");
 
     private static string RequiredDigest(string? digest, string field)
     {
@@ -2031,8 +1366,7 @@ public static class BakeEnvironmentResolver
         var markerIndex = resolvedVersion.IndexOf(marker, StringComparison.Ordinal);
         if (markerIndex <= 0)
         {
-            throw new BakeEnvironmentValidationException(
-                "roslyn-const-generics.resolvedVersion must contain '-const-generics.' for Bake compiler version derivation.");
+            throw new BakeEnvironmentValidationException("roslyn-const-generics.resolvedVersion must contain '-const-generics.' for Bake compiler version derivation.");
         }
         return resolvedVersion[..markerIndex];
     }
@@ -2045,21 +1379,13 @@ public static class BakeEnvironmentResolver
 
     private static string RequiredValue(string? value, string field) =>
         !string.IsNullOrWhiteSpace(value)
-            ? value
-            : throw new BakeEnvironmentValidationException(
-                $"Release lock/base image field '{field}' is required for Bake.");
+            ? value : throw new BakeEnvironmentValidationException($"Release lock/base image field '{field}' is required for Bake.");
 
     private static string ValidateControlRuntimeTargetFramework(string value)
     {
-        if (string.IsNullOrWhiteSpace(value) ||
-            value.Length > 32 ||
-            !value.StartsWith("net", StringComparison.Ordinal) ||
-            value[3..].Length == 0 ||
-            value[3..].Any(static character =>
-                !char.IsAsciiDigit(character) && character != '.'))
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 32 || !value.StartsWith("net", StringComparison.Ordinal) || value[3..].Length == 0 || value[3..].Any(static character => !char.IsAsciiDigit(character) && character != '.'))
         {
-            throw new BakeEnvironmentValidationException(
-                $"Control runtime target framework '{value}' is invalid.");
+            throw new BakeEnvironmentValidationException($"Control runtime target framework '{value}' is invalid.");
         }
         return value;
     }
@@ -2077,22 +1403,12 @@ public static class BakeEnvironmentResolver
         public required string Reference { get; init; }
     }
 
-    private sealed record CoreClrReferenceSetDescriptor(
-        string Id,
-        string EnvironmentPrefix,
-        string VersionVariable,
-        string? CandidateUrlVariable);
+    private sealed record CoreClrReferenceSetDescriptor(string Id, string EnvironmentPrefix, string VersionVariable, string? CandidateUrlVariable);
 }
 
 public sealed class BakeEnvironmentValidationException : Exception
 {
-    public BakeEnvironmentValidationException(string message)
-        : base(message)
-    {
-    }
+    public BakeEnvironmentValidationException(string message) : base(message) { }
 
-    public BakeEnvironmentValidationException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
+    public BakeEnvironmentValidationException(string message, Exception innerException) : base(message, innerException) { }
 }

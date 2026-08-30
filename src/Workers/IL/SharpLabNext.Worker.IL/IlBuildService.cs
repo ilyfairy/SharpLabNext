@@ -11,17 +11,11 @@ using SharpLabNext.Worker.IL.Compiler;
 
 namespace SharpLabNext.Worker.IL;
 
-public sealed class IlBuildService(
-    IlReferenceSetProvider referenceSets,
-    IlAssemblerProcess assembler,
-    IlWorkerIdentity identity,
-    IlCompilationLimits limits)
+public sealed class IlBuildService(IlReferenceSetProvider referenceSets, IlAssemblerProcess assembler, IlWorkerIdentity identity, IlCompilationLimits limits)
 {
     private const string AssemblyName = "SharpLabNext.User";
 
-    public async Task<IlWorkerBuildExecution> ExecuteAsync(
-        BuildRequest request,
-        CancellationToken cancellationToken)
+    public async Task<IlWorkerBuildExecution> ExecuteAsync(BuildRequest request, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var outcome = SharpLabNextTelemetryOutcome.Failed;
@@ -54,18 +48,11 @@ public sealed class IlBuildService(
         finally
         {
             stopwatch.Stop();
-            SharpLabNextTelemetry.Metrics.RecordBuild(
-                "il",
-                identity.ToolchainId,
-                stopwatch.Elapsed,
-                outcome,
-                cacheHit: false);
+            SharpLabNextTelemetry.Metrics.RecordBuild("il", identity.ToolchainId, stopwatch.Elapsed, outcome, cacheHit: false);
         }
     }
 
-    private async Task<IlWorkerBuildExecution> ExecuteWithDeadlineAsync(
-        BuildRequest request,
-        CancellationToken cancellationToken)
+    private async Task<IlWorkerBuildExecution> ExecuteWithDeadlineAsync(BuildRequest request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var remaining = request.DeadlineUtc - DateTimeOffset.UtcNow;
@@ -75,16 +62,12 @@ public sealed class IlBuildService(
         if (remaining > workerLimit)
             remaining = workerLimit;
         using var deadlineCancellation = new CancellationTokenSource(remaining);
-        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            deadlineCancellation.Token);
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadlineCancellation.Token);
         try
         {
             return await ExecuteCoreAsync(request, linkedCancellation.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (
-            deadlineCancellation.IsCancellationRequested &&
-            !cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (deadlineCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
             throw new IlBuildDeadlineExceededException("The IL build deadline elapsed.", deadlineCancellation.Token);
         }
@@ -98,45 +81,21 @@ public sealed class IlBuildService(
         _ => SharpLabNextTelemetryOutcome.Succeeded
     };
 
-    private async Task<IlWorkerBuildExecution> ExecuteCoreAsync(
-        BuildRequest request,
-        CancellationToken cancellationToken)
+    private async Task<IlWorkerBuildExecution> ExecuteCoreAsync(BuildRequest request, CancellationToken cancellationToken)
     {
         var workspace = IlWorkspaceValidator.Validate(request, limits);
         var referenceSet = referenceSets.Get(request.ReferenceSetId);
         var invocation = await assembler.AssembleAsync(workspace, cancellationToken).ConfigureAwait(false);
         var diagnostics = ConvertDiagnostics(invocation.Diagnostics, workspace);
-        var buildIdentity = new BuildIdentity(
-            identity.ReleaseId,
-            "il",
-            identity.ToolchainId,
-            identity.CompilerVersion,
-            identity.CompilerCommit,
-            referenceSet.Id,
-            identity.WorkerImageId);
+        var buildIdentity = new BuildIdentity(identity.ReleaseId, "il", identity.ToolchainId, identity.CompilerVersion, identity.CompilerCommit, referenceSet.Id, identity.WorkerImageId);
 
         if (!invocation.Succeeded)
         {
             if (request.Target == BuildTarget.CompileCheck)
             {
-                return new IlWorkerBuildExecution(
-                    new CompilationCheckResult(
-                        false,
-                        diagnostics,
-                        buildIdentity,
-                        workspace.Snapshot.Revision,
-                        workspace.Snapshot.SelectionRevision),
-                    null);
+                return new IlWorkerBuildExecution(new CompilationCheckResult(false, diagnostics, buildIdentity, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision), null);
             }
-            return new IlWorkerBuildExecution(
-                new BuildResult(
-                    BuildOutcome.CompilationFailed,
-                    null,
-                    diagnostics,
-                    buildIdentity,
-                    workspace.Snapshot.Revision,
-                    workspace.Snapshot.SelectionRevision),
-                null);
+            return new IlWorkerBuildExecution(new BuildResult(BuildOutcome.CompilationFailed, null, diagnostics, buildIdentity, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision), null);
         }
 
         PeInspection inspection;
@@ -146,73 +105,24 @@ public sealed class IlBuildService(
         }
         catch (BadImageFormatException exception)
         {
-            diagnostics = diagnostics.Append(new Diagnostic(
-                "mobius-ilasm",
-                "ILASM998",
-                DiagnosticSeverity.Error,
-                $"The assembler returned an invalid managed PE image: {Limit(exception.Message, 2_048)}",
-                null,
-                null,
-                [],
-                [],
-                workspace.Snapshot.Revision,
-                workspace.Snapshot.SelectionRevision)).ToArray();
+            diagnostics = diagnostics.Append(new Diagnostic("mobius-ilasm", "ILASM998", DiagnosticSeverity.Error, $"The assembler returned an invalid managed PE image: {Limit(exception.Message, 2_048)}", null, null, [], [], workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision)).ToArray();
             if (request.Target == BuildTarget.CompileCheck)
             {
-                return new IlWorkerBuildExecution(
-                    new CompilationCheckResult(
-                        false,
-                        diagnostics,
-                        buildIdentity,
-                        workspace.Snapshot.Revision,
-                        workspace.Snapshot.SelectionRevision),
-                    null);
+                return new IlWorkerBuildExecution(new CompilationCheckResult(false, diagnostics, buildIdentity, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision), null);
             }
-            return new IlWorkerBuildExecution(
-                new BuildResult(
-                    BuildOutcome.EmitFailed,
-                    null,
-                    diagnostics,
-                    buildIdentity,
-                    workspace.Snapshot.Revision,
-                    workspace.Snapshot.SelectionRevision),
-                null);
+            return new IlWorkerBuildExecution(new BuildResult(BuildOutcome.EmitFailed, null, diagnostics, buildIdentity, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision), null);
         }
 
         if (request.Target == BuildTarget.CompileCheck)
         {
-            return new IlWorkerBuildExecution(
-                new CompilationCheckResult(
-                    true,
-                    diagnostics,
-                    buildIdentity,
-                    workspace.Snapshot.Revision,
-                    workspace.Snapshot.SelectionRevision),
-                null);
+            return new IlWorkerBuildExecution(new CompilationCheckResult(true, diagnostics, buildIdentity, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision), null);
         }
 
-        var artifact = CreateArtifact(
-            invocation.PeImage,
-            referenceSet,
-            buildIdentity,
-            workspace.Options.OutputKind,
-            inspection.EntryPoint,
-            inspection.AssemblyDefinitionName,
-            workspace.OrderedFiles.Count);
-        return new IlWorkerBuildExecution(
-            new BuildResult(
-                BuildOutcome.Succeeded,
-                artifact.ArtifactRef,
-                diagnostics,
-                buildIdentity,
-                workspace.Snapshot.Revision,
-                workspace.Snapshot.SelectionRevision),
-            artifact);
+        var artifact = CreateArtifact(invocation.PeImage, referenceSet, buildIdentity, workspace.Options.OutputKind, inspection.EntryPoint, inspection.AssemblyDefinitionName, workspace.OrderedFiles.Count);
+        return new IlWorkerBuildExecution(new BuildResult(BuildOutcome.Succeeded, artifact.ArtifactRef, diagnostics, buildIdentity, workspace.Snapshot.Revision, workspace.Snapshot.SelectionRevision), artifact);
     }
 
-    private Diagnostic[] ConvertDiagnostics(
-        IReadOnlyList<IlCompilerDiagnostic> diagnostics,
-        ValidatedIlWorkspace workspace)
+    private Diagnostic[] ConvertDiagnostics(IReadOnlyList<IlCompilerDiagnostic> diagnostics, ValidatedIlWorkspace workspace)
     {
         var files = workspace.OrderedFiles.ToDictionary(static file => file.Path, StringComparer.Ordinal);
         return diagnostics.Take(limits.MaxDiagnostics).Select(item =>
@@ -261,8 +171,7 @@ public sealed class IlBuildService(
         var assemblyName = metadata.GetString(metadata.GetAssemblyDefinition().Name);
         string? entryPoint = null;
         var entryPointToken = peReader.PEHeaders.CorHeader.EntryPointTokenOrRelativeVirtualAddress;
-        if (entryPointToken != 0 &&
-            (peReader.PEHeaders.CorHeader.Flags & CorFlags.NativeEntryPoint) == 0)
+        if (entryPointToken != 0 && (peReader.PEHeaders.CorHeader.Flags & CorFlags.NativeEntryPoint) == 0)
         {
             var handle = MetadataTokens.EntityHandle(entryPointToken);
             if (handle.Kind != HandleKind.MethodDefinition)
@@ -274,45 +183,23 @@ public sealed class IlBuildService(
             var typeNamespace = metadata.GetString(declaringType.Namespace);
             var methodName = metadata.GetString(method.Name);
             entryPoint = string.IsNullOrEmpty(typeNamespace)
-                ? $"{typeName}::{methodName}"
-                : $"{typeNamespace}.{typeName}::{methodName}";
+                ? $"{typeName}::{methodName}" : $"{typeNamespace}.{typeName}::{methodName}";
         }
         return new PeInspection(Limit(assemblyName, 256), LimitNullable(entryPoint, 512));
     }
 
-    private static IlCompiledArtifact CreateArtifact(
-        byte[] peImage,
-        IlReferenceSetDefinition referenceSet,
-        BuildIdentity buildIdentity,
-        BuildOutputKind outputKind,
-        string? entryPoint,
-        string sourceAssemblyName,
-        int sourceFileCount)
+    private static IlCompiledArtifact CreateArtifact(byte[] peImage, IlReferenceSetDefinition referenceSet, BuildIdentity buildIdentity, BuildOutputKind outputKind, string? entryPoint, string sourceAssemblyName, int sourceFileCount)
     {
-        var file = new ArtifactFileDescriptor(
-            "primary-assembly",
-            $"{AssemblyName}.dll",
-            peImage.LongLength,
-            Digest(peImage));
+        var file = new ArtifactFileDescriptor("primary-assembly", $"{AssemblyName}.dll", peImage.LongLength, Digest(peImage));
         var placeholder = new ArtifactRef($"sha256:{new string('0', ArtifactStoreProtocol.Sha256HexLength)}");
         var manifest = ArtifactIdentity.WithComputedId(new ArtifactManifest(
             ContractSchemaVersions.ArtifactManifest,
             placeholder,
-            new ArtifactProducer(
-                buildIdentity.ReleaseId,
-                buildIdentity.LanguageId,
-                buildIdentity.ToolchainId,
-                buildIdentity.CompilerVersion,
-                buildIdentity.CompilerCommit,
-                buildIdentity.WorkerImageId),
+            new ArtifactProducer(buildIdentity.ReleaseId, buildIdentity.LanguageId, buildIdentity.ToolchainId, buildIdentity.CompilerVersion, buildIdentity.CompilerCommit, buildIdentity.WorkerImageId),
             referenceSet.Id,
             referenceSet.TargetFramework,
             "dotnet-managed-pe-v1",
-            new ArtifactRuntimeRequirement(
-                "coreclr",
-                [new FrameworkRequirement("Microsoft.NETCore.App", referenceSet.FrameworkVersion)],
-                "anycpu",
-                []),
+            new ArtifactRuntimeRequirement("coreclr", [new FrameworkRequirement("Microsoft.NETCore.App", referenceSet.FrameworkVersion)], "anycpu", []),
             [],
             outputKind,
             file.Path,
@@ -326,26 +213,14 @@ public sealed class IlBuildService(
                 ["sourceAssemblyName"] = sourceAssemblyName,
                 ["sourceFileCount"] = sourceFileCount.ToString(System.Globalization.CultureInfo.InvariantCulture)
             }));
-        return new IlCompiledArtifact(
-            manifest.ArtifactId,
-            "dotnet-managed-pe-v1",
-            AssemblyName,
-            referenceSet.Id,
-            referenceSet.TargetFramework,
-            peImage,
-            manifest,
-            [file],
-            buildIdentity);
+        return new IlCompiledArtifact(manifest.ArtifactId, "dotnet-managed-pe-v1", AssemblyName, referenceSet.Id, referenceSet.TargetFramework, peImage, manifest, [file], buildIdentity);
     }
 
-    private static string Digest(byte[] bytes) =>
-        $"sha256:{Convert.ToHexStringLower(SHA256.HashData(bytes))}";
+    private static string Digest(byte[] bytes) => $"sha256:{Convert.ToHexStringLower(SHA256.HashData(bytes))}";
 
-    private static string Limit(string value, int maximum) =>
-        value.Length <= maximum ? value : value[..maximum];
+    private static string Limit(string value, int maximum) => value.Length <= maximum ? value : value[..maximum];
 
-    private static string? LimitNullable(string? value, int maximum) =>
-        value is null || value.Length <= maximum ? value : value[..maximum];
+    private static string? LimitNullable(string? value, int maximum) => value is null || value.Length <= maximum ? value : value[..maximum];
 
     private sealed record PeInspection(string AssemblyDefinitionName, string? EntryPoint);
 }

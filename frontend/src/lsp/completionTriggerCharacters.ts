@@ -1,11 +1,1 @@
-export const ilSenseCompletionTriggerCharacters = [
-  '.',
-  '[',
-  ']',
-  ':',
-  "'",
-  '(',
-  ',',
-  '<',
-  '!',
-] as const
+export const ilSenseCompletionTriggerCharacters = ['.', '[', ']', ':', "'", '(', ',', '<', '!'] as const;

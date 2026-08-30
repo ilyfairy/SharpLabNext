@@ -4,24 +4,10 @@ namespace SharpLabNext.Worker.GSharp;
 
 internal static class GSharpProcessEnvironment
 {
-    public static ProcessStartInfo Create(
-        GSharpWorkerSettings settings,
-        string workingDirectory)
+    public static ProcessStartInfo Create(GSharpWorkerSettings settings, string workingDirectory)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = settings.DotNetHostPath,
-            WorkingDirectory = workingDirectory,
-            UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-        var inheritedEnvironment = startInfo.Environment.ToDictionary(
-            static pair => pair.Key,
-            static pair => pair.Value,
-            StringComparer.OrdinalIgnoreCase);
+        var startInfo = new ProcessStartInfo { FileName = settings.DotNetHostPath, WorkingDirectory = workingDirectory, UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        var inheritedEnvironment = startInfo.Environment.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.OrdinalIgnoreCase);
         startInfo.Environment.Clear();
         Copy("PATH");
         Copy("SystemRoot");
@@ -54,9 +40,7 @@ internal static class GSharpProcessEnvironment
             if (!process.HasExited)
                 process.Kill(entireProcessTree: true);
         }
-        catch (InvalidOperationException)
-        {
-        }
+        catch (InvalidOperationException) { }
     }
 
     public static string PublicText(string value, int maximumCharacters = 1024)

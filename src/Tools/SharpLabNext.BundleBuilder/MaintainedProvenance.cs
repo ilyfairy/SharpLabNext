@@ -29,11 +29,7 @@ internal static class MaintainedProvenanceLoader
         "source"
     ];
 
-    public static async Task<IReadOnlyList<MaintainedProvenanceInput>> LoadAsync(
-        string repositoryRoot,
-        ReleaseLockDocument releaseLock,
-        BaseImageManifest baseImages,
-        CancellationToken cancellationToken)
+    public static async Task<IReadOnlyList<MaintainedProvenanceInput>> LoadAsync(string repositoryRoot, ReleaseLockDocument releaseLock, BaseImageManifest baseImages, CancellationToken cancellationToken)
     {
         var provenanceRoot = Path.Combine(repositoryRoot, "profiles", "provenance");
         if (!Directory.Exists(provenanceRoot))
@@ -45,17 +41,13 @@ internal static class MaintainedProvenanceLoader
         foreach (var path in Directory.EnumerateFiles(provenanceRoot, "*.json").Order(StringComparer.Ordinal))
         {
             await using var stream = File.OpenRead(path);
-            using var document = await JsonDocument.ParseAsync(
-                stream,
-                cancellationToken: cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
             var root = document.RootElement;
             RejectCopiedIdentities(root, Path.GetFileName(path));
 
-            if (root.GetProperty("schemaVersion").GetInt32() != 1 ||
-                !string.Equals(root.GetProperty("status").GetString(), "source-inputs-recorded", StringComparison.Ordinal))
+            if (root.GetProperty("schemaVersion").GetInt32() != 1 || !string.Equals(root.GetProperty("status").GetString(), "source-inputs-recorded", StringComparison.Ordinal))
             {
-                throw new BundleValidationException(
-                    $"Maintained provenance '{path}' has an unsupported schema or status.");
+                throw new BundleValidationException($"Maintained provenance '{path}' has an unsupported schema or status.");
             }
 
             var componentId = RequiredString(root, "componentId", path);
@@ -73,27 +65,13 @@ internal static class MaintainedProvenanceLoader
             var builderImageId = RequiredString(root.GetProperty("builder"), "imageId", path);
             if (!baseImageIds.Contains(builderImageId))
             {
-                throw new BundleValidationException(
-                    $"Maintained provenance '{path}' references unknown base image '{builderImageId}'.");
+                throw new BundleValidationException($"Maintained provenance '{path}' references unknown base image '{builderImageId}'.");
             }
 
             var referenced = new HashSet<string>(StringComparer.Ordinal) { componentId, sourceComponentId };
             ValidateAndCollectReferences(root, releaseLock, referenced, path);
-            var (patchPaths, patchSeriesDigest) = await ResolvePatchSeriesAsync(
-                repositoryRoot,
-                root,
-                path,
-                cancellationToken);
-            documents.Add(new MaintainedProvenanceInput(
-                Path.GetRelativePath(repositoryRoot, path).Replace('\\', '/'),
-                path,
-                componentId,
-                sourceComponentId,
-                license,
-                builderImageId,
-                patchSeriesDigest,
-                patchPaths,
-                referenced.Order(StringComparer.Ordinal).ToArray()));
+            var (patchPaths, patchSeriesDigest) = await ResolvePatchSeriesAsync(repositoryRoot, root, path, cancellationToken);
+            documents.Add(new MaintainedProvenanceInput(Path.GetRelativePath(repositoryRoot, path).Replace('\\', '/'), path, componentId, sourceComponentId, license, builderImageId, patchSeriesDigest, patchPaths, referenced.Order(StringComparer.Ordinal).ToArray()));
         }
 
         if (documents.Count == 0)
@@ -116,18 +94,13 @@ internal static class MaintainedProvenanceLoader
         {
             if (CopiedIdentityFields.Contains(property.Name))
             {
-                throw new BundleValidationException(
-                    $"Maintained provenance '{documentName}' copies release identity field '{property.Name}'.");
+                throw new BundleValidationException($"Maintained provenance '{documentName}' copies release identity field '{property.Name}'.");
             }
             RejectCopiedIdentities(property.Value, documentName);
         }
     }
 
-    private static void ValidateAndCollectReferences(
-        JsonElement root,
-        ReleaseLockDocument releaseLock,
-        HashSet<string> referenced,
-        string path)
+    private static void ValidateAndCollectReferences(JsonElement root, ReleaseLockDocument releaseLock, HashSet<string> referenced, string path)
     {
         var build = root.GetProperty("build");
         if (build.TryGetProperty("referenceSet", out var referenceSet))
@@ -151,18 +124,8 @@ internal static class MaintainedProvenanceLoader
 
         if (root.TryGetProperty("runtimeDependency", out var runtimeDependency))
         {
-            AddReference(
-                runtimeDependency.GetProperty("sourceComponentId").GetString(),
-                "source",
-                releaseLock,
-                referenced,
-                path);
-            AddReference(
-                runtimeDependency.GetProperty("runtimeComponentId").GetString(),
-                "runtime",
-                releaseLock,
-                referenced,
-                path);
+            AddReference(runtimeDependency.GetProperty("sourceComponentId").GetString(), "source", releaseLock, referenced, path);
+            AddReference(runtimeDependency.GetProperty("runtimeComponentId").GetString(), "runtime", releaseLock, referenced, path);
         }
 
         if (root.TryGetProperty("artifactContract", out var contract))
@@ -174,11 +137,7 @@ internal static class MaintainedProvenanceLoader
         }
     }
 
-    private static async Task<(IReadOnlyList<string> Paths, string? Digest)> ResolvePatchSeriesAsync(
-        string repositoryRoot,
-        JsonElement root,
-        string provenancePath,
-        CancellationToken cancellationToken)
+    private static async Task<(IReadOnlyList<string> Paths, string? Digest)> ResolvePatchSeriesAsync(string repositoryRoot, JsonElement root, string provenancePath, CancellationToken cancellationToken)
     {
         if (!root.TryGetProperty("patchSeries", out var patchSeries))
             return ([], null);
@@ -193,8 +152,7 @@ internal static class MaintainedProvenanceLoader
             var fullPath = Path.GetFullPath(Path.Combine(repositoryRoot, relativePath));
             if (!fullPath.StartsWith(repositoryPrefix, StringComparison.OrdinalIgnoreCase) || !File.Exists(fullPath))
             {
-                throw new BundleValidationException(
-                    $"Maintained provenance '{provenancePath}' references invalid patch '{relativePath}'.");
+                throw new BundleValidationException($"Maintained provenance '{provenancePath}' references invalid patch '{relativePath}'.");
             }
             var bytes = await File.ReadAllBytesAsync(fullPath, cancellationToken);
             hash.AppendData(bytes);
@@ -203,56 +161,37 @@ internal static class MaintainedProvenanceLoader
         return (paths, $"sha256:{Convert.ToHexStringLower(hash.GetHashAndReset())}");
     }
 
-    private static void AddReference(
-        string? componentId,
-        string? expectedKind,
-        ReleaseLockDocument releaseLock,
-        HashSet<string> referenced,
-        string path)
+    private static void AddReference(string? componentId, string? expectedKind, ReleaseLockDocument releaseLock, HashSet<string> referenced, string path)
     {
         if (string.IsNullOrWhiteSpace(componentId))
             throw new BundleValidationException($"Maintained provenance '{path}' has an empty component reference.");
         var component = RequiredComponent(releaseLock, componentId, path);
         if (expectedKind is not null && !string.Equals(component.Kind, expectedKind, StringComparison.Ordinal))
         {
-            throw new BundleValidationException(
-                $"Maintained provenance '{path}' references '{componentId}' as {expectedKind}, but lock kind is '{component.Kind}'.");
+            throw new BundleValidationException($"Maintained provenance '{path}' references '{componentId}' as {expectedKind}, but lock kind is '{component.Kind}'.");
         }
         if (string.Equals(expectedKind, "source", StringComparison.Ordinal))
             ValidateSourceComponent(componentId, component, path);
         referenced.Add(componentId);
     }
 
-    private static LockedComponent RequiredComponent(
-        ReleaseLockDocument releaseLock,
-        string componentId,
-        string path) =>
+    private static LockedComponent RequiredComponent(ReleaseLockDocument releaseLock, string componentId, string path) =>
         releaseLock.Components.TryGetValue(componentId, out var component)
-            ? component
-            : throw new BundleValidationException(
-                $"Maintained provenance '{path}' references missing lock component '{componentId}'.");
+            ? component : throw new BundleValidationException($"Maintained provenance '{path}' references missing lock component '{componentId}'.");
 
     private static void ValidateSourceComponent(string id, LockedComponent component, string path)
     {
-        if (!string.Equals(component.Kind, "source", StringComparison.Ordinal) ||
-            string.IsNullOrWhiteSpace(component.ResolvedVersion) ||
-            !IsCommit(component.Commit) ||
-            !IsSha256(component.Digest) ||
-            !Uri.TryCreate(component.SourceUri, UriKind.Absolute, out _))
+        if (!string.Equals(component.Kind, "source", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(component.ResolvedVersion) || !IsCommit(component.Commit) || !IsSha256(component.Digest) || !Uri.TryCreate(component.SourceUri, UriKind.Absolute, out _))
         {
-            throw new BundleValidationException(
-                $"Maintained provenance '{path}' source component '{id}' has incomplete lock identity.");
+            throw new BundleValidationException($"Maintained provenance '{path}' source component '{id}' has incomplete lock identity.");
         }
     }
 
     private static string RequiredString(JsonElement element, string propertyName, string path)
     {
-        if (!element.TryGetProperty(propertyName, out var property) ||
-            property.ValueKind != JsonValueKind.String ||
-            string.IsNullOrWhiteSpace(property.GetString()))
+        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(property.GetString()))
         {
-            throw new BundleValidationException(
-                $"Maintained provenance '{path}' requires string property '{propertyName}'.");
+            throw new BundleValidationException($"Maintained provenance '{path}' requires string property '{propertyName}'.");
         }
         return property.GetString()!;
     }

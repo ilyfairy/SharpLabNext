@@ -3,43 +3,19 @@ using SharpLabNext.Contracts;
 
 namespace SharpLabNext.RuntimeProtocol;
 
-public sealed record RuntimeGraphDocument(
-    IReadOnlyList<RuntimeGraphRoot> Roots,
-    IReadOnlyList<RuntimeGraphNode> Nodes,
-    bool Truncated,
-    string? TruncationReason);
+public sealed record RuntimeGraphDocument(IReadOnlyList<RuntimeGraphRoot> Roots, IReadOnlyList<RuntimeGraphNode> Nodes, bool Truncated, string? TruncationReason);
 
 public sealed record RuntimeGraphRoot(string Name, int NodeId);
 
-public sealed record RuntimeGraphNode(
-    int Id,
-    string TypeName,
-    string Kind,
-    string? DisplayValue,
-    IReadOnlyList<RuntimeGraphEdge> Edges);
+public sealed record RuntimeGraphNode(int Id, string TypeName, string Kind, string? DisplayValue, IReadOnlyList<RuntimeGraphEdge> Edges);
 
 public sealed record RuntimeGraphEdge(string Name, int TargetNodeId);
 
-public sealed record RuntimeInspectionPayload(
-    string Kind,
-    string Title,
-    RuntimeGraphDocument Graph);
+public sealed record RuntimeInspectionPayload(string Kind, string Title, RuntimeGraphDocument Graph);
 
-public sealed record RuntimeFlowPayload(
-    string EventKind,
-    string? DocumentPath,
-    RuntimeSourceRange? Range,
-    int ManagedThreadId,
-    int? TaskId,
-    string? Name,
-    RuntimeGraphDocument? Value,
-    bool Truncated);
+public sealed record RuntimeFlowPayload(string EventKind, string? DocumentPath, RuntimeSourceRange? Range, int ManagedThreadId, int? TaskId, string? Name, RuntimeGraphDocument? Value, bool Truncated);
 
-public sealed record RuntimeSourceRange(
-    int StartLine,
-    int StartColumn,
-    int EndLine,
-    int EndColumn);
+public sealed record RuntimeSourceRange(int StartLine, int StartColumn, int EndLine, int EndColumn);
 
 public static class RuntimeStructuredPayloadCodec
 {
@@ -54,11 +30,9 @@ public static class RuntimeStructuredPayloadCodec
 
     public static byte[] Serialize<T>(T value) => JsonSerializer.SerializeToUtf8Bytes(value, JsonOptions);
 
-    public static RuntimeInspectionPayload DeserializeInspection(ReadOnlySpan<byte> payload) =>
-        Deserialize<RuntimeInspectionPayload>(payload, "inspection");
+    public static RuntimeInspectionPayload DeserializeInspection(ReadOnlySpan<byte> payload) => Deserialize<RuntimeInspectionPayload>(payload, "inspection");
 
-    public static RuntimeFlowPayload DeserializeFlow(ReadOnlySpan<byte> payload) =>
-        Deserialize<RuntimeFlowPayload>(payload, "flow");
+    public static RuntimeFlowPayload DeserializeFlow(ReadOnlySpan<byte> payload) => Deserialize<RuntimeFlowPayload>(payload, "flow");
 
     public static void Validate(RuntimeFrameKind kind, ReadOnlySpan<byte> payload)
     {
@@ -76,9 +50,7 @@ public static class RuntimeStructuredPayloadCodec
                 case RuntimeFrameKind.Exception:
                 case RuntimeFrameKind.Exit:
                 case RuntimeFrameKind.ProtocolError:
-                    using (JsonDocument.Parse(payload.ToArray()))
-                    {
-                    }
+                    using (JsonDocument.Parse(payload.ToArray())) { }
                     break;
                 default:
                     throw new InvalidDataException($"Runtime frame '{kind}' is not a structured child payload.");
@@ -94,8 +66,7 @@ public static class RuntimeStructuredPayloadCodec
     {
         try
         {
-            return JsonSerializer.Deserialize<T>(payload, JsonOptions)
-                ?? throw new InvalidDataException($"The {payloadName} payload is empty.");
+            return JsonSerializer.Deserialize<T>(payload, JsonOptions) ?? throw new InvalidDataException($"The {payloadName} payload is empty.");
         }
         catch (JsonException exception)
         {

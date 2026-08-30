@@ -32,13 +32,9 @@ public sealed class ToolchainWorkerClientTests
         {
             BaseAddress = new Uri("http://worker.test", UriKind.Absolute)
         };
-        var client = new ToolchainWorkerClient(
-            httpClient,
-            new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
 
-        var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(
-            CreateRequest(),
-            TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(CreateRequest(), TestContext.Current.CancellationToken));
         Assert.Equal("unavailable", exception.Error.Code);
         Assert.Equal(WorkerErrorCategory.Unavailable, exception.Error.Category);
         Assert.True(exception.Error.Retryable);
@@ -53,30 +49,21 @@ public sealed class ToolchainWorkerClientTests
         using var httpClient = new HttpClient(new DelegateHandler(request =>
         {
             if (request.RequestUri?.AbsolutePath == "/api/v1/build")
-            {
                 buildCalled = true;
-            }
 
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = JsonContent.Create(
-                    CreateDescriptor() with
-                    {
-                        Service = CreateDescriptor().Service with { ReleaseId = "another-release" }
-                    },
+                    CreateDescriptor() with { Service = CreateDescriptor().Service with { ReleaseId = "another-release" } },
                     options: ContractJson.CreateSerializerOptions())
             };
         }))
         {
             BaseAddress = new Uri("http://worker.test", UriKind.Absolute)
         };
-        var client = new ToolchainWorkerClient(
-            httpClient,
-            new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
 
-        var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(
-            CreateRequest(),
-            TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(CreateRequest(), TestContext.Current.CancellationToken));
         Assert.Equal("worker-protocol-invalid", exception.Error.Code);
         Assert.False(buildCalled);
     }
@@ -105,9 +92,7 @@ public sealed class ToolchainWorkerClientTests
                 "worker-image",
                 new Dictionary<string, string> { ["net10-ref"] = "sha512-expected" }));
 
-        var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(
-            CreateRequest(),
-            TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(CreateRequest(), TestContext.Current.CancellationToken));
 
         Assert.Equal("worker-protocol-invalid", exception.Error.Code);
         Assert.Contains("omitted reference-set attestations", exception.Message, StringComparison.Ordinal);
@@ -125,10 +110,7 @@ public sealed class ToolchainWorkerClientTests
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = JsonContent.Create(
-                    CreateDescriptor() with
-                    {
-                        ReferenceSets = [CreateReferenceSetAttestation("sha512-actual")]
-                    },
+                    CreateDescriptor() with { ReferenceSets = [CreateReferenceSetAttestation("sha512-actual")] },
                     options: ContractJson.CreateSerializerOptions())
             };
         }))
@@ -143,9 +125,7 @@ public sealed class ToolchainWorkerClientTests
                 "worker-image",
                 new Dictionary<string, string> { ["net10-ref"] = "sha512-expected" }));
 
-        var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(
-            CreateRequest(),
-            TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(CreateRequest(), TestContext.Current.CancellationToken));
 
         Assert.Equal("worker-protocol-invalid", exception.Error.Code);
         Assert.Contains("active release lock", exception.Message, StringComparison.Ordinal);
@@ -166,11 +146,7 @@ public sealed class ToolchainWorkerClientTests
                     Content = JsonContent.Create(
                         descriptor with
                         {
-                            Service = descriptor.Service with
-                            {
-                                Id = "minilang-stable",
-                                Capabilities = ["artifact"]
-                            },
+                            Service = descriptor.Service with { Id = "minilang-stable", Capabilities = ["artifact"] },
                             Capabilities =
                             [
                                 new WorkerCapabilityDescriptor("artifact", 1, true, ["minilang-stable"])
@@ -192,18 +168,10 @@ public sealed class ToolchainWorkerClientTests
         {
             BaseAddress = new Uri("http://worker.test", UriKind.Absolute)
         };
-        var client = new ToolchainWorkerClient(
-            httpClient,
-            new ToolchainWorkerClientSettings("minilang-stable", "development", "worker-image"));
-        var request = CreateRequest() with
-        {
-            ToolchainId = "minilang-stable",
-            Target = BuildTarget.Artifact
-        };
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("minilang-stable", "development", "worker-image"));
+        var request = CreateRequest() with { ToolchainId = "minilang-stable", Target = BuildTarget.Artifact };
 
-        _ = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(
-            request,
-            TestContext.Current.CancellationToken));
+        _ = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(request, TestContext.Current.CancellationToken));
 
         Assert.True(buildCalled);
     }
@@ -219,11 +187,7 @@ public sealed class ToolchainWorkerClientTests
             Service = CreateDescriptor().Service with { Id = workerId },
             Capabilities =
             [
-                new WorkerCapabilityDescriptor(
-                    "compile-check",
-                    1,
-                    true,
-                    ["gsharp-stable", requestedToolchainId])
+                new WorkerCapabilityDescriptor("compile-check", 1, true, ["gsharp-stable", requestedToolchainId])
             ],
             ProfileIds = ["gsharp-stable", requestedToolchainId]
         };
@@ -257,9 +221,7 @@ public sealed class ToolchainWorkerClientTests
         {
             BaseAddress = new Uri("http://worker.test", UriKind.Absolute)
         };
-        var client = new ToolchainWorkerClient(
-            httpClient,
-            new ToolchainWorkerClientSettings(workerId, "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings(workerId, "development", "worker-image"));
 
         var response = await client.BuildAsync(request, TestContext.Current.CancellationToken);
 
@@ -296,12 +258,9 @@ public sealed class ToolchainWorkerClientTests
         {
             BaseAddress = new Uri("http://worker.test", UriKind.Absolute)
         };
-        var client = new ToolchainWorkerClient(
-            httpClient,
-            new ToolchainWorkerClientSettings(workerId, "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings(workerId, "development", "worker-image"));
 
-        var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() =>
-            client.BuildAsync(request, TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(request, TestContext.Current.CancellationToken));
 
         Assert.Equal("worker-capability-unavailable", exception.Error.Code);
         Assert.False(buildCalled);
@@ -312,16 +271,8 @@ public sealed class ToolchainWorkerClientTests
     {
         var request = CreateRequest() with { Target = BuildTarget.Artifact };
         var artifactRef = new ArtifactRef($"sha256:{new string('a', 64)}");
-        using var httpClient = CreateArtifactWorkerHttpClient(request, new BuildResult(
-            BuildOutcome.Succeeded,
-            artifactRef,
-            [],
-            CreateBuildIdentity(),
-            request.Workspace.Revision,
-            request.Workspace.SelectionRevision));
-        var client = new ToolchainWorkerClient(
-            httpClient,
-            new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
+        using var httpClient = CreateArtifactWorkerHttpClient(request, new BuildResult(BuildOutcome.Succeeded, artifactRef, [], CreateBuildIdentity(), request.Workspace.Revision, request.Workspace.SelectionRevision));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
 
         var response = await client.BuildAsync(request, TestContext.Current.CancellationToken);
 
@@ -334,19 +285,10 @@ public sealed class ToolchainWorkerClientTests
     public async Task SuccessfulArtifactBuildWithoutReferenceIsRejected()
     {
         var request = CreateRequest() with { Target = BuildTarget.Artifact };
-        using var httpClient = CreateArtifactWorkerHttpClient(request, new BuildResult(
-            BuildOutcome.Succeeded,
-            null,
-            [],
-            CreateBuildIdentity(),
-            request.Workspace.Revision,
-            request.Workspace.SelectionRevision));
-        var client = new ToolchainWorkerClient(
-            httpClient,
-            new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
+        using var httpClient = CreateArtifactWorkerHttpClient(request, new BuildResult(BuildOutcome.Succeeded, null, [], CreateBuildIdentity(), request.Workspace.Revision, request.Workspace.SelectionRevision));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
 
-        var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() =>
-            client.BuildAsync(request, TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(request, TestContext.Current.CancellationToken));
 
         Assert.Equal("worker-protocol-invalid", exception.Error.Code);
         Assert.Contains("artifact reference", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -364,12 +306,9 @@ public sealed class ToolchainWorkerClientTests
             CreateBuildIdentity() with { ReferenceSetId = "another-reference-set" },
             request.Workspace.Revision,
             request.Workspace.SelectionRevision));
-        var client = new ToolchainWorkerClient(
-            httpClient,
-            new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
 
-        var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() =>
-            client.BuildAsync(request, TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(request, TestContext.Current.CancellationToken));
 
         Assert.Equal("worker-protocol-invalid", exception.Error.Code);
         Assert.Contains("identity", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -390,14 +329,10 @@ public sealed class ToolchainWorkerClientTests
                     Content = JsonContent.Create(
                         descriptor with
                         {
-                            Service = descriptor.Service with
-                            {
-                                Id = workerId,
-                                Capabilities = ["compile-check", "explain"]
-                            },
+                            Service = descriptor.Service with { Id = workerId, Capabilities = ["compile-check", "explain"] },
                             Capabilities =
                             [
-                                .. descriptor.Capabilities,
+..descriptor.Capabilities,
                                 new WorkerCapabilityDescriptor("explain", 1, true, ["roslyn-stable"])
                             ]
                         },
@@ -407,33 +342,13 @@ public sealed class ToolchainWorkerClientTests
 
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = JsonContent.Create(
-                    new ToolchainExplainResponse(
-                        request.RequestId,
-                        new ExplainResult(new ExplanationDocument(
-                            "csharp",
-                            "roslyn-stable",
-                            request.Workspace.Revision,
-                            request.Workspace.SelectionRevision,
-                            [new ExplanationFile("Program.cs", [])],
-                            false),
-                            new BuildIdentity(
-                                "development",
-                                "csharp",
-                                "roslyn-stable",
-                                "5.6.0",
-                                null,
-                                request.Workspace.ReferenceSetId,
-                                "worker-image"))),
-                    options: ContractJson.CreateSerializerOptions())
+                Content = JsonContent.Create(new ToolchainExplainResponse(request.RequestId, new ExplainResult(new ExplanationDocument("csharp", "roslyn-stable", request.Workspace.Revision, request.Workspace.SelectionRevision, [new ExplanationFile("Program.cs", [])], false), new BuildIdentity("development", "csharp", "roslyn-stable", "5.6.0", null, request.Workspace.ReferenceSetId, "worker-image"))), options: ContractJson.CreateSerializerOptions())
             };
         }))
         {
             BaseAddress = new Uri("http://worker.test", UriKind.Absolute)
         };
-        var client = new ToolchainWorkerClient(
-            httpClient,
-            new ToolchainWorkerClientSettings(workerId, "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings(workerId, "development", "worker-image"));
 
         var response = await client.ExplainAsync(request, TestContext.Current.CancellationToken);
 
@@ -441,55 +356,13 @@ public sealed class ToolchainWorkerClientTests
         Assert.Equal(request.Workspace.Revision, response.Result.Document.WorkspaceRevision);
     }
 
-    private static WorkerDescriptor CreateDescriptor() => new(
-        new ServiceIdentity(
-            "roslyn-stable",
-            ServiceKind.ToolchainWorker,
-            "development",
-            ProtocolVersion.WorkerV1,
-            ["compile-check"],
-            "ready"),
-        "instance",
-        WorkerKind.Toolchain,
-        "worker-image",
-        ProtocolVersion.WorkerV1,
-        [ProtocolVersion.WorkerV1],
-        [new WorkerCapabilityDescriptor("compile-check", 1, true, ["roslyn-stable"])],
-        ["roslyn-stable"],
-        DateTimeOffset.UtcNow);
+    private static WorkerDescriptor CreateDescriptor() => new(new ServiceIdentity("roslyn-stable", ServiceKind.ToolchainWorker, "development", ProtocolVersion.WorkerV1, ["compile-check"], "ready"), "instance", WorkerKind.Toolchain, "worker-image", ProtocolVersion.WorkerV1, [ProtocolVersion.WorkerV1], [new WorkerCapabilityDescriptor("compile-check", 1, true, ["roslyn-stable"])], ["roslyn-stable"], DateTimeOffset.UtcNow);
 
-    private static ReferenceSetAttestation CreateReferenceSetAttestation(string digest) => new(
-        "net10-ref",
-        "net10.0",
-        digest,
-        $"sha256:{new string('a', 64)}",
-        new ReferenceSetProvenance(
-            "nuget-package",
-            "10.0.9",
-            "Microsoft.NETCore.App.Ref"));
+    private static ReferenceSetAttestation CreateReferenceSetAttestation(string digest) => new("net10-ref", "net10.0", digest, $"sha256:{new string('a', 64)}", new ReferenceSetProvenance("nuget-package", "10.0.9", "Microsoft.NETCore.App.Ref"));
 
-    private static BuildRequest CreateRequest() => new(
-        "client-request",
-        "client-key",
-        "client-pipeline",
-        "roslyn-stable",
-        "net10-ref",
-        new WorkspaceSnapshot(
-            ContractSchemaVersions.WorkspaceSnapshot,
-            1,
-            1,
-            "csharp",
-            [new WorkspaceFile("Program.cs", 1, "System.Console.WriteLine(42);")],
-            "Program.cs",
-            ["Program.cs"],
-            "net10-ref",
-            new BuildOptions(BuildConfiguration.Release, true, BuildOutputKind.Console, false, true)),
-        DateTimeOffset.UtcNow.AddMinutes(1),
-        Target: BuildTarget.CompileCheck);
+    private static BuildRequest CreateRequest() => new("client-request", "client-key", "client-pipeline", "roslyn-stable", "net10-ref", new WorkspaceSnapshot(ContractSchemaVersions.WorkspaceSnapshot, 1, 1, "csharp", [new WorkspaceFile("Program.cs", 1, "System.Console.WriteLine(42);")], "Program.cs", ["Program.cs"], "net10-ref", new BuildOptions(BuildConfiguration.Release, true, BuildOutputKind.Console, false, true)), DateTimeOffset.UtcNow.AddMinutes(1), Target: BuildTarget.CompileCheck);
 
-    private static HttpClient CreateArtifactWorkerHttpClient(
-        BuildRequest request,
-        BuildResult result) => new(new DelegateHandler(message =>
+    private static HttpClient CreateArtifactWorkerHttpClient(BuildRequest request, BuildResult result) => new(new DelegateHandler(message =>
     {
         if (message.RequestUri?.AbsolutePath == "/api/v1/worker/describe")
         {
@@ -502,11 +375,7 @@ public sealed class ToolchainWorkerClientTests
                         Service = descriptor.Service with { Capabilities = ["managed-pe"] },
                         Capabilities =
                         [
-                            new WorkerCapabilityDescriptor(
-                                "managed-pe",
-                                1,
-                                true,
-                                ["roslyn-stable"])
+                            new WorkerCapabilityDescriptor("managed-pe", 1, true, ["roslyn-stable"])
                         ]
                     },
                     options: ContractJson.CreateSerializerOptions())
@@ -515,40 +384,24 @@ public sealed class ToolchainWorkerClientTests
 
         return new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = JsonContent.Create(
-                new ToolchainBuildResponse(request.RequestId, result, null),
-                options: ContractJson.CreateSerializerOptions())
+            Content = JsonContent.Create(new ToolchainBuildResponse(request.RequestId, result, null), options: ContractJson.CreateSerializerOptions())
         };
     }))
     {
         BaseAddress = new Uri("http://worker.test", UriKind.Absolute)
     };
 
-    private static BuildIdentity CreateBuildIdentity() => new(
-        "development",
-        "csharp",
-        "roslyn-stable",
-        "5.6.0",
-        null,
-        "net10-ref",
-        "worker-image");
+    private static BuildIdentity CreateBuildIdentity() => new("development", "csharp", "roslyn-stable", "5.6.0", null, "net10-ref", "worker-image");
 
     private static ExplainRequest CreateExplainRequest()
     {
         var build = CreateRequest();
-        return new ExplainRequest(
-            "client-explain-request",
-            "client-explain-key",
-            "client-explain-pipeline",
-            build.Workspace,
-            DateTimeOffset.UtcNow.AddMinutes(1));
+        return new ExplainRequest("client-explain-request", "client-explain-key", "client-explain-pipeline", build.Workspace, DateTimeOffset.UtcNow.AddMinutes(1));
     }
 
     private sealed class DelegateHandler(Func<HttpRequestMessage, HttpResponseMessage> handler) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(handler(request));

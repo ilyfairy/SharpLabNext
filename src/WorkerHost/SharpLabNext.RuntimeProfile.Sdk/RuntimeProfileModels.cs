@@ -86,9 +86,7 @@ public class RuntimeOperationDefinition
     public RuntimeOperationCommandDefinition Command { get; set; } = new();
 }
 
-public sealed class RuntimeRunOperationDefinition : RuntimeOperationDefinition
-{
-}
+public sealed class RuntimeRunOperationDefinition : RuntimeOperationDefinition;
 
 public sealed class RuntimeJitOperationDefinition : RuntimeOperationDefinition
 {

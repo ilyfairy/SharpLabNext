@@ -12,12 +12,11 @@ return await CppCliToolchainPreparation.RunAsync(args);
 
 internal static class CppCliToolchainPreparation
 {
-    private const string DockerfileRelativePath =
-        "deploy/docker/Dockerfile.operator-cppcli-base";
+    private const string DockerfileRelativePath = "deploy/docker/Dockerfile.operator-cppcli-base";
     private const string ManifestRelativePath = "eng/release-prerequisites.json";
     private const string ContextName = "cppcli-prerequisite-context";
     private const string Usage =
-        "Usage: dotnet run eng/prepare-cppcli-toolchain.cs -- " +
+        "Usage: dotnet run eng/tools/prepare-cppcli-toolchain.cs -- " +
         "--framework-seed-image REFERENCE --output-image REFERENCE " +
         "--msvc-wine-source PATH --visual-studio-manifest PATH " +
         "--netfx48-developer-pack PATH --operator-build-input-sha256 HEX " +
@@ -136,71 +135,35 @@ internal static class CppCliToolchainPreparation
                 operatorBuildInputSha256
             }.Any(string.IsNullOrWhiteSpace))
         {
-            throw new UsageException(
-                "Framework seed, output image, all three source files, and " +
-                "operator build input digest are required.");
+            throw new UsageException("Framework seed, output image, all three source files, and " + "operator build input digest are required.");
         }
         if (!acceptCppBuildToolsLicense || !acceptDotNetEula)
         {
-            throw new UsageException(
-                "Both --accept-microsoft-cpp-build-tools-license and " +
-                "--accept-microsoft-dotnet-eula are required.");
+            throw new UsageException("Both --accept-microsoft-cpp-build-tools-license and " + "--accept-microsoft-dotnet-eula are required.");
         }
 
-        return new PreparationOptions(
-            repositoryRoot,
-            dockerCommand ?? "docker",
-            ValidateDigestReference(frameworkSeedImage!, "--framework-seed-image"),
-            ValidateOutputImageReference(outputImage!),
-            msvcWineSource!,
-            visualStudioManifest!,
-            developerPack!,
-            NormalizeSha256(
-                operatorBuildInputSha256!,
-                "--operator-build-input-sha256"),
-            dryRun);
+        return new PreparationOptions(repositoryRoot, dockerCommand ?? "docker", ValidateDigestReference(frameworkSeedImage!, "--framework-seed-image"), ValidateOutputImageReference(outputImage!), msvcWineSource!, visualStudioManifest!, developerPack!, NormalizeSha256(operatorBuildInputSha256!, "--operator-build-input-sha256"), dryRun);
     }
 
     private static ValidatedInputs Validate(PreparationOptions options)
     {
         var repositoryRoot = ResolveRepositoryRoot(options.RepositoryRoot);
         var dockerfile = Path.Combine(repositoryRoot, DockerfileRelativePath);
-        RequireRegularFile(
-            dockerfile,
-            "The C++/CLI operator Dockerfile is missing or invalid.");
-        var locks = ReadDownloadLocks(
-            Path.Combine(repositoryRoot, ManifestRelativePath));
-        return new ValidatedInputs(
-            repositoryRoot,
-            dockerfile,
-            ValidateSource(
-                options.MsvcWineSource,
-                locks,
-                "msvc-wine-source"),
-            ValidateSource(
-                options.VisualStudioManifest,
-                locks,
-                "visual-studio-manifest"),
-            ValidateSource(
-                options.DeveloperPack,
-                locks,
-                "netfx48-developer-pack"));
+        RequireRegularFile(dockerfile, "The C++/CLI operator Dockerfile is missing or invalid.");
+        var locks = ReadDownloadLocks(Path.Combine(repositoryRoot, ManifestRelativePath));
+        return new ValidatedInputs(repositoryRoot, dockerfile, ValidateSource(options.MsvcWineSource, locks, "msvc-wine-source"), ValidateSource(options.VisualStudioManifest, locks, "visual-studio-manifest"), ValidateSource(options.DeveloperPack, locks, "netfx48-developer-pack"));
     }
 
-    private static Dictionary<string, DownloadLock> ReadDownloadLocks(
-        string manifestPath)
+    private static Dictionary<string, DownloadLock> ReadDownloadLocks(string manifestPath)
     {
         try
         {
-            RequireRegularFile(
-                manifestPath,
-                "The release prerequisite manifest is missing or invalid.");
+            RequireRegularFile(manifestPath, "The release prerequisite manifest is missing or invalid.");
             using var document = JsonDocument.Parse(File.ReadAllBytes(manifestPath));
             var root = document.RootElement;
             if (root.GetProperty("schemaVersion").GetInt32() != 3)
             {
-                throw new InputValidationException(
-                    "The release prerequisite manifest schema is unsupported.");
+                throw new InputValidationException("The release prerequisite manifest schema is unsupported.");
             }
             var result = new Dictionary<string, DownloadLock>(StringComparer.Ordinal);
             foreach (var item in root.GetProperty("downloads").EnumerateArray())
@@ -215,28 +178,20 @@ internal static class CppCliToolchainPreparation
                 {
                     continue;
                 }
-                if (!StringComparer.Ordinal.Equals(
-                        item.GetProperty("kind").GetString(),
-                        "file"))
+                if (!StringComparer.Ordinal.Equals(item.GetProperty("kind").GetString(), "file"))
                 {
-                    throw new InputValidationException(
-                        $"Prerequisite lock '{id}' is invalid.");
+                    throw new InputValidationException($"Prerequisite lock '{id}' is invalid.");
                 }
                 var size = item.GetProperty("sizeBytes").GetInt64();
                 var sha256 = item.GetProperty("sha256").GetString();
-                if (size <= 0 || sha256 is null || sha256.Length != 64 ||
-                    sha256.Any(static character =>
-                        character is not (>= '0' and <= '9' or >= 'a' and <= 'f')) ||
-                    !result.TryAdd(id, new DownloadLock(id, size, sha256)))
+                if (size <= 0 || sha256 is null || sha256.Length != 64 || sha256.Any(static character => character is not (>= '0' and <= '9' or >= 'a' and <= 'f')) || !result.TryAdd(id, new DownloadLock(id, size, sha256)))
                 {
-                    throw new InputValidationException(
-                        $"Prerequisite lock '{id}' is invalid.");
+                    throw new InputValidationException($"Prerequisite lock '{id}' is invalid.");
                 }
             }
             if (result.Count != 3)
             {
-                throw new InputValidationException(
-                    "The release prerequisite manifest is missing C++/CLI source locks.");
+                throw new InputValidationException("The release prerequisite manifest is missing C++/CLI source locks.");
             }
             return result;
         }
@@ -244,20 +199,13 @@ internal static class CppCliToolchainPreparation
         {
             throw;
         }
-        catch (Exception exception) when (
-            exception is ArgumentException or IOException or
-                UnauthorizedAccessException or JsonException or
-                InvalidOperationException or KeyNotFoundException)
+        catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or KeyNotFoundException)
         {
-            throw new InputValidationException(
-                "The release prerequisite manifest could not be validated.");
+            throw new InputValidationException("The release prerequisite manifest could not be validated.");
         }
     }
 
-    private static ValidatedSource ValidateSource(
-        string configuredPath,
-        IReadOnlyDictionary<string, DownloadLock> locks,
-        string id)
+    private static ValidatedSource ValidateSource(string configuredPath, IReadOnlyDictionary<string, DownloadLock> locks, string id)
     {
         try
         {
@@ -265,21 +213,18 @@ internal static class CppCliToolchainPreparation
             var info = new FileInfo(path);
             if (!info.Exists || (info.Attributes & FileAttributes.ReparsePoint) != 0)
             {
-                throw new InputValidationException(
-                    $"Prerequisite '{id}' is missing or is not a regular file.");
+                throw new InputValidationException($"Prerequisite '{id}' is missing or is not a regular file.");
             }
             var expected = locks[id];
             if (info.Length != expected.SizeBytes)
             {
-                throw new InputValidationException(
-                    $"Prerequisite '{id}' size or SHA-256 is invalid.");
+                throw new InputValidationException($"Prerequisite '{id}' size or SHA-256 is invalid.");
             }
             using var stream = File.OpenRead(path);
             var digest = Convert.ToHexStringLower(SHA256.HashData(stream));
             if (!StringComparer.Ordinal.Equals(digest, expected.Sha256))
             {
-                throw new InputValidationException(
-                    $"Prerequisite '{id}' size or SHA-256 is invalid.");
+                throw new InputValidationException($"Prerequisite '{id}' size or SHA-256 is invalid.");
             }
             return new ValidatedSource(id, path, expected.SizeBytes, expected.Sha256);
         }
@@ -287,18 +232,13 @@ internal static class CppCliToolchainPreparation
         {
             throw;
         }
-        catch (Exception exception) when (
-            exception is ArgumentException or IOException or
-                NotSupportedException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
         {
-            throw new InputValidationException(
-                $"Prerequisite '{id}' could not be validated.");
+            throw new InputValidationException($"Prerequisite '{id}' could not be validated.");
         }
     }
 
-    private static DockerInvocation CreateDockerInvocation(
-        PreparationOptions options,
-        ValidatedInputs inputs)
+    private static DockerInvocation CreateDockerInvocation(PreparationOptions options, ValidatedInputs inputs)
     {
         var contextDirectory = ContextDirectory(inputs);
         var arguments = new List<DockerArgument>
@@ -316,13 +256,9 @@ internal static class CppCliToolchainPreparation
             new("--build-arg"),
             new($"MSVC_WINE_SOURCE_SHA256={inputs.MsvcWineSource.Sha256}"),
             new("--build-arg"),
-            new(
-                $"VISUAL_STUDIO_MANIFEST_SHA256=" +
-                inputs.VisualStudioManifest.Sha256),
+            new($"VISUAL_STUDIO_MANIFEST_SHA256=" + inputs.VisualStudioManifest.Sha256),
             new("--build-arg"),
-            new(
-                $"NETFX48_DEVELOPER_PACK_SHA256=" +
-                inputs.DeveloperPack.Sha256),
+            new($"NETFX48_DEVELOPER_PACK_SHA256=" + inputs.DeveloperPack.Sha256),
             new("--build-arg"),
             new($"OPERATOR_BUILD_INPUT_SHA256={options.OperatorBuildInputSha256}"),
             new("--build-arg"),
@@ -336,9 +272,7 @@ internal static class CppCliToolchainPreparation
             new("--build-arg"),
             new($"NETFX48_DEVELOPER_PACK_FILE={Path.GetFileName(inputs.DeveloperPack.Path)}"),
             new("--build-context"),
-            new(
-                $"{ContextName}={contextDirectory}",
-                $"{ContextName}=<direct-input-directory>"),
+            new($"{ContextName}={contextDirectory}", $"{ContextName}=<direct-input-directory>"),
             new(inputs.RepositoryRoot)
         };
         return new DockerInvocation(options.DockerCommand, arguments);
@@ -354,12 +288,10 @@ internal static class CppCliToolchainPreparation
         };
         var directory = Path.GetDirectoryName(paths[0]);
         if (string.IsNullOrEmpty(directory))
-            throw new InputValidationException(
-                "The C++/CLI prerequisite directory is invalid.");
+            throw new InputValidationException("The C++/CLI prerequisite directory is invalid.");
         directory = Path.GetFullPath(directory);
         var comparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
+            ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         if (paths.Any(path =>
         {
             var parent = Path.GetDirectoryName(path);
@@ -367,16 +299,12 @@ internal static class CppCliToolchainPreparation
                 !String.Equals(Path.GetFullPath(parent), directory, comparison);
         }))
         {
-            throw new InputValidationException(
-                "The C++/CLI prerequisite files must be in one directory " +
-                "so Docker can map that directory directly.");
+            throw new InputValidationException("The C++/CLI prerequisite files must be in one directory " + "so Docker can map that directory directly.");
         }
         return directory;
     }
 
-    private static async Task<int> ExecuteAsync(
-        DockerInvocation invocation,
-        ValidatedInputs inputs)
+    private static async Task<int> ExecuteAsync(DockerInvocation invocation, ValidatedInputs inputs)
     {
         var startInfo = new ProcessStartInfo(invocation.Command)
         {
@@ -393,8 +321,7 @@ internal static class CppCliToolchainPreparation
         {
             process = Process.Start(startInfo);
         }
-        catch (Exception exception) when (
-            exception is InvalidOperationException or Win32Exception)
+        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
         {
             Console.Error.WriteLine("Could not start Docker Buildx.");
             return 1;
@@ -414,30 +341,20 @@ internal static class CppCliToolchainPreparation
                 inputs.DeveloperPack.Path,
                 ContextDirectory(inputs)
             };
-            var standardOutput = ForwardRedactedAsync(
-                process.StandardOutput,
-                Console.Out,
-                sensitive);
-            var standardError = ForwardRedactedAsync(
-                process.StandardError,
-                Console.Error,
-                sensitive);
+            var standardOutput = ForwardRedactedAsync(process.StandardOutput, Console.Out, sensitive);
+            var standardError = ForwardRedactedAsync(process.StandardError, Console.Error, sensitive);
             await process.WaitForExitAsync();
             await Task.WhenAll(standardOutput, standardError);
             if (process.ExitCode != 0)
             {
-                Console.Error.WriteLine(
-                    "Docker Buildx did not create the source-built C++/CLI base image.");
+                Console.Error.WriteLine("Docker Buildx did not create the source-built C++/CLI base image.");
                 return 1;
             }
         }
         return 0;
     }
 
-    private static async Task ForwardRedactedAsync(
-        StreamReader source,
-        TextWriter destination,
-        IReadOnlyList<string> sensitiveValues)
+    private static async Task ForwardRedactedAsync(StreamReader source, TextWriter destination, IReadOnlyList<string> sensitiveValues)
     {
         while (await source.ReadLineAsync() is { } line)
         {
@@ -470,14 +387,11 @@ internal static class CppCliToolchainPreparation
         {
             throw;
         }
-        catch (Exception exception) when (
-            exception is ArgumentException or IOException or
-                NotSupportedException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
         {
             throw new InputValidationException("The repository root is invalid.");
         }
-        throw new InputValidationException(
-            "SharpLabNext.slnx was not found above the current directory.");
+        throw new InputValidationException("SharpLabNext.slnx was not found above the current directory.");
     }
 
     private static void RequireRegularFile(string path, string message)
@@ -492,9 +406,7 @@ internal static class CppCliToolchainPreparation
         {
             throw;
         }
-        catch (Exception exception) when (
-            exception is ArgumentException or IOException or
-                NotSupportedException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
         {
             throw new InputValidationException(message);
         }
@@ -502,11 +414,9 @@ internal static class CppCliToolchainPreparation
 
     private static string NormalizeSha256(string value, string option)
     {
-        if (value.Length != 64 ||
-            value.Any(static character => !char.IsAsciiHexDigit(character)))
+        if (value.Length != 64 || value.Any(static character => !char.IsAsciiHexDigit(character)))
         {
-            throw new UsageException(
-                $"{option} must contain exactly 64 hexadecimal characters.");
+            throw new UsageException($"{option} must contain exactly 64 hexadecimal characters.");
         }
         return value.ToLowerInvariant();
     }
@@ -515,30 +425,18 @@ internal static class CppCliToolchainPreparation
     {
         const string marker = "@sha256:";
         var separator = value.LastIndexOf(marker, StringComparison.Ordinal);
-        if (value.Length > 512 || separator <= 0 ||
-            separator + marker.Length + 64 != value.Length ||
-            value[..separator].Any(static character =>
-                char.IsWhiteSpace(character) ||
-                char.IsControl(character) ||
-                character == '@') ||
-            value[(separator + marker.Length)..].Any(static character =>
-                character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
+        if (value.Length > 512 || separator <= 0 || separator + marker.Length + 64 != value.Length || value[..separator].Any(static character => char.IsWhiteSpace(character) || char.IsControl(character) || character == '@') || value[(separator + marker.Length)..].Any(static character => character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
         {
-            throw new UsageException(
-                $"{option} must use repository[:tag]@sha256:<64 lowercase hex>.");
+            throw new UsageException($"{option} must use repository[:tag]@sha256:<64 lowercase hex>.");
         }
         return value;
     }
 
     private static string ValidateOutputImageReference(string value)
     {
-        if (value.Length > 512 || value.Contains('@') ||
-            !value.Contains(':', StringComparison.Ordinal) ||
-            value.Any(static character =>
-                char.IsWhiteSpace(character) || char.IsControl(character)))
+        if (value.Length > 512 || value.Contains('@') || !value.Contains(':', StringComparison.Ordinal) || value.Any(static character => char.IsWhiteSpace(character) || char.IsControl(character)))
         {
-            throw new UsageException(
-                "--output-image must contain one bounded taggable Docker image reference.");
+            throw new UsageException("--output-image must contain one bounded taggable Docker image reference.");
         }
         return value;
     }
@@ -563,23 +461,12 @@ internal static class CppCliToolchainPreparation
         bool DryRun);
 
     private sealed record DownloadLock(string Id, long SizeBytes, string Sha256);
-    private sealed record ValidatedSource(
-        string Id,
-        string Path,
-        long SizeBytes,
-        string Sha256);
-    private sealed record ValidatedInputs(
-        string RepositoryRoot,
-        string Dockerfile,
-        ValidatedSource MsvcWineSource,
-        ValidatedSource VisualStudioManifest,
-        ValidatedSource DeveloperPack);
+    private sealed record ValidatedSource(string Id, string Path, long SizeBytes, string Sha256);
+    private sealed record ValidatedInputs(string RepositoryRoot, string Dockerfile, ValidatedSource MsvcWineSource, ValidatedSource VisualStudioManifest, ValidatedSource DeveloperPack);
 
     private sealed record DockerArgument(string Value, string? RedactedValue = null);
 
-    private sealed record DockerInvocation(
-        string Command,
-        IReadOnlyList<DockerArgument> Arguments)
+    private sealed record DockerInvocation(string Command, IReadOnlyList<DockerArgument> Arguments)
     {
         public string RenderRedacted()
         {
@@ -594,9 +481,7 @@ internal static class CppCliToolchainPreparation
 
         private static string Quote(string value)
         {
-            if (value.Length > 0 && value.All(static character =>
-                    !char.IsWhiteSpace(character) &&
-                    character is not ('"' or '\\')))
+            if (value.Length > 0 && value.All(static character => !char.IsWhiteSpace(character) && character is not ('"' or '\\')))
             {
                 return value;
             }
@@ -609,7 +494,6 @@ internal static class CppCliToolchainPreparation
     {
         public InputValidationException(string message) : base(message) { }
 
-        public InputValidationException(string message, Exception? innerException)
-            : base(message, innerException) { }
+        public InputValidationException(string message, Exception? innerException) : base(message, innerException) { }
     }
 }

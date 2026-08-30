@@ -96,8 +96,8 @@ WORKDIR /source
 COPY global.json Directory.Build.props Directory.Build.targets Directory.Packages.props NuGet.config SharpLabNext.slnx ./
 COPY profiles/versions.props ./profiles/versions.props
 COPY src/ ./src/
-COPY eng/extract-zip.cs /tools/extract-zip.cs
-COPY eng/create-reference-set-attestation.cs /tools/create-reference-set-attestation.cs
+COPY eng/tools/extract-zip.cs /tools/extract-zip.cs
+COPY eng/tools/create-reference-set-attestation.cs /tools/create-reference-set-attestation.cs
 COPY --chmod=0555 deploy/docker/fetch-verified-reference-package.sh /tools/fetch-verified-reference-package
 RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
     dotnet restore \

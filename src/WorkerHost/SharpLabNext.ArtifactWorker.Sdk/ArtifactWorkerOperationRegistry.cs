@@ -15,24 +15,15 @@ public sealed partial class ArtifactWorkerOperationRegistry : IDisposable
     private readonly ConcurrentDictionary<string, string> _idempotency = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _concurrency;
 
-    public ArtifactWorkerOperationRegistry(
-        ArtifactWorkerCapabilityManifest manifest,
-        ArtifactWorkerHostIdentity hostIdentity,
-        ILogger<ArtifactWorkerOperationRegistry> logger)
+    public ArtifactWorkerOperationRegistry(ArtifactWorkerCapabilityManifest manifest, ArtifactWorkerHostIdentity hostIdentity, ILogger<ArtifactWorkerOperationRegistry> logger)
     {
         _manifest = manifest;
         _hostIdentity = hostIdentity;
         _logger = logger;
-        _concurrency = new SemaphoreSlim(
-            manifest.Limits.MaximumConcurrentOperations,
-            manifest.Limits.MaximumConcurrentOperations);
+        _concurrency = new SemaphoreSlim(manifest.Limits.MaximumConcurrentOperations, manifest.Limits.MaximumConcurrentOperations);
     }
 
-    public OperationHandle Start(
-        string requestId,
-        string idempotencyKey,
-        OperationKind kind,
-        Func<string, CancellationToken, Task<ArtifactWorkerJobExecution>> execute)
+    public OperationHandle Start(string requestId, string idempotencyKey, OperationKind kind, Func<string, CancellationToken, Task<ArtifactWorkerJobExecution>> execute)
     {
         ValidateRequestIdentity(requestId, idempotencyKey);
         ArgumentNullException.ThrowIfNull(execute);
@@ -43,21 +34,12 @@ public sealed partial class ArtifactWorkerOperationRegistry : IDisposable
         TrimCompleted();
         if (_operations.Count >= _manifest.Limits.MaximumRetainedOperations)
         {
-            throw new ArtifactWorkerRequestException(
-                "worker-capacity-exceeded",
-                "The artifact worker operation registry is at capacity.",
-                StatusCodes.Status429TooManyRequests,
-                WorkerErrorCategory.ResourceExhausted);
+            throw new ArtifactWorkerRequestException("worker-capacity-exceeded", "The artifact worker operation registry is at capacity.", StatusCodes.Status429TooManyRequests, WorkerErrorCategory.ResourceExhausted);
         }
 
         var operationId = $"op_{Guid.NewGuid():N}";
         var traceId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
-        var operation = new ArtifactOperation(
-            operationId,
-            requestId,
-            kind,
-            traceId,
-            _manifest.Limits.MaximumEventsPerOperation);
+        var operation = new ArtifactOperation(operationId, requestId, kind, traceId, _manifest.Limits.MaximumEventsPerOperation);
         if (!_operations.TryAdd(operationId, operation))
             throw new InvalidOperationException("Could not allocate an artifact operation.");
         if (!_idempotency.TryAdd(idempotencyId, operationId))
@@ -74,20 +56,16 @@ public sealed partial class ArtifactWorkerOperationRegistry : IDisposable
         return Handle(operation, isExisting: false);
     }
 
-    public OperationState? Get(string operationId) =>
-        _operations.TryGetValue(operationId, out var operation) ? operation.Snapshot() : null;
+    public OperationState? Get(string operationId) => _operations.TryGetValue(operationId, out var operation) ? operation.Snapshot() : null;
 
     public IReadOnlyList<OperationEvent>? GetEvents(string operationId, long fromSequence)
     {
         if (fromSequence < 0)
         {
-            throw new ArtifactWorkerRequestException(
-                "invalid-sequence",
-                "fromSequence cannot be negative.");
+            throw new ArtifactWorkerRequestException("invalid-sequence", "fromSequence cannot be negative.");
         }
         return _operations.TryGetValue(operationId, out var operation)
-            ? operation.Events(fromSequence)
-            : null;
+            ? operation.Events(fromSequence) : null;
     }
 
     public CancelResult Cancel(string operationId)
@@ -104,9 +82,7 @@ public sealed partial class ArtifactWorkerOperationRegistry : IDisposable
         _concurrency.Dispose();
     }
 
-    private async Task ExecuteAsync(
-        ArtifactOperation operation,
-        Func<string, CancellationToken, Task<ArtifactWorkerJobExecution>> execute)
+    private async Task ExecuteAsync(ArtifactOperation operation, Func<string, CancellationToken, Task<ArtifactWorkerJobExecution>> execute)
     {
         var started = DateTimeOffset.UtcNow;
         var entered = false;
@@ -119,17 +95,11 @@ public sealed partial class ArtifactWorkerOperationRegistry : IDisposable
             var execution = await execute(operation.OperationId, operation.CancellationToken).ConfigureAwait(false);
             if (execution.Content is not null)
             {
-                operation.Append(new ContentProducedOperationEventPayload(
-                    execution.Content.ContentRef,
-                    execution.Content.MediaType,
-                    execution.Content.Size));
+                operation.Append(new ContentProducedOperationEventPayload(execution.Content.ContentRef, execution.Content.MediaType, execution.Content.Size));
             }
             if (execution.Artifact is not null)
             {
-                operation.Append(new ArtifactProducedOperationEventPayload(
-                    execution.Artifact.ArtifactRef,
-                    execution.Artifact.ArtifactFormat,
-                    execution.Artifact.Role));
+                operation.Append(new ArtifactProducedOperationEventPayload(execution.Artifact.ArtifactRef, execution.Artifact.ArtifactFormat, execution.Artifact.Role));
             }
             operation.Append(new TypedResultOperationEventPayload(execution.Result));
             operation.Complete(OperationCompletionStatus.Completed, DateTimeOffset.UtcNow - started);
@@ -140,16 +110,8 @@ public sealed partial class ArtifactWorkerOperationRegistry : IDisposable
         }
         catch (Exception exception)
         {
-            var error = ArtifactWorkerErrorMapper.Map(
-                exception,
-                operation.TraceId,
-                _manifest.WorkerId,
-                _hostIdentity.WorkerImageId);
-            OperationFailed(
-                _logger,
-                operation.OperationId,
-                error.Code,
-                operation.TraceId);
+            var error = ArtifactWorkerErrorMapper.Map(exception, operation.TraceId, _manifest.WorkerId, _hostIdentity.WorkerImageId);
+            OperationFailed(_logger, operation.OperationId, error.Code, operation.TraceId);
             operation.Fail(error);
         }
         finally
@@ -170,11 +132,7 @@ public sealed partial class ArtifactWorkerOperationRegistry : IDisposable
     {
         if (_operations.Count < _manifest.Limits.MaximumRetainedOperations)
             return;
-        var removable = _operations.Values
-            .Where(static operation => operation.IsTerminal)
-            .OrderBy(static operation => operation.UpdatedAtUtc)
-            .Take(Math.Max(1, _manifest.Limits.MaximumRetainedOperations / 4))
-            .ToArray();
+        var removable = _operations.Values.Where(static operation => operation.IsTerminal).OrderBy(static operation => operation.UpdatedAtUtc).Take(Math.Max(1, _manifest.Limits.MaximumRetainedOperations / 4)).ToArray();
         foreach (var operation in removable)
         {
             if (_operations.TryRemove(operation.OperationId, out var removed))
@@ -195,21 +153,10 @@ public sealed partial class ArtifactWorkerOperationRegistry : IDisposable
             throw new ArtifactWorkerRequestException("invalid-request", "IdempotencyKey is required and must not exceed 256 characters.");
     }
 
-    private static OperationHandle Handle(ArtifactOperation operation, bool isExisting) => new(
-        operation.OperationId,
-        operation.RequestId,
-        operation.CreatedAtUtc,
-        isExisting);
+    private static OperationHandle Handle(ArtifactOperation operation, bool isExisting) => new(operation.OperationId, operation.RequestId, operation.CreatedAtUtc, isExisting);
 
-    [LoggerMessage(
-        EventId = 4200,
-        Level = LogLevel.Error,
-        Message = "Artifact operation {OperationId} failed with {ErrorCode}. TraceId {TraceId}.")]
-    private static partial void OperationFailed(
-        ILogger logger,
-        string operationId,
-        string errorCode,
-        string traceId);
+    [LoggerMessage(EventId = 4200, Level = LogLevel.Error, Message = "Artifact operation {OperationId} failed with {ErrorCode}. TraceId {TraceId}.")]
+    private static partial void OperationFailed(ILogger logger, string operationId, string errorCode, string traceId);
 
     private sealed class ArtifactOperation : IDisposable
     {
@@ -222,12 +169,7 @@ public sealed partial class ArtifactWorkerOperationRegistry : IDisposable
         private DateTimeOffset? _completedAtUtc;
         private long _sequence;
 
-        public ArtifactOperation(
-            string operationId,
-            string requestId,
-            OperationKind kind,
-            string traceId,
-            int maximumEvents)
+        public ArtifactOperation(string operationId, string requestId, OperationKind kind, string traceId, int maximumEvents)
         {
             OperationId = operationId;
             RequestId = requestId;
@@ -290,8 +232,7 @@ public sealed partial class ArtifactWorkerOperationRegistry : IDisposable
                 var now = DateTimeOffset.UtcNow;
                 AppendCore(new CompletedOperationEventPayload(status, elapsed), now);
                 _status = status == OperationCompletionStatus.Cancelled
-                    ? OperationStatus.Cancelled
-                    : OperationStatus.Completed;
+                    ? OperationStatus.Cancelled : OperationStatus.Completed;
                 _completedAtUtc = now;
                 UpdatedAtUtc = now;
             }
@@ -316,17 +257,7 @@ public sealed partial class ArtifactWorkerOperationRegistry : IDisposable
         {
             lock (_gate)
             {
-                return new OperationState(
-                    OperationId,
-                    RequestId,
-                    Kind,
-                    _status,
-                    _sequence,
-                    CreatedAtUtc,
-                    UpdatedAtUtc,
-                    _completedAtUtc,
-                    TraceId,
-                    _error);
+                return new OperationState(OperationId, RequestId, Kind, _status, _sequence, CreatedAtUtc, UpdatedAtUtc, _completedAtUtc, TraceId, _error);
             }
         }
 

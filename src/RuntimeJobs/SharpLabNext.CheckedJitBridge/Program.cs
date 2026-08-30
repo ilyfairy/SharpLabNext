@@ -12,8 +12,7 @@ internal static class CheckedJitBridgeContract
 {
     public const string ImplementationId = "sharplabnext-checked-jit-bridge-v1";
     public const string SourceMappingKind = "checked-jit-debug-info";
-    public const string SourceMappingKindEnvironmentVariable =
-        "SHARPLABNEXT_CHECKED_JIT_SOURCE_MAPPING_KIND";
+    public const string SourceMappingKindEnvironmentVariable = "SHARPLABNEXT_CHECKED_JIT_SOURCE_MAPPING_KIND";
     public const string InstalledAssemblyPath = "/opt/sharplabnext/SharpLabNext.CheckedJitBridge.dll";
 }
 
@@ -36,9 +35,7 @@ internal static class CheckedJitBridgeBootstrap
         Console.CancelKeyPress += handler;
         try
         {
-            return CheckedJitBridgeProgram.RunAsync(args, cancellation.Token)
-                .GetAwaiter()
-                .GetResult();
+            return CheckedJitBridgeProgram.RunAsync(args, cancellation.Token).GetAwaiter().GetResult();
         }
         finally
         {
@@ -53,12 +50,7 @@ internal static class CheckedJitBridgeProgram
     private const int MaximumChildMetadataBytes = 512 * 1024;
     private static readonly TimeSpan MetadataCompletionTimeout = TimeSpan.FromSeconds(2);
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
-    private static readonly BoundedChildProcessLimits ChildLimits = new(
-        standardOutputBytes: 3 * 1024 * 1024,
-        standardErrorBytes: 256 * 1024,
-        totalOutputBytes: 3 * 1024 * 1024,
-        executionTimeout: TimeSpan.FromSeconds(8),
-        cleanupTimeout: TimeSpan.FromSeconds(2));
+    private static readonly BoundedChildProcessLimits ChildLimits = new(standardOutputBytes: 3 * 1024 * 1024, standardErrorBytes: 256 * 1024, totalOutputBytes: 3 * 1024 * 1024, executionTimeout: TimeSpan.FromSeconds(8), cleanupTimeout: TimeSpan.FromSeconds(2));
 
     public static async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
@@ -72,23 +64,13 @@ internal static class CheckedJitBridgeProgram
             using var metadata = ManagedAssemblyMetadata.Open(options.AssemblyPath);
             var userAssemblyName = metadata.AssemblyName;
             var nonce = Guid.NewGuid().ToString("N");
-            using var childMetadata = new AnonymousPipeServerStream(
-                PipeDirection.In,
-                HandleInheritability.Inheritable);
-            var metadataFailure = new TaskCompletionSource<bool>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
-            var metadataRead = BoundedStreamReader.ReadAsync(
-                childMetadata,
-                MaximumChildMetadataBytes,
-                metadataFailure);
+            using var childMetadata = new AnonymousPipeServerStream(PipeDirection.In, HandleInheritability.Inheritable);
+            var metadataFailure = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var metadataRead = BoundedStreamReader.ReadAsync(childMetadata, MaximumChildMetadataBytes, metadataFailure);
             var localClientDisposed = false;
             try
             {
-                var startInfo = CheckedJitChildProcess.CreateStartInfo(
-                    options,
-                    childMetadata.GetClientHandleAsString(),
-                    nonce,
-                    userAssemblyName);
+                var startInfo = CheckedJitChildProcess.CreateStartInfo(options, childMetadata.GetClientHandleAsString(), nonce, userAssemblyName);
                 var child = await BoundedChildProcessRunner.RunAsync(
                     startInfo,
                     ChildLimits,
@@ -102,13 +84,7 @@ internal static class CheckedJitBridgeProgram
 
                 if (!localClientDisposed)
                     childMetadata.DisposeLocalCopyOfClientHandle();
-                return await CompleteAsync(
-                    writer,
-                    options,
-                    nonce,
-                    child,
-                    metadataRead,
-                    started).ConfigureAwait(false);
+                return await CompleteAsync(writer, options, nonce, child, metadataRead, started).ConfigureAwait(false);
             }
             finally
             {
@@ -134,13 +110,7 @@ internal static class CheckedJitBridgeProgram
         }
     }
 
-    private static async Task<int> CompleteAsync(
-        RuntimeFrameWriter writer,
-        CheckedJitBridgeArguments options,
-        string nonce,
-        BoundedChildProcessResult child,
-        Task<byte[]> metadataRead,
-        Stopwatch started)
+    private static async Task<int> CompleteAsync(RuntimeFrameWriter writer, CheckedJitBridgeArguments options, string nonce, BoundedChildProcessResult child, Task<byte[]> metadataRead, Stopwatch started)
     {
         switch (child.TerminationReason)
         {
@@ -168,54 +138,27 @@ internal static class CheckedJitBridgeProgram
                 return 1;
         }
 
-        var childPayload = await AwaitMetadataAsync(
-            metadataRead,
-            MetadataCompletionTimeout).ConfigureAwait(false);
-        var validated = ChildResultCodec.ParseAndValidate(
-            childPayload,
-            options.AssemblyPath,
-            nonce);
+        var childPayload = await AwaitMetadataAsync(metadataRead, MetadataCompletionTimeout).ConfigureAwait(false);
+        var validated = ChildResultCodec.ParseAndValidate(childPayload, options.AssemblyPath, nonce);
         if (validated.FatalError is not null)
         {
-            writer.Write(
-                RuntimeFrameKind.Exception,
-                BridgePayloadCodec.Serialize(new ExceptionPayload(
-                    validated.FatalError.TypeName,
-                    validated.FatalError.Message,
-                    validated.FatalError.StackTrace,
-                    null,
-                    started.Elapsed.TotalMilliseconds)));
+            writer.Write(RuntimeFrameKind.Exception, BridgePayloadCodec.Serialize(new ExceptionPayload(validated.FatalError.TypeName, validated.FatalError.Message, validated.FatalError.StackTrace, null, started.Elapsed.TotalMilliseconds)));
             var status = child.ExitCode == 137 ? "out-of-memory" : "inspection-failed";
             WriteExit(writer, status, child.ExitCode, started);
             return child.ExitCode;
         }
         if (child.ExitCode != 0)
         {
-            WriteProtocolError(
-                writer,
-                "checked-jit-child-crash",
-                CreateChildFailureMessage(child.StandardError, child.ExitCode));
+            WriteProtocolError(writer, "checked-jit-child-crash", CreateChildFailureMessage(child.StandardError, child.ExitCode));
             WriteExit(writer, "process-crash", child.ExitCode, started);
             return child.ExitCode;
         }
 
         var rawAssembly = StrictUtf8.GetString(child.StandardOutput);
-        var sourceMaps = CheckedJitSourceMapping.LoadForDeclaredKind(
-            options.AssemblyPath,
-            Environment.GetEnvironmentVariable(
-                CheckedJitBridgeContract.SourceMappingKindEnvironmentVariable));
-        var assemblyText = CheckedJitDisassemblyDocument.SelectPreparedMethods(
-            rawAssembly,
-            validated.Methods,
-            sourceMaps);
+        var sourceMaps = CheckedJitSourceMapping.LoadForDeclaredKind(options.AssemblyPath, Environment.GetEnvironmentVariable(CheckedJitBridgeContract.SourceMappingKindEnvironmentVariable));
+        var assemblyText = CheckedJitDisassemblyDocument.SelectPreparedMethods(rawAssembly, validated.Methods, sourceMaps);
         WriteChunks(writer, RuntimeFrameKind.JitAssembly, Encoding.UTF8.GetBytes(assemblyText));
-        writer.Write(
-            RuntimeFrameKind.JitSummary,
-            BridgePayloadCodec.Serialize(new JitSummaryPayload(
-                Environment.Version.ToString(),
-                validated.AssemblyName,
-                options.MethodFilter,
-                validated.Methods)));
+        writer.Write(RuntimeFrameKind.JitSummary, BridgePayloadCodec.Serialize(new JitSummaryPayload(Environment.Version.ToString(), validated.AssemblyName, options.MethodFilter, validated.Methods)));
 
         var preparedAny = false;
         foreach (var method in validated.Methods)
@@ -227,19 +170,11 @@ internal static class CheckedJitBridgeProgram
             }
         }
         var exitCode = preparedAny && assemblyText.Length > 0 ? 0 : preparedAny ? 1 : 2;
-        WriteExit(
-            writer,
-            exitCode == 0
-                ? "completed"
-                : exitCode == 2 ? "no-matching-methods" : "inspection-failed",
-            exitCode,
-            started);
+        WriteExit(writer, exitCode == 0 ? "completed" : exitCode == 2 ? "no-matching-methods" : "inspection-failed", exitCode, started);
         return exitCode;
     }
 
-    internal static async Task<byte[]> AwaitMetadataAsync(
-        Task<byte[]> metadataRead,
-        TimeSpan timeout)
+    internal static async Task<byte[]> AwaitMetadataAsync(Task<byte[]> metadataRead, TimeSpan timeout)
     {
         if (metadataRead is null)
             throw new ArgumentNullException(nameof(metadataRead));
@@ -248,8 +183,7 @@ internal static class CheckedJitBridgeProgram
 
         if (await Task.WhenAny(metadataRead, Task.Delay(timeout)).ConfigureAwait(false) != metadataRead)
         {
-            throw new InvalidDataException(
-                "Checked JIT child metadata pipe did not reach EOF after the child exited.");
+            throw new InvalidDataException("Checked JIT child metadata pipe did not reach EOF after the child exited.");
         }
         return await metadataRead.ConfigureAwait(false);
     }
@@ -260,8 +194,7 @@ internal static class CheckedJitBridgeProgram
         if (detail.Length > 1_024)
             detail = detail.Substring(0, 1_024);
         return detail.Length == 0
-            ? $"Checked JIT child exited with code {exitCode}."
-            : $"Checked JIT child exited with code {exitCode}: {detail}";
+            ? $"Checked JIT child exited with code {exitCode}." : $"Checked JIT child exited with code {exitCode}: {detail}";
     }
 
     private static void WriteChunks(RuntimeFrameWriter writer, RuntimeFrameKind kind, byte[] content)
@@ -277,20 +210,9 @@ internal static class CheckedJitBridgeProgram
     {
         if (message.Length > 4_096)
             message = message.Substring(0, 4_096);
-        writer.Write(
-            RuntimeFrameKind.ProtocolError,
-            BridgePayloadCodec.Serialize(new ProtocolErrorPayload(code, message)));
+        writer.Write(RuntimeFrameKind.ProtocolError, BridgePayloadCodec.Serialize(new ProtocolErrorPayload(code, message)));
     }
 
-    private static void WriteExit(
-        RuntimeFrameWriter writer,
-        string status,
-        int exitCode,
-        Stopwatch started) =>
-        writer.Write(
-            RuntimeFrameKind.Exit,
-            BridgePayloadCodec.Serialize(new ExitPayload(
-                status,
-                exitCode,
-                started.Elapsed.TotalMilliseconds)));
+    private static void WriteExit(RuntimeFrameWriter writer, string status, int exitCode, Stopwatch started) =>
+        writer.Write(RuntimeFrameKind.Exit, BridgePayloadCodec.Serialize(new ExitPayload(status, exitCode, started.Elapsed.TotalMilliseconds)));
 }

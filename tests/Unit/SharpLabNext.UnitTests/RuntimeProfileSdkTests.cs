@@ -15,44 +15,20 @@ public sealed class RuntimeProfileSdkTests
         profile.Layout.RunnerAssemblyPath = "/helpers/Runner.dll";
         profile.Layout.JitInspectorAssemblyPath = "/helpers/Jit.dll";
 
-        var run = RuntimeProfileCommandBuilder.CreateRunCommand(
-            profile,
-            "app/Program.dll",
-            ["first", "second"]);
-        var jit = RuntimeProfileCommandBuilder.CreateJitCommand(
-            profile,
-            "app/Program.dll",
-            "Program:Main");
+        var run = RuntimeProfileCommandBuilder.CreateRunCommand(profile, "app/Program.dll", ["first", "second"]);
+        var jit = RuntimeProfileCommandBuilder.CreateJitCommand(profile, "app/Program.dll", "Program:Main");
 
-        Assert.Equal(
-            ["/runtime/dotnet", "/helpers/Runner.dll", "/workspace/app/Program.dll", "--", "first", "second"],
-            run);
-        Assert.Equal(
-            ["/runtime/dotnet", "/helpers/Jit.dll", "/workspace/app/Program.dll", "Program:Main"],
-            jit);
+        Assert.Equal(["/runtime/dotnet", "/helpers/Runner.dll", "/workspace/app/Program.dll", "--", "first", "second"], run);
+        Assert.Equal(["/runtime/dotnet", "/helpers/Jit.dll", "/workspace/app/Program.dll", "Program:Main"], jit);
     }
 
     [Fact]
     public void RunOperationBuildsALinuxDirectCommandAndKeepsArgumentsLiteral()
     {
         var profile = Profile();
-        profile.Operations = new RuntimeProfileOperations
-        {
-            Run = new RuntimeRunOperationDefinition
-            {
-                ImplementationId = RuntimeOperationImplementationIds.DirectRuntime,
-                Command = new RuntimeOperationCommandDefinition
-                {
-                    Executable = "/usr/share/dotnet/dotnet",
-                    Argv = [RuntimeOperationPlaceholders.EntryAssembly, "--", RuntimeOperationPlaceholders.Arguments]
-                }
-            }
-        };
+        profile.Operations = new RuntimeProfileOperations { Run = new RuntimeRunOperationDefinition { ImplementationId = RuntimeOperationImplementationIds.DirectRuntime, Command = new RuntimeOperationCommandDefinition { Executable = "/usr/share/dotnet/dotnet", Argv = [RuntimeOperationPlaceholders.EntryAssembly, "--", RuntimeOperationPlaceholders.Arguments] } } };
 
-        var command = RuntimeProfileCommandBuilder.CreateRunCommand(
-            profile,
-            "app/Program.dll",
-            ["$(touch /tmp/not-executed)", "; rm -rf /tmp/not-executed"]);
+        var command = RuntimeProfileCommandBuilder.CreateRunCommand(profile, "app/Program.dll", ["$(touch /tmp/not-executed)", "; rm -rf /tmp/not-executed"]);
 
         Assert.Equal(
             [
@@ -89,10 +65,7 @@ public sealed class RuntimeProfileSdkTests
             }
         };
 
-        var command = RuntimeProfileCommandBuilder.CreateRunCommand(
-            profile,
-            "app/Program.exe",
-            ["first"]);
+        var command = RuntimeProfileCommandBuilder.CreateRunCommand(profile, "app/Program.exe", ["first"]);
 
         Assert.Equal(
             [
@@ -132,10 +105,7 @@ public sealed class RuntimeProfileSdkTests
             }
         };
 
-        var command = RuntimeProfileCommandBuilder.CreateJitCommand(
-            profile,
-            "app/Program.dll",
-            "Program:Main");
+        var command = RuntimeProfileCommandBuilder.CreateJitCommand(profile, "app/Program.dll", "Program:Main");
 
         Assert.Equal(
             [
@@ -162,8 +132,7 @@ public sealed class RuntimeProfileSdkTests
         profile.Operations!.Jit = null;
         failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("'jit-asm' without a JIT operation", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("'jit-asm' without a JIT operation", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -178,8 +147,7 @@ public sealed class RuntimeProfileSdkTests
         profile.Family = "coreclr-wine";
         var failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("instrumentation capabilities are supported only by the standard CoreCLR runner", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("instrumentation capabilities are supported only by the standard CoreCLR runner", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -199,14 +167,12 @@ public sealed class RuntimeProfileSdkTests
 
         var failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("require Run implementation 'sharplabnext-runner-v1'", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("require Run implementation 'sharplabnext-runner-v1'", StringComparison.Ordinal));
 
         profile.Operations.Run.ImplementationId = RuntimeOperationImplementationIds.Runner;
         failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("must invoke '/opt/sharplabnext/SharpLabNext.Runner.dll'", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("must invoke '/opt/sharplabnext/SharpLabNext.Runner.dll'", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -219,10 +185,8 @@ public sealed class RuntimeProfileSdkTests
         var runFailures = RuntimeProfileValidation.Validate(profile.Operations.Run);
         var jitFailures = RuntimeProfileValidation.Validate(profile.Operations.Jit);
 
-        Assert.Contains(runFailures, static failure =>
-            failure.Contains("fixed operation contract", StringComparison.Ordinal));
-        Assert.Contains(jitFailures, static failure =>
-            failure.Contains("fixed operation contract", StringComparison.Ordinal));
+        Assert.Contains(runFailures, static failure => failure.Contains("fixed operation contract", StringComparison.Ordinal));
+        Assert.Contains(jitFailures, static failure => failure.Contains("fixed operation contract", StringComparison.Ordinal));
 
         var bridge = new RuntimeRunOperationDefinition
         {
@@ -242,9 +206,7 @@ public sealed class RuntimeProfileSdkTests
                 ]
             }
         };
-        Assert.Contains(RuntimeProfileValidation.Validate(bridge), static failure =>
-            failure.Contains("must invoke 'sharplabnext-wine-runner-v1'", StringComparison.Ordinal) ||
-            failure.Contains("must invoke '/opt/sharplabnext/SharpLabNext.WineRunner.dll'", StringComparison.Ordinal));
+        Assert.Contains(RuntimeProfileValidation.Validate(bridge), static failure => failure.Contains("must invoke 'sharplabnext-wine-runner-v1'", StringComparison.Ordinal) || failure.Contains("must invoke '/opt/sharplabnext/SharpLabNext.WineRunner.dll'", StringComparison.Ordinal));
 
         var targetRuntimeRunner = new RuntimeRunOperationDefinition
         {
@@ -262,33 +224,25 @@ public sealed class RuntimeProfileSdkTests
                 ]
             }
         };
-        Assert.Contains(RuntimeProfileValidation.Validate(targetRuntimeRunner), static failure =>
-            failure.Contains("fixed target CLR host", StringComparison.Ordinal));
+        Assert.Contains(RuntimeProfileValidation.Validate(targetRuntimeRunner), static failure => failure.Contains("fixed target CLR host", StringComparison.Ordinal));
     }
 
     [Fact]
     public void LegacyHelperContractRejectsPrefixBypassesAndRuntimeVersionDrift()
     {
-        var profile = JsonSerializer.Deserialize<RuntimeProfileDefinition>(
-            File.ReadAllText(Path.Combine(
-                FindProfilesDirectory(),
-                "candidates",
-                "dotnet-7-linux-x64.json")),
-            WebJsonOptions);
+        var profile = JsonSerializer.Deserialize<RuntimeProfileDefinition>(File.ReadAllText(Path.Combine(FindProfilesDirectory(), "candidates", "dotnet-7-linux-x64.json")), WebJsonOptions);
         Assert.NotNull(profile?.Operations?.Run);
         profile.Operations.Run.Command.Argv.Insert(0, "/opt/untrusted/Other.dll");
 
         var failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("exact fixed operation contract", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("exact fixed operation contract", StringComparison.Ordinal));
 
         profile.Operations.Run.Command.Argv.RemoveAt(0);
         profile.Operations.Run.Command.Argv[2] = "8.0.0";
         failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("'--fx-version' must match runtime profile version", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("'--fx-version' must match runtime profile version", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -300,8 +254,7 @@ public sealed class RuntimeProfileSdkTests
 
         var failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("without operation-based Run support", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("without operation-based Run support", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -311,12 +264,7 @@ public sealed class RuntimeProfileSdkTests
         profile.Family = "mono";
         profile.Capabilities = ["run"];
         profile.AcceptedArtifactFormats = ["dotnet-framework-managed-pe-v1"];
-        profile.Container = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Standard,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Mono,
-            ExecutionUser = RuntimeContainerExecutionUsers.NonRoot
-        };
+        profile.Container = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Standard, EnvironmentKind = RuntimeContainerEnvironmentKinds.Mono, ExecutionUser = RuntimeContainerExecutionUsers.NonRoot };
         profile.Operations!.Jit = null;
         profile.Layout.DotNetHostPath = "/usr/bin/mono";
         profile.Layout.RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe";
@@ -361,8 +309,7 @@ public sealed class RuntimeProfileSdkTests
             "/opt/sharplabnext/SharpLabNext.JitInspector.dll";
         var failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("requires JIT implementation", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("requires JIT implementation", StringComparison.Ordinal));
 
         profile.Operations.Jit.ImplementationId = RuntimeOperationImplementationIds.MonoJitInspector;
         profile.Operations.Jit.Command.Argv[0] =
@@ -370,29 +317,20 @@ public sealed class RuntimeProfileSdkTests
         profile.Operations.Jit.SourceMappingKind = RuntimeJitSourceMappingKinds.LinuxProfiler;
         failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("source mapping kind 'none'", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("source mapping kind 'none'", StringComparison.Ordinal));
     }
 
     [Fact]
     public void WineOperationProfilesCannotBypassFamilyChecksWithDotNetRunnerKind()
     {
         var profile = OperationProfile();
-        profile.Container = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Wine,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-            ExecutionUser = RuntimeContainerExecutionUsers.Root,
-            WinePrefixPath = "/opt/not-the-coreclr-prefix"
-        };
+        profile.Container = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, ExecutionUser = RuntimeContainerExecutionUsers.Root, WinePrefixPath = "/opt/not-the-coreclr-prefix" };
         profile.Layout.RunnerKind = RuntimeRunnerKinds.DotNet;
 
         var failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("wine-coreclr runner", StringComparison.Ordinal));
-        Assert.Contains(failures, static failure =>
-            failure.Contains("/opt/wine-dotnet", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("wine-coreclr runner", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("/opt/wine-dotnet", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -403,8 +341,7 @@ public sealed class RuntimeProfileSdkTests
 
         var failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("declares unsupported capability 'not-a-capability'", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("declares unsupported capability 'not-a-capability'", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -425,8 +362,7 @@ public sealed class RuntimeProfileSdkTests
 
         Assert.Contains(failures, static failure => failure.Contains("shell executable", StringComparison.Ordinal));
         Assert.Contains(failures, static failure => failure.Contains("embedded placeholder", StringComparison.Ordinal));
-        Assert.Throws<InvalidOperationException>(() =>
-            RuntimeProfileCommandBuilder.CreateRunCommand(profile, "Program.dll", []));
+        Assert.Throws<InvalidOperationException>(() => RuntimeProfileCommandBuilder.CreateRunCommand(profile, "Program.dll", []));
     }
 
     [Fact]
@@ -443,10 +379,8 @@ public sealed class RuntimeProfileSdkTests
 
         var failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("must follow '{entryAssembly}' and be the final argv token", StringComparison.Ordinal));
-        Assert.Throws<InvalidOperationException>(() =>
-            RuntimeProfileCommandBuilder.CreateRunCommand(profile, "Program.dll", ["--additional-host-option"]));
+        Assert.Contains(failures, static failure => failure.Contains("must follow '{entryAssembly}' and be the final argv token", StringComparison.Ordinal));
+        Assert.Throws<InvalidOperationException>(() => RuntimeProfileCommandBuilder.CreateRunCommand(profile, "Program.dll", ["--additional-host-option"]));
     }
 
     [Fact]
@@ -467,8 +401,7 @@ public sealed class RuntimeProfileSdkTests
         profile.Operations.Jit.ProfilerPath = "/opt/sharplabnext/libSharpLabNext.JitProfiler.so";
         failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("cannot declare a profiler path", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("cannot declare a profiler path", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -498,20 +431,17 @@ public sealed class RuntimeProfileSdkTests
 
         profile.Operations.Jit.ProfilerPath = "/opt/sharplabnext/SharpLabNext.JitProfiler.so";
         var failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
-        Assert.Contains(failures, static failure =>
-            failure.Contains("cannot declare a profiler path", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("cannot declare a profiler path", StringComparison.Ordinal));
 
         profile.Operations.Jit.ProfilerPath = null;
         profile.Operations.Jit.Command.Argv[1] = "--child";
         failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
-        Assert.Contains(failures, static failure =>
-            failure.Contains("must invoke '/opt/sharplabnext/SharpLabNext.CheckedJitBridge.dll'", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("must invoke '/opt/sharplabnext/SharpLabNext.CheckedJitBridge.dll'", StringComparison.Ordinal));
 
         profile.Operations.Jit.Command.Argv[1] = "jit";
         profile.Operations.Jit.SourceMappingKind = RuntimeJitSourceMappingKinds.LinuxProfiler;
         failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
-        Assert.Contains(failures, static failure =>
-            failure.Contains("supports only source mapping kinds", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("supports only source mapping kinds", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -540,8 +470,7 @@ public sealed class RuntimeProfileSdkTests
         profile.AcceptedRuntimeFamilies = ["coreclr"];
         var failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("must include its own family 'coreclr-wine'", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("must include its own family 'coreclr-wine'", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -550,22 +479,9 @@ public sealed class RuntimeProfileSdkTests
         var profile = OperationProfile();
         profile.AcceptedFrameworks =
         [
-            new RuntimeFrameworkCompatibilityDefinition
-            {
-                Name = ".NETFramework",
-                ExactVersion = "4.8"
-            },
-            new RuntimeFrameworkCompatibilityDefinition
-            {
-                Name = "Microsoft.NETCore.App",
-                MinimumVersion = "11.0.0-preview.2",
-                MaximumVersion = "11.0.0"
-            },
-            new RuntimeFrameworkCompatibilityDefinition
-            {
-                Name = "SharpLab.PrivateRuntime",
-                ExactVersion = "9.0.0-constgenerics.1.23470.1"
-            }
+            new RuntimeFrameworkCompatibilityDefinition { Name = ".NETFramework", ExactVersion = "4.8" },
+            new RuntimeFrameworkCompatibilityDefinition { Name = "Microsoft.NETCore.App", MinimumVersion = "11.0.0-preview.2", MaximumVersion = "11.0.0" },
+            new RuntimeFrameworkCompatibilityDefinition { Name = "SharpLab.PrivateRuntime", ExactVersion = "9.0.0-constgenerics.1.23470.1" }
         ];
 
         Assert.Empty(RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false));
@@ -574,24 +490,12 @@ public sealed class RuntimeProfileSdkTests
     [Fact]
     public void AcceptedFrameworkMatchingUsesLiteralExactAndInclusiveSemanticRanges()
     {
-        var exact = new RuntimeFrameworkCompatibilityDefinition
-        {
-            Name = ".NETFramework",
-            ExactVersion = "4.8"
-        };
-        var range = new RuntimeFrameworkCompatibilityDefinition
-        {
-            Name = "Microsoft.NETCore.App",
-            MinimumVersion = "11.0.0-preview.2",
-            MaximumVersion = "11.0.0"
-        };
+        var exact = new RuntimeFrameworkCompatibilityDefinition { Name = ".NETFramework", ExactVersion = "4.8" };
+        var range = new RuntimeFrameworkCompatibilityDefinition { Name = "Microsoft.NETCore.App", MinimumVersion = "11.0.0-preview.2", MaximumVersion = "11.0.0" };
 
         Assert.True(RuntimeProfileValidation.AcceptsFramework(exact, ".NETFramework", "4.8"));
         Assert.False(RuntimeProfileValidation.AcceptsFramework(exact, ".NETFramework", "4.8.0"));
-        Assert.True(RuntimeProfileValidation.AcceptsFramework(
-            range,
-            "Microsoft.NETCore.App",
-            "11.0.0-preview.5"));
+        Assert.True(RuntimeProfileValidation.AcceptsFramework(range, "Microsoft.NETCore.App", "11.0.0-preview.5"));
         Assert.True(RuntimeProfileValidation.AcceptsFramework(range, "Microsoft.NETCore.App", "11.0.0"));
         Assert.False(RuntimeProfileValidation.AcceptsFramework(range, "Microsoft.NETCore.App", "11.0.1"));
         Assert.False(RuntimeProfileValidation.AcceptsFramework(range, "microsoft.netcore.app", "11.0.0"));
@@ -600,23 +504,11 @@ public sealed class RuntimeProfileSdkTests
     [Fact]
     public void AcceptedFrameworkValidationRejectsMixedAndIncompleteVersionModes()
     {
-        var mixed = new RuntimeFrameworkCompatibilityDefinition
-        {
-            Name = "Microsoft.NETCore.App",
-            ExactVersion = "10.0.9",
-            MinimumVersion = "10.0.0",
-            MaximumVersion = "10.0.99"
-        };
-        var incomplete = new RuntimeFrameworkCompatibilityDefinition
-        {
-            Name = ".NETFramework",
-            MinimumVersion = "4.0"
-        };
+        var mixed = new RuntimeFrameworkCompatibilityDefinition { Name = "Microsoft.NETCore.App", ExactVersion = "10.0.9", MinimumVersion = "10.0.0", MaximumVersion = "10.0.99" };
+        var incomplete = new RuntimeFrameworkCompatibilityDefinition { Name = ".NETFramework", MinimumVersion = "4.0" };
 
-        Assert.Contains(RuntimeProfileValidation.Validate(mixed), static failure =>
-            failure.Contains("either ExactVersion or a minimum/maximum range, not both", StringComparison.Ordinal));
-        Assert.Contains(RuntimeProfileValidation.Validate(incomplete), static failure =>
-            failure.Contains("both MinimumVersion and MaximumVersion", StringComparison.Ordinal));
+        Assert.Contains(RuntimeProfileValidation.Validate(mixed), static failure => failure.Contains("either ExactVersion or a minimum/maximum range, not both", StringComparison.Ordinal));
+        Assert.Contains(RuntimeProfileValidation.Validate(incomplete), static failure => failure.Contains("both MinimumVersion and MaximumVersion", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -625,44 +517,22 @@ public sealed class RuntimeProfileSdkTests
         var profile = OperationProfile();
         profile.AcceptedFrameworks =
         [
-            new RuntimeFrameworkCompatibilityDefinition
-            {
-                Name = "Microsoft.NETCore.App",
-                MinimumVersion = "11.0.0",
-                MaximumVersion = "11.0.0-preview.2"
-            },
-            new RuntimeFrameworkCompatibilityDefinition
-            {
-                Name = "Microsoft.NETCore.App",
-                ExactVersion = "latest"
-            }
+            new RuntimeFrameworkCompatibilityDefinition { Name = "Microsoft.NETCore.App", MinimumVersion = "11.0.0", MaximumVersion = "11.0.0-preview.2" },
+            new RuntimeFrameworkCompatibilityDefinition { Name = "Microsoft.NETCore.App", ExactVersion = "latest" }
         ];
 
         var failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("MinimumVersion greater than MaximumVersion", StringComparison.Ordinal));
-        Assert.Contains(failures, static failure =>
-            failure.Contains("invalid exact version 'latest'", StringComparison.Ordinal));
-        Assert.Contains(failures, static failure =>
-            failure.Contains("duplicate accepted framework 'Microsoft.NETCore.App'", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("MinimumVersion greater than MaximumVersion", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("invalid exact version 'latest'", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("duplicate accepted framework 'Microsoft.NETCore.App'", StringComparison.Ordinal));
     }
 
     [Fact]
     public void ContainerValidationAllowsStandardMonoAndBothClosedWineUsers()
     {
-        var standardMono = new RuntimeContainerDefinition
-        {
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Mono,
-            ExecutionUser = RuntimeContainerExecutionUsers.NonRoot
-        };
-        var wine = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Wine,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-            ExecutionUser = RuntimeContainerExecutionUsers.Root,
-            WinePrefixPath = "/opt/wine-dotnet"
-        };
+        var standardMono = new RuntimeContainerDefinition { EnvironmentKind = RuntimeContainerEnvironmentKinds.Mono, ExecutionUser = RuntimeContainerExecutionUsers.NonRoot };
+        var wine = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, ExecutionUser = RuntimeContainerExecutionUsers.Root, WinePrefixPath = "/opt/wine-dotnet" };
 
         Assert.Empty(RuntimeProfileValidation.Validate(standardMono));
         Assert.Empty(RuntimeProfileValidation.Validate(wine));
@@ -674,63 +544,25 @@ public sealed class RuntimeProfileSdkTests
     public void ContainerValidationRejectsMissingArbitraryAndMismatchedExecutionUsers()
     {
         var standard = new RuntimeContainerDefinition();
-        var standardRoot = new RuntimeContainerDefinition
-        {
-            ExecutionUser = RuntimeContainerExecutionUsers.Root
-        };
-        var wine = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Wine,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-            WinePrefixPath = "/opt/wine-dotnet"
-        };
+        var standardRoot = new RuntimeContainerDefinition { ExecutionUser = RuntimeContainerExecutionUsers.Root };
+        var wine = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, WinePrefixPath = "/opt/wine-dotnet" };
 
-        Assert.Contains(
-            RuntimeProfileValidation.Validate(standard),
-            static failure => failure.Contains("requires execution user '1654:1654'", StringComparison.Ordinal));
-        Assert.Contains(
-            RuntimeProfileValidation.Validate(standardRoot),
-            static failure => failure.Contains("requires execution user '1654:1654'", StringComparison.Ordinal));
-        Assert.Contains(
-            RuntimeProfileValidation.Validate(wine),
-            static failure => failure.Contains("requires execution user '0:0' or '1654:1654'", StringComparison.Ordinal));
+        Assert.Contains(RuntimeProfileValidation.Validate(standard), static failure => failure.Contains("requires execution user '1654:1654'", StringComparison.Ordinal));
+        Assert.Contains(RuntimeProfileValidation.Validate(standardRoot), static failure => failure.Contains("requires execution user '1654:1654'", StringComparison.Ordinal));
+        Assert.Contains(RuntimeProfileValidation.Validate(wine), static failure => failure.Contains("requires execution user '0:0' or '1654:1654'", StringComparison.Ordinal));
 
         wine.ExecutionUser = "1000:1000";
-        Assert.Contains(
-            RuntimeProfileValidation.Validate(wine),
-            static failure => failure.Contains("requires execution user '0:0' or '1654:1654'", StringComparison.Ordinal));
+        Assert.Contains(RuntimeProfileValidation.Validate(wine), static failure => failure.Contains("requires execution user '0:0' or '1654:1654'", StringComparison.Ordinal));
     }
 
     [Fact]
     public void ContainerValidationRejectsMismatchedKindsAndWinePrefixPaths()
     {
-        var standardWine = new RuntimeContainerDefinition
-        {
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-            WinePrefixPath = "/opt/wine-dotnet"
-        };
-        var wineWithoutPrefix = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Wine,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.CoreClr
-        };
-        var wineWithUnsafePrefix = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Wine,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-            WinePrefixPath = "/opt/../shared-wine"
-        };
-        var wineOutsideOpt = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Wine,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-            WinePrefixPath = "/var/lib/wine-dotnet"
-        };
-        var unknownKinds = new RuntimeContainerDefinition
-        {
-            IsolationKind = "custom",
-            EnvironmentKind = "native"
-        };
+        var standardWine = new RuntimeContainerDefinition { EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, WinePrefixPath = "/opt/wine-dotnet" };
+        var wineWithoutPrefix = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.CoreClr };
+        var wineWithUnsafePrefix = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, WinePrefixPath = "/opt/../shared-wine" };
+        var wineOutsideOpt = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, WinePrefixPath = "/var/lib/wine-dotnet" };
+        var unknownKinds = new RuntimeContainerDefinition { IsolationKind = "custom", EnvironmentKind = "native" };
 
         var standardFailures = RuntimeProfileValidation.Validate(standardWine);
         var wineFailures = RuntimeProfileValidation.Validate(wineWithoutPrefix);
@@ -738,22 +570,14 @@ public sealed class RuntimeProfileSdkTests
         var outsideOptFailures = RuntimeProfileValidation.Validate(wineOutsideOpt);
         var unknownKindFailures = RuntimeProfileValidation.Validate(unknownKinds);
 
-        Assert.Contains(standardFailures, static failure =>
-            failure.Contains("supports only 'coreclr' or 'mono'", StringComparison.Ordinal));
-        Assert.Contains(standardFailures, static failure =>
-            failure.Contains("cannot declare a Wine prefix", StringComparison.Ordinal));
-        Assert.Contains(wineFailures, static failure =>
-            failure.Contains("requires the 'wine' environment", StringComparison.Ordinal));
-        Assert.Contains(wineFailures, static failure =>
-            failure.Contains("Wine container prefix", StringComparison.Ordinal));
-        Assert.Contains(unsafePrefixFailures, static failure =>
-            failure.Contains("path is invalid", StringComparison.Ordinal));
-        Assert.Contains(outsideOptFailures, static failure =>
-            failure.Contains("below /opt", StringComparison.Ordinal));
-        Assert.Contains(unknownKindFailures, static failure =>
-            failure.Contains("environment kind 'native' is not supported", StringComparison.Ordinal));
-        Assert.Contains(unknownKindFailures, static failure =>
-            failure.Contains("isolation kind 'custom' is not supported", StringComparison.Ordinal));
+        Assert.Contains(standardFailures, static failure => failure.Contains("supports only 'coreclr' or 'mono'", StringComparison.Ordinal));
+        Assert.Contains(standardFailures, static failure => failure.Contains("cannot declare a Wine prefix", StringComparison.Ordinal));
+        Assert.Contains(wineFailures, static failure => failure.Contains("requires the 'wine' environment", StringComparison.Ordinal));
+        Assert.Contains(wineFailures, static failure => failure.Contains("Wine container prefix", StringComparison.Ordinal));
+        Assert.Contains(unsafePrefixFailures, static failure => failure.Contains("path is invalid", StringComparison.Ordinal));
+        Assert.Contains(outsideOptFailures, static failure => failure.Contains("below /opt", StringComparison.Ordinal));
+        Assert.Contains(unknownKindFailures, static failure => failure.Contains("environment kind 'native' is not supported", StringComparison.Ordinal));
+        Assert.Contains(unknownKindFailures, static failure => failure.Contains("isolation kind 'custom' is not supported", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -764,10 +588,7 @@ public sealed class RuntimeProfileSdkTests
         profile.Layout.RunnerAssemblyPath = "/helpers/WineRunner.dll";
         profile.Layout.WineHostPath = "/opt/wine/bin/wine";
 
-        var run = RuntimeProfileCommandBuilder.CreateRunCommand(
-            profile,
-            "app/Program.exe",
-            ["first", "second"]);
+        var run = RuntimeProfileCommandBuilder.CreateRunCommand(profile, "app/Program.exe", ["first", "second"]);
 
         Assert.Equal(
             [
@@ -781,8 +602,7 @@ public sealed class RuntimeProfileSdkTests
                 "second"
             ],
             run);
-        Assert.Throws<NotSupportedException>(() =>
-            RuntimeProfileCommandBuilder.CreateJitCommand(profile, "app/Program.exe", null));
+        Assert.Throws<NotSupportedException>(() => RuntimeProfileCommandBuilder.CreateJitCommand(profile, "app/Program.exe", null));
         Assert.Null(profile.Layout.JitInspectorAssemblyPath);
     }
 
@@ -815,29 +635,22 @@ public sealed class RuntimeProfileSdkTests
                 "/workspace/app/Program.exe",
                 "Example.Program:Main"
             ],
-            RuntimeProfileCommandBuilder.CreateJitCommand(
-                profile,
-                "app/Program.exe",
-                "Example.Program:Main"));
+            RuntimeProfileCommandBuilder.CreateJitCommand(profile, "app/Program.exe", "Example.Program:Main"));
 
         profile.Operations!.Jit!.ImplementationId = RuntimeOperationImplementationIds.LegacyJitInspector;
         var oldProviderFailures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
-        Assert.Contains(oldProviderFailures, static failure =>
-            failure.Contains("Desktop CLR JIT provider", StringComparison.Ordinal));
+        Assert.Contains(oldProviderFailures, static failure => failure.Contains("Desktop CLR JIT provider", StringComparison.Ordinal));
 
         profile = DesktopClrJitWineProfile();
         profile.Operations!.Jit!.SourceMappingKind = RuntimeJitSourceMappingKinds.LinuxProfiler;
         var mappingFailures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
-        Assert.Contains(mappingFailures, static failure =>
-            failure.Contains("source mapping kind 'none'", StringComparison.Ordinal));
+        Assert.Contains(mappingFailures, static failure => failure.Contains("source mapping kind 'none'", StringComparison.Ordinal));
 
         profile = DesktopClrJitWineProfile();
         profile.Operations!.Jit = null;
         var missingOperationFailures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
-        Assert.Contains(missingOperationFailures, static failure =>
-            failure.Contains("capability 'jit-asm' without a JIT operation", StringComparison.Ordinal));
-        Assert.Contains(missingOperationFailures, static failure =>
-            failure.Contains("only the run capability unless", StringComparison.Ordinal));
+        Assert.Contains(missingOperationFailures, static failure => failure.Contains("capability 'jit-asm' without a JIT operation", StringComparison.Ordinal));
+        Assert.Contains(missingOperationFailures, static failure => failure.Contains("only the run capability unless", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -847,13 +660,7 @@ public sealed class RuntimeProfileSdkTests
         {
             var profile = WineProfile();
             profile.Layout.WinePrefixPath = prefix;
-            profile.Container = new RuntimeContainerDefinition
-            {
-                IsolationKind = RuntimeContainerIsolationKinds.Wine,
-                EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-                ExecutionUser = RuntimeContainerExecutionUsers.Root,
-                WinePrefixPath = prefix
-            };
+            profile.Container = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, ExecutionUser = RuntimeContainerExecutionUsers.Root, WinePrefixPath = prefix };
 
             Assert.Empty(RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false));
         }
@@ -875,21 +682,8 @@ public sealed class RuntimeProfileSdkTests
             AcceptedArtifactFormats = ["dotnet-managed-pe-v1"],
             Capabilities = ["run", "jit-asm"],
             AllowedSecurityPolicyIds = ["runtime-job-default"],
-            Container = new RuntimeContainerDefinition
-            {
-                IsolationKind = RuntimeContainerIsolationKinds.Wine,
-                EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-                ExecutionUser = RuntimeContainerExecutionUsers.NonRoot,
-                WinePrefixPath = "/opt/wine-dotnet"
-            },
-            Layout = new RuntimeImageLayout
-            {
-                RunnerKind = RuntimeRunnerKinds.WineCoreClr,
-                DotNetHostPath = "/opt/wine-dotnet/drive_c/dotnet/dotnet.exe",
-                WineHostPath = "/usr/lib/wine/wine64",
-                WinePrefixPath = "/opt/wine-dotnet",
-                RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll"
-            },
+            Container = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, ExecutionUser = RuntimeContainerExecutionUsers.NonRoot, WinePrefixPath = "/opt/wine-dotnet" },
+            Layout = new RuntimeImageLayout { RunnerKind = RuntimeRunnerKinds.WineCoreClr, DotNetHostPath = "/opt/wine-dotnet/drive_c/dotnet/dotnet.exe", WineHostPath = "/usr/lib/wine/wine64", WinePrefixPath = "/opt/wine-dotnet", RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll" },
             Operations = new RuntimeProfileOperations
             {
                 Run = new RuntimeRunOperationDefinition
@@ -983,21 +777,15 @@ public sealed class RuntimeProfileSdkTests
     {
         var profilesDirectory = FindProfilesDirectory();
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        var profilePaths = Directory.EnumerateFiles(profilesDirectory, "*.json", SearchOption.AllDirectories)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
+        var profilePaths = Directory.EnumerateFiles(profilesDirectory, "*.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal).ToArray();
 
         Assert.NotEmpty(profilePaths);
         foreach (var path in profilePaths)
         {
-            var profile = JsonSerializer.Deserialize<RuntimeProfileDefinition>(
-                File.ReadAllText(path),
-                jsonOptions);
+            var profile = JsonSerializer.Deserialize<RuntimeProfileDefinition>(File.ReadAllText(path), jsonOptions);
             Assert.NotNull(profile);
             var failures = RuntimeProfileValidation.Validate(profile!, requireDigestPinnedImage: false);
-            Assert.True(
-                failures.Count == 0,
-                $"{Path.GetFileName(path)} failed SDK validation: {string.Join(" | ", failures)}");
+            Assert.True(failures.Count == 0, $"{Path.GetFileName(path)} failed SDK validation: {string.Join(" | ", failures)}");
         }
     }
 
@@ -1008,36 +796,22 @@ public sealed class RuntimeProfileSdkTests
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
 
         RuntimeProfileDefinition Load(string fileName) =>
-            JsonSerializer.Deserialize<RuntimeProfileDefinition>(
-                File.ReadAllText(Path.Combine(candidatesDirectory, fileName)),
-                jsonOptions) ?? throw new InvalidDataException($"Candidate profile '{fileName}' is invalid.");
+            JsonSerializer.Deserialize<RuntimeProfileDefinition>(File.ReadAllText(Path.Combine(candidatesDirectory, fileName)), jsonOptions) ?? throw new InvalidDataException($"Candidate profile '{fileName}' is invalid.");
 
         var wineCoreClr = Load("wine-dotnet-10-linux-x64.json");
         Assert.Equal(["coreclr-wine", "coreclr"], wineCoreClr.AcceptedRuntimeFamilies);
-        Assert.Equal(
-            RuntimeOperationImplementationIds.LegacyJitInspector,
-            wineCoreClr.Operations?.Run?.ImplementationId);
-        Assert.Equal(
-            RuntimeOperationImplementationIds.LegacyJitInspector,
-            wineCoreClr.Operations?.Jit?.ImplementationId);
+        Assert.Equal(RuntimeOperationImplementationIds.LegacyJitInspector, wineCoreClr.Operations?.Run?.ImplementationId);
+        Assert.Equal(RuntimeOperationImplementationIds.LegacyJitInspector, wineCoreClr.Operations?.Jit?.ImplementationId);
 
         var mono = Load("mono-6.12-linux-x64.json");
         Assert.Equal(["mono", "netfx-clr-wine"], mono.AcceptedRuntimeFamilies);
-        Assert.Equal(
-            RuntimeOperationImplementationIds.TargetRuntimeRunner,
-            mono.Operations?.Run?.ImplementationId);
+        Assert.Equal(RuntimeOperationImplementationIds.TargetRuntimeRunner, mono.Operations?.Run?.ImplementationId);
         Assert.Equal("/usr/bin/mono", mono.Operations?.Run?.Command.Executable);
-        Assert.Equal(
-            "/opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe",
-            mono.Layout.RunnerAssemblyPath);
-        Assert.Equal(
-            RuntimeOperationImplementationIds.MonoJitInspector,
-            mono.Operations?.Jit?.ImplementationId);
+        Assert.Equal("/opt/sharplabnext/SharpLabNext.TargetRuntimeRunner.exe", mono.Layout.RunnerAssemblyPath);
+        Assert.Equal(RuntimeOperationImplementationIds.MonoJitInspector, mono.Operations?.Jit?.ImplementationId);
         Assert.Equal(RuntimeJitSourceMappingKinds.None, mono.Operations?.Jit?.SourceMappingKind);
         Assert.Equal("/usr/share/dotnet/dotnet", mono.Operations?.Jit?.Command.Executable);
-        Assert.Equal(
-            "/opt/sharplabnext/SharpLabNext.MonoJitInspector.dll",
-            mono.Layout.JitInspectorAssemblyPath);
+        Assert.Equal("/opt/sharplabnext/SharpLabNext.MonoJitInspector.dll", mono.Layout.JitInspectorAssemblyPath);
 
         foreach (var fileName in new[]
                  {
@@ -1046,21 +820,11 @@ public sealed class RuntimeProfileSdkTests
                  })
         {
             var linuxCoreClr = Load(fileName);
-            Assert.Equal(
-                RuntimeOperationImplementationIds.Runner,
-                linuxCoreClr.Operations?.Run?.ImplementationId);
-            Assert.Equal(
-                RuntimeOperationImplementationIds.JitInspector,
-                linuxCoreClr.Operations?.Jit?.ImplementationId);
-            Assert.Equal(
-                RuntimeJitSourceMappingKinds.LinuxProfiler,
-                linuxCoreClr.Operations?.Jit?.SourceMappingKind);
-            Assert.Equal(
-                "/opt/sharplabnext/SharpLabNext.Runner.dll",
-                linuxCoreClr.Layout.RunnerAssemblyPath);
-            Assert.Equal(
-                "/opt/sharplabnext/SharpLabNext.JitInspector.dll",
-                linuxCoreClr.Layout.JitInspectorAssemblyPath);
+            Assert.Equal(RuntimeOperationImplementationIds.Runner, linuxCoreClr.Operations?.Run?.ImplementationId);
+            Assert.Equal(RuntimeOperationImplementationIds.JitInspector, linuxCoreClr.Operations?.Jit?.ImplementationId);
+            Assert.Equal(RuntimeJitSourceMappingKinds.LinuxProfiler, linuxCoreClr.Operations?.Jit?.SourceMappingKind);
+            Assert.Equal("/opt/sharplabnext/SharpLabNext.Runner.dll", linuxCoreClr.Layout.RunnerAssemblyPath);
+            Assert.Equal("/opt/sharplabnext/SharpLabNext.JitInspector.dll", linuxCoreClr.Layout.JitInspectorAssemblyPath);
         }
 
         foreach (var (fileName, minimum, maximum) in new[]
@@ -1082,9 +846,7 @@ public sealed class RuntimeProfileSdkTests
 
         var genericNetFx = Load("wine-netfx20-linux-x64.json");
         Assert.Equal(["dotnet-framework-managed-pe-v1"], genericNetFx.AcceptedArtifactFormats);
-        Assert.Equal(
-            RuntimeOperationImplementationIds.TargetRuntimeRunner,
-            genericNetFx.Operations?.Run?.ImplementationId);
+        Assert.Equal(RuntimeOperationImplementationIds.TargetRuntimeRunner, genericNetFx.Operations?.Run?.ImplementationId);
         Assert.Equal(
             [
                 @"Z:\opt\sharplabnext\SharpLabNext.TargetRuntimeRunner.exe",
@@ -1096,16 +858,12 @@ public sealed class RuntimeProfileSdkTests
             genericNetFx.Operations?.Run?.Command.Argv);
 
         var netFx48 = Load("wine-netfx48-linux-x64.json");
-        Assert.Equal(
-            ["dotnet-framework-managed-pe-v1", "dotnet-framework-mixed-pe-v1"],
-            netFx48.AcceptedArtifactFormats);
+        Assert.Equal(["dotnet-framework-managed-pe-v1", "dotnet-framework-mixed-pe-v1"], netFx48.AcceptedArtifactFormats);
         Assert.Equal(["runtime.netfx48-wine"], netFx48.ProvidedRuntimeFeatureTags);
 
         foreach (var path in Directory.EnumerateFiles(candidatesDirectory, "*.json"))
         {
-            var profile = JsonSerializer.Deserialize<RuntimeProfileDefinition>(
-                File.ReadAllText(path),
-                jsonOptions) ?? throw new InvalidDataException($"Candidate profile '{path}' is invalid.");
+            var profile = JsonSerializer.Deserialize<RuntimeProfileDefinition>(File.ReadAllText(path), jsonOptions) ?? throw new InvalidDataException($"Candidate profile '{path}' is invalid.");
             var expectedWinePolicy = StringComparer.Ordinal.Equals(profile.Family, "netfx-clr-wine");
             var expectedPolicyId = expectedWinePolicy ? "runtime-job-wine-netfx" : "runtime-job-default";
             Assert.Equal([expectedPolicyId], profile.AllowedSecurityPolicyIds);
@@ -1122,22 +880,11 @@ public sealed class RuntimeProfileSdkTests
     {
         var profilesDirectory = FindProfilesDirectory();
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        var profiles = Directory.EnumerateFiles(profilesDirectory, "*.json", SearchOption.TopDirectoryOnly)
-            .Select(path => JsonSerializer.Deserialize<RuntimeProfileDefinition>(
-                File.ReadAllText(path),
-                jsonOptions) ?? throw new InvalidDataException($"Active profile '{path}' is invalid."))
-            .Where(static profile =>
-                profile.Capabilities.Contains("inspection", StringComparer.Ordinal) ||
-                profile.Capabilities.Contains("execution-flow", StringComparer.Ordinal))
-            .ToArray();
+        var profiles = Directory.EnumerateFiles(profilesDirectory, "*.json", SearchOption.TopDirectoryOnly).Select(path => JsonSerializer.Deserialize<RuntimeProfileDefinition>(File.ReadAllText(path), jsonOptions) ?? throw new InvalidDataException($"Active profile '{path}' is invalid.")).Where(static profile => profile.Capabilities.Contains("inspection", StringComparer.Ordinal) || profile.Capabilities.Contains("execution-flow", StringComparer.Ordinal)).ToArray();
 
         Assert.NotEmpty(profiles);
         foreach (var profile in profiles)
-        {
-            Assert.Equal(
-                RuntimeOperationImplementationIds.Runner,
-                profile.Operations?.Run?.ImplementationId);
-        }
+            Assert.Equal(RuntimeOperationImplementationIds.Runner, profile.Operations?.Run?.ImplementationId);
     }
 
     [Fact]
@@ -1145,25 +892,15 @@ public sealed class RuntimeProfileSdkTests
     {
         var candidatesDirectory = Path.Combine(FindProfilesDirectory(), "candidates");
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        var profilePaths = Directory.EnumerateFiles(candidatesDirectory, "*.json")
-            .Where(static path =>
-                Path.GetFileName(path).StartsWith("dotnet-", StringComparison.Ordinal) &&
-                !Path.GetFileName(path).StartsWith("wine-", StringComparison.Ordinal))
-            .Order(StringComparer.Ordinal)
-            .ToArray();
+        var profilePaths = Directory.EnumerateFiles(candidatesDirectory, "*.json").Where(static path => Path.GetFileName(path).StartsWith("dotnet-", StringComparison.Ordinal) && !Path.GetFileName(path).StartsWith("wine-", StringComparison.Ordinal)).Order(StringComparer.Ordinal).ToArray();
 
         Assert.NotEmpty(profilePaths);
         foreach (var path in profilePaths)
         {
-            var profile = JsonSerializer.Deserialize<RuntimeProfileDefinition>(
-                File.ReadAllText(path),
-                jsonOptions);
+            var profile = JsonSerializer.Deserialize<RuntimeProfileDefinition>(File.ReadAllText(path), jsonOptions);
             Assert.NotNull(profile);
             Assert.NotNull(profile.Operations?.Run);
-            if (string.Equals(
-                    profile.Operations.Run.ImplementationId,
-                    RuntimeOperationImplementationIds.Runner,
-                    StringComparison.Ordinal))
+            if (string.Equals(profile.Operations.Run.ImplementationId, RuntimeOperationImplementationIds.Runner, StringComparison.Ordinal))
             {
                 Assert.Equal(
                     [
@@ -1176,24 +913,12 @@ public sealed class RuntimeProfileSdkTests
             }
             else
             {
-                Assert.Equal(
-                    RuntimeOperationImplementationIds.LegacyJitInspector,
-                    profile.Operations.Run.ImplementationId);
-                Assert.Collection(
-                    profile.Operations.Run.Command.Argv.Take(4),
-                    value => Assert.Equal("exec", value),
-                    value => Assert.Equal("--fx-version", value),
-                    value => Assert.Equal(profile.RuntimeVersion, value),
-                    value => Assert.Equal(
-                        "/opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll",
-                        value));
+                Assert.Equal(RuntimeOperationImplementationIds.LegacyJitInspector, profile.Operations.Run.ImplementationId);
+                Assert.Collection(profile.Operations.Run.Command.Argv.Take(4), value => Assert.Equal("exec", value), value => Assert.Equal("--fx-version", value), value => Assert.Equal(profile.RuntimeVersion, value), value => Assert.Equal("/opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll", value));
             }
             if (profile.Operations.Jit is { } jit)
             {
-                if (string.Equals(
-                        jit.ImplementationId,
-                        RuntimeOperationImplementationIds.CheckedJitBridge,
-                        StringComparison.Ordinal))
+                if (string.Equals(jit.ImplementationId, RuntimeOperationImplementationIds.CheckedJitBridge, StringComparison.Ordinal))
                 {
                     Assert.Equal(
                         [
@@ -1204,10 +929,7 @@ public sealed class RuntimeProfileSdkTests
                         ],
                         jit.Command.Argv);
                 }
-                else if (string.Equals(
-                             jit.ImplementationId,
-                             RuntimeOperationImplementationIds.JitInspector,
-                             StringComparison.Ordinal))
+                else if (string.Equals(jit.ImplementationId, RuntimeOperationImplementationIds.JitInspector, StringComparison.Ordinal))
                 {
                     Assert.Equal(
                         [
@@ -1220,12 +942,8 @@ public sealed class RuntimeProfileSdkTests
                 }
                 else
                 {
-                    Assert.Equal(
-                        RuntimeOperationImplementationIds.LegacyJitInspector,
-                        jit.ImplementationId);
-                    Assert.Equal(
-                        ["exec", "--fx-version", profile.RuntimeVersion],
-                        jit.Command.Argv.Take(3));
+                    Assert.Equal(RuntimeOperationImplementationIds.LegacyJitInspector, jit.ImplementationId);
+                    Assert.Equal(["exec", "--fx-version", profile.RuntimeVersion], jit.Command.Argv.Take(3));
                 }
             }
         }
@@ -1242,8 +960,7 @@ public sealed class RuntimeProfileSdkTests
 
         var failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("exact fixed operation contract", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("exact fixed operation contract", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1254,8 +971,7 @@ public sealed class RuntimeProfileSdkTests
 
         var failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(failures, static failure =>
-            failure.Contains("cannot declare a JIT inspector", StringComparison.Ordinal));
+        Assert.Contains(failures, static failure => failure.Contains("cannot declare a JIT inspector", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1266,27 +982,18 @@ public sealed class RuntimeProfileSdkTests
         Assert.Empty(RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false));
 
         profile.RuntimeCommit = "operator-payload";
-        var runtimeCommitFailures = RuntimeProfileValidation.Validate(
-            profile,
-            requireDigestPinnedImage: false);
-        Assert.Contains(runtimeCommitFailures, static failure =>
-            failure.Contains("RuntimeCommit", StringComparison.Ordinal));
+        var runtimeCommitFailures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
+        Assert.Contains(runtimeCommitFailures, static failure => failure.Contains("RuntimeCommit", StringComparison.Ordinal));
 
         profile = LoadCandidateProfileForValidation("wine-netfx48-linux-x64.json");
         profile.JitVersion = "4.8";
-        var jitVersionFailures = RuntimeProfileValidation.Validate(
-            profile,
-            requireDigestPinnedImage: false);
-        Assert.Contains(jitVersionFailures, static failure =>
-            failure.Contains("JitVersion", StringComparison.Ordinal));
+        var jitVersionFailures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
+        Assert.Contains(jitVersionFailures, static failure => failure.Contains("JitVersion", StringComparison.Ordinal));
 
         profile = LoadCandidateProfileForValidation("wine-netfx48-linux-x64.json");
         profile.JitCommit = "operator-jit";
-        var jitCommitFailures = RuntimeProfileValidation.Validate(
-            profile,
-            requireDigestPinnedImage: false);
-        Assert.Contains(jitCommitFailures, static failure =>
-            failure.Contains("JitCommit", StringComparison.Ordinal));
+        var jitCommitFailures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
+        Assert.Contains(jitCommitFailures, static failure => failure.Contains("JitCommit", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1294,21 +1001,15 @@ public sealed class RuntimeProfileSdkTests
     {
         var profile = LoadCandidateProfileForValidation("wine-netfx48-linux-x64.json");
         profile.AcceptedFrameworks[0].ExactVersion = "4.7.2";
-        var frameworkFailures = RuntimeProfileValidation.Validate(
-            profile,
-            requireDigestPinnedImage: false);
+        var frameworkFailures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(frameworkFailures, static failure =>
-            failure.Contains("accept exactly '.NETFramework' version '4.8'", StringComparison.Ordinal));
+        Assert.Contains(frameworkFailures, static failure => failure.Contains("accept exactly '.NETFramework' version '4.8'", StringComparison.Ordinal));
 
         profile = LoadCandidateProfileForValidation("wine-netfx48-linux-x64.json");
         profile.Layout.DotNetHostPath = "/usr/bin/mono";
-        var hostFailures = RuntimeProfileValidation.Validate(
-            profile,
-            requireDigestPinnedImage: false);
+        var hostFailures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: false);
 
-        Assert.Contains(hostFailures, static failure =>
-            failure.Contains("DotNetHostPath", StringComparison.Ordinal));
+        Assert.Contains(hostFailures, static failure => failure.Contains("DotNetHostPath", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1317,10 +1018,7 @@ public sealed class RuntimeProfileSdkTests
         var profile = JSharpWineProfile();
 
         var failures = RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: true);
-        var run = RuntimeProfileCommandBuilder.CreateRunCommand(
-            profile,
-            "SharpLabNext.User.exe",
-            []);
+        var run = RuntimeProfileCommandBuilder.CreateRunCommand(profile, "SharpLabNext.User.exe", []);
 
         Assert.Empty(failures);
         Assert.Equal(
@@ -1334,11 +1032,7 @@ public sealed class RuntimeProfileSdkTests
             ],
             run);
         Assert.Equal("/opt/wine-jsharp20", profile.Layout.WinePrefixPath);
-        Assert.Throws<NotSupportedException>(() =>
-            RuntimeProfileCommandBuilder.CreateJitCommand(
-                profile,
-                "SharpLabNext.User.exe",
-                null));
+        Assert.Throws<NotSupportedException>(() => RuntimeProfileCommandBuilder.CreateJitCommand(profile, "SharpLabNext.User.exe", null));
     }
 
     [Fact]
@@ -1383,11 +1077,7 @@ public sealed class RuntimeProfileSdkTests
         profile.AcceptedArtifactFormats = ["dotnet-managed-pe-v1"];
         profile.Capabilities = ["run"];
         profile.AllowedSecurityPolicyIds = ["runtime-job-default"];
-        profile.PromotionReceipt = new RuntimePromotionReceiptReference
-        {
-            Path = "profiles/runtime-promotion-receipts/example-runtime.json",
-            Sha256 = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-        };
+        profile.PromotionReceipt = new RuntimePromotionReceiptReference { Path = "profiles/runtime-promotion-receipts/example-runtime.json", Sha256 = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" };
 
         Assert.Empty(RuntimeProfileValidation.Validate(profile, requireDigestPinnedImage: true));
 
@@ -1420,10 +1110,7 @@ public sealed class RuntimeProfileSdkTests
         RuntimeVersion = "11.0.0-preview.5",
         RuntimeImageId = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         JitVersion = "11.0.0-preview.5",
-        Container = new RuntimeContainerDefinition
-        {
-            ExecutionUser = RuntimeContainerExecutionUsers.NonRoot
-        }
+        Container = new RuntimeContainerDefinition { ExecutionUser = RuntimeContainerExecutionUsers.NonRoot }
     };
 
     private static RuntimeProfileDefinition OperationProfile() => new()
@@ -1437,10 +1124,7 @@ public sealed class RuntimeProfileSdkTests
         AcceptedArtifactFormats = ["dotnet-managed-pe-v1"],
         Capabilities = ["run", "jit-asm"],
         AllowedSecurityPolicyIds = ["runtime-job-default"],
-        Container = new RuntimeContainerDefinition
-        {
-            ExecutionUser = RuntimeContainerExecutionUsers.NonRoot
-        },
+        Container = new RuntimeContainerDefinition { ExecutionUser = RuntimeContainerExecutionUsers.NonRoot },
         Operations = new RuntimeProfileOperations
         {
             Run = new RuntimeRunOperationDefinition
@@ -1495,20 +1179,8 @@ public sealed class RuntimeProfileSdkTests
         Capabilities = ["run"],
         ProvidedRuntimeFeatureTags = ["runtime.netfx48-wine"],
         AllowedSecurityPolicyIds = ["runtime-job-wine-netfx"],
-        Container = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Wine,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-            ExecutionUser = RuntimeContainerExecutionUsers.Root,
-            WinePrefixPath = "/opt/wine-dotnet"
-        },
-        Layout = new RuntimeImageLayout
-        {
-            RunnerKind = RuntimeRunnerKinds.WineNetFx,
-            RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.WineRunner.dll",
-            WineHostPath = "/usr/lib/wine/wine64",
-            WinePrefixPath = "/opt/wine-dotnet"
-        }
+        Container = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, ExecutionUser = RuntimeContainerExecutionUsers.Root, WinePrefixPath = "/opt/wine-dotnet" },
+        Layout = new RuntimeImageLayout { RunnerKind = RuntimeRunnerKinds.WineNetFx, RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.WineRunner.dll", WineHostPath = "/usr/lib/wine/wine64", WinePrefixPath = "/opt/wine-dotnet" }
     };
 
     private static RuntimeProfileDefinition DesktopClrJitWineProfile()
@@ -1581,36 +1253,19 @@ public sealed class RuntimeProfileSdkTests
         Capabilities = ["run"],
         ProvidedRuntimeFeatureTags = ["runtime.jsharp20-wine"],
         AllowedSecurityPolicyIds = ["runtime-job-wine-jsharp20"],
-        Container = new RuntimeContainerDefinition
-        {
-            IsolationKind = RuntimeContainerIsolationKinds.Wine,
-            EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine,
-            ExecutionUser = RuntimeContainerExecutionUsers.Root,
-            WinePrefixPath = "/opt/wine-jsharp20"
-        },
-        Layout = new RuntimeImageLayout
-        {
-            RunnerKind = RuntimeRunnerKinds.WineJSharp20,
-            RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.WineRunner.dll",
-            WineHostPath = "/usr/lib/wine/wine64",
-            WinePrefixPath = "/opt/wine-jsharp20"
-        }
+        Container = new RuntimeContainerDefinition { IsolationKind = RuntimeContainerIsolationKinds.Wine, EnvironmentKind = RuntimeContainerEnvironmentKinds.Wine, ExecutionUser = RuntimeContainerExecutionUsers.Root, WinePrefixPath = "/opt/wine-jsharp20" },
+        Layout = new RuntimeImageLayout { RunnerKind = RuntimeRunnerKinds.WineJSharp20, RunnerAssemblyPath = "/opt/sharplabnext/SharpLabNext.WineRunner.dll", WineHostPath = "/usr/lib/wine/wine64", WinePrefixPath = "/opt/wine-jsharp20" }
     };
 
     private static RuntimeProfileDefinition LoadCandidateProfileForValidation(string fileName)
     {
         var path = Path.Combine(FindProfilesDirectory(), "candidates", fileName);
-        return JsonSerializer.Deserialize<RuntimeProfileDefinition>(
-                   File.ReadAllText(path),
-                   WebJsonOptions)
-               ?? throw new InvalidDataException($"Candidate profile '{fileName}' is invalid.");
+        return JsonSerializer.Deserialize<RuntimeProfileDefinition>(File.ReadAllText(path), WebJsonOptions) ?? throw new InvalidDataException($"Candidate profile '{fileName}' is invalid.");
     }
 
     private static string FindProfilesDirectory()
     {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
-             directory is not null;
-             directory = directory.Parent)
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
         {
             var candidate = Path.Combine(directory.FullName, "profiles", "runtimes");
             if (Directory.Exists(candidate))

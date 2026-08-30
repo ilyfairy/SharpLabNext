@@ -21,10 +21,7 @@ public sealed class BuildOperationExecutorTests
         var operations = new OperationStore();
         await using var scheduler = CreateScheduler(operations);
         var operation = operations.Start("cancel-request", "cancel-key", OperationKind.Build, "trace", DateTimeOffset.UtcNow);
-        CreateExecutor(operations, scheduler, worker).QueueBuild(
-            operation,
-            CreateRequest(DateTimeOffset.UtcNow.AddMinutes(1)),
-            "roslyn-stable");
+        CreateExecutor(operations, scheduler, worker).QueueBuild(operation, CreateRequest(DateTimeOffset.UtcNow.AddMinutes(1)), "roslyn-stable");
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         var cancellation = operations.Cancel(operation.Handle.OperationId, "test", DateTimeOffset.UtcNow);
@@ -41,10 +38,7 @@ public sealed class BuildOperationExecutorTests
         var operations = new OperationStore();
         await using var scheduler = CreateScheduler(operations);
         var operation = operations.Start("deadline-request", "deadline-key", OperationKind.Build, "trace", DateTimeOffset.UtcNow);
-        CreateExecutor(operations, scheduler, worker).QueueBuild(
-            operation,
-            CreateRequest(DateTimeOffset.UtcNow.AddSeconds(-1)),
-            "roslyn-stable");
+        CreateExecutor(operations, scheduler, worker).QueueBuild(operation, CreateRequest(DateTimeOffset.UtcNow.AddSeconds(-1)), "roslyn-stable");
 
         var state = await WaitForTerminalAsync(operations, operation.Handle.OperationId);
         Assert.Equal(OperationStatus.Failed, state.Status);
@@ -55,23 +49,12 @@ public sealed class BuildOperationExecutorTests
     [Fact]
     public async Task WorkerFailureIsPreservedAsStructuredOperationError()
     {
-        var expected = new WorkerError(
-            "worker-unavailable",
-            WorkerErrorCategory.Unavailable,
-            "The toolchain worker is unavailable.",
-            true,
-            true,
-            "worker-trace",
-            "roslyn-stable",
-            "test-worker-image");
+        var expected = new WorkerError("worker-unavailable", WorkerErrorCategory.Unavailable, "The toolchain worker is unavailable.", true, true, "worker-trace", "roslyn-stable", "test-worker-image");
         var worker = new DelegateWorkerClient((_, _) => throw new ToolchainWorkerException(expected, 503));
         var operations = new OperationStore();
         await using var scheduler = CreateScheduler(operations);
         var operation = operations.Start("failure-request", "failure-key", OperationKind.Build, "trace", DateTimeOffset.UtcNow);
-        CreateExecutor(operations, scheduler, worker).QueueBuild(
-            operation,
-            CreateRequest(DateTimeOffset.UtcNow.AddMinutes(1)),
-            "roslyn-stable");
+        CreateExecutor(operations, scheduler, worker).QueueBuild(operation, CreateRequest(DateTimeOffset.UtcNow.AddMinutes(1)), "roslyn-stable");
 
         var state = await WaitForTerminalAsync(operations, operation.Handle.OperationId);
         Assert.Equal(OperationStatus.Failed, state.Status);
@@ -83,15 +66,7 @@ public sealed class BuildOperationExecutorTests
     {
         var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var failure = new WorkerError(
-            "test-worker-failure",
-            WorkerErrorCategory.Unavailable,
-            "Test worker failure.",
-            true,
-            true,
-            "test-trace",
-            "roslyn-stable",
-            "test-image");
+        var failure = new WorkerError("test-worker-failure", WorkerErrorCategory.Unavailable, "Test worker failure.", true, true, "test-trace", "roslyn-stable", "test-image");
         var worker = new DelegateWorkerClient(async (_, cancellationToken) =>
         {
             firstStarted.TrySetResult();
@@ -121,48 +96,13 @@ public sealed class BuildOperationExecutorTests
         release.TrySetResult();
     }
 
-    private static BuildOperationExecutor CreateExecutor(
-        OperationStore operations,
-        BoundedOperationScheduler scheduler,
-        IToolchainWorkerClient worker) => new(
-            operations,
-            scheduler,
-            new SingleWorkerFactory(worker),
-            new RejectingPublisher(),
-            new BuildPipelineOptions(),
-            NullLogger<BuildOperationExecutor>.Instance);
+    private static BuildOperationExecutor CreateExecutor(OperationStore operations, BoundedOperationScheduler scheduler, IToolchainWorkerClient worker) => new(operations, scheduler, new SingleWorkerFactory(worker), new RejectingPublisher(), new BuildPipelineOptions(), NullLogger<BuildOperationExecutor>.Instance);
 
-    private static BoundedOperationScheduler CreateScheduler(
-        OperationStore operations,
-        int queueCapacity = 8,
-        int workerConcurrency = 2) => new(
+    private static BoundedOperationScheduler CreateScheduler(OperationStore operations, int queueCapacity = 8, int workerConcurrency = 2) => new(
             operations,
-            new OperationExecutionOptions
-            {
-                QueueCapacity = queueCapacity,
-                WorkerConcurrency = workerConcurrency,
-                ShutdownTimeout = TimeSpan.FromSeconds(5),
-                ExecutorId = "gateway-test"
-            });
+            new OperationExecutionOptions { QueueCapacity = queueCapacity, WorkerConcurrency = workerConcurrency, ShutdownTimeout = TimeSpan.FromSeconds(5), ExecutorId = "gateway-test" });
 
-    private static BuildRequest CreateRequest(DateTimeOffset deadline) => new(
-        "executor-request",
-        "executor-key",
-        "executor-pipeline",
-        "roslyn-stable",
-        "net10-ref",
-        new WorkspaceSnapshot(
-            ContractSchemaVersions.WorkspaceSnapshot,
-            1,
-            1,
-            "csharp",
-            [new WorkspaceFile("Program.cs", 1, "System.Console.WriteLine(42);")],
-            "Program.cs",
-            ["Program.cs"],
-            "net10-ref",
-            new BuildOptions(BuildConfiguration.Release, true, BuildOutputKind.Console, false, true)),
-        deadline,
-        Target: BuildTarget.CompileCheck);
+    private static BuildRequest CreateRequest(DateTimeOffset deadline) => new("executor-request", "executor-key", "executor-pipeline", "roslyn-stable", "net10-ref", new WorkspaceSnapshot(ContractSchemaVersions.WorkspaceSnapshot, 1, 1, "csharp", [new WorkspaceFile("Program.cs", 1, "System.Console.WriteLine(42);")], "Program.cs", ["Program.cs"], "net10-ref", new BuildOptions(BuildConfiguration.Release, true, BuildOutputKind.Console, false, true)), deadline, Target: BuildTarget.CompileCheck);
 
     private static async Task<OperationState> WaitForTerminalAsync(OperationStore operations, string operationId)
     {
@@ -170,9 +110,7 @@ public sealed class BuildOperationExecutorTests
         {
             var state = operations.Get(operationId) ?? throw new InvalidOperationException("Operation disappeared.");
             if (state.Status is OperationStatus.Completed or OperationStatus.Cancelled or OperationStatus.Failed)
-            {
                 return state;
-            }
 
             await Task.Delay(25, TestContext.Current.CancellationToken);
         }
@@ -180,8 +118,7 @@ public sealed class BuildOperationExecutorTests
         throw new TimeoutException("Operation did not reach a terminal state.");
     }
 
-    private sealed class DelegateWorkerClient(
-        Func<BuildRequest, CancellationToken, Task<ToolchainBuildResponse>> build) : IToolchainWorkerClient
+    private sealed class DelegateWorkerClient(Func<BuildRequest, CancellationToken, Task<ToolchainBuildResponse>> build) : IToolchainWorkerClient
     {
         public int CallCount { get; private set; }
 
@@ -190,9 +127,7 @@ public sealed class BuildOperationExecutorTests
         public Task<WorkerDescriptor> DescribeAsync(CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public async Task<ToolchainBuildResponse> BuildAsync(
-            BuildRequest request,
-            CancellationToken cancellationToken = default)
+        public async Task<ToolchainBuildResponse> BuildAsync(BuildRequest request, CancellationToken cancellationToken = default)
         {
             CallCount++;
             try
@@ -206,9 +141,7 @@ public sealed class BuildOperationExecutorTests
             }
         }
 
-        public Task<ToolchainExplainResponse> ExplainAsync(
-            ExplainRequest request,
-            CancellationToken cancellationToken = default) =>
+        public Task<ToolchainExplainResponse> ExplainAsync(ExplainRequest request, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
 
@@ -219,13 +152,8 @@ public sealed class BuildOperationExecutorTests
 
     private sealed class RejectingPublisher : IBuildArtifactPublisher
     {
-        public Task<PublishedBuildArtifact> PublishAsync(
-            WorkerArtifactEnvelope envelope,
-            CancellationToken cancellationToken) => throw new InvalidOperationException("Artifact publisher must not be called.");
+        public Task<PublishedBuildArtifact> PublishAsync(WorkerArtifactEnvelope envelope, CancellationToken cancellationToken) => throw new InvalidOperationException("Artifact publisher must not be called.");
 
-        public Task<PublishedBuildArtifact> AcceptPublishedAsync(
-            ArtifactRef artifactRef,
-            BuildIdentity identity,
-            CancellationToken cancellationToken) => throw new InvalidOperationException("Artifact publisher must not be called.");
+        public Task<PublishedBuildArtifact> AcceptPublishedAsync(ArtifactRef artifactRef, BuildIdentity identity, CancellationToken cancellationToken) => throw new InvalidOperationException("Artifact publisher must not be called.");
     }
 }

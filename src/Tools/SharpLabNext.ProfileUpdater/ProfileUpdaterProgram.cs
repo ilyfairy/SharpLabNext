@@ -22,17 +22,9 @@ public static class ProfileUpdaterProgram
         try
         {
             var command = ProfileUpdaterCommand.Parse(args);
-            using var httpClient = new HttpClient
-            {
-                Timeout = TimeSpan.FromSeconds(command.HttpTimeoutSeconds)
-            };
+            using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(command.HttpTimeoutSeconds) };
             httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("SharpLabNext-ProfileUpdater/2.0");
-            var workflow = new ProfileUpdateWorkflow(
-                command.RepositoryRoot,
-                command.LockPath,
-                command.StateRoot,
-                new OfficialProfileSourceClient(httpClient),
-                new ProcessProfileUpdateCommandRunner());
+            var workflow = new ProfileUpdateWorkflow(command.RepositoryRoot, command.LockPath, command.StateRoot, new OfficialProfileSourceClient(httpClient), new ProcessProfileUpdateCommandRunner());
 
             object result;
             var exitCode = 0;
@@ -61,17 +53,10 @@ public static class ProfileUpdaterProgram
                         break;
                     }
                 case ProfileUpdaterCommandKind.Build:
-                    result = await workflow.BuildAsync(
-                        command.CandidatePath,
-                        command.CandidateDigest,
-                        command.Configuration);
+                    result = await workflow.BuildAsync(command.CandidatePath, command.CandidateDigest, command.Configuration);
                     break;
                 case ProfileUpdaterCommandKind.Test:
-                    result = await workflow.TestAsync(
-                        command.CandidatePath,
-                        command.CandidateDigest,
-                        command.Configuration,
-                        command.TestScope);
+                    result = await workflow.TestAsync(command.CandidatePath, command.CandidateDigest, command.Configuration, command.TestScope);
                     break;
                 case ProfileUpdaterCommandKind.Promote:
                     result = await workflow.PromoteAsync(command.CandidatePath, command.CandidateDigest);
@@ -80,11 +65,7 @@ public static class ProfileUpdaterProgram
                     {
                         var candidate = await workflow.ResolveAsync(command.ReleaseId, command.OutputPath);
                         await workflow.BuildAsync(null, candidate.CandidateDigest, command.Configuration);
-                        await workflow.TestAsync(
-                            null,
-                            candidate.CandidateDigest,
-                            command.Configuration,
-                            ProfileUpdateTestScope.Full);
+                        await workflow.TestAsync(null, candidate.CandidateDigest, command.Configuration, ProfileUpdateTestScope.Full);
                         result = await workflow.PromoteAsync(null, candidate.CandidateDigest);
                         break;
                     }
@@ -224,8 +205,7 @@ public sealed record ProfileUpdaterCommand(
                     {
                         "Debug" or "debug" => "Debug",
                         "Release" or "release" => "Release",
-                        var value => throw new ProfileUpdaterUsageException(
-                            $"Unknown configuration '{value}'; expected Debug or Release.")
+                        var value => throw new ProfileUpdaterUsageException($"Unknown configuration '{value}'; expected Debug or Release.")
                     };
                     break;
                 case "--test-scope":
@@ -233,8 +213,7 @@ public sealed record ProfileUpdaterCommand(
                     {
                         "affected" => ProfileUpdateTestScope.Affected,
                         "full" => ProfileUpdateTestScope.Full,
-                        var value => throw new ProfileUpdaterUsageException(
-                            $"Unknown test scope '{value}'; expected affected or full.")
+                        var value => throw new ProfileUpdaterUsageException($"Unknown test scope '{value}'; expected affected or full.")
                     };
                     break;
                 default:
@@ -267,19 +246,7 @@ public sealed record ProfileUpdaterCommand(
             throw new ProfileUpdaterUsageException("--fail-on-change is only valid for check or resolve.");
         }
 
-        return new ProfileUpdaterCommand(
-            kind,
-            repositoryRoot,
-            Path.GetFullPath(lockPath),
-            Path.GetFullPath(stateRoot),
-            outputPath,
-            candidatePath,
-            candidateDigest,
-            releaseId,
-            failOnChange,
-            timeout,
-            configuration,
-            testScope);
+        return new ProfileUpdaterCommand(kind, repositoryRoot, Path.GetFullPath(lockPath), Path.GetFullPath(stateRoot), outputPath, candidatePath, candidateDigest, releaseId, failOnChange, timeout, configuration, testScope);
     }
 
     private static bool TryParseKind(string value, out ProfileUpdaterCommandKind kind)
@@ -301,8 +268,7 @@ public sealed record ProfileUpdaterCommand(
     {
         index++;
         return index < args.Length && !string.IsNullOrWhiteSpace(args[index])
-            ? args[index]
-            : throw new ProfileUpdaterUsageException("An option value is missing.");
+            ? args[index] : throw new ProfileUpdaterUsageException("An option value is missing.");
     }
 
     private static string FindRepositoryRoot()
@@ -326,14 +292,10 @@ public sealed class ProfileUpdaterUsageException(string message) : Exception(mes
 
 internal static class AtomicFile
 {
-    public static async Task WriteAllBytesAsync(
-        string path,
-        ReadOnlyMemory<byte> content,
-        CancellationToken cancellationToken)
+    public static async Task WriteAllBytesAsync(string path, ReadOnlyMemory<byte> content, CancellationToken cancellationToken)
     {
         var fullPath = Path.GetFullPath(path);
-        var directory = Path.GetDirectoryName(fullPath)
-            ?? throw new InvalidOperationException("The output path has no parent directory.");
+        var directory = Path.GetDirectoryName(fullPath) ?? throw new InvalidOperationException("The output path has no parent directory.");
         Directory.CreateDirectory(directory);
         var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
@@ -350,9 +312,7 @@ internal static class AtomicFile
         }
     }
 
-    public static async Task ReplaceSetAsync(
-        IReadOnlyList<(string Path, ReadOnlyMemory<byte> Content)> replacements,
-        CancellationToken cancellationToken)
+    public static async Task ReplaceSetAsync(IReadOnlyList<(string Path, ReadOnlyMemory<byte> Content)> replacements, CancellationToken cancellationToken)
     {
         var entries = new List<ReplacementEntry>(replacements.Count);
         try
@@ -360,8 +320,7 @@ internal static class AtomicFile
             foreach (var replacement in replacements)
             {
                 var path = Path.GetFullPath(replacement.Path);
-                var directory = Path.GetDirectoryName(path)
-                    ?? throw new InvalidOperationException("The replacement path has no parent directory.");
+                var directory = Path.GetDirectoryName(path) ?? throw new InvalidOperationException("The replacement path has no parent directory.");
                 Directory.CreateDirectory(directory);
                 var temporary = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
                 var backup = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.bak");
@@ -404,11 +363,7 @@ internal static class AtomicFile
         }
     }
 
-    private sealed class ReplacementEntry(
-        string path,
-        string temporary,
-        string backup,
-        bool existed)
+    private sealed class ReplacementEntry(string path, string temporary, string backup, bool existed)
     {
         public string Path { get; } = path;
         public string Temporary { get; } = temporary;

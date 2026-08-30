@@ -1,7 +1,7 @@
 #:sdk Microsoft.NET.Sdk
 #:property TargetFramework=net10.0
+#:property RestorePackagesWithLockFile=false
 #:property JsonSerializerIsReflectionEnabledByDefault=true
-#:property NuGetLockFilePath=obj/verify-ilsense-inputs.packages.lock.json
 
 using System.Diagnostics;
 using System.Globalization;
@@ -26,13 +26,9 @@ try
 {
     var options = Options.Parse(args);
     var repositoryRoot = Path.GetFullPath(options.RepositoryRoot);
-    var releaseLockPath = Path.GetFullPath(
-        options.ReleaseLockPath ?? Path.Combine(repositoryRoot, "profiles", "lock.json"));
+    var releaseLockPath = Path.GetFullPath(options.ReleaseLockPath ?? Path.Combine(repositoryRoot, "profiles", "lock.json"));
 
-    var contentIdentityMode = string.Equals(
-        Environment.GetEnvironmentVariable("SHARPLABNEXT_SOURCE_IDENTITY_MODE"),
-        "content",
-        StringComparison.OrdinalIgnoreCase);
+    var contentIdentityMode = string.Equals(Environment.GetEnvironmentVariable("SHARPLABNEXT_SOURCE_IDENTITY_MODE"), "content", StringComparison.OrdinalIgnoreCase);
     var submoduleRoot = Path.Combine(repositoryRoot, SubmodulePath.Replace('/', Path.DirectorySeparatorChar));
     var projectPath = Path.Combine(repositoryRoot, CoreProjectPath.Replace('/', Path.DirectorySeparatorChar));
     var nugetLockPath = Path.Combine(repositoryRoot, NuGetLockPath.Replace('/', Path.DirectorySeparatorChar));
@@ -48,31 +44,19 @@ try
     {
         Require(File.Exists(Path.Combine(repositoryRoot, ".gitmodules")), ".gitmodules is missing.");
 
-        var configuredPaths = await RunGitAsync(
-            repositoryRoot,
-            ["config", "--file", Path.Combine(repositoryRoot, ".gitmodules"), "--get-regexp", "^submodule\\..*\\.path$"]);
+        var configuredPaths = await RunGitAsync(repositoryRoot, ["config", "--file", Path.Combine(repositoryRoot, ".gitmodules"), "--get-regexp", "^submodule\\..*\\.path$"]);
         var configuredPathLines = Lines(configuredPaths);
-        Require(configuredPathLines.Length == 1 && configuredPathLines[0].EndsWith($" {SubmodulePath}", StringComparison.Ordinal),
-            ".gitmodules must declare exactly the approved ILSense submodule path.");
-        var configuredUrl = (await RunGitAsync(
-            repositoryRoot,
-            ["config", "--file", Path.Combine(repositoryRoot, ".gitmodules"), "--get", "submodule.third_party/ILSense.url"])).Trim();
-        Require(string.Equals(configuredUrl, SubmoduleUrl, StringComparison.Ordinal),
-            $"The ILSense submodule URL must be '{SubmoduleUrl}'.");
+        Require(configuredPathLines.Length == 1 && configuredPathLines[0].EndsWith($" {SubmodulePath}", StringComparison.Ordinal), ".gitmodules must declare exactly the approved ILSense submodule path.");
+        var configuredUrl = (await RunGitAsync(repositoryRoot, ["config", "--file", Path.Combine(repositoryRoot, ".gitmodules"), "--get", "submodule.third_party/ILSense.url"])).Trim();
+        Require(string.Equals(configuredUrl, SubmoduleUrl, StringComparison.Ordinal), $"The ILSense submodule URL must be '{SubmoduleUrl}'.");
 
-        var indexEntry = (await RunGitAsync(
-            repositoryRoot,
-            ["ls-files", "--stage", "--", SubmodulePath])).Trim();
+        var indexEntry = (await RunGitAsync(repositoryRoot, ["ls-files", "--stage", "--", SubmodulePath])).Trim();
         var indexParts = indexEntry.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
-        Require(indexParts is ["160000", _, "0", SubmodulePath] && IsCommit(indexParts[1]),
-            "The ILSense path must be a stage-0 Git gitlink.");
+        Require(indexParts is ["160000", _, "0", SubmodulePath] && IsCommit(indexParts[1]), "The ILSense path must be a stage-0 Git gitlink.");
         gitlinkCommit = indexParts[1];
         var checkoutCommit = (await RunGitAsync(submoduleRoot, ["rev-parse", "HEAD"])).Trim();
-        Require(string.Equals(checkoutCommit, gitlinkCommit, StringComparison.Ordinal),
-            $"The ILSense checkout '{checkoutCommit}' does not match gitlink '{gitlinkCommit}'.");
-        var submoduleStatus = await RunGitAsync(
-            submoduleRoot,
-            ["status", "--porcelain=v1", "--untracked-files=all"]);
+        Require(string.Equals(checkoutCommit, gitlinkCommit, StringComparison.Ordinal), $"The ILSense checkout '{checkoutCommit}' does not match gitlink '{gitlinkCommit}'.");
+        var submoduleStatus = await RunGitAsync(submoduleRoot, ["status", "--porcelain=v1", "--untracked-files=all"]);
         Require(string.IsNullOrWhiteSpace(submoduleStatus), "The ILSense submodule checkout is dirty.");
         commitTimestamp = (await RunGitAsync(submoduleRoot, ["show", "-s", "--format=%ct", "HEAD"])).Trim();
     }
@@ -89,66 +73,45 @@ try
     var sourceCommit = RequiredString(source, "commit");
     if (gitlinkCommit is null)
     {
-        Require(IsCommit(runtimeCommit) && string.Equals(runtimeCommit, sourceCommit, StringComparison.Ordinal),
-            "ILSense runtime and source lock commits must contain one matching source identity.");
+        Require(IsCommit(runtimeCommit) && string.Equals(runtimeCommit, sourceCommit, StringComparison.Ordinal), "ILSense runtime and source lock commits must contain one matching source identity.");
         gitlinkCommit = runtimeCommit;
     }
     else
     {
-        Require(gitlinkCommit == runtimeCommit && gitlinkCommit == sourceCommit,
-            "ILSense lock commits must match the actual gitlink and checkout.");
+        Require(gitlinkCommit == runtimeCommit && gitlinkCommit == sourceCommit, "ILSense lock commits must match the actual gitlink and checkout.");
     }
     var digest = RequiredString(runtime, "digest");
-    Require(IsSha256(digest) && digest == RequiredString(source, "digest"),
-        "ILSense runtime and source archive digests must be the same SHA-256 identity.");
-    Require(RequiredString(runtime, "sourceUri") == $"https://github.com/OrgEleCho/ILSense/tree/{gitlinkCommit}",
-        "ilsense.sourceUri must identify the gitlink commit.");
-    Require(RequiredString(source, "sourceUri") == $"https://codeload.github.com/OrgEleCho/ILSense/tar.gz/{gitlinkCommit}",
-        "ilsense-source.sourceUri must identify the gitlink archive.");
+    Require(IsSha256(digest) && digest == RequiredString(source, "digest"), "ILSense runtime and source archive digests must be the same SHA-256 identity.");
+    Require(RequiredString(runtime, "sourceUri") == $"https://github.com/OrgEleCho/ILSense/tree/{gitlinkCommit}", "ilsense.sourceUri must identify the gitlink commit.");
+    Require(RequiredString(source, "sourceUri") == $"https://codeload.github.com/OrgEleCho/ILSense/tar.gz/{gitlinkCommit}", "ilsense-source.sourceUri must identify the gitlink archive.");
 
-    var projectVersion = XDocument.Load(projectPath)
-        .Descendants("Version")
-        .Select(static element => element.Value.Trim())
-        .SingleOrDefault();
+    var projectVersion = XDocument.Load(projectPath).Descendants("Version").Select(static element => element.Value.Trim()).SingleOrDefault();
     Require(version == projectVersion, $"ILSense project version '{projectVersion}' does not match lock version '{version}'.");
 
-    using var provenance = JsonDocument.Parse(await File.ReadAllBytesAsync(
-        Path.Combine(repositoryRoot, "profiles", "provenance", "ilsense.json")));
+    using var provenance = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(repositoryRoot, "profiles", "provenance", "ilsense.json")));
     var provenanceRoot = provenance.RootElement;
-    Require(RequiredString(provenanceRoot, "componentId") == "ilsense" &&
-            RequiredString(provenanceRoot, "sourceComponentId") == "ilsense-source",
-        "ILSense provenance must resolve identity through the two locked components.");
-    Require(RequiredString(provenanceRoot, "compatibilityGroup") == $"ilsense-v{version}",
-        "ILSense provenance compatibilityGroup does not match the locked version.");
+    Require(RequiredString(provenanceRoot, "componentId") == "ilsense" && RequiredString(provenanceRoot, "sourceComponentId") == "ilsense-source", "ILSense provenance must resolve identity through the two locked components.");
+    Require(RequiredString(provenanceRoot, "compatibilityGroup") == $"ilsense-v{version}", "ILSense provenance compatibilityGroup does not match the locked version.");
     Require(RequiredString(provenanceRoot, "license") == "MIT", "ILSense provenance must declare MIT.");
     var provenanceBuilder = RequiredProperty(provenanceRoot, "builder");
     var sourceDateEpoch = RequiredProperty(provenanceBuilder, "sourceDateEpoch");
     if (commitTimestamp is not null)
     {
-        Require(long.TryParse(commitTimestamp, NumberStyles.None, CultureInfo.InvariantCulture, out var commitEpoch) &&
-                sourceDateEpoch.GetInt64() == commitEpoch,
-            "ILSense provenance sourceDateEpoch does not match the gitlink commit timestamp.");
+        Require(long.TryParse(commitTimestamp, NumberStyles.None, CultureInfo.InvariantCulture, out var commitEpoch) && sourceDateEpoch.GetInt64() == commitEpoch, "ILSense provenance sourceDateEpoch does not match the gitlink commit timestamp.");
     }
     else
     {
-        Require(sourceDateEpoch.ValueKind == JsonValueKind.Number &&
-                sourceDateEpoch.TryGetInt64(out var epoch) && epoch >= 0,
-            "ILSense provenance sourceDateEpoch must be a non-negative Unix timestamp.");
+        Require(sourceDateEpoch.ValueKind == JsonValueKind.Number && sourceDateEpoch.TryGetInt64(out var epoch) && epoch >= 0, "ILSense provenance sourceDateEpoch must be a non-negative Unix timestamp.");
     }
     var provenanceBuild = RequiredProperty(provenanceRoot, "build");
-    Require(RequiredString(provenanceBuild, "languageServerProject") == CoreProjectPath,
-        "ILSense provenance must identify the gitlink Core project.");
-    Require(RequiredString(provenanceBuild, "targetFramework") == "net10.0",
-        "ILSense provenance target framework must match the worker build.");
+    Require(RequiredString(provenanceBuild, "languageServerProject") == CoreProjectPath, "ILSense provenance must identify the gitlink Core project.");
+    Require(RequiredString(provenanceBuild, "targetFramework") == "net10.0", "ILSense provenance target framework must match the worker build.");
 
     using var packageLock = JsonDocument.Parse(await File.ReadAllBytesAsync(nugetLockPath));
-    Require(RequiredProperty(packageLock.RootElement, "version").GetInt32() == 2,
-        "The ILSense NuGet lock must use lock format version 2.");
+    Require(RequiredProperty(packageLock.RootElement, "version").GetInt32() == 2, "The ILSense NuGet lock must use lock format version 2.");
     var dependencyGraphs = RequiredProperty(packageLock.RootElement, "dependencies");
     var lockedFrameworks = dependencyGraphs.EnumerateObject().Select(static property => property.Name).ToArray();
-    Require(lockedFrameworks.Length == TargetFrameworks.Length &&
-            TargetFrameworks.All(framework => lockedFrameworks.Contains(framework, StringComparer.Ordinal)),
-        "The ILSense NuGet lock must contain exactly the netstandard2.0 and net10.0 graphs.");
+    Require(lockedFrameworks.Length == TargetFrameworks.Length && TargetFrameworks.All(framework => lockedFrameworks.Contains(framework, StringComparer.Ordinal)), "The ILSense NuGet lock must contain exactly the netstandard2.0 and net10.0 graphs.");
     foreach (var framework in TargetFrameworks)
     {
         var graph = RequiredProperty(dependencyGraphs, framework);
@@ -172,13 +135,10 @@ try
         repositoryRoot);
     using var evaluatedProperties = JsonDocument.Parse(evaluated.Output);
     var properties = RequiredProperty(evaluatedProperties.RootElement, "Properties");
-    Require(RequiredString(properties, "SharpLabNextIsILSenseProject") == "true",
-        "The superproject ILSense MSBuild identity hook is not active.");
-    Require(RequiredString(properties, "RestorePackagesWithLockFile") == "true",
-        "The evaluated ILSense project does not require a NuGet lock.");
+    Require(RequiredString(properties, "SharpLabNextIsILSenseProject") == "true", "The superproject ILSense MSBuild identity hook is not active.");
+    Require(RequiredString(properties, "RestorePackagesWithLockFile") == "true", "The evaluated ILSense project does not require a NuGet lock.");
     var evaluatedLockPath = Path.GetFullPath(RequiredString(properties, "NuGetLockFilePath"));
-    Require(PathsEqual(evaluatedLockPath, nugetLockPath),
-        $"The evaluated ILSense NuGet lock path is '{evaluatedLockPath}', expected '{nugetLockPath}'.");
+    Require(PathsEqual(evaluatedLockPath, nugetLockPath), $"The evaluated ILSense NuGet lock path is '{evaluatedLockPath}', expected '{nugetLockPath}'.");
 
     if (options.VerifyRestore)
     {
@@ -195,8 +155,7 @@ try
             repositoryRoot);
     }
 
-    Console.WriteLine(
-        $"ILSense inputs valid: {version} {gitlinkCommit}, {TargetFrameworks.Length} locked dependency graphs, digest {digest}.");
+    Console.WriteLine($"ILSense inputs valid: {version} {gitlinkCommit}, {TargetFrameworks.Length} locked dependency graphs, digest {digest}.");
     return 0;
 }
 catch (Exception exception) when (exception is not OperationCanceledException)
@@ -216,13 +175,12 @@ static string RequiredString(JsonElement value, string name)
 {
     var property = RequiredProperty(value, name);
     return property.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(property.GetString())
-        ? property.GetString()!
-        : throw new InvalidDataException($"Required JSON property '{name}' must be a non-empty string.");
+        ? property.GetString()! : throw new InvalidDataException($"Required JSON property '{name}' must be a non-empty string.");
 }
 
 static async Task<string> RunGitAsync(string workingDirectory, IReadOnlyList<string> arguments)
 {
-    var result = await RunProcessAsync("git", ["-C", workingDirectory, .. arguments], workingDirectory);
+    var result = await RunProcessAsync("git", ["-C", workingDirectory, ..arguments], workingDirectory);
     return result.Output;
 }
 
@@ -230,38 +188,23 @@ static async Task<bool> IsGitWorktreeAsync(string repositoryRoot)
 {
     try
     {
-        var result = await RunProcessAsync(
-            "git",
-            ["-C", repositoryRoot, "rev-parse", "--is-inside-work-tree"],
-            repositoryRoot);
+        var result = await RunProcessAsync("git", ["-C", repositoryRoot, "rev-parse", "--is-inside-work-tree"], repositoryRoot);
         return string.Equals(result.Output.Trim(), "true", StringComparison.OrdinalIgnoreCase);
     }
-    catch (Exception exception) when (
-        exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+    catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
     {
         return false;
     }
 }
 
-static async Task<ProcessResult> RunProcessAsync(
-    string fileName,
-    IReadOnlyList<string> arguments,
-    string workingDirectory)
+static async Task<ProcessResult> RunProcessAsync(string fileName, IReadOnlyList<string> arguments, string workingDirectory)
 {
-    var startInfo = new ProcessStartInfo
-    {
-        FileName = fileName,
-        WorkingDirectory = workingDirectory,
-        UseShellExecute = false,
-        RedirectStandardOutput = true,
-        RedirectStandardError = true
-    };
+    var startInfo = new ProcessStartInfo { FileName = fileName, WorkingDirectory = workingDirectory, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
     startInfo.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
     startInfo.Environment["DOTNET_NOLOGO"] = "1";
     foreach (var argument in arguments)
         startInfo.ArgumentList.Add(argument);
-    using var process = Process.Start(startInfo)
-        ?? throw new InvalidOperationException($"Could not start '{fileName}'.");
+    using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Could not start '{fileName}'.");
     var outputTask = process.StandardOutput.ReadToEndAsync();
     var errorTask = process.StandardError.ReadToEndAsync();
     await process.WaitForExitAsync();
@@ -269,17 +212,14 @@ static async Task<ProcessResult> RunProcessAsync(
     var error = await errorTask;
     if (process.ExitCode != 0)
     {
-        throw new InvalidOperationException(
-            $"'{fileName} {string.Join(' ', arguments)}' failed with exit code {process.ExitCode}: {error.Trim()}");
+        throw new InvalidOperationException($"'{fileName} {string.Join(' ', arguments)}' failed with exit code {process.ExitCode}: {error.Trim()}");
     }
     return new ProcessResult(output, error);
 }
 
-static string[] Lines(string value) =>
-    value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+static string[] Lines(string value) => value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-static bool IsCommit(string value) =>
-    value.Length == 40 && value.All(static character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
+static bool IsCommit(string value) => value.Length == 40 && value.All(static character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
 
 static bool IsSha256(string value)
 {
@@ -294,10 +234,7 @@ static bool IsSha256(string value)
 }
 
 static bool PathsEqual(string left, string right) =>
-    string.Equals(
-        Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)),
-        Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)),
-        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
 static void Require(bool condition, string message)
 {
@@ -307,11 +244,7 @@ static void Require(bool condition, string message)
 
 sealed record ProcessResult(string Output, string Error);
 
-sealed record Options(
-    string RepositoryRoot,
-    string? ReleaseLockPath,
-    bool VerifyRestore,
-    bool AllowMissingGit)
+sealed record Options(string RepositoryRoot, string? ReleaseLockPath, bool VerifyRestore, bool AllowMissingGit)
 {
     public static Options Parse(string[] arguments)
     {
@@ -346,7 +279,6 @@ sealed record Options(
     {
         index++;
         return index < values.Length && !string.IsNullOrWhiteSpace(values[index])
-            ? values[index]
-            : throw new ArgumentException("An option value is missing.");
+            ? values[index] : throw new ArgumentException("An option value is missing.");
     }
 }

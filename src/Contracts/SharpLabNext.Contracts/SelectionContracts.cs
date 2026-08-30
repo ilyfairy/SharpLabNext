@@ -2,15 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace SharpLabNext.Contracts;
 
-public sealed record ResolveSelectionRequest(
-    string LanguageId,
-    string? ToolchainId,
-    string? ReferenceSetId,
-    string OutputId,
-    string? RuntimeId,
-    BuildConfiguration BuildMode,
-    string CatalogRevision,
-    long WorkspaceRevision);
+public sealed record ResolveSelectionRequest(string LanguageId, string? ToolchainId, string? ReferenceSetId, string OutputId, string? RuntimeId, BuildConfiguration BuildMode, string CatalogRevision, long WorkspaceRevision);
 
 public sealed record ResolveSelectionResponse(
     ResolvedSelection EffectiveSelection,
@@ -20,25 +12,11 @@ public sealed record ResolveSelectionResponse(
     PipelinePlanDescriptor PipelinePlan,
     DateTimeOffset ExpiresAt);
 
-public sealed record ResolvedSelection(
-    string LanguageId,
-    string ToolchainId,
-    string ReferenceSetId,
-    string OutputId,
-    string? RuntimeId);
+public sealed record ResolvedSelection(string LanguageId, string ToolchainId, string ReferenceSetId, string OutputId, string? RuntimeId);
 
-public sealed record SelectionChange(
-    SelectionField Field,
-    string? RequestedValue,
-    string? EffectiveValue,
-    SelectionChangeReason Reason,
-    string Message);
+public sealed record SelectionChange(SelectionField Field, string? RequestedValue, string? EffectiveValue, SelectionChangeReason Reason, string Message);
 
-public sealed record EffectiveCapabilities(
-    IReadOnlyList<string> LanguageServerCapabilities,
-    IReadOnlyList<string> BuildCapabilities,
-    IReadOnlyList<string> OutputCapabilities,
-    IReadOnlyList<string> RuntimeCapabilities);
+public sealed record EffectiveCapabilities(IReadOnlyList<string> LanguageServerCapabilities, IReadOnlyList<string> BuildCapabilities, IReadOnlyList<string> OutputCapabilities, IReadOnlyList<string> RuntimeCapabilities);
 
 public sealed record PipelinePlanDescriptor(
     string ReleaseId,
@@ -50,12 +28,7 @@ public sealed record PipelinePlanDescriptor(
     string SecurityPolicyId,
     IReadOnlyList<string> WorkerImageIds);
 
-public sealed record PipelineStageDescriptor(
-    string Id,
-    PipelineStageKind Kind,
-    string ProviderId,
-    string? InputArtifactFormat,
-    string? OutputArtifactFormat);
+public sealed record PipelineStageDescriptor(string Id, PipelineStageKind Kind, string ProviderId, string? InputArtifactFormat, string? OutputArtifactFormat);
 
 [JsonConverter(typeof(KebabCaseJsonStringEnumConverter<SelectionField>))]
 public enum SelectionField

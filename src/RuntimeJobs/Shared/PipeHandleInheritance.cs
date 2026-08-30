@@ -14,20 +14,17 @@ internal static class PipeHandleInheritance
 
     public static void Disable(SafePipeHandle handle)
     {
-        if (handle is null || handle.IsInvalid)
-            throw new ArgumentException("The anonymous pipe handle is invalid.", nameof(handle));
+        if (handle is null || handle.IsInvalid) throw new ArgumentException("The anonymous pipe handle is invalid.", nameof(handle));
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            if (!SetHandleInformation(handle, HandleFlagInherit, 0))
-                throw new Win32Exception(Marshal.GetLastWin32Error());
+            if (!SetHandleInformation(handle, HandleFlagInherit, 0)) throw new Win32Exception(Marshal.GetLastWin32Error());
             return;
         }
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             var flags = GetDescriptorFlags(handle, GetFileDescriptorFlags);
-            if (flags < 0 || SetDescriptorFlags(handle, SetFileDescriptorFlags, flags | FileDescriptorCloseOnExec) < 0)
-                throw new Win32Exception(Marshal.GetLastWin32Error());
+            if (flags < 0 || SetDescriptorFlags(handle, SetFileDescriptorFlags, flags | FileDescriptorCloseOnExec) < 0) throw new Win32Exception(Marshal.GetLastWin32Error());
             return;
         }
         throw new PlatformNotSupportedException("Runtime jobs support Linux and Windows only.");
@@ -35,19 +32,11 @@ internal static class PipeHandleInheritance
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetHandleInformation(
-        SafePipeHandle handle,
-        uint mask,
-        uint flags);
+    private static extern bool SetHandleInformation(SafePipeHandle handle, uint mask, uint flags);
 
     [DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]
-    private static extern int GetDescriptorFlags(
-        SafePipeHandle descriptor,
-        int command);
+    private static extern int GetDescriptorFlags(SafePipeHandle descriptor, int command);
 
     [DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]
-    private static extern int SetDescriptorFlags(
-        SafePipeHandle descriptor,
-        int command,
-        int flags);
+    private static extern int SetDescriptorFlags(SafePipeHandle descriptor, int command, int flags);
 }

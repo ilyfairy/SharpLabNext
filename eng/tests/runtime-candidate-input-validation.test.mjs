@@ -20,7 +20,7 @@ import {
   validateCandidateImageInputs,
   validateCandidateImageLabels,
   validateWineCoreClrUserspaceInputs,
-} from './runtime-candidate-input-validation.mjs'
+} from '../runtime-candidate-input-validation.mjs'
 import {
   candidateExpectedLabels,
   candidateIdentityLabelBindings,
@@ -30,28 +30,22 @@ import {
   createCandidateBakeArguments,
   runCandidateBuild as runCandidateBuildProduction,
   validateCandidateBuildInputs,
-} from './build-runtime-candidate.mjs'
-import { findDockerfileStageArgumentScopeViolations } from './dockerfile-stage-arguments.mjs'
+} from '../build-runtime-candidate.mjs'
+import { findDockerfileStageArgumentScopeViolations } from '../dockerfile-stage-arguments.mjs'
 import {
   pinnedDockerfileFrontend,
   validateDockerfileFrontend,
-} from './dockerfile-frontend.mjs'
+} from '../dockerfile-frontend.mjs'
 import {
   deriveRuntimeCandidateEnvironment,
   frameworkCandidateInputStrategy,
-} from './runtime-candidate-environment.mjs'
+} from '../runtime-candidate-environment.mjs'
 
 const digest = 'a'.repeat(64)
 const valid = `registry.example/runtime@sha256:${digest}`
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const runtimeMatrix = JSON.parse(fs.readFileSync(
-  path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'),
-  'utf8',
-))
-const releaseLock = JSON.parse(fs.readFileSync(
-  path.join(repositoryRoot, 'profiles', 'lock.json'),
-  'utf8',
-))
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const runtimeMatrix = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'), 'utf8'));
+const releaseLock = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'profiles', 'lock.json'), 'utf8'));
 const wineUserspace = releaseLock.components['wine-coreclr-userspace']
 const fakeOperatorReceiptSha256 = `sha256:${'8'.repeat(64)}`
 const fakeOperatorReceiptKeyId = 'sha256:8528b0408a4f60a29132610413c90638777a9258f84d1fb5b849ee116445760f'
@@ -60,18 +54,8 @@ const developmentWineOperatorImageId = `sha256:${'1'.repeat(64)}`
 const sharedMatrixInputSha256 = `sha256:${'c'.repeat(64)}`
 const sharedRowOperatorImage = pinnedImage('operator-netfx48', 'e')
 const sharedRowDigest = `sha256:${'d'.repeat(64)}`
-const shellValidator = path.join(
-  repositoryRoot,
-  'deploy',
-  'docker',
-  'validate-digest-pinned-image.sh',
-)
-const linuxRuntimeVerifier = path.join(
-  repositoryRoot,
-  'deploy',
-  'docker',
-  'verify-linux-coreclr-runtime.sh',
-)
+const shellValidator = path.join(repositoryRoot, 'deploy', 'docker', 'validate-digest-pinned-image.sh')
+const linuxRuntimeVerifier = path.join(repositoryRoot, 'deploy', 'docker', 'verify-linux-coreclr-runtime.sh')
 const shell = findShell()
 
 function runCandidateBuild(argv, values, spawn, output, testHooks = {}) {
@@ -139,17 +123,31 @@ test('Dockerfile frontend is pinned and rejects missing or floating directives',
     [`must start with '# syntax=${pinnedDockerfileFrontend}'`],
   )
 
-  const trackedDockerfiles = childProcess.execFileSync(
-    'git',
-    ['ls-files', '--', '**/Dockerfile*'],
-    { cwd: repositoryRoot, encoding: 'utf8' },
-  ).split(/\r?\n/).filter(Boolean)
-  assert.ok(trackedDockerfiles.length > 0)
-  for (const relativePath of trackedDockerfiles) {
+  const dockerfiles = discoverDockerfiles(repositoryRoot)
+  assert.ok(dockerfiles.length > 0)
+  for (const relativePath of dockerfiles) {
     const source = fs.readFileSync(path.join(repositoryRoot, relativePath), 'utf8')
     assert.deepEqual(validateDockerfileFrontend(source), [], relativePath)
   }
 })
+
+function discoverDockerfiles(root) {
+  const excludedDirectories = new Set(['.git', '.tmp', '_tmp', '.vs', '.idea', '.vscode', 'artifacts', 'bin', 'obj', 'node_modules', 'dist', 'coverage', 'TestResults', 'third_party'])
+  const files = []
+  const visit = directory => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) continue
+      const filename = path.join(directory, entry.name)
+      if (entry.isDirectory()) {
+        if (!excludedDirectories.has(entry.name)) visit(filename)
+      } else if (entry.isFile() && entry.name.startsWith('Dockerfile')) {
+        files.push(path.relative(root, filename).replaceAll(path.sep, '/'))
+      }
+    }
+  }
+  visit(root)
+  return files.sort()
+}
 
 function findShell() {
   if (process.platform !== 'win32') return '/bin/sh'
@@ -160,9 +158,7 @@ function findShell() {
   return candidates.find(candidate => fs.existsSync(candidate))
 }
 
-function shellPath(value) {
-  return process.platform === 'win32' ? value.replaceAll('\\', '/') : value
-}
+function shellPath(value) { return process.platform === 'win32' ? value.replaceAll('\\', '/') : value; }
 
 function shellEnvironment() {
   if (process.platform !== 'win32' || shell === undefined) return process.env
@@ -244,9 +240,7 @@ esac
   }
 }
 
-function pinnedImage(name, character) {
-  return `registry.example/${name}@sha256:${character.repeat(64)}`
-}
+function pinnedImage(name, character) { return `registry.example/${name}@sha256:${character.repeat(64)}`; }
 
 function commonCandidateEnvironment() {
   return {
@@ -2325,7 +2319,7 @@ test('Mono candidate final stage retains and consumes its operator identity', ()
     'utf8',
   )
   const bakeValidator = fs.readFileSync(
-    path.join(repositoryRoot, 'eng', 'validate-bake-inputs.mjs'),
+    path.join(repositoryRoot, 'eng', 'validation', 'validate-bake-inputs.mjs'),
     'utf8',
   )
   const finalStageIndex = dockerfile.indexOf('FROM mono-runtime-check AS final')

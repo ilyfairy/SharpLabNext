@@ -7,7 +7,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const assembler = path.join(repositoryRoot, 'deploy', 'docker', 'assemble-framework-prefix-matrix.py')
 const dedupe = path.join(repositoryRoot, 'deploy', 'docker', 'dedupe-wine-prefixes.py')
 const parentDockerfile = path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.operator-wine-framework-matrix-parent')
@@ -328,12 +328,8 @@ test('shared Framework matrix selector whiteouts unselected rows and emits a rec
       'assemble', '--input', input, '--output', output, '--dedupe-helper', dedupe,
     ]).status, 0)
     const matrixRoot = path.join(output, 'framework-prefixes')
-    const matrixInputSha256 = JSON.parse(
-      fs.readFileSync(path.join(output, 'framework-matrix.json'), 'utf8'),
-    ).inputManifestSha256
-    const selectedRow = JSON.parse(
-      fs.readFileSync(path.join(output, 'framework-matrix.json'), 'utf8'),
-    ).rows.find(row => row.id === 'netfx47')
+    const matrixInputSha256 = JSON.parse(fs.readFileSync(path.join(output, 'framework-matrix.json'), 'utf8')).inputManifestSha256;
+    const selectedRow = JSON.parse(fs.readFileSync(path.join(output, 'framework-matrix.json'), 'utf8')).rows.find(row => row.id === 'netfx47');
     const receipt = path.join(output, 'selector.json')
     const selected = childProcess.spawnSync(python, [assembler, 'select',
       '--root', matrixRoot,
@@ -392,12 +388,8 @@ test('shared Framework matrix selector rejects row content drift before mutation
     const drifted = path.join(output, 'framework-prefixes', 'netfx47', 'clr4', 'system.reg')
     fs.appendFileSync(drifted, 'drift\n')
     const matrixRoot = path.join(output, 'framework-prefixes')
-    const matrixInputSha256 = JSON.parse(
-      fs.readFileSync(path.join(output, 'framework-matrix.json'), 'utf8'),
-    ).inputManifestSha256
-    const selectedRow = JSON.parse(
-      fs.readFileSync(path.join(output, 'framework-matrix.json'), 'utf8'),
-    ).rows.find(row => row.id === 'netfx47')
+    const matrixInputSha256 = JSON.parse(fs.readFileSync(path.join(output, 'framework-matrix.json'), 'utf8')).inputManifestSha256;
+    const selectedRow = JSON.parse(fs.readFileSync(path.join(output, 'framework-matrix.json'), 'utf8')).rows.find(row => row.id === 'netfx47');
     const selected = childProcess.spawnSync(python, [assembler, 'select',
       '--root', matrixRoot,
       '--target-id', 'netfx47',
@@ -625,10 +617,7 @@ test('shared Framework matrix selector rejects intermediate symlinks in manifest
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-framework-path-link-'))
   try {
     const { output, manifest } = assembleTwoRowMatrix(python, root)
-    const frameworkRoot = path.join(
-      output, 'framework-prefixes', 'netfx47', 'clr4',
-      'drive_c', 'windows', 'Microsoft.NET',
-    )
+    const frameworkRoot = path.join(output, 'framework-prefixes', 'netfx47', 'clr4', 'drive_c', 'windows', 'Microsoft.NET')
     fs.renameSync(path.join(frameworkRoot, 'Framework64'), path.join(frameworkRoot, 'Framework64-real'))
     fs.symlinkSync('Framework64-real', path.join(frameworkRoot, 'Framework64'), 'dir')
     const selected = selectTwoRowMatrix(python, root, output, manifest)

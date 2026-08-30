@@ -6,7 +6,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const helperPath = path.join(repositoryRoot, 'deploy', 'docker', 'dedupe-wine-prefixes.py')
 
 function pythonCommand() {

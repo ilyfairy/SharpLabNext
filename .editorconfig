@@ -7,12 +7,15 @@ insert_final_newline = true
 trim_trailing_whitespace = true
 indent_style = space
 indent_size = 2
+max_line_length = off
 
 [*.{cs,fs,vb}]
 indent_size = 4
 
 [*.cs]
 dotnet_sort_system_directives_first = true
+csharp_preserve_single_line_statements = true
+csharp_preserve_single_line_blocks = true
 csharp_style_namespace_declarations = file_scoped:warning
 csharp_style_prefer_primary_constructors = false:suggestion
 

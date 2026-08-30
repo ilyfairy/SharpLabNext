@@ -7,8 +7,7 @@ namespace SharpLabNext.Operations.Http;
 
 public static class OperationCapacityMiddlewareExtensions
 {
-    public static IApplicationBuilder UseSharpLabNextOperationCapacityHandling(
-        this IApplicationBuilder app) =>
+    public static IApplicationBuilder UseSharpLabNextOperationCapacityHandling(this IApplicationBuilder app) =>
         app.UseMiddleware<OperationCapacityMiddleware>();
 }
 
@@ -47,10 +46,4 @@ public sealed class OperationCapacityMiddleware(RequestDelegate next)
     }
 }
 
-public sealed record OperationCapacityProblem(
-    string Type,
-    string Title,
-    int Status,
-    string Detail,
-    int MaximumOperations,
-    string TraceId);
+public sealed record OperationCapacityProblem(string Type, string Title, int Status, string Detail, int MaximumOperations, string TraceId);

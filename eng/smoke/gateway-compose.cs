@@ -15,19 +15,11 @@ using System.Threading.Tasks;
 
 var full = args.Contains("--full", StringComparer.Ordinal);
 var security = args.Contains("--security", StringComparer.Ordinal);
-var baseAddressArgument = args.FirstOrDefault(static argument =>
-    !StringComparer.Ordinal.Equals(argument, "--full") &&
-    !StringComparer.Ordinal.Equals(argument, "--security"));
+var baseAddressArgument = args.FirstOrDefault(static argument => !StringComparer.Ordinal.Equals(argument, "--full") && !StringComparer.Ordinal.Equals(argument, "--security"));
 var baseAddress = baseAddressArgument is null
-    ? new Uri("http://127.0.0.1:8080", UriKind.Absolute)
-    : new Uri(baseAddressArgument, UriKind.Absolute);
-using var overallTimeout = new CancellationTokenSource(
-    full || security ? TimeSpan.FromMinutes(15) : TimeSpan.FromMinutes(5));
-using var http = new HttpClient
-{
-    BaseAddress = baseAddress,
-    Timeout = TimeSpan.FromSeconds(90)
-};
+    ? new Uri("http://127.0.0.1:8080", UriKind.Absolute) : new Uri(baseAddressArgument, UriKind.Absolute);
+using var overallTimeout = new CancellationTokenSource(full || security ? TimeSpan.FromMinutes(15) : TimeSpan.FromMinutes(5));
+using var http = new HttpClient { BaseAddress = baseAddress, Timeout = TimeSpan.FromSeconds(90) };
 var json = CreateJsonOptions();
 var lspJson = CreateLspJsonOptions();
 
@@ -35,8 +27,7 @@ await EnsureSuccessAsync(await http.GetAsync("/health/ready", overallTimeout.Tok
 using var catalogResponse = await http.GetAsync("/api/v1/catalog", overallTimeout.Token);
 await EnsureSuccessAsync(catalogResponse, "Catalog");
 using var catalog = JsonDocument.Parse(await catalogResponse.Content.ReadAsByteArrayAsync(overallTimeout.Token));
-var catalogRevision = catalog.RootElement.GetProperty("Revision").GetString()
-    ?? throw new InvalidOperationException("Catalog revision is missing.");
+var catalogRevision = catalog.RootElement.GetProperty("Revision").GetString() ?? throw new InvalidOperationException("Catalog revision is missing.");
 
 var languages = new[]
 {
@@ -151,13 +142,7 @@ var languages = new[]
         """,
         "compose-il",
         SupportsAst: false),
-    new LanguageCase(
-        "minilang",
-        "minilang-stable",
-        "Program.mini",
-        "print \"compose-minilang\"\n",
-        "compose-minilang",
-        SupportsAst: false)
+    new LanguageCase("minilang", "minilang-stable", "Program.mini", "print \"compose-minilang\"\n", "compose-minilang", SupportsAst: false)
 };
 
 var runtimes = new[]
@@ -218,11 +203,7 @@ foreach (var profile in new[] { gsharpStable, gsharpLegacy })
 {
     await CheckAsync($"{profile.ToolchainId} auto top-level compile identity", async () =>
     {
-        var execution = await ExecutePipelineDetailedAsync(
-            profile,
-            "compile-check",
-            null,
-            buildOutputKind: "auto");
+        var execution = await ExecutePipelineDetailedAsync(profile, "compile-check", null, buildOutputKind: "auto");
         var result = execution.Result;
         Require(ResultType(result) == "compile-check", "G# Compile Check returned the wrong result type.");
         Require(result.GetProperty("CompilationSucceeded").GetBoolean(), "G# top-level source did not compile in auto mode.");
@@ -233,18 +214,13 @@ foreach (var profile in new[] { gsharpStable, gsharpLegacy })
 
     await CheckAsync($"{profile.ToolchainId} auto top-level decompiled C#", async () =>
     {
-        var execution = await ExecutePipelineDetailedAsync(
-            profile,
-            "decompiled-csharp",
-            null,
-            buildOutputKind: "auto");
+        var execution = await ExecutePipelineDetailedAsync(profile, "decompiled-csharp", null, buildOutputKind: "auto");
         Require(ResultType(execution.Result) == "artifact-render", "G# decompile returned the wrong result type.");
         var text = await ReadResultContentAsync(execution);
         Require(text.Length > 40, "G# decompiled C# output is empty.");
     });
 
-    await CheckAsync($"{profile.ToolchainId} Gateway LSP WebSocket", () =>
-        CheckGatewayLspAsync(profile));
+    await CheckAsync($"{profile.ToolchainId} Gateway LSP WebSocket", () => CheckGatewayLspAsync(profile));
 }
 
 var ilLibrary = languages.Single(static language => language.Id == "il") with
@@ -268,11 +244,7 @@ var ilLibrary = languages.Single(static language => language.Id == "il") with
 };
 await CheckAsync("il library decompiled C# without entry point", async () =>
 {
-    var execution = await ExecutePipelineDetailedAsync(
-        ilLibrary,
-        "decompiled-csharp",
-        null,
-        buildOutputKind: "library");
+    var execution = await ExecutePipelineDetailedAsync(ilLibrary, "decompiled-csharp", null, buildOutputKind: "library");
     Require(ResultType(execution.Result) == "artifact-render", "IL library decompile returned the wrong result type.");
     var text = await ReadResultContentAsync(execution);
     Require(text.Contains("Method", StringComparison.Ordinal), "IL library decompile lost the user method.");
@@ -293,25 +265,13 @@ await CheckAsync("csharp classic JavaScript via JSIL", async () =>
 {
     var execution = await ExecutePipelineDetailedAsync(jsilSource, "javascript", null);
     Require(ResultType(execution.Result) == "artifact-render", "JSIL returned the wrong result type.");
-    Require(
-        execution.Result.GetProperty("Outcome").GetString() == "succeeded",
-        $"JSIL did not translate the Roslyn artifact: {execution.Result.GetRawText()}");
+    Require(execution.Result.GetProperty("Outcome").GetString() == "succeeded", $"JSIL did not translate the Roslyn artifact: {execution.Result.GetRawText()}");
     var text = await ReadResultContentAsync(execution);
-    Require(
-        text.Contains("'use strict';", StringComparison.Ordinal),
-        "JSIL output has no classic strict-mode prologue.");
-    Require(
-        text.Contains("var $asm00 = JSIL.DeclareAssembly", StringComparison.Ordinal),
-        "JSIL output has no classic global entry assembly binding.");
-    Require(
-        text.Contains("Program_Add", StringComparison.Ordinal),
-        "JSIL output has no generated method body.");
-    Require(
-        !text.Contains("export default", StringComparison.Ordinal),
-        "Classic JSIL output unexpectedly contains an ESM default export.");
-    Require(
-        !text.Contains("export function run", StringComparison.Ordinal),
-        "Classic JSIL output unexpectedly contains an ESM run export.");
+    Require(text.Contains("'use strict';", StringComparison.Ordinal), "JSIL output has no classic strict-mode prologue.");
+    Require(text.Contains("var $asm00 = JSIL.DeclareAssembly", StringComparison.Ordinal), "JSIL output has no classic global entry assembly binding.");
+    Require(text.Contains("Program_Add", StringComparison.Ordinal), "JSIL output has no generated method body.");
+    Require(!text.Contains("export default", StringComparison.Ordinal), "Classic JSIL output unexpectedly contains an ESM default export.");
+    Require(!text.Contains("export function run", StringComparison.Ordinal), "Classic JSIL output unexpectedly contains an ESM run export.");
 });
 
 var runtimeLanguages = full ? languages : new[] { languages[0], languages[^1] };
@@ -328,11 +288,7 @@ foreach (var language in runtimeLanguages)
             Require(result.GetProperty("ExitCode").GetInt32() == 0, "Run returned a non-zero exit code.");
             var output = DecodeOutput(execution.Events, "stdout");
             Require(output.Contains(language.ExpectedOutput, StringComparison.Ordinal), "Run stdout is incorrect.");
-            Require(
-                result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString()?.StartsWith(
-                    runtime.VersionPrefix,
-                    StringComparison.Ordinal) == true,
-                "Run used the wrong runtime.");
+            Require(result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString()?.StartsWith(runtime.VersionPrefix, StringComparison.Ordinal) == true, "Run used the wrong runtime.");
         });
 
         await CheckAsync($"{language.Id} JIT {runtime.Id}", async () =>
@@ -340,26 +296,14 @@ foreach (var language in runtimeLanguages)
             var execution = await ExecutePipelineDetailedAsync(language, "jit-asm", runtime.Id);
             var result = execution.Result;
             Require(ResultType(result) == "jit", "JIT returned the wrong result type.");
-            Require(
-                result.GetProperty("Status").GetString() == "completed",
-                $"JIT did not complete: {result.GetRawText()}");
+            Require(result.GetProperty("Status").GetString() == "completed", $"JIT did not complete: {result.GetRawText()}");
             var methods = result.GetProperty("Methods").EnumerateArray().ToArray();
             Require(methods.Length > 0, "JIT returned no methods.");
-            Require(
-                methods.Any(static method =>
-                    method.GetProperty("NativeCodeSize").GetInt32() > 0 &&
-                    method.GetProperty("InstructionCount").GetInt32() > 0),
-                "JIT returned no method with native code statistics.");
+            Require(methods.Any(static method => method.GetProperty("NativeCodeSize").GetInt32() > 0 && method.GetProperty("InstructionCount").GetInt32() > 0), "JIT returned no method with native code statistics.");
             var text = await ReadResultContentAsync(execution);
             Require(text.Length > 40, "JIT assembly output is empty.");
-            Require(
-                text.Contains("Assembly listing for method", StringComparison.Ordinal),
-                "JIT output contains no CoreCLR assembly listing.");
-            Require(
-                result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString()?.StartsWith(
-                    runtime.VersionPrefix,
-                    StringComparison.Ordinal) == true,
-                "JIT used the wrong runtime.");
+            Require(text.Contains("Assembly listing for method", StringComparison.Ordinal), "JIT output contains no CoreCLR assembly listing.");
+            Require(result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString()?.StartsWith(runtime.VersionPrefix, StringComparison.Ordinal) == true, "JIT used the wrong runtime.");
         });
     }
 }
@@ -382,31 +326,16 @@ await CheckAsync("net5 defaults to its matching runtime", async () =>
     var execution = await ExecutePipelineDetailedAsync(net5OnNewerRuntime, "run", null);
     Require(ResultType(execution.Result) == "run", "net5 default Run returned the wrong result type.");
     Require(execution.Result.GetProperty("Status").GetString() == "completed", "net5 default Run did not complete.");
-    Require(
-        DecodeOutput(execution.Events, "stdout").Contains(net5OnNewerRuntime.ExpectedOutput, StringComparison.Ordinal),
-        "net5 default Run stdout is incorrect.");
-    Require(
-        execution.Result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString()?.StartsWith(
-            "5.",
-            StringComparison.Ordinal) == true,
-        "net5 default Run did not select the matching .NET 5 runtime.");
+    Require(DecodeOutput(execution.Events, "stdout").Contains(net5OnNewerRuntime.ExpectedOutput, StringComparison.Ordinal), "net5 default Run stdout is incorrect.");
+    Require(execution.Result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString()?.StartsWith("5.", StringComparison.Ordinal) == true, "net5 default Run did not select the matching .NET 5 runtime.");
 });
 await CheckAsync("net5 can run on explicitly selected net10", async () =>
 {
-    var execution = await ExecutePipelineDetailedAsync(
-        net5OnNewerRuntime,
-        "run",
-        "dotnet-10-linux-x64");
+    var execution = await ExecutePipelineDetailedAsync(net5OnNewerRuntime, "run", "dotnet-10-linux-x64");
     Require(ResultType(execution.Result) == "run", "net5-on-net10 Run returned the wrong result type.");
     Require(execution.Result.GetProperty("Status").GetString() == "completed", "net5-on-net10 Run did not complete.");
-    Require(
-        DecodeOutput(execution.Events, "stdout").Contains(net5OnNewerRuntime.ExpectedOutput, StringComparison.Ordinal),
-        "net5-on-net10 Run stdout is incorrect.");
-    Require(
-        execution.Result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString()?.StartsWith(
-            "10.",
-            StringComparison.Ordinal) == true,
-        "net5-on-net10 Run did not use the explicitly selected .NET 10 runtime.");
+    Require(DecodeOutput(execution.Events, "stdout").Contains(net5OnNewerRuntime.ExpectedOutput, StringComparison.Ordinal), "net5-on-net10 Run stdout is incorrect.");
+    Require(execution.Result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString()?.StartsWith("10.", StringComparison.Ordinal) == true, "net5-on-net10 Run did not use the explicitly selected .NET 10 runtime.");
 });
 
 if (full)
@@ -414,17 +343,8 @@ if (full)
     string? constGenericsArtifactRef = null;
     var lockedConstGenericsCompiler = ReadLockedComponent("roslyn-const-generics");
     var lockedConstGenericsRuntime = ReadLockedComponent("const-generics-linux-x64");
-    var roslynMainCSharp = languages[0] with
-    {
-        ToolchainId = "roslyn-main",
-        ReferenceSetId = "net11-preview-ref",
-        LanguageVersion = "preview"
-    };
-    var roslynMainVisualBasic = languages[1] with
-    {
-        ToolchainId = "roslyn-main",
-        ReferenceSetId = "net11-preview-ref"
-    };
+    var roslynMainCSharp = languages[0] with { ToolchainId = "roslyn-main", ReferenceSetId = "net11-preview-ref", LanguageVersion = "preview" };
+    var roslynMainVisualBasic = languages[1] with { ToolchainId = "roslyn-main", ReferenceSetId = "net11-preview-ref" };
     var gsharp = gsharpStable;
     var php = languages.Single(static language => language.Id == "php");
     var cppCli = new LanguageCase(
@@ -544,12 +464,8 @@ if (full)
             Require(ResultType(result) == "run", $"{displayName} Wine Run returned the wrong result type.");
             Require(result.GetProperty("Status").GetString() == "completed", $"{displayName} Wine Run did not complete.");
             Require(result.GetProperty("ExitCode").GetInt32() == 0, $"{displayName} Wine Run returned a non-zero exit code.");
-            Require(
-                DecodeOutput(execution.Events, "stdout").Contains(language.ExpectedOutput, StringComparison.Ordinal),
-                $"{displayName} Wine Run stdout is incorrect.");
-            Require(
-                result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString() == "4.8",
-                $"{displayName} did not use the Wine/.NET Framework runtime.");
+            Require(DecodeOutput(execution.Events, "stdout").Contains(language.ExpectedOutput, StringComparison.Ordinal), $"{displayName} Wine Run stdout is incorrect.");
+            Require(result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString() == "4.8", $"{displayName} did not use the Wine/.NET Framework runtime.");
         });
     }
 
@@ -569,17 +485,11 @@ if (full)
 
     await CheckAsync("gsharp legacy 0.3.8 Run .NET 10", async () =>
     {
-        var execution = await ExecutePipelineDetailedAsync(
-            gsharpLegacy,
-            "run",
-            "dotnet-10-linux-x64",
-            buildOutputKind: "console");
+        var execution = await ExecutePipelineDetailedAsync(gsharpLegacy, "run", "dotnet-10-linux-x64", buildOutputKind: "console");
         Require(ResultType(execution.Result) == "run", "G# legacy Run returned the wrong result type.");
         Require(execution.Result.GetProperty("Status").GetString() == "completed", "G# legacy Run did not complete.");
         Require(execution.Result.GetProperty("ExitCode").GetInt32() == 0, "G# legacy Run returned a non-zero exit code.");
-        Require(
-            DecodeOutput(execution.Events, "stdout").Contains(gsharpLegacy.ExpectedOutput, StringComparison.Ordinal),
-            "G# legacy Run stdout is incorrect.");
+        Require(DecodeOutput(execution.Events, "stdout").Contains(gsharpLegacy.ExpectedOutput, StringComparison.Ordinal), "G# legacy Run stdout is incorrect.");
     });
 
     await CheckAsync("php decompiled C#", async () =>
@@ -588,9 +498,7 @@ if (full)
         Require(ResultType(execution.Result) == "artifact-render", "PHP decompile returned the wrong result type.");
         var text = await ReadResultContentAsync(execution);
         Require(text.Length > 40, "PHP decompiled C# output is empty.");
-        Require(
-            text.Contains("square", StringComparison.OrdinalIgnoreCase),
-            "PHP decompiled C# does not contain the source function.");
+        Require(text.Contains("square", StringComparison.OrdinalIgnoreCase), "PHP decompiled C# does not contain the source function.");
     });
 
     await CheckAsync("php IL Verify", async () =>
@@ -618,9 +526,7 @@ if (full)
         Require(ResultType(result) == "run", "PHP filesystem Run returned the wrong result type.");
         Require(result.GetProperty("Status").GetString() == "completed", "PHP filesystem Run did not complete.");
         Require(result.GetProperty("ExitCode").GetInt32() == 0, "PHP filesystem Run returned a non-zero exit code.");
-        Require(
-            DecodeOutput(execution.Events, "stdout").Contains(filesystem.ExpectedOutput, StringComparison.Ordinal),
-            "PHP filesystem Run did not load the Mono.Unix native dependency.");
+        Require(DecodeOutput(execution.Events, "stdout").Contains(filesystem.ExpectedOutput, StringComparison.Ordinal), "PHP filesystem Run did not load the Mono.Unix native dependency.");
     });
 
     await CheckAsync("cppcli compile identity", async () =>
@@ -656,27 +562,16 @@ if (full)
 
     await CheckAsync("cppcli Wine Run", async () =>
     {
-        var execution = await ExecutePipelineDetailedAsync(
-            cppCli,
-            "run",
-            "wine-netfx48-linux-x64");
+        var execution = await ExecutePipelineDetailedAsync(cppCli, "run", "wine-netfx48-linux-x64");
         var result = execution.Result;
         Require(ResultType(result) == "run", "C++/CLI Wine Run returned the wrong result type.");
         Require(result.GetProperty("Status").GetString() == "completed", "C++/CLI Wine Run did not complete.");
         Require(result.GetProperty("ExitCode").GetInt32() == 0, "C++/CLI Wine Run returned a non-zero exit code.");
-        Require(
-            DecodeOutput(execution.Events, "stdout").Contains(cppCli.ExpectedOutput, StringComparison.Ordinal),
-            "C++/CLI Wine Run stdout is incorrect.");
-        Require(
-            DecodeOutput(execution.Events, "stderr").Contains("compose-cppcli-stderr", StringComparison.Ordinal),
-            "C++/CLI Wine Run stderr is incorrect.");
+        Require(DecodeOutput(execution.Events, "stdout").Contains(cppCli.ExpectedOutput, StringComparison.Ordinal), "C++/CLI Wine Run stdout is incorrect.");
+        Require(DecodeOutput(execution.Events, "stderr").Contains("compose-cppcli-stderr", StringComparison.Ordinal), "C++/CLI Wine Run stderr is incorrect.");
         var runtimeIdentity = result.GetProperty("Identity");
-        Require(
-            runtimeIdentity.GetProperty("RuntimeVersion").GetString() == "4.8",
-            "C++/CLI Run did not use the Wine/.NET Framework runtime.");
-        Require(
-            runtimeIdentity.GetProperty("RuntimeCommit").GetString() == "not-applicable",
-            "C++/CLI Wine Run reported a CoreCLR runtime commit.");
+        Require(runtimeIdentity.GetProperty("RuntimeVersion").GetString() == "4.8", "C++/CLI Run did not use the Wine/.NET Framework runtime.");
+        Require(runtimeIdentity.GetProperty("RuntimeCommit").GetString() == "not-applicable", "C++/CLI Wine Run reported a CoreCLR runtime commit.");
     });
 
     foreach (var unsupported in new[]
@@ -690,18 +585,11 @@ if (full)
         await CheckAsync($"cppcli rejects {unsupported.OutputId}", async () =>
         {
             using var response = await PostResolutionAsync(cppCli, unsupported.OutputId, unsupported.RuntimeId);
-            Require(
-                response.StatusCode == System.Net.HttpStatusCode.BadRequest,
-                $"C++/CLI unexpectedly resolved unsupported output '{unsupported.OutputId}'.");
-            using var document = JsonDocument.Parse(
-                await response.Content.ReadAsByteArrayAsync(overallTimeout.Token));
+            Require(response.StatusCode == System.Net.HttpStatusCode.BadRequest, $"C++/CLI unexpectedly resolved unsupported output '{unsupported.OutputId}'.");
+            using var document = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(overallTimeout.Token));
             var error = document.RootElement;
-            Require(
-                error.GetProperty("Error").GetString() == "unsupported-capability",
-                $"C++/CLI '{unsupported.OutputId}' failed for the wrong reason.");
-            Require(
-                error.GetProperty("Field").GetString() == unsupported.Field,
-                $"C++/CLI '{unsupported.OutputId}' rejected the wrong selection field.");
+            Require(error.GetProperty("Error").GetString() == "unsupported-capability", $"C++/CLI '{unsupported.OutputId}' failed for the wrong reason.");
+            Require(error.GetProperty("Field").GetString() == unsupported.Field, $"C++/CLI '{unsupported.OutputId}' rejected the wrong selection field.");
         });
     }
 
@@ -738,27 +626,16 @@ if (full)
 
     await CheckAsync("jsharp x64 Wine Run", async () =>
     {
-        var execution = await ExecutePipelineDetailedAsync(
-            jsharp,
-            "run",
-            "wine-jsharp20-linux-x64");
+        var execution = await ExecutePipelineDetailedAsync(jsharp, "run", "wine-jsharp20-linux-x64");
         var result = execution.Result;
         Require(ResultType(result) == "run", "J# Wine Run returned the wrong result type.");
         Require(result.GetProperty("Status").GetString() == "completed", "J# Wine Run did not complete.");
         Require(result.GetProperty("ExitCode").GetInt32() == 0, "J# Wine Run returned a non-zero exit code.");
-        Require(
-            DecodeOutput(execution.Events, "stdout").Contains(jsharp.ExpectedOutput, StringComparison.Ordinal),
-            "J# Wine Run stdout is incorrect.");
-        Require(
-            DecodeOutput(execution.Events, "stderr").Contains("compose-jsharp-stderr", StringComparison.Ordinal),
-            "J# Wine Run stderr is incorrect.");
+        Require(DecodeOutput(execution.Events, "stdout").Contains(jsharp.ExpectedOutput, StringComparison.Ordinal), "J# Wine Run stdout is incorrect.");
+        Require(DecodeOutput(execution.Events, "stderr").Contains("compose-jsharp-stderr", StringComparison.Ordinal), "J# Wine Run stderr is incorrect.");
         var runtimeIdentity = result.GetProperty("Identity");
-        Require(
-            runtimeIdentity.GetProperty("RuntimeVersion").GetString() == "wine-9.0+clr2+jsharp-2.0.50727.937",
-            "J# Run did not use the dedicated x64 CLR2/J# runtime.");
-        Require(
-            runtimeIdentity.GetProperty("RuntimeCommit").GetString() == "not-applicable",
-            "J# Wine Run reported a CoreCLR runtime commit.");
+        Require(runtimeIdentity.GetProperty("RuntimeVersion").GetString() == "wine-9.0+clr2+jsharp-2.0.50727.937", "J# Run did not use the dedicated x64 CLR2/J# runtime.");
+        Require(runtimeIdentity.GetProperty("RuntimeCommit").GetString() == "not-applicable", "J# Wine Run reported a CoreCLR runtime commit.");
     });
 
     foreach (var unsupported in new[]
@@ -775,18 +652,11 @@ if (full)
         await CheckAsync($"jsharp rejects {unsupported.OutputId} via {unsupported.RuntimeId ?? "no runtime"}", async () =>
         {
             using var response = await PostResolutionAsync(jsharp, unsupported.OutputId, unsupported.RuntimeId);
-            Require(
-                response.StatusCode == System.Net.HttpStatusCode.BadRequest,
-                $"J# unexpectedly resolved unsupported selection '{unsupported.OutputId}/{unsupported.RuntimeId}'.");
-            using var document = JsonDocument.Parse(
-                await response.Content.ReadAsByteArrayAsync(overallTimeout.Token));
+            Require(response.StatusCode == System.Net.HttpStatusCode.BadRequest, $"J# unexpectedly resolved unsupported selection '{unsupported.OutputId}/{unsupported.RuntimeId}'.");
+            using var document = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(overallTimeout.Token));
             var error = document.RootElement;
-            Require(
-                error.GetProperty("Error").GetString() == "unsupported-capability",
-                $"J# '{unsupported.OutputId}' failed for the wrong reason.");
-            Require(
-                error.GetProperty("Field").GetString() == unsupported.Field,
-                $"J# '{unsupported.OutputId}' rejected the wrong selection field.");
+            Require(error.GetProperty("Error").GetString() == "unsupported-capability", $"J# '{unsupported.OutputId}' failed for the wrong reason.");
+            Require(error.GetProperty("Field").GetString() == unsupported.Field, $"J# '{unsupported.OutputId}' rejected the wrong selection field.");
         });
     }
 
@@ -797,13 +667,8 @@ if (full)
     {
         await CheckAsync($"C# net48 rejects {unsupported}", async () =>
         {
-            using var response = await PostResolutionAsync(
-                netFxCSharp,
-                unsupported,
-                unsupported is "jit-asm" or "execution-flow" ? "wine-netfx48-linux-x64" : null);
-            Require(
-                response.StatusCode == System.Net.HttpStatusCode.BadRequest,
-                $"C# net48 unexpectedly resolved unsupported output '{unsupported}'.");
+            using var response = await PostResolutionAsync(netFxCSharp, unsupported, unsupported is "jit-asm" or "execution-flow" ? "wine-netfx48-linux-x64" : null);
+            Require(response.StatusCode == System.Net.HttpStatusCode.BadRequest, $"C# net48 unexpectedly resolved unsupported output '{unsupported}'.");
         });
     }
 
@@ -812,12 +677,8 @@ if (full)
         var result = await ExecutePipelineAsync(roslynMainCSharp, "compile-check", null);
         Require(ResultType(result) == "compile-check", "Roslyn main Compile Check returned the wrong result type.");
         Require(result.GetProperty("CompilationSucceeded").GetBoolean(), "Roslyn main C# did not compile.");
-        Require(
-            result.GetProperty("Identity").GetProperty("ToolchainId").GetString() == "roslyn-main",
-            "Compile Check did not use Roslyn main.");
-        Require(
-            result.GetProperty("Identity").GetProperty("ReferenceSetId").GetString() == "net11-preview-ref",
-            "Roslyn main did not use the .NET 11 reference set.");
+        Require(result.GetProperty("Identity").GetProperty("ToolchainId").GetString() == "roslyn-main", "Compile Check did not use Roslyn main.");
+        Require(result.GetProperty("Identity").GetProperty("ReferenceSetId").GetString() == "net11-preview-ref", "Roslyn main did not use the .NET 11 reference set.");
     });
 
     await CheckAsync("roslyn-main VB compile", async () =>
@@ -829,27 +690,17 @@ if (full)
 
     await CheckAsync("roslyn-main C# Run dotnet-11-preview-linux-x64", async () =>
     {
-        var execution = await ExecutePipelineDetailedAsync(
-            roslynMainCSharp,
-            "run",
-            "dotnet-11-preview-linux-x64");
+        var execution = await ExecutePipelineDetailedAsync(roslynMainCSharp, "run", "dotnet-11-preview-linux-x64");
         Require(ResultType(execution.Result) == "run", "Roslyn main Run returned the wrong result type.");
         Require(execution.Result.GetProperty("Status").GetString() == "completed", "Roslyn main Run did not complete.");
-        Require(
-            DecodeOutput(execution.Events, "stdout").Contains("compose-csharp", StringComparison.Ordinal),
-            "Roslyn main Run stdout is incorrect.");
+        Require(DecodeOutput(execution.Events, "stdout").Contains("compose-csharp", StringComparison.Ordinal), "Roslyn main Run stdout is incorrect.");
     });
 
     await CheckAsync("roslyn-main C# JIT dotnet-11-preview-linux-x64", async () =>
     {
-        var execution = await ExecutePipelineDetailedAsync(
-            roslynMainCSharp,
-            "jit-asm",
-            "dotnet-11-preview-linux-x64");
+        var execution = await ExecutePipelineDetailedAsync(roslynMainCSharp, "jit-asm", "dotnet-11-preview-linux-x64");
         Require(ResultType(execution.Result) == "jit", "Roslyn main JIT returned the wrong result type.");
-        Require(
-            execution.Result.GetProperty("Methods").GetArrayLength() > 0,
-            $"Roslyn main JIT returned no methods: {execution.Result.GetRawText()}");
+        Require(execution.Result.GetProperty("Methods").GetArrayLength() > 0, $"Roslyn main JIT returned no methods: {execution.Result.GetRawText()}");
         Require((await ReadResultContentAsync(execution)).Length > 40, "Roslyn main JIT output is empty.");
     });
 
@@ -867,8 +718,7 @@ if (full)
 
         public static class Program
         {
-            public static void Main() =>
-                Console.WriteLine(FixedValue<42>.GetValue());
+            public static void Main() => Console.WriteLine(FixedValue<42>.GetValue());
         }
         """,
         "42",
@@ -883,9 +733,7 @@ if (full)
         Require(result.GetProperty("CompilationSucceeded").GetBoolean(), "ConstGenerics source did not compile.");
         var identity = result.GetProperty("Identity");
         Require(identity.GetProperty("ToolchainId").GetString() == "roslyn-const-generics", "Compile Check used the wrong compiler.");
-        Require(
-            identity.GetProperty("CompilerCommit").GetString() == lockedConstGenericsCompiler.Commit,
-            "Compile Check used the wrong ConstGenerics Roslyn commit.");
+        Require(identity.GetProperty("CompilerCommit").GetString() == lockedConstGenericsCompiler.Commit, "Compile Check used the wrong ConstGenerics Roslyn commit.");
         Require(identity.GetProperty("ReferenceSetId").GetString() == "const-generics-ref", "Compile Check used the wrong reference set.");
     });
 
@@ -893,9 +741,7 @@ if (full)
     {
         var result = await ExecutePipelineAsync(constGenerics, "ast", null);
         Require(ResultType(result) == "ast", "ConstGenerics AST returned the wrong result type.");
-        Require(
-            result.GetRawText().Contains("LiteralTypeArgument", StringComparison.Ordinal),
-            "ConstGenerics AST did not expose LiteralTypeArgument.");
+        Require(result.GetRawText().Contains("LiteralTypeArgument", StringComparison.Ordinal), "ConstGenerics AST did not expose LiteralTypeArgument.");
     });
 
     await CheckAsync("const-generics IL", async () =>
@@ -926,26 +772,17 @@ if (full)
 
     await CheckAsync("const-generics Run", async () =>
     {
-        var execution = await ExecutePipelineDetailedAsync(
-            constGenerics,
-            "run",
-            "const-generics-linux-x64");
+        var execution = await ExecutePipelineDetailedAsync(constGenerics, "run", "const-generics-linux-x64");
         Require(ResultType(execution.Result) == "run", "ConstGenerics Run returned the wrong result type.");
         Require(execution.Result.GetProperty("Status").GetString() == "completed", "ConstGenerics Run did not complete.");
         Require(execution.Result.GetProperty("ExitCode").GetInt32() == 0, "ConstGenerics Run returned a non-zero exit code.");
         Require(DecodeOutput(execution.Events, "stdout").Trim() == "42", "ConstGenerics Run stdout is incorrect.");
-        Require(
-            execution.Result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString() ==
-                lockedConstGenericsRuntime.ResolvedVersion,
-            "ConstGenerics Run used the wrong runtime.");
+        Require(execution.Result.GetProperty("Identity").GetProperty("RuntimeVersion").GetString() == lockedConstGenericsRuntime.ResolvedVersion, "ConstGenerics Run used the wrong runtime.");
     });
 
     await CheckAsync("const-generics JIT", async () =>
     {
-        var execution = await ExecutePipelineDetailedAsync(
-            constGenerics,
-            "jit-asm",
-            "const-generics-linux-x64");
+        var execution = await ExecutePipelineDetailedAsync(constGenerics, "jit-asm", "const-generics-linux-x64");
         Require(ResultType(execution.Result) == "jit", "ConstGenerics JIT returned the wrong result type.");
         Require(execution.Result.GetProperty("Status").GetString() == "completed", "ConstGenerics JIT did not complete.");
         Require(execution.Result.GetProperty("Methods").GetArrayLength() > 0, "ConstGenerics JIT returned no methods.");
@@ -954,46 +791,20 @@ if (full)
 
     await CheckAsync("const-generics rejects ordinary runtime", async () =>
     {
-        using var response = await PostResolutionAsync(
-            constGenerics,
-            "run",
-            "dotnet-10-linux-x64");
-        Require(
-            response.StatusCode == System.Net.HttpStatusCode.BadRequest,
-            "ConstGenerics artifact was routed to an ordinary .NET runtime.");
+        using var response = await PostResolutionAsync(constGenerics, "run", "dotnet-10-linux-x64");
+        Require(response.StatusCode == System.Net.HttpStatusCode.BadRequest, "ConstGenerics artifact was routed to an ordinary .NET runtime.");
     });
 
     await CheckAsync("ordinary artifact worker rejects const-generics", async () =>
     {
-        var artifactRef = constGenericsArtifactRef
-            ?? throw new InvalidOperationException("No ConstGenerics artifact is available for the worker boundary test.");
+        var artifactRef = constGenericsArtifactRef ?? throw new InvalidOperationException("No ConstGenerics artifact is available for the worker boundary test.");
         var ordinaryResolution = await ResolveAsync(languages[0], "il", null);
-        var pipelineId = ordinaryResolution.GetProperty("PipelineResolutionId").GetString()
-            ?? throw new InvalidOperationException("Ordinary IL resolution returned no pipeline ID.");
-        var renderStage = ordinaryResolution.GetProperty("PipelinePlan").GetProperty("Stages")
-            .EnumerateArray()
-            .Single(static stage => stage.GetProperty("Kind").GetString() == "render");
+        var pipelineId = ordinaryResolution.GetProperty("PipelineResolutionId").GetString() ?? throw new InvalidOperationException("Ordinary IL resolution returned no pipeline ID.");
+        var renderStage = ordinaryResolution.GetProperty("PipelinePlan").GetProperty("Stages").EnumerateArray().Single(static stage => stage.GetProperty("Kind").GetString() == "render");
         var identity = Identity("boundary-render");
-        var rejection = await StartAndWaitAsync("/api/v1/artifact-renders", new
-        {
-            identity.requestId,
-            identity.idempotencyKey,
-            pipelineResolutionId = pipelineId,
-            artifactRef,
-            processorId = renderStage.GetProperty("ProviderId").GetString(),
-            outputId = renderStage.GetProperty("Id").GetString(),
-            options = new
-            {
-                includeSequencePoints = false,
-                includeCompilerGeneratedMembers = true,
-                maxCharacters = 1_000_000
-            },
-            deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45)
-        });
+        var rejection = await StartAndWaitAsync("/api/v1/artifact-renders", new { identity.requestId, identity.idempotencyKey, pipelineResolutionId = pipelineId, artifactRef, processorId = renderStage.GetProperty("ProviderId").GetString(), outputId = renderStage.GetProperty("Id").GetString(), options = new { includeSequencePoints = false, includeCompilerGeneratedMembers = true, maxCharacters = 1_000_000 }, deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45) });
         Require(ResultType(rejection.Result) == "artifact-render", "Ordinary artifact worker returned the wrong result type.");
-        Require(
-            rejection.Result.GetProperty("Outcome").GetString() == "invalid-artifact",
-            $"Ordinary artifact worker accepted the ConstGenerics artifact: {rejection.Result.GetRawText()}");
+        Require(rejection.Result.GetProperty("Outcome").GetString() == "invalid-artifact", $"Ordinary artifact worker accepted the ConstGenerics artifact: {rejection.Result.GetRawText()}");
     });
 
     await CheckAsync("minilang Generated IL", async () =>
@@ -1018,10 +829,7 @@ if (full)
 
     await CheckAsync("csharp Execution Flow", async () =>
     {
-        var execution = await ExecutePipelineDetailedAsync(
-            languages[0],
-            "execution-flow",
-            "dotnet-10-linux-x64");
+        var execution = await ExecutePipelineDetailedAsync(languages[0], "execution-flow", "dotnet-10-linux-x64");
         Require(ResultType(execution.Result) == "run", "Execution Flow returned the wrong result type.");
         Require(execution.Result.GetProperty("Status").GetString() == "completed", "Execution Flow did not complete.");
         Require(DecodeOutput(execution.Events, "flow").Length > 0, "Execution Flow emitted no structured flow frames.");
@@ -1031,17 +839,12 @@ if (full)
     {
         await CheckAsync($"{language.Id} Execution Flow", async () =>
         {
-            var execution = await ExecutePipelineDetailedAsync(
-                language,
-                "execution-flow",
-                "dotnet-10-linux-x64");
+            var execution = await ExecutePipelineDetailedAsync(language, "execution-flow", "dotnet-10-linux-x64");
             Require(ResultType(execution.Result) == "run", "Execution Flow returned the wrong result type.");
             Require(execution.Result.GetProperty("Status").GetString() == "completed", "Execution Flow did not complete.");
             var flow = DecodeOutput(execution.Events, "flow");
             Require(flow.Length > 0, "Execution Flow emitted no structured flow frames.");
-            Require(
-                flow.Contains(language.FileName, StringComparison.Ordinal),
-                $"Execution Flow did not preserve the {language.FileName} source identity.");
+            Require(flow.Contains(language.FileName, StringComparison.Ordinal), $"Execution Flow did not preserve the {language.FileName} source identity.");
         });
     }
 
@@ -1057,9 +860,7 @@ if (full)
     await CheckAsync("Generated Source hidden without a content provider", async () =>
     {
         using var response = await PostResolutionAsync(languages[0], "generated-source", null);
-        Require(
-            response.StatusCode == System.Net.HttpStatusCode.BadRequest,
-            "Generated Source is selectable even though no worker publishes generated-source documents.");
+        Require(response.StatusCode == System.Net.HttpStatusCode.BadRequest, "Generated Source is selectable even though no worker publishes generated-source documents.");
     });
 
     foreach (var language in languages)
@@ -1104,11 +905,7 @@ if (full)
         var work = Enumerable.Range(0, 4).Select(async index =>
         {
             var marker = $"parallel-run-{index}";
-            var language = languages[0] with
-            {
-                Source = languages[0].Source.Replace("compose-csharp", marker, StringComparison.Ordinal),
-                ExpectedOutput = marker
-            };
+            var language = languages[0] with { Source = languages[0].Source.Replace("compose-csharp", marker, StringComparison.Ordinal), ExpectedOutput = marker };
             var runtime = runtimes[index % runtimes.Length];
             var execution = await ExecutePipelineDetailedAsync(language, "run", runtime.Id);
             Require(ResultType(execution.Result) == "run", "Concurrent Run returned the wrong result type.");
@@ -1175,22 +972,14 @@ if (security)
             "security-probe",
             SupportsAst: true);
         var compileCheck = await ExecutePipelineAsync(securityLanguage, "compile-check", null);
-        Require(
-            ResultType(compileCheck) == "compile-check" &&
-            compileCheck.GetProperty("CompilationSucceeded").GetBoolean(),
-            $"Security probe did not compile: {compileCheck.GetRawText()}");
+        Require(ResultType(compileCheck) == "compile-check" && compileCheck.GetProperty("CompilationSucceeded").GetBoolean(), $"Security probe did not compile: {compileCheck.GetRawText()}");
         RuntimeContainerInspection? inspection = null;
-        var execution = await ExecutePipelineDetailedAsync(
-            securityLanguage,
-            "run",
-            "dotnet-10-linux-x64",
-            async _ => inspection = await InspectRuntimeContainerAsync());
+        var execution = await ExecutePipelineDetailedAsync(securityLanguage, "run", "dotnet-10-linux-x64", async _ => inspection = await InspectRuntimeContainerAsync());
         var result = execution.Result;
         Require(ResultType(result) == "run", "Security probe returned the wrong result type.");
         Require(result.GetProperty("Status").GetString() == "completed", "Security probe did not complete.");
         Require(result.GetProperty("ExitCode").GetInt32() == 0, "Security probe returned a non-zero exit code.");
-        var observed = inspection
-            ?? throw new InvalidOperationException("The one-shot runtime container was not inspected.");
+        var observed = inspection ?? throw new InvalidOperationException("The one-shot runtime container was not inspected.");
         var output = DecodeOutput(execution.Events, "stdout");
         Require(output.Contains("rootfs-blocked", StringComparison.Ordinal), "The runtime root filesystem was writable.");
         Require(output.Contains("workspace-blocked", StringComparison.Ordinal), "The artifact workspace was writable.");
@@ -1221,140 +1010,53 @@ if (security)
             """,
             ExpectedOutput = "stdin-"
         };
-        var baselineContainerIds = (await ReadManagedRuntimeContainersAsync())
-            .Select(static container => container.ContainerId)
-            .ToHashSet(StringComparer.Ordinal);
+        var baselineContainerIds = (await ReadManagedRuntimeContainersAsync()).Select(static container => container.ContainerId).ToHashSet(StringComparer.Ordinal);
         RuntimeSessionDockerInspection? observedSession = null;
         using var socket = new ClientWebSocket();
         try
         {
             await socket.ConnectAsync(OperationCommandWebSocketUri(), overallTimeout.Token);
-            var firstResolution = await ResolveOverOperationWebSocketAsync(
-                socket,
-                reuseLanguage,
-                "run",
-                "dotnet-10-linux-x64",
-                workspaceRevision: 1);
+            var firstResolution = await ResolveOverOperationWebSocketAsync(socket, reuseLanguage, "run", "dotnet-10-linux-x64", workspaceRevision: 1);
             var effective = firstResolution.GetProperty("EffectiveSelection");
-            var referenceSetId = effective.GetProperty("ReferenceSetId").GetString()
-                ?? throw new InvalidOperationException("Reuse probe reference set ID is missing.");
-            var pipelineId = firstResolution.GetProperty("PipelineResolutionId").GetString()
-                ?? throw new InvalidOperationException("Reuse probe pipeline resolution ID is missing.");
-            var buildOptions = new
-            {
-                configuration = "release",
-                optimize = true,
-                outputKind = "console",
-                allowUnsafe = false,
-                emitPortablePdb = true,
-                nullableContext = "project-default",
-                languageVersion = reuseLanguage.LanguageVersion,
-                preprocessorSymbols = Array.Empty<string>(),
-                checkOverflow = false
-            };
-            var workspace = new
-            {
-                schemaVersion = 1,
-                revision = 1,
-                selectionRevision = 1,
-                languageId = reuseLanguage.Id,
-                files = new[] { new { path = reuseLanguage.FileName, version = 1, text = reuseLanguage.Source } },
-                activeFile = reuseLanguage.FileName,
-                sourceOrder = new[] { reuseLanguage.FileName },
-                referenceSetId,
-                buildOptions
-            };
+            var referenceSetId = effective.GetProperty("ReferenceSetId").GetString() ?? throw new InvalidOperationException("Reuse probe reference set ID is missing.");
+            var pipelineId = firstResolution.GetProperty("PipelineResolutionId").GetString() ?? throw new InvalidOperationException("Reuse probe pipeline resolution ID is missing.");
+            var buildOptions = new { configuration = "release", optimize = true, outputKind = "console", allowUnsafe = false, emitPortablePdb = true, nullableContext = "project-default", languageVersion = reuseLanguage.LanguageVersion, preprocessorSymbols = Array.Empty<string>(), checkOverflow = false };
+            var workspace = new { schemaVersion = 1, revision = 1, selectionRevision = 1, languageId = reuseLanguage.Id, files = new[] { new { path = reuseLanguage.FileName, version = 1, text = reuseLanguage.Source } }, activeFile = reuseLanguage.FileName, sourceOrder = new[] { reuseLanguage.FileName }, referenceSetId, buildOptions };
             var buildIdentity = Identity("reuse-build");
             var buildOperationId = await StartOverOperationWebSocketAsync(
                 socket,
                 "build",
-                new
-                {
-                    buildIdentity.requestId,
-                    buildIdentity.idempotencyKey,
-                    pipelineResolutionId = pipelineId,
-                    toolchainId = effective.GetProperty("ToolchainId").GetString(),
-                    referenceSetId,
-                    workspace,
-                    deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45),
-                    options = buildOptions,
-                    target = "artifact"
-                });
+                new { buildIdentity.requestId, buildIdentity.idempotencyKey, pipelineResolutionId = pipelineId, toolchainId = effective.GetProperty("ToolchainId").GetString(), referenceSetId, workspace, deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45), options = buildOptions, target = "artifact" });
             var buildExecution = await WaitForOperationAsync(buildOperationId);
             Require(ResultType(buildExecution.Result) == "build", "Reuse probe build returned the wrong result type.");
             Require(buildExecution.Result.GetProperty("Outcome").GetString() == "succeeded", "Reuse probe build failed.");
-            var artifactRef = buildExecution.Result.GetProperty("ArtifactRef").GetString()
-                ?? throw new InvalidOperationException("Reuse probe build returned no artifact reference.");
+            var artifactRef = buildExecution.Result.GetProperty("ArtifactRef").GetString() ?? throw new InvalidOperationException("Reuse probe build returned no artifact reference.");
 
             var firstRunIdentity = Identity("reuse-run-first");
             var firstRunOperationId = await StartOverOperationWebSocketAsync(
                 socket,
                 "run",
-                new
-                {
-                    firstRunIdentity.requestId,
-                    firstRunIdentity.idempotencyKey,
-                    pipelineResolutionId = pipelineId,
-                    artifactRef,
-                    runtimeProfileId = "dotnet-10-linux-x64",
-                    options = new
-                    {
-                        arguments = Array.Empty<string>(),
-                        stdin = marker,
-                        instrumentation = "none",
-                        securityPolicyId = firstResolution.GetProperty("PipelinePlan").GetProperty("SecurityPolicyId").GetString()
-                    },
-                    deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(60)
-                });
+                new { firstRunIdentity.requestId, firstRunIdentity.idempotencyKey, pipelineResolutionId = pipelineId, artifactRef, runtimeProfileId = "dotnet-10-linux-x64", options = new { arguments = Array.Empty<string>(), stdin = marker, instrumentation = "none", securityPolicyId = firstResolution.GetProperty("PipelinePlan").GetProperty("SecurityPolicyId").GetString() }, deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(60) });
             observedSession = await WaitForActiveRuntimeSessionAsync(baselineContainerIds);
             await RequireRuntimeSessionVolumeIdentityAsync(observedSession);
             var firstExecution = await WaitForOperationAsync(firstRunOperationId);
             Require(ResultType(firstExecution.Result) == "run", "First reused Run returned the wrong result type.");
             Require(firstExecution.Result.GetProperty("Status").GetString() == "completed", "First reused Run did not complete.");
             var firstOutput = DecodeOutput(firstExecution.Events, "stdout");
-            Require(
-                firstOutput.Contains($"stdin-present:{marker}", StringComparison.Ordinal),
-                "The first reused Run did not observe its unique stdin workspace file.");
-            Require(
-                ContainerProgress(firstExecution.Events).Contains(
-                    $"Created isolated container {observedSession.ContainerId}.",
-                    StringComparison.Ordinal),
-                "The first reused Run did not report the observed runtime container.");
+            Require(firstOutput.Contains($"stdin-present:{marker}", StringComparison.Ordinal), "The first reused Run did not observe its unique stdin workspace file.");
+            Require(ContainerProgress(firstExecution.Events).Contains($"Created isolated container {observedSession.ContainerId}.", StringComparison.Ordinal), "The first reused Run did not report the observed runtime container.");
             await WaitForDockerContainerStateAsync(observedSession.ContainerId, "exited");
             await WaitForDockerContainerStateAsync(observedSession.MaterializerContainerId, "exited");
 
-            var secondResolution = await ResolveOverOperationWebSocketAsync(
-                socket,
-                reuseLanguage,
-                "run",
-                "dotnet-10-linux-x64",
-                workspaceRevision: 2);
-            var secondPipelineId = secondResolution.GetProperty("PipelineResolutionId").GetString()
-                ?? throw new InvalidOperationException("Second reuse probe pipeline resolution ID is missing.");
+            var secondResolution = await ResolveOverOperationWebSocketAsync(socket, reuseLanguage, "run", "dotnet-10-linux-x64", workspaceRevision: 2);
+            var secondPipelineId = secondResolution.GetProperty("PipelineResolutionId").GetString() ?? throw new InvalidOperationException("Second reuse probe pipeline resolution ID is missing.");
             Require(secondPipelineId != pipelineId, "Workspace revision did not produce a fresh pipeline resolution.");
             var secondRunIdentity = Identity("reuse-run-second");
             var secondRunOperationId = await StartOverOperationWebSocketAsync(
                 socket,
                 "run",
-                new
-                {
-                    secondRunIdentity.requestId,
-                    secondRunIdentity.idempotencyKey,
-                    pipelineResolutionId = secondPipelineId,
-                    artifactRef,
-                    runtimeProfileId = "dotnet-10-linux-x64",
-                    options = new
-                    {
-                        arguments = Array.Empty<string>(),
-                        stdin = (string?)null,
-                        instrumentation = "none",
-                        securityPolicyId = secondResolution.GetProperty("PipelinePlan").GetProperty("SecurityPolicyId").GetString()
-                    },
-                    deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(60)
-                });
-            var secondObservation = await WaitForActiveRuntimeSessionAsync(
-                baselineContainerIds,
-                observedSession);
+                new { secondRunIdentity.requestId, secondRunIdentity.idempotencyKey, pipelineResolutionId = secondPipelineId, artifactRef, runtimeProfileId = "dotnet-10-linux-x64", options = new { arguments = Array.Empty<string>(), stdin = (string?)null, instrumentation = "none", securityPolicyId = secondResolution.GetProperty("PipelinePlan").GetProperty("SecurityPolicyId").GetString() }, deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(60) });
+            var secondObservation = await WaitForActiveRuntimeSessionAsync(baselineContainerIds, observedSession);
             Require(secondObservation == observedSession, "The compatible Run did not reuse all runtime session resources.");
             var secondExecution = await WaitForOperationAsync(secondRunOperationId);
             Require(ResultType(secondExecution.Result) == "run", "Second reused Run returned the wrong result type.");
@@ -1362,18 +1064,11 @@ if (security)
             var secondOutput = DecodeOutput(secondExecution.Events, "stdout");
             Require(secondOutput.Contains("stdin-absent", StringComparison.Ordinal), "The second reused Run still found stdin.txt.");
             Require(!secondOutput.Contains(marker, StringComparison.Ordinal), "The second reused Run leaked first-run workspace content.");
-            Require(
-                ContainerProgress(secondExecution.Events).Contains(
-                    $"Reused session-isolated container {observedSession.ContainerId}.",
-                    StringComparison.Ordinal),
-                "The second Run did not report reuse of the observed runtime container.");
+            Require(ContainerProgress(secondExecution.Events).Contains($"Reused session-isolated container {observedSession.ContainerId}.", StringComparison.Ordinal), "The second Run did not report reuse of the observed runtime container.");
             await WaitForDockerContainerStateAsync(observedSession.ContainerId, "exited");
             await WaitForDockerContainerStateAsync(observedSession.MaterializerContainerId, "exited");
 
-            await socket.CloseOutputAsync(
-                WebSocketCloseStatus.NormalClosure,
-                "runtime reuse smoke complete",
-                overallTimeout.Token);
+            await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "runtime reuse smoke complete", overallTimeout.Token);
             await WaitForDockerResourceRemovalAsync("container", observedSession.ContainerId, maximumAttempts: 200);
             await WaitForDockerResourceRemovalAsync("container", observedSession.MaterializerContainerId, maximumAttempts: 200);
             await WaitForDockerResourceRemovalAsync("volume", observedSession.WorkspaceVolumeName, maximumAttempts: 200);
@@ -1417,22 +1112,14 @@ async Task CheckAsync(string name, Func<Task> action)
     }
 }
 
-async Task<JsonElement> ExecutePipelineAsync(LanguageCase language, string outputId, string? runtimeId) =>
-    (await ExecutePipelineDetailedAsync(language, outputId, runtimeId)).Result;
+async Task<JsonElement> ExecutePipelineAsync(LanguageCase language, string outputId, string? runtimeId) => (await ExecutePipelineDetailedAsync(language, outputId, runtimeId)).Result;
 
-async Task<PipelineExecution> ExecutePipelineDetailedAsync(
-    LanguageCase language,
-    string outputId,
-    string? runtimeId,
-    Func<string, Task>? onRuntimeOperationStarted = null,
-    string buildOutputKind = "console")
+async Task<PipelineExecution> ExecutePipelineDetailedAsync(LanguageCase language, string outputId, string? runtimeId, Func<string, Task>? onRuntimeOperationStarted = null, string buildOutputKind = "console")
 {
     var resolution = await ResolveAsync(language, outputId, runtimeId);
-    var pipelineId = resolution.GetProperty("PipelineResolutionId").GetString()
-        ?? throw new InvalidOperationException("Pipeline resolution ID is missing.");
+    var pipelineId = resolution.GetProperty("PipelineResolutionId").GetString() ?? throw new InvalidOperationException("Pipeline resolution ID is missing.");
     var effective = resolution.GetProperty("EffectiveSelection");
-    var referenceSetId = effective.GetProperty("ReferenceSetId").GetString()
-        ?? throw new InvalidOperationException("Reference set ID is missing.");
+    var referenceSetId = effective.GetProperty("ReferenceSetId").GetString() ?? throw new InvalidOperationException("Reference set ID is missing.");
     var stages = resolution.GetProperty("PipelinePlan").GetProperty("Stages").EnumerateArray().ToArray();
     Require(stages.Length > 0, "Resolved pipeline has no stages.");
     var buildOptions = new Dictionary<string, object?>
@@ -1450,30 +1137,12 @@ async Task<PipelineExecution> ExecutePipelineDetailedAsync(
         buildOptions["PreprocessorSymbols"] = Array.Empty<string>();
         buildOptions["CheckOverflow"] = false;
     }
-    var workspace = new
-    {
-        schemaVersion = 1,
-        revision = 1,
-        selectionRevision = 1,
-        languageId = language.Id,
-        files = new[] { new { path = language.FileName, version = 1, text = language.Source } },
-        activeFile = language.FileName,
-        sourceOrder = new[] { language.FileName },
-        referenceSetId,
-        buildOptions
-    };
+    var workspace = new { schemaVersion = 1, revision = 1, selectionRevision = 1, languageId = language.Id, files = new[] { new { path = language.FileName, version = 1, text = language.Source } }, activeFile = language.FileName, sourceOrder = new[] { language.FileName }, referenceSetId, buildOptions };
 
     if (stages[0].GetProperty("Kind").GetString() == "explain")
     {
         var explainIdentity = Identity("explain");
-        return await StartAndWaitAsync("/api/v1/explanations", new
-        {
-            explainIdentity.requestId,
-            explainIdentity.idempotencyKey,
-            pipelineResolutionId = pipelineId,
-            workspace,
-            deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45)
-        });
+        return await StartAndWaitAsync("/api/v1/explanations", new { explainIdentity.requestId, explainIdentity.idempotencyKey, pipelineResolutionId = pipelineId, workspace, deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45) });
     }
 
     var buildTarget = outputId switch
@@ -1484,106 +1153,43 @@ async Task<PipelineExecution> ExecutePipelineDetailedAsync(
         _ => "artifact"
     };
     var buildIdentity = Identity("build");
-    var buildExecution = await StartAndWaitAsync("/api/v1/builds", new
-    {
-        buildIdentity.requestId,
-        buildIdentity.idempotencyKey,
-        pipelineResolutionId = pipelineId,
-        toolchainId = effective.GetProperty("ToolchainId").GetString(),
-        referenceSetId,
-        workspace,
-        deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45),
-        options = buildOptions,
-        target = buildTarget
-    });
+    var buildExecution = await StartAndWaitAsync("/api/v1/builds", new { buildIdentity.requestId, buildIdentity.idempotencyKey, pipelineResolutionId = pipelineId, toolchainId = effective.GetProperty("ToolchainId").GetString(), referenceSetId, workspace, deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45), options = buildOptions, target = buildTarget });
     var currentResult = buildExecution.Result;
     if (stages.Length == 1)
         return buildExecution;
 
     Require(ResultType(currentResult) == "build", "Artifact pipeline did not begin with a build result.");
     Require(currentResult.GetProperty("Outcome").GetString() == "succeeded", "Artifact build did not succeed.");
-    var artifactRef = currentResult.GetProperty("ArtifactRef").GetString()
-        ?? throw new InvalidOperationException("Artifact build returned no artifact reference.");
+    var artifactRef = currentResult.GetProperty("ArtifactRef").GetString() ?? throw new InvalidOperationException("Artifact build returned no artifact reference.");
 
     for (var index = 1; index < stages.Length; index++)
     {
         var stage = stages[index];
         var kind = stage.GetProperty("Kind").GetString();
-        var stageId = stage.GetProperty("Id").GetString()
-            ?? throw new InvalidOperationException("Pipeline stage ID is missing.");
-        var providerId = stage.GetProperty("ProviderId").GetString()
-            ?? throw new InvalidOperationException("Pipeline provider ID is missing.");
+        var stageId = stage.GetProperty("Id").GetString() ?? throw new InvalidOperationException("Pipeline stage ID is missing.");
+        var providerId = stage.GetProperty("ProviderId").GetString() ?? throw new InvalidOperationException("Pipeline provider ID is missing.");
         PipelineExecution execution;
         switch (kind)
         {
             case "transform":
             {
                 var identity = Identity("transform");
-                execution = await StartAndWaitAsync("/api/v1/artifact-transforms", new
-                {
-                    identity.requestId,
-                    identity.idempotencyKey,
-                    pipelineResolutionId = pipelineId,
-                    artifactRef,
-                    processorId = providerId,
-                    transformId = stageId,
-                    options = new
-                    {
-                        preservePortablePdb = true,
-                        preserveSequencePoints = true,
-                        rewriterProfileId = stageId == "runtime-instrumentation-v1"
-                            ? "execution-flow-v1"
-                            : null
-                    },
-                    deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45)
-                });
+                execution = await StartAndWaitAsync("/api/v1/artifact-transforms", new { identity.requestId, identity.idempotencyKey, pipelineResolutionId = pipelineId, artifactRef, processorId = providerId, transformId = stageId, options = new { preservePortablePdb = true, preserveSequencePoints = true, rewriterProfileId = stageId == "runtime-instrumentation-v1" ? "execution-flow-v1" : null }, deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45) });
                 Require(ResultType(execution.Result) == "artifact-transform", "Transform returned the wrong result type.");
                 Require(execution.Result.GetProperty("Outcome").GetString() == "succeeded", "Transform did not succeed.");
-                artifactRef = execution.Result.GetProperty("ArtifactRef").GetString()
-                    ?? throw new InvalidOperationException("Transform returned no artifact reference.");
+                artifactRef = execution.Result.GetProperty("ArtifactRef").GetString() ?? throw new InvalidOperationException("Transform returned no artifact reference.");
                 break;
             }
             case "render":
             {
                 var identity = Identity("render");
-                execution = await StartAndWaitAsync("/api/v1/artifact-renders", new
-                {
-                    identity.requestId,
-                    identity.idempotencyKey,
-                    pipelineResolutionId = pipelineId,
-                    artifactRef,
-                    processorId = providerId,
-                    outputId = stageId,
-                    options = new
-                    {
-                        includeSequencePoints = true,
-                        includeCompilerGeneratedMembers = true,
-                        maxCharacters = 1_000_000
-                    },
-                    deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45)
-                });
+                execution = await StartAndWaitAsync("/api/v1/artifact-renders", new { identity.requestId, identity.idempotencyKey, pipelineResolutionId = pipelineId, artifactRef, processorId = providerId, outputId = stageId, options = new { includeSequencePoints = true, includeCompilerGeneratedMembers = true, maxCharacters = 1_000_000 }, deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45) });
                 break;
             }
             case "verify":
             {
                 var identity = Identity("verify");
-                execution = await StartAndWaitAsync("/api/v1/verifications", new
-                {
-                    identity.requestId,
-                    identity.idempotencyKey,
-                    pipelineResolutionId = pipelineId,
-                    artifactRef,
-                    processorId = providerId,
-                    options = new
-                    {
-                        verificationProfileId = providerId == "artifacts-const-generics"
-                            ? "il-verify"
-                            : "default",
-                        includeMetadataTokens = true,
-                        maxFindings = 1_000
-                    },
-                    deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45)
-                });
+                execution = await StartAndWaitAsync("/api/v1/verifications", new { identity.requestId, identity.idempotencyKey, pipelineResolutionId = pipelineId, artifactRef, processorId = providerId, options = new { verificationProfileId = providerId == "artifacts-const-generics" ? "il-verify" : "default", includeMetadataTokens = true, maxFindings = 1_000 }, deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(45) });
                 break;
             }
             case "run":
@@ -1596,13 +1202,7 @@ async Task<PipelineExecution> ExecutePipelineDetailedAsync(
                     pipelineResolutionId = pipelineId,
                     artifactRef,
                     runtimeProfileId = effective.GetProperty("RuntimeId").GetString(),
-                    options = new
-                    {
-                        arguments = Array.Empty<string>(),
-                        stdin = (string?)null,
-                        instrumentation = outputId == "execution-flow" ? "execution-flow" : "none",
-                        securityPolicyId = resolution.GetProperty("PipelinePlan").GetProperty("SecurityPolicyId").GetString()
-                    },
+                    options = new { arguments = Array.Empty<string>(), stdin = (string?)null, instrumentation = outputId == "execution-flow" ? "execution-flow" : "none", securityPolicyId = resolution.GetProperty("PipelinePlan").GetProperty("SecurityPolicyId").GetString() },
                     deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(60)
                 }, onRuntimeOperationStarted);
                 break;
@@ -1610,23 +1210,7 @@ async Task<PipelineExecution> ExecutePipelineDetailedAsync(
             case "jit":
             {
                 var identity = Identity("jit");
-                execution = await StartAndWaitAsync("/api/v1/jit", new
-                {
-                    identity.requestId,
-                    identity.idempotencyKey,
-                    pipelineResolutionId = pipelineId,
-                    artifactRef,
-                    runtimeProfileId = effective.GetProperty("RuntimeId").GetString(),
-                    options = new
-                    {
-                        methodFilter = (string?)null,
-                        tieringPolicyId = "tier0-diffable",
-                        pgoPolicyId = "disabled",
-                        providerId = "coreclr-jitdisasm",
-                        securityPolicyId = resolution.GetProperty("PipelinePlan").GetProperty("SecurityPolicyId").GetString()
-                    },
-                    deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(60)
-                });
+                execution = await StartAndWaitAsync("/api/v1/jit", new { identity.requestId, identity.idempotencyKey, pipelineResolutionId = pipelineId, artifactRef, runtimeProfileId = effective.GetProperty("RuntimeId").GetString(), options = new { methodFilter = (string?)null, tieringPolicyId = "tier0-diffable", pgoPolicyId = "disabled", providerId = "coreclr-jitdisasm", securityPolicyId = resolution.GetProperty("PipelinePlan").GetProperty("SecurityPolicyId").GetString() }, deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(60) });
                 break;
             }
             default:
@@ -1652,10 +1236,8 @@ async Task<JsonElement> ResolveAsync(LanguageCase language, string outputId, str
 async Task CheckGatewayLspAsync(LanguageCase language)
 {
     var resolution = await ResolveAsync(language, "compile-check", null);
-    var pipelineId = resolution.GetProperty("PipelineResolutionId").GetString()
-        ?? throw new InvalidOperationException("Language session resolution returned no pipeline ID.");
-    var referenceSetId = resolution.GetProperty("EffectiveSelection").GetProperty("ReferenceSetId").GetString()
-        ?? throw new InvalidOperationException("Language session resolution returned no reference set ID.");
+    var pipelineId = resolution.GetProperty("PipelineResolutionId").GetString() ?? throw new InvalidOperationException("Language session resolution returned no pipeline ID.");
+    var referenceSetId = resolution.GetProperty("EffectiveSelection").GetProperty("ReferenceSetId").GetString() ?? throw new InvalidOperationException("Language session resolution returned no reference set ID.");
     var workspace = new
     {
         schemaVersion = 1,
@@ -1666,99 +1248,48 @@ async Task CheckGatewayLspAsync(LanguageCase language)
         activeFile = language.FileName,
         sourceOrder = new[] { language.FileName },
         referenceSetId,
-        buildOptions = new
-        {
-            configuration = "release",
-            optimize = true,
-            outputKind = "auto",
-            allowUnsafe = false,
-            emitPortablePdb = true,
-            nullableContext = "project-default",
-            languageVersion = language.LanguageVersion,
-            preprocessorSymbols = Array.Empty<string>(),
-            checkOverflow = false
-        }
+        buildOptions = new { configuration = "release", optimize = true, outputKind = "auto", allowUnsafe = false, emitPortablePdb = true, nullableContext = "project-default", languageVersion = language.LanguageVersion, preprocessorSymbols = Array.Empty<string>(), checkOverflow = false }
     };
-    using var openResponse = await http.PostAsJsonAsync(
-        "/api/v1/language-sessions",
-        new
-        {
-            requestId = $"smoke-lsp-{language.ToolchainId}-{Guid.NewGuid():N}",
-            pipelineResolutionId = pipelineId,
-            languageId = language.Id,
-            toolchainId = language.ToolchainId,
-            referenceSetId,
-            workspace,
-            lspVersion = "3.17"
-        },
-        json,
-        overallTimeout.Token);
+    using var openResponse = await http.PostAsJsonAsync("/api/v1/language-sessions", new { requestId = $"smoke-lsp-{language.ToolchainId}-{Guid.NewGuid():N}", pipelineResolutionId = pipelineId, languageId = language.Id, toolchainId = language.ToolchainId, referenceSetId, workspace, lspVersion = "3.17" }, json, overallTimeout.Token);
     await EnsureSuccessAsync(openResponse, $"Open {language.ToolchainId} language session");
-    using var opened = JsonDocument.Parse(
-        await openResponse.Content.ReadAsByteArrayAsync(overallTimeout.Token));
+    using var opened = JsonDocument.Parse(await openResponse.Content.ReadAsByteArrayAsync(overallTimeout.Token));
     var descriptor = opened.RootElement;
-    var sessionId = descriptor.GetProperty("SessionId").GetString()
-        ?? throw new InvalidOperationException("Gateway language session returned no session ID.");
+    var sessionId = descriptor.GetProperty("SessionId").GetString() ?? throw new InvalidOperationException("Gateway language session returned no session ID.");
 
     try
     {
-        var webSocketUrl = descriptor.GetProperty("WebSocketUrl").GetString()
-            ?? throw new InvalidOperationException("Gateway language session returned no WebSocket URL.");
+        var webSocketUrl = descriptor.GetProperty("WebSocketUrl").GetString() ?? throw new InvalidOperationException("Gateway language session returned no WebSocket URL.");
         var lockedToolchain = ReadLockedComponent(language.ToolchainId);
-        Require(
-            descriptor.GetProperty("ToolchainId").GetString() == language.ToolchainId,
-            "Gateway language session used the wrong G# profile.");
-        Require(
-            descriptor.GetProperty("CompilerBuildIdentity").GetString() ==
-                $"{lockedToolchain.ResolvedVersion}@{lockedToolchain.Commit}",
-            "Gateway language session used the wrong G# compiler identity.");
-        Require(
-            descriptor.GetProperty("LspVersion").GetString() == "3.17",
-            "Gateway negotiated the wrong LSP version.");
+        Require(descriptor.GetProperty("ToolchainId").GetString() == language.ToolchainId, "Gateway language session used the wrong G# profile.");
+        Require(descriptor.GetProperty("CompilerBuildIdentity").GetString() == $"{lockedToolchain.ResolvedVersion}@{lockedToolchain.Commit}", "Gateway language session used the wrong G# compiler identity.");
+        Require(descriptor.GetProperty("LspVersion").GetString() == "3.17", "Gateway negotiated the wrong LSP version.");
 
         using var socket = new ClientWebSocket();
         await socket.ConnectAsync(LanguageSessionWebSocketUri(webSocketUrl), overallTimeout.Token);
-        await SendLspAsync(socket, new
-        {
-            jsonrpc = "2.0",
-            id = 1,
-            method = "initialize",
-            @params = new { processId = (int?)null, rootUri = (string?)null, capabilities = new { } }
-        });
+        await SendLspAsync(socket, new { jsonrpc = "2.0", id = 1, method = "initialize", @params = new { processId = (int?)null, rootUri = (string?)null, capabilities = new { } } });
         using (var initialized = await ReceiveLspResponseAsync(socket, 1))
         {
             Require(!initialized.RootElement.TryGetProperty("error", out _), "G# LSP initialize returned an error.");
             var capabilities = initialized.RootElement.GetProperty("result").GetProperty("capabilities");
-            Require(
-                capabilities.GetProperty("hoverProvider").GetBoolean(),
-                "G# LSP initialize did not advertise hover.");
-            Require(
-                capabilities.GetProperty("semanticTokensProvider").ValueKind == JsonValueKind.Object,
-                "G# LSP initialize did not advertise semantic tokens.");
+            Require(capabilities.GetProperty("hoverProvider").GetBoolean(), "G# LSP initialize did not advertise hover.");
+            Require(capabilities.GetProperty("semanticTokensProvider").ValueKind == JsonValueKind.Object, "G# LSP initialize did not advertise semantic tokens.");
         }
 
         await SendLspAsync(socket, new { jsonrpc = "2.0", id = 2, method = "shutdown", @params = new { } });
         using (var shutdown = await ReceiveLspResponseAsync(socket, 2))
         {
             Require(!shutdown.RootElement.TryGetProperty("error", out _), "G# LSP shutdown returned an error.");
-            Require(
-                shutdown.RootElement.GetProperty("result").ValueKind == JsonValueKind.Null,
-                "G# LSP shutdown returned a non-null result.");
+            Require(shutdown.RootElement.GetProperty("result").ValueKind == JsonValueKind.Null, "G# LSP shutdown returned a non-null result.");
         }
         await SendLspAsync(socket, new { jsonrpc = "2.0", method = "exit", @params = new { } });
         if (socket.State == WebSocketState.Open)
         {
-            await socket.CloseOutputAsync(
-                WebSocketCloseStatus.NormalClosure,
-                "Gateway G# LSP smoke complete.",
-                overallTimeout.Token);
+            await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Gateway G# LSP smoke complete.", overallTimeout.Token);
         }
     }
     finally
     {
-        using var closeResponse = await http.DeleteAsync(
-            $"/api/v1/language-sessions/{Uri.EscapeDataString(sessionId)}",
-            overallTimeout.Token);
+        using var closeResponse = await http.DeleteAsync($"/api/v1/language-sessions/{Uri.EscapeDataString(sessionId)}", overallTimeout.Token);
         await EnsureSuccessAsync(closeResponse, $"Close {language.ToolchainId} language session");
     }
 }
@@ -1799,9 +1330,7 @@ async Task<JsonDocument> ReceiveLspResponseAsync(ClientWebSocket socket, int id)
         }
 
         var message = JsonDocument.Parse(content.ToArray());
-        if (message.RootElement.TryGetProperty("id", out var actualId) &&
-            actualId.ValueKind == JsonValueKind.Number &&
-            actualId.GetInt32() == id)
+        if (message.RootElement.TryGetProperty("id", out var actualId) && actualId.ValueKind == JsonValueKind.Number && actualId.GetInt32() == id)
         {
             return message;
         }
@@ -1811,28 +1340,14 @@ async Task<JsonDocument> ReceiveLspResponseAsync(ClientWebSocket socket, int id)
 }
 
 Task<HttpResponseMessage> PostResolutionAsync(LanguageCase language, string outputId, string? runtimeId) =>
-    http.PostAsJsonAsync("/api/v1/selections/resolve", new
-    {
-        languageId = language.Id,
-        toolchainId = language.ToolchainId,
-        referenceSetId = language.ReferenceSetId,
-        outputId,
-        runtimeId,
-        buildMode = "release",
-        catalogRevision,
-        workspaceRevision = 1
-    }, json, overallTimeout.Token);
+    http.PostAsJsonAsync("/api/v1/selections/resolve", new { languageId = language.Id, toolchainId = language.ToolchainId, referenceSetId = language.ReferenceSetId, outputId, runtimeId, buildMode = "release", catalogRevision, workspaceRevision = 1 }, json, overallTimeout.Token);
 
-async Task<PipelineExecution> StartAndWaitAsync(
-    string path,
-    object request,
-    Func<string, Task>? onStarted = null)
+async Task<PipelineExecution> StartAndWaitAsync(string path, object request, Func<string, Task>? onStarted = null)
 {
     using var start = await http.PostAsJsonAsync(path, request, json, overallTimeout.Token);
     await EnsureSuccessAsync(start, path);
     using var handle = JsonDocument.Parse(await start.Content.ReadAsByteArrayAsync(overallTimeout.Token));
-    var operationId = handle.RootElement.GetProperty("OperationId").GetString()
-        ?? throw new InvalidOperationException($"{path} returned no operation ID.");
+    var operationId = handle.RootElement.GetProperty("OperationId").GetString() ?? throw new InvalidOperationException($"{path} returned no operation ID.");
     if (onStarted is not null)
         await onStarted(operationId);
 
@@ -1858,30 +1373,20 @@ async Task<PipelineExecution> WaitForOperationAsync(string operationId)
     if (terminalStatus != "completed")
     {
         var error = state.TryGetProperty("Error", out var errorElement) && errorElement.ValueKind == JsonValueKind.Object
-            ? errorElement.GetProperty("PublicMessage").GetString()
-            : null;
+            ? errorElement.GetProperty("PublicMessage").GetString() : null;
         throw new InvalidOperationException($"Operation {operationId} ended as {terminalStatus}: {error}");
     }
 
-    using var eventResponse = await http.GetAsync(
-        $"/api/v1/operations/{operationId}/events?FromSequence=0",
-        overallTimeout.Token);
+    using var eventResponse = await http.GetAsync($"/api/v1/operations/{operationId}/events?FromSequence=0", overallTimeout.Token);
     await EnsureSuccessAsync(eventResponse, $"Events for {operationId}");
     var eventText = await eventResponse.Content.ReadAsStringAsync(overallTimeout.Token);
-    var events = eventText.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-        .Where(static line => line.StartsWith("data: ", StringComparison.Ordinal))
-        .Select(static line =>
+    var events = eventText.Split('\n', StringSplitOptions.RemoveEmptyEntries).Where(static line => line.StartsWith("data: ", StringComparison.Ordinal)).Select(static line =>
         {
             using var document = JsonDocument.Parse(line["data: ".Length..]);
             return document.RootElement.Clone();
-        })
-        .ToArray();
+        }).ToArray();
     Require(events.Length > 0, $"Operation {operationId} returned no events.");
-    var typedResults = events
-        .Where(static operationEvent =>
-            operationEvent.GetProperty("Payload").GetProperty("Kind").GetString() == "typed-result")
-        .Select(static operationEvent => operationEvent.GetProperty("Payload").GetProperty("Result"))
-        .ToArray();
+    var typedResults = events.Where(static operationEvent => operationEvent.GetProperty("Payload").GetProperty("Kind").GetString() == "typed-result").Select(static operationEvent => operationEvent.GetProperty("Payload").GetProperty("Result")).ToArray();
     Require(typedResults.Length == 1, $"Operation {operationId} returned {typedResults.Length} typed results.");
     return new PipelineExecution(operationId, typedResults[0].Clone(), events);
 }
@@ -1895,15 +1400,11 @@ async Task<string> ReadResultContentAsync(PipelineExecution execution)
         "jit" => "RawTextRef",
         _ => string.Empty
     };
-    if (contentProperty.Length == 0 ||
-        !result.TryGetProperty(contentProperty, out var contentRefElement) ||
-        contentRefElement.ValueKind != JsonValueKind.String)
+    if (contentProperty.Length == 0 || !result.TryGetProperty(contentProperty, out var contentRefElement) || contentRefElement.ValueKind != JsonValueKind.String)
     {
-        throw new InvalidOperationException(
-            $"Result contains no readable content reference: {result.GetRawText()}");
+        throw new InvalidOperationException($"Result contains no readable content reference: {result.GetRawText()}");
     }
-    var contentRef = contentRefElement.GetString()
-        ?? throw new InvalidOperationException("Content reference is null.");
+    var contentRef = contentRefElement.GetString() ?? throw new InvalidOperationException("Content reference is null.");
 
     Require(
         execution.Events.Any(operationEvent =>
@@ -1915,11 +1416,8 @@ async Task<string> ReadResultContentAsync(PipelineExecution execution)
         $"Operation returned {contentRef} without a matching content-produced event.");
 
     var digest = contentRef.StartsWith("sha256:", StringComparison.Ordinal)
-        ? contentRef["sha256:".Length..]
-        : throw new InvalidOperationException("Content reference has the wrong format.");
-    using var response = await http.GetAsync(
-        $"/api/v1/operations/{execution.OperationId}/contents/sha256/{digest}",
-        overallTimeout.Token);
+        ? contentRef["sha256:".Length..] : throw new InvalidOperationException("Content reference has the wrong format.");
+    using var response = await http.GetAsync($"/api/v1/operations/{execution.OperationId}/contents/sha256/{digest}", overallTimeout.Token);
     await EnsureSuccessAsync(response, $"Content {contentRef}");
     return await response.Content.ReadAsStringAsync(overallTimeout.Token);
 }
@@ -1941,13 +1439,7 @@ string DecodeOutput(IReadOnlyList<JsonElement> events, string channel)
     return builder.ToString();
 }
 
-string ContainerProgress(IReadOnlyList<JsonElement> events) => events
-    .Select(static operationEvent => operationEvent.GetProperty("Payload"))
-    .Where(static payload =>
-        payload.GetProperty("Kind").GetString() == "progress" &&
-        payload.GetProperty("Stage").GetString() == "container")
-    .Select(static payload => payload.GetProperty("Message").GetString())
-    .LastOrDefault(static message => message is not null) ?? string.Empty;
+string ContainerProgress(IReadOnlyList<JsonElement> events) => events.Select(static operationEvent => operationEvent.GetProperty("Payload")).Where(static payload => payload.GetProperty("Kind").GetString() == "progress" && payload.GetProperty("Stage").GetString() == "container").Select(static payload => payload.GetProperty("Message").GetString()).LastOrDefault(static message => message is not null) ?? string.Empty;
 
 Uri OperationCommandWebSocketUri()
 {
@@ -1961,62 +1453,20 @@ Uri OperationCommandWebSocketUri()
     return builder.Uri;
 }
 
-async Task<JsonElement> ResolveOverOperationWebSocketAsync(
-    ClientWebSocket socket,
-    LanguageCase language,
-    string outputId,
-    string runtimeId,
-    int workspaceRevision)
+async Task<JsonElement> ResolveOverOperationWebSocketAsync(ClientWebSocket socket, LanguageCase language, string outputId, string runtimeId, int workspaceRevision)
 {
     var commandId = $"cmd_resolve_{Guid.NewGuid():N}";
-    return await SendOperationCommandAsync(
-        socket,
-        commandId,
-        expectedStatus: 200,
-        new
-        {
-            type = "resolve-selection",
-            commandId,
-            request = new
-            {
-                languageId = language.Id,
-                toolchainId = language.ToolchainId,
-                referenceSetId = language.ReferenceSetId,
-                outputId,
-                runtimeId,
-                buildMode = "release",
-                catalogRevision,
-                workspaceRevision
-            }
-        });
+    return await SendOperationCommandAsync(socket, commandId, expectedStatus: 200, new { type = "resolve-selection", commandId, request = new { languageId = language.Id, toolchainId = language.ToolchainId, referenceSetId = language.ReferenceSetId, outputId, runtimeId, buildMode = "release", catalogRevision, workspaceRevision } });
 }
 
-async Task<string> StartOverOperationWebSocketAsync(
-    ClientWebSocket socket,
-    string operation,
-    object request)
+async Task<string> StartOverOperationWebSocketAsync(ClientWebSocket socket, string operation, object request)
 {
     var commandId = $"cmd_start_{Guid.NewGuid():N}";
-    var payload = await SendOperationCommandAsync(
-        socket,
-        commandId,
-        expectedStatus: 202,
-        new
-        {
-            type = "start",
-            commandId,
-            operation,
-            request
-        });
-    return payload.GetProperty("OperationId").GetString()
-        ?? throw new InvalidOperationException($"WebSocket {operation} command returned no operation ID.");
+    var payload = await SendOperationCommandAsync(socket, commandId, expectedStatus: 202, new { type = "start", commandId, operation, request });
+    return payload.GetProperty("OperationId").GetString() ?? throw new InvalidOperationException($"WebSocket {operation} command returned no operation ID.");
 }
 
-async Task<JsonElement> SendOperationCommandAsync(
-    ClientWebSocket socket,
-    string commandId,
-    int expectedStatus,
-    object command)
+async Task<JsonElement> SendOperationCommandAsync(ClientWebSocket socket, string commandId, int expectedStatus, object command)
 {
     var bytes = JsonSerializer.SerializeToUtf8Bytes(command, json);
     await socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, overallTimeout.Token);
@@ -2024,9 +1474,7 @@ async Task<JsonElement> SendOperationCommandAsync(
     var root = response.RootElement;
     Require(root.GetProperty("Type").GetString() == "response", "Operation WebSocket returned a non-response message.");
     Require(root.GetProperty("CommandId").GetString() == commandId, "Operation WebSocket response crossed commands.");
-    Require(
-        root.GetProperty("Ok").GetBoolean(),
-        $"Operation WebSocket command failed: {(root.TryGetProperty("Error", out var error) ? error.GetRawText() : root.GetRawText())}");
+    Require(root.GetProperty("Ok").GetBoolean(), $"Operation WebSocket command failed: {(root.TryGetProperty("Error", out var error) ? error.GetRawText() : root.GetRawText())}");
     Require(root.GetProperty("Status").GetInt32() == expectedStatus, "Operation WebSocket returned the wrong status.");
     return root.GetProperty("Payload").Clone();
 }
@@ -2070,14 +1518,9 @@ async Task<RuntimeContainerInspection> InspectRuntimeContainerAsync()
 {
     for (var attempt = 0; attempt < 150; attempt++)
     {
-        var list = await RunDockerCommandAsync(
-            "ps",
-            "--filter", "label=com.sharplabnext.runtime-job=true",
-            "--format", "{{.ID}}");
+        var list = await RunDockerCommandAsync("ps", "--filter", "label=com.sharplabnext.runtime-job=true", "--format", "{{.ID}}");
         Require(list.ExitCode == 0, $"Docker container listing failed: {list.StandardError}");
-        foreach (var containerId in list.StandardOutput.Split(
-                     ['\r', '\n'],
-                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (var containerId in list.StandardOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var inspect = await RunDockerCommandAsync("inspect", containerId);
             if (inspect.ExitCode != 0)
@@ -2109,45 +1552,26 @@ async Task<RuntimeContainerInspection> InspectRuntimeContainerAsync()
             Require(logOptions.GetProperty("max-size").GetString() == "4m", "Runtime container log size limit was incorrect.");
             Require(logOptions.GetProperty("max-file").GetString() == "1", "Runtime container log file count was incorrect.");
             Require(logOptions.GetProperty("compress").GetString() == "false", "Runtime container log compression was not disabled.");
-            Require(
-                host.GetProperty("CapDrop").EnumerateArray().Any(static item => item.GetString() == "ALL"),
-                "Runtime container did not drop all Linux capabilities.");
-            Require(
-                host.GetProperty("SecurityOpt").EnumerateArray().Any(static item =>
-                    item.GetString()?.StartsWith("no-new-privileges", StringComparison.Ordinal) == true),
-                "Runtime container did not enable no-new-privileges.");
+            Require(host.GetProperty("CapDrop").EnumerateArray().Any(static item => item.GetString() == "ALL"), "Runtime container did not drop all Linux capabilities.");
+            Require(host.GetProperty("SecurityOpt").EnumerateArray().Any(static item => item.GetString()?.StartsWith("no-new-privileges", StringComparison.Ordinal) == true), "Runtime container did not enable no-new-privileges.");
             Require(
                 host.GetProperty("SecurityOpt").EnumerateArray().Any(static item =>
                     item.GetString() is { } option && HasDenyByDefaultSeccomp(option)),
                 "Runtime container did not use the deny-by-default seccomp profile.");
             var ulimits = host.GetProperty("Ulimits").EnumerateArray().ToArray();
-            Require(
-                ulimits.Any(static limit =>
-                    limit.GetProperty("Name").GetString() == "nofile" &&
-                    limit.GetProperty("Soft").GetInt64() == 256 &&
-                    limit.GetProperty("Hard").GetInt64() == 256),
-                "Runtime container did not apply the open-file limit.");
-            Require(
-                ulimits.Any(static limit =>
-                    limit.GetProperty("Name").GetString() == "core" &&
-                    limit.GetProperty("Soft").GetInt64() == 0 &&
-                    limit.GetProperty("Hard").GetInt64() == 0),
-                "Runtime container did not disable core dumps.");
+            Require(ulimits.Any(static limit => limit.GetProperty("Name").GetString() == "nofile" && limit.GetProperty("Soft").GetInt64() == 256 && limit.GetProperty("Hard").GetInt64() == 256), "Runtime container did not apply the open-file limit.");
+            Require(ulimits.Any(static limit => limit.GetProperty("Name").GetString() == "core" && limit.GetProperty("Soft").GetInt64() == 0 && limit.GetProperty("Hard").GetInt64() == 0), "Runtime container did not disable core dumps.");
             var tmpfs = host.GetProperty("Tmpfs").GetProperty("/tmp").GetString() ?? string.Empty;
             foreach (var option in new[] { "noexec", "nosuid", "nodev", "size=33554432" })
                 Require(tmpfs.Contains(option, StringComparison.Ordinal), $"Runtime tmpfs omitted '{option}'.");
 
             var mounts = root.GetProperty("Mounts").EnumerateArray().ToArray();
-            Require(
-                mounts.All(static mount => mount.GetProperty("Destination").GetString() != "/var/run/docker.sock"),
-                "Runtime container received the Docker socket.");
-            var workspace = mounts.SingleOrDefault(static mount =>
-                mount.GetProperty("Destination").GetString() == "/workspace");
+            Require(mounts.All(static mount => mount.GetProperty("Destination").GetString() != "/var/run/docker.sock"), "Runtime container received the Docker socket.");
+            var workspace = mounts.SingleOrDefault(static mount => mount.GetProperty("Destination").GetString() == "/workspace");
             Require(workspace.ValueKind == JsonValueKind.Object, "Runtime container had no workspace mount.");
             Require(workspace.GetProperty("Type").GetString() == "volume", "Runtime workspace was not an isolated volume.");
             Require(!workspace.GetProperty("RW").GetBoolean(), "Runtime workspace mount was writable.");
-            var volumeName = workspace.GetProperty("Name").GetString()
-                ?? throw new InvalidOperationException("Runtime workspace volume had no name.");
+            var volumeName = workspace.GetProperty("Name").GetString() ?? throw new InvalidOperationException("Runtime workspace volume had no name.");
 
             var shell = await RunDockerCommandAsync(
                 "exec",
@@ -2181,15 +1605,9 @@ async Task<RuntimeContainerInspection> InspectRuntimeContainerAsync()
 
 async Task<IReadOnlyList<ManagedRuntimeContainer>> ReadManagedRuntimeContainersAsync()
 {
-    var list = await RunDockerCommandAsync(
-        "ps",
-        "--all",
-        "--filter", "label=com.sharplabnext.runtime-job=true",
-        "--format", "{{.ID}}");
+    var list = await RunDockerCommandAsync("ps", "--all", "--filter", "label=com.sharplabnext.runtime-job=true", "--format", "{{.ID}}");
     Require(list.ExitCode == 0, $"Docker container listing failed: {list.StandardError}");
-    var containerIds = list.StandardOutput.Split(
-        ['\r', '\n'],
-        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    var containerIds = list.StandardOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     if (containerIds.Length == 0)
         return [];
 
@@ -2199,8 +1617,7 @@ async Task<IReadOnlyList<ManagedRuntimeContainer>> ReadManagedRuntimeContainersA
         var inspect = await RunDockerCommandAsync("container", "inspect", containerId);
         if (inspect.ExitCode != 0)
         {
-            if (inspect.StandardError.Contains("no such object", StringComparison.OrdinalIgnoreCase) ||
-                inspect.StandardError.Contains("no such container", StringComparison.OrdinalIgnoreCase))
+            if (inspect.StandardError.Contains("no such object", StringComparison.OrdinalIgnoreCase) || inspect.StandardError.Contains("no such container", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -2212,56 +1629,35 @@ async Task<IReadOnlyList<ManagedRuntimeContainer>> ReadManagedRuntimeContainersA
         var labels = config.GetProperty("Labels");
         if (!labels.TryGetProperty("com.sharplabnext.runtime-job", out _))
             continue;
-        var workspace = root.GetProperty("Mounts").EnumerateArray().FirstOrDefault(static mount =>
-            mount.GetProperty("Destination").GetString() == "/workspace");
+        var workspace = root.GetProperty("Mounts").EnumerateArray().FirstOrDefault(static mount => mount.GetProperty("Destination").GetString() == "/workspace");
         containers.Add(new ManagedRuntimeContainer(
-            root.GetProperty("Id").GetString()
-                ?? throw new InvalidOperationException("Managed runtime container had no ID."),
+            root.GetProperty("Id").GetString() ?? throw new InvalidOperationException("Managed runtime container had no ID."),
             root.GetProperty("Name").GetString() ?? string.Empty,
-            labels.GetProperty("com.sharplabnext.job-id").GetString()
-                ?? throw new InvalidOperationException("Managed runtime container had no job ID."),
+            labels.GetProperty("com.sharplabnext.job-id").GetString() ?? throw new InvalidOperationException("Managed runtime container had no job ID."),
             labels.TryGetProperty("com.sharplabnext.materializer", out var materializer) &&
                 materializer.GetString() == "true",
             root.GetProperty("State").GetProperty("Status").GetString() ?? string.Empty,
             workspace.ValueKind == JsonValueKind.Object
-                ? workspace.GetProperty("Name").GetString()
-                : null));
+                ? workspace.GetProperty("Name").GetString() : null));
     }
     return containers;
 }
 
-async Task<RuntimeSessionDockerInspection> WaitForActiveRuntimeSessionAsync(
-    IReadOnlySet<string> baselineContainerIds,
-    RuntimeSessionDockerInspection? expected = null)
+async Task<RuntimeSessionDockerInspection> WaitForActiveRuntimeSessionAsync(IReadOnlySet<string> baselineContainerIds, RuntimeSessionDockerInspection? expected = null)
 {
     for (var attempt = 0; attempt < 200; attempt++)
     {
         var containers = await ReadManagedRuntimeContainersAsync();
-        var runtimes = containers.Where(container =>
-            !container.Materializer &&
-            container.Name.StartsWith("/sln-session-", StringComparison.Ordinal) &&
-            container.State == "running" &&
-            (expected is not null
-                ? container.ContainerId == expected.ContainerId
-                : !baselineContainerIds.Contains(container.ContainerId)));
+        var runtimes = containers.Where(container => !container.Materializer && container.Name.StartsWith("/sln-session-", StringComparison.Ordinal) && container.State == "running" && (expected is not null ? container.ContainerId == expected.ContainerId : !baselineContainerIds.Contains(container.ContainerId)));
         foreach (var runtime in runtimes)
         {
             if (runtime.WorkspaceVolumeName is null)
                 continue;
-            var materializers = containers.Where(container =>
-                container.Materializer &&
-                container.SessionId == runtime.SessionId &&
-                container.State == "running" &&
-                container.WorkspaceVolumeName == runtime.WorkspaceVolumeName &&
-                (expected is null || container.ContainerId == expected.MaterializerContainerId)).ToArray();
+            var materializers = containers.Where(container => container.Materializer && container.SessionId == runtime.SessionId && container.State == "running" && container.WorkspaceVolumeName == runtime.WorkspaceVolumeName && (expected is null || container.ContainerId == expected.MaterializerContainerId)).ToArray();
             if (materializers.Length != 1)
                 continue;
 
-            var observation = new RuntimeSessionDockerInspection(
-                runtime.SessionId,
-                runtime.ContainerId,
-                materializers[0].ContainerId,
-                runtime.WorkspaceVolumeName);
+            var observation = new RuntimeSessionDockerInspection(runtime.SessionId, runtime.ContainerId, materializers[0].ContainerId, runtime.WorkspaceVolumeName);
             if (expected is null || observation == expected)
                 return observation;
         }
@@ -2269,10 +1665,7 @@ async Task<RuntimeSessionDockerInspection> WaitForActiveRuntimeSessionAsync(
         await Task.Delay(100, overallTimeout.Token);
     }
 
-    throw new InvalidOperationException(
-        expected is null
-            ? "The reusable runtime and its running materializer did not become observable."
-            : "The reusable runtime did not restart with the same materializer and workspace volume.");
+    throw new InvalidOperationException(expected is null ? "The reusable runtime and its running materializer did not become observable." : "The reusable runtime did not restart with the same materializer and workspace volume.");
 }
 
 async Task RequireRuntimeSessionVolumeIdentityAsync(RuntimeSessionDockerInspection session)
@@ -2281,49 +1674,31 @@ async Task RequireRuntimeSessionVolumeIdentityAsync(RuntimeSessionDockerInspecti
     Require(inspect.ExitCode == 0, $"Runtime session volume inspection failed: {inspect.StandardError}");
     using var document = JsonDocument.Parse(inspect.StandardOutput);
     var labels = document.RootElement[0].GetProperty("Labels");
-    Require(
-        labels.GetProperty("com.sharplabnext.runtime-job").GetString() == "workspace",
-        "Runtime session volume did not have the workspace management label.");
-    Require(
-        labels.GetProperty("com.sharplabnext.job-id").GetString() == session.SessionId,
-        "Runtime session volume did not share the container session identity.");
+    Require(labels.GetProperty("com.sharplabnext.runtime-job").GetString() == "workspace", "Runtime session volume did not have the workspace management label.");
+    Require(labels.GetProperty("com.sharplabnext.job-id").GetString() == session.SessionId, "Runtime session volume did not share the container session identity.");
 
-    var materializerInspect = await RunDockerCommandAsync(
-        "container",
-        "inspect",
-        session.MaterializerContainerId);
-    Require(
-        materializerInspect.ExitCode == 0,
-        $"Runtime session materializer inspection failed: {materializerInspect.StandardError}");
+    var materializerInspect = await RunDockerCommandAsync("container", "inspect", session.MaterializerContainerId);
+    Require(materializerInspect.ExitCode == 0, $"Runtime session materializer inspection failed: {materializerInspect.StandardError}");
     using var materializerDocument = JsonDocument.Parse(materializerInspect.StandardOutput);
     var materializer = materializerDocument.RootElement[0];
     var config = materializer.GetProperty("Config");
     var host = materializer.GetProperty("HostConfig");
     Require(config.GetProperty("User").GetString() == "1654:1654", "Materializer did not use the sandbox user.");
     Require(config.GetProperty("NetworkDisabled").GetBoolean(), "Materializer did not disable networking.");
-    Require(
-        config.GetProperty("Entrypoint")[0].GetString() == "/bin/sh" &&
-        config.GetProperty("Cmd")[1].GetString()?.Contains("rm -rf -- /workspace/", StringComparison.Ordinal) == true,
-        "Materializer did not use the fixed workspace-cleanup command.");
+    Require(config.GetProperty("Entrypoint")[0].GetString() == "/bin/sh" && config.GetProperty("Cmd")[1].GetString()?.Contains("rm -rf -- /workspace/", StringComparison.Ordinal) == true, "Materializer did not use the fixed workspace-cleanup command.");
     Require(host.GetProperty("NetworkMode").GetString() == "none", "Materializer did not use NetworkMode=none.");
     Require(host.GetProperty("ReadonlyRootfs").GetBoolean(), "Materializer root filesystem was not read-only.");
     Require(!host.GetProperty("Privileged").GetBoolean(), "Materializer was privileged.");
     Require(host.GetProperty("IpcMode").GetString() == "none", "Materializer did not use private IPC.");
     Require(host.GetProperty("PidsLimit").GetInt64() <= 16, "Materializer PID limit exceeded the helper boundary.");
     Require(host.GetProperty("LogConfig").GetProperty("Type").GetString() == "none", "Materializer logging was enabled.");
-    Require(
-        host.GetProperty("CapDrop").EnumerateArray().Any(static item => item.GetString() == "ALL"),
-        "Materializer did not drop all Linux capabilities.");
-    Require(
-        host.GetProperty("SecurityOpt").EnumerateArray().Any(static item =>
-            item.GetString()?.StartsWith("no-new-privileges", StringComparison.Ordinal) == true),
-        "Materializer did not enable no-new-privileges.");
+    Require(host.GetProperty("CapDrop").EnumerateArray().Any(static item => item.GetString() == "ALL"), "Materializer did not drop all Linux capabilities.");
+    Require(host.GetProperty("SecurityOpt").EnumerateArray().Any(static item => item.GetString()?.StartsWith("no-new-privileges", StringComparison.Ordinal) == true), "Materializer did not enable no-new-privileges.");
     Require(
         host.GetProperty("SecurityOpt").EnumerateArray().Any(static item =>
             item.GetString() is { } option && HasDenyByDefaultSeccomp(option)),
         "Materializer did not use the deny-by-default seccomp profile.");
-    var workspace = materializer.GetProperty("Mounts").EnumerateArray().SingleOrDefault(static mount =>
-        mount.GetProperty("Destination").GetString() == "/workspace");
+    var workspace = materializer.GetProperty("Mounts").EnumerateArray().SingleOrDefault(static mount => mount.GetProperty("Destination").GetString() == "/workspace");
     Require(workspace.ValueKind == JsonValueKind.Object, "Materializer had no workspace mount.");
     Require(workspace.GetProperty("Name").GetString() == session.WorkspaceVolumeName, "Materializer used a different workspace volume.");
     Require(workspace.GetProperty("RW").GetBoolean(), "Materializer workspace mount was not writable.");
@@ -2345,10 +1720,7 @@ async Task WaitForDockerContainerStateAsync(string containerId, string expectedS
     throw new InvalidOperationException($"Docker container '{containerId}' did not become {expectedState}.");
 }
 
-async Task WaitForDockerResourceRemovalAsync(
-    string resourceKind,
-    string resourceId,
-    int maximumAttempts = 100)
+async Task WaitForDockerResourceRemovalAsync(string resourceKind, string resourceId, int maximumAttempts = 100)
 {
     for (var attempt = 0; attempt < maximumAttempts; attempt++)
     {
@@ -2371,8 +1743,7 @@ async Task<DockerCommandResult> RunDockerCommandAsync(params string[] arguments)
     };
     foreach (var argument in arguments)
         startInfo.ArgumentList.Add(argument);
-    using var process = Process.Start(startInfo)
-        ?? throw new InvalidOperationException("Docker CLI could not be started.");
+    using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Docker CLI could not be started.");
     var stdout = process.StandardOutput.ReadToEndAsync(overallTimeout.Token);
     var stderr = process.StandardError.ReadToEndAsync(overallTimeout.Token);
     try
@@ -2388,14 +1759,9 @@ async Task<DockerCommandResult> RunDockerCommandAsync(params string[] arguments)
     return new DockerCommandResult(process.ExitCode, await stdout, await stderr);
 }
 
-string ResultType(JsonElement result) => result.GetProperty("ResultType").GetString()
-    ?? throw new InvalidOperationException("Operation result type is missing.");
+string ResultType(JsonElement result) => result.GetProperty("ResultType").GetString() ?? throw new InvalidOperationException("Operation result type is missing.");
 
-(string requestId, string idempotencyKey) Identity(string kind)
-{
-    var requestId = $"req_{Guid.NewGuid():N}";
-    return (requestId, $"{kind}:{requestId}");
-}
+(string requestId, string idempotencyKey) Identity(string kind) { var requestId = $"req_{Guid.NewGuid():N}"; return (requestId, $"{kind}:{requestId}"); }
 
 static async Task EnsureSuccessAsync(HttpResponseMessage response, string operation)
 {
@@ -2405,11 +1771,7 @@ static async Task EnsureSuccessAsync(HttpResponseMessage response, string operat
     throw new InvalidOperationException($"{operation} failed with {(int)response.StatusCode}: {body}");
 }
 
-static void Require(bool condition, string message)
-{
-    if (!condition)
-        throw new InvalidOperationException(message);
-}
+static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
 
 void RequireIlVerification(JsonElement result, string context)
 {
@@ -2423,9 +1785,7 @@ void RequireIlVerification(JsonElement result, string context)
         result.GetProperty("VerifierVersion").GetString() is { Length: > 0 },
         $"{context} IL Verify returned no verifier version.");
     var findings = result.GetProperty("Findings").EnumerateArray().ToArray();
-    Require(
-        outcome == "valid" ? findings.Length == 0 : findings.Length > 0,
-        $"{context} IL Verify outcome and findings disagree.");
+    Require(outcome == "valid" ? findings.Length == 0 : findings.Length > 0, $"{context} IL Verify outcome and findings disagree.");
     Require(
         findings.All(static finding =>
             finding.GetProperty("Code").GetString() is { Length: > 0 } &&
@@ -2452,9 +1812,7 @@ static LockedComponentIdentity ReadLockedComponent(string componentId)
     if (!document.RootElement.GetProperty("components").TryGetProperty(componentId, out var component))
         throw new InvalidOperationException($"Release lock '{lockPath}' has no component '{componentId}'.");
 
-    return new LockedComponentIdentity(
-        RequiredLockString(component, "resolvedVersion", componentId, lockPath),
-        RequiredLockString(component, "commit", componentId, lockPath));
+    return new LockedComponentIdentity(RequiredLockString(component, "resolvedVersion", componentId, lockPath), RequiredLockString(component, "commit", componentId, lockPath));
 }
 
 static string FindReleaseLockPath()
@@ -2472,25 +1830,14 @@ static string FindReleaseLockPath()
         }
     }
 
-    throw new FileNotFoundException(
-        "Could not find profiles/lock.json or bundle lock.json. Set SHARPLABNEXT_RELEASE_LOCK_PATH explicitly.");
+    throw new FileNotFoundException("Could not find profiles/lock.json or bundle lock.json. Set SHARPLABNEXT_RELEASE_LOCK_PATH explicitly.");
 }
 
 static string RequiredLockString(JsonElement component, string propertyName, string componentId, string lockPath) =>
     component.TryGetProperty(propertyName, out var property) && property.GetString() is { Length: > 0 } value
-        ? value
-        : throw new InvalidOperationException(
-            $"Release lock component '{componentId}' in '{lockPath}' has no '{propertyName}'.");
+        ? value : throw new InvalidOperationException($"Release lock component '{componentId}' in '{lockPath}' has no '{propertyName}'.");
 
-sealed record LanguageCase(
-    string Id,
-    string ToolchainId,
-    string FileName,
-    string Source,
-    string ExpectedOutput,
-    bool SupportsAst,
-    string ReferenceSetId = "net10-ref",
-    string? LanguageVersion = null);
+sealed record LanguageCase(string Id, string ToolchainId, string FileName, string Source, string ExpectedOutput, bool SupportsAst, string ReferenceSetId = "net10-ref", string? LanguageVersion = null);
 
 sealed record RuntimeCase(string Id, string VersionPrefix);
 
@@ -2500,32 +1847,17 @@ sealed class PascalCaseJsonNamingPolicy : JsonNamingPolicy
 
     public override string ConvertName(string name) =>
         name.Length == 0 || !char.IsAsciiLetterLower(name[0])
-            ? name
-            : char.ToUpperInvariant(name[0]) + name[1..];
+            ? name : char.ToUpperInvariant(name[0]) + name[1..];
 }
 
 sealed record LockedComponentIdentity(string ResolvedVersion, string Commit);
 
 sealed record RuntimeContainerInspection(string ContainerId, string WorkspaceVolumeName);
 
-sealed record RuntimeSessionDockerInspection(
-    string SessionId,
-    string ContainerId,
-    string MaterializerContainerId,
-    string WorkspaceVolumeName);
+sealed record RuntimeSessionDockerInspection(string SessionId, string ContainerId, string MaterializerContainerId, string WorkspaceVolumeName);
 
-sealed record ManagedRuntimeContainer(
-    string ContainerId,
-    string Name,
-    string SessionId,
-    bool Materializer,
-    string State,
-    string? WorkspaceVolumeName);
+sealed record ManagedRuntimeContainer(string ContainerId, string Name, string SessionId, bool Materializer, string State, string? WorkspaceVolumeName);
 
 sealed record DockerCommandResult(int ExitCode, string StandardOutput, string StandardError);
 
-sealed record PipelineExecution(
-    string OperationId,
-    JsonElement Result,
-    IReadOnlyList<JsonElement> Events,
-    string? BuildArtifactRef = null);
+sealed record PipelineExecution(string OperationId, JsonElement Result, IReadOnlyList<JsonElement> Events, string? BuildArtifactRef = null);

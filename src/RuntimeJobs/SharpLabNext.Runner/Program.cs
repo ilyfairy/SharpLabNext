@@ -26,45 +26,25 @@ internal static class RunnerProgram
     private static async Task<int> RunParentAsync(string[] args)
     {
         var parsed = RunnerArguments.Parse(args);
-        await using var protocolWriter = new RuntimeFrameWriter(
-            Console.OpenStandardOutput(),
-            RuntimeFrameTransport.Base64Line);
-        using var childFrames = new AnonymousPipeServerStream(
-            PipeDirection.In,
-            HandleInheritability.Inheritable);
+        await using var protocolWriter = new RuntimeFrameWriter(Console.OpenStandardOutput(), RuntimeFrameTransport.Base64Line);
+        using var childFrames = new AnonymousPipeServerStream(PipeDirection.In, HandleInheritability.Inheritable);
         // cgroup v2 may kill only the user child without marking the container OOM-killed.
         var oomKillCountBefore = CgroupMemoryEvents.TryReadOomKillCount();
         using var child = StartChild(parsed, childFrames.GetClientHandleAsString());
         childFrames.DisposeLocalCopyOfClientHandle();
 
         using var outputCancellation = new CancellationTokenSource();
-        var stdout = ForwardTextAsync(
-            child.StandardOutput.BaseStream,
-            protocolWriter,
-            RuntimeFrameKind.Stdout,
-            outputCancellation.Token);
-        var stderr = ForwardTextAsync(
-            child.StandardError.BaseStream,
-            protocolWriter,
-            RuntimeFrameKind.Stderr,
-            outputCancellation.Token);
+        var stdout = ForwardTextAsync(child.StandardOutput.BaseStream, protocolWriter, RuntimeFrameKind.Stdout, outputCancellation.Token);
+        var stderr = ForwardTextAsync(child.StandardError.BaseStream, protocolWriter, RuntimeFrameKind.Stderr, outputCancellation.Token);
         var structured = ForwardStructuredAsync(childFrames, protocolWriter);
         await child.WaitForExitAsync();
         var childExitReported = await structured;
         await CompleteTextForwardingAsync(child, stdout, stderr, outputCancellation);
 
-        var syntheticStatus = RunnerExitClassification.GetSyntheticStatus(
-            childExitReported,
-            oomKillCountBefore,
-            CgroupMemoryEvents.TryReadOomKillCount());
+        var syntheticStatus = RunnerExitClassification.GetSyntheticStatus(childExitReported, oomKillCountBefore, CgroupMemoryEvents.TryReadOomKillCount());
         if (syntheticStatus is not null)
         {
-            await WriteJsonAsync(protocolWriter, RuntimeFrameKind.Exit, new
-            {
-                status = syntheticStatus,
-                exitCode = child.ExitCode,
-                elapsedMilliseconds = 0
-            });
+            await WriteJsonAsync(protocolWriter, RuntimeFrameKind.Exit, new { status = syntheticStatus, exitCode = child.ExitCode, elapsedMilliseconds = 0 });
         }
 
         return child.ExitCode;
@@ -72,8 +52,7 @@ internal static class RunnerProgram
 
     private static Process StartChild(RunnerArguments parsed, string pipeHandle)
     {
-        var processPath = Environment.ProcessPath
-            ?? throw new InvalidOperationException("The current .NET host path is unavailable.");
+        var processPath = Environment.ProcessPath ?? throw new InvalidOperationException("The current .NET host path is unavailable.");
         var startInfo = new ProcessStartInfo(processPath)
         {
             UseShellExecute = false,
@@ -91,22 +70,15 @@ internal static class RunnerProgram
         startInfo.ArgumentList.Add(parsed.AssemblyPath);
         startInfo.ArgumentList.Add("--");
         foreach (var argument in parsed.UserArguments)
-        {
             startInfo.ArgumentList.Add(argument);
-        }
 
         startInfo.Environment["DOTNET_EnableDiagnostics"] = "0";
         startInfo.Environment["COMPlus_EnableDiagnostics"] = "0";
         startInfo.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
-        return Process.Start(startInfo)
-            ?? throw new InvalidOperationException("The isolated user process could not be started.");
+        return Process.Start(startInfo) ?? throw new InvalidOperationException("The isolated user process could not be started.");
     }
 
-    private static async Task ForwardTextAsync(
-        Stream stream,
-        RuntimeFrameWriter writer,
-        RuntimeFrameKind kind,
-        CancellationToken cancellationToken)
+    private static async Task ForwardTextAsync(Stream stream, RuntimeFrameWriter writer, RuntimeFrameKind kind, CancellationToken cancellationToken)
     {
         var buffer = new byte[16 * 1024];
         while (await stream.ReadAsync(buffer, cancellationToken) is var read && read > 0)
@@ -117,11 +89,7 @@ internal static class RunnerProgram
         }
     }
 
-    private static async Task CompleteTextForwardingAsync(
-        Process child,
-        Task stdout,
-        Task stderr,
-        CancellationTokenSource cancellation)
+    private static async Task CompleteTextForwardingAsync(Process child, Task stdout, Task stderr, CancellationTokenSource cancellation)
     {
         var forwarding = Task.WhenAll(stdout, stderr);
         try
@@ -154,25 +122,13 @@ internal static class RunnerProgram
     }
 
     private static void ObserveFault(Task task) =>
-        _ = task.ContinueWith(
-            static completed => _ = completed.Exception,
-            CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
+        _ = task.ContinueWith(static completed => _ = completed.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
 
-    internal static async Task<bool> ForwardStructuredAsync(
-        Stream stream,
-        RuntimeFrameWriter writer)
+    internal static async Task<bool> ForwardStructuredAsync(Stream stream, RuntimeFrameWriter writer)
     {
         while (await RuntimeFrameCodec.ReadAsync(stream) is { } frame)
         {
-            if (frame.Kind is not (
-                    RuntimeFrameKind.Inspection or
-                    RuntimeFrameKind.MemoryGraph or
-                    RuntimeFrameKind.Flow or
-                    RuntimeFrameKind.Exception or
-                    RuntimeFrameKind.Exit or
-                    RuntimeFrameKind.ProtocolError))
+            if (frame.Kind is not (RuntimeFrameKind.Inspection or RuntimeFrameKind.MemoryGraph or RuntimeFrameKind.Flow or RuntimeFrameKind.Exception or RuntimeFrameKind.Exit or RuntimeFrameKind.ProtocolError))
             {
                 throw new InvalidDataException($"The user child emitted forbidden frame kind '{frame.Kind}'.");
             }
@@ -194,28 +150,19 @@ internal static class RunnerProgram
         ConfigureStandardInput();
         using var inspectionScope = RuntimeServices.PushInspectionSink(new FramedInspectionSink(writer));
         using var flowScope = IsExecutionFlowEnabled()
-            ? RuntimeServices.PushFlowSink(new FramedFlowSink(writer))
-            : null;
+            ? RuntimeServices.PushFlowSink(new FramedFlowSink(writer)) : null;
         var started = DateTimeOffset.UtcNow;
         try
         {
-            var loadContext = new RuntimeArtifactLoadContext(
-                parsed.AssemblyPath,
-                typeof(RuntimeServices).Assembly);
+            var loadContext = new RuntimeArtifactLoadContext(parsed.AssemblyPath, typeof(RuntimeServices).Assembly);
             var assembly = loadContext.LoadFromAssemblyPath(parsed.AssemblyPath);
-            var entryPoint = assembly.EntryPoint
-                ?? throw new InvalidOperationException("The user assembly does not define an entry point.");
+            var entryPoint = assembly.EntryPoint ?? throw new InvalidOperationException("The user assembly does not define an entry point.");
             var invocationArguments = entryPoint.GetParameters().Length == 0
                 ? null
                 : new object?[] { parsed.UserArguments };
             var result = entryPoint.Invoke(null, invocationArguments);
             var exitCode = await AwaitResultAsync(result);
-            await WriteJsonAsync(writer, RuntimeFrameKind.Exit, new
-            {
-                status = exitCode == 0 ? "completed" : "non-zero-exit",
-                exitCode,
-                elapsedMilliseconds = (DateTimeOffset.UtcNow - started).TotalMilliseconds
-            });
+            await WriteJsonAsync(writer, RuntimeFrameKind.Exit, new { status = exitCode == 0 ? "completed" : "non-zero-exit", exitCode, elapsedMilliseconds = (DateTimeOffset.UtcNow - started).TotalMilliseconds });
             return exitCode;
         }
         catch (TargetInvocationException exception) when (exception.InnerException is OutOfMemoryException)
@@ -267,38 +214,18 @@ internal static class RunnerProgram
             return;
         }
 
-        Console.SetIn(new StreamReader(
-            new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read),
-            Encoding.UTF8,
-            detectEncodingFromByteOrderMarks: true));
+        Console.SetIn(new StreamReader(new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read), Encoding.UTF8, detectEncodingFromByteOrderMarks: true));
     }
 
     private static bool IsExecutionFlowEnabled() =>
-        StringComparer.Ordinal.Equals(
-            Environment.GetEnvironmentVariable("SHARPLABNEXT_INSTRUMENTATION"),
-            "execution-flow");
+        StringComparer.Ordinal.Equals(Environment.GetEnvironmentVariable("SHARPLABNEXT_INSTRUMENTATION"), "execution-flow");
 
-    private static async Task WriteExceptionAsync(
-        RuntimeFrameWriter writer,
-        Exception exception,
-        DateTimeOffset started)
+    private static async Task WriteExceptionAsync(RuntimeFrameWriter writer, Exception exception, DateTimeOffset started)
     {
         // Keep the source model aligned with the shared runtime contract;
         // RuntimeStructuredPayloadCodec emits these members as PascalCase.
-        await WriteJsonAsync(writer, RuntimeFrameKind.Exception, new
-        {
-            typeName = exception.GetType().FullName ?? exception.GetType().Name,
-            message = exception.Message,
-            stackTrace = exception.StackTrace,
-            innerException = CreateInnerExceptionPayload(exception.InnerException),
-            elapsedMilliseconds = (DateTimeOffset.UtcNow - started).TotalMilliseconds
-        });
-        await WriteJsonAsync(writer, RuntimeFrameKind.Exit, new
-        {
-            status = "user-exception",
-            exitCode = 1,
-            elapsedMilliseconds = (DateTimeOffset.UtcNow - started).TotalMilliseconds
-        });
+        await WriteJsonAsync(writer, RuntimeFrameKind.Exception, new { typeName = exception.GetType().FullName ?? exception.GetType().Name, message = exception.Message, stackTrace = exception.StackTrace, innerException = CreateInnerExceptionPayload(exception.InnerException), elapsedMilliseconds = (DateTimeOffset.UtcNow - started).TotalMilliseconds });
+        await WriteJsonAsync(writer, RuntimeFrameKind.Exit, new { status = "user-exception", exitCode = 1, elapsedMilliseconds = (DateTimeOffset.UtcNow - started).TotalMilliseconds });
     }
 
     private static object? CreateInnerExceptionPayload(Exception? exception, int depth = 1)
@@ -306,24 +233,11 @@ internal static class RunnerProgram
         if (exception is null || depth > MaximumExceptionDepth)
             return null;
 
-        return new
-        {
-            typeName = exception.GetType().FullName ?? exception.GetType().Name,
-            message = exception.Message,
-            stackTrace = exception.StackTrace,
-            innerException = CreateInnerExceptionPayload(exception.InnerException, depth + 1)
-        };
+        return new { typeName = exception.GetType().FullName ?? exception.GetType().Name, message = exception.Message, stackTrace = exception.StackTrace, innerException = CreateInnerExceptionPayload(exception.InnerException, depth + 1) };
     }
 
-    private static ValueTask WriteOutOfMemoryAsync(
-        RuntimeFrameWriter writer,
-        DateTimeOffset started) =>
-        WriteJsonAsync(writer, RuntimeFrameKind.Exit, new
-        {
-            status = "out-of-memory",
-            exitCode = 137,
-            elapsedMilliseconds = (DateTimeOffset.UtcNow - started).TotalMilliseconds
-        });
+    private static ValueTask WriteOutOfMemoryAsync(RuntimeFrameWriter writer, DateTimeOffset started) =>
+        WriteJsonAsync(writer, RuntimeFrameKind.Exit, new { status = "out-of-memory", exitCode = 137, elapsedMilliseconds = (DateTimeOffset.UtcNow - started).TotalMilliseconds });
 
     private static ValueTask WriteJsonAsync(RuntimeFrameWriter writer, RuntimeFrameKind kind, object value) =>
         writer.WriteAsync(kind, RuntimeStructuredPayloadCodec.Serialize(value));
@@ -331,17 +245,13 @@ internal static class RunnerProgram
 
 internal static class RunnerExitClassification
 {
-    public static string? GetSyntheticStatus(
-        bool childExitReported,
-        ulong? oomKillCountBefore,
-        ulong? oomKillCountAfter)
+    public static string? GetSyntheticStatus(bool childExitReported, ulong? oomKillCountBefore, ulong? oomKillCountAfter)
     {
         if (childExitReported)
             return null;
 
         return CgroupMemoryEvents.OomKillCountIncreased(oomKillCountBefore, oomKillCountAfter)
-            ? "out-of-memory"
-            : "process-crash";
+            ? "out-of-memory" : "process-crash";
     }
 }
 
@@ -375,8 +285,7 @@ internal static class CgroupMemoryEvents
                 continue;
 
             return ulong.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var count)
-                ? count
-                : null;
+                ? count : null;
         }
 
         return null;
@@ -428,13 +337,9 @@ internal sealed class FramedInspectionSink(RuntimeFrameWriter writer) : IInspect
             ? inspection.Values.Select((value, index) => ($"Root {index + 1}", value)).ToArray()
             : new[] { (inspection.Title, inspection.Value) };
         var graph = RuntimeValueGraphBuilder.Build(roots);
-        var payload = RuntimeStructuredPayloadCodec.Serialize(new RuntimeInspectionPayload(
-            inspection.Kind.ToString(),
-            inspection.Title,
-            graph));
+        var payload = RuntimeStructuredPayloadCodec.Serialize(new RuntimeInspectionPayload(inspection.Kind.ToString(), inspection.Title, graph));
         var frameKind = inspection.Kind == InspectionKind.MemoryGraph
-            ? RuntimeFrameKind.MemoryGraph
-            : RuntimeFrameKind.Inspection;
+            ? RuntimeFrameKind.MemoryGraph : RuntimeFrameKind.Inspection;
         writer.Write(frameKind, payload);
     }
 }
@@ -457,15 +362,7 @@ internal sealed class FramedFlowSink(RuntimeFrameWriter writer) : IFlowSink
         var value = flow.Value is null
             ? null
             : RuntimeValueGraphBuilder.Build(new[] { (flow.Name ?? "Value", (object?)flow.Value) });
-        var payload = RuntimeStructuredPayloadCodec.Serialize(new RuntimeFlowPayload(
-            ToEventKind(flow.Kind),
-            flow.DocumentPath,
-            CreateRange(flow),
-            Environment.CurrentManagedThreadId,
-            Task.CurrentId,
-            flow.Name,
-            value,
-            false));
+        var payload = RuntimeStructuredPayloadCodec.Serialize(new RuntimeFlowPayload(ToEventKind(flow.Kind), flow.DocumentPath, CreateRange(flow), Environment.CurrentManagedThreadId, Task.CurrentId, flow.Name, value, false));
         if (++_eventCount > MaximumEvents || checked(_totalBytes + payload.Length) > MaximumBytes)
         {
             WriteTruncated();
@@ -479,26 +376,13 @@ internal sealed class FramedFlowSink(RuntimeFrameWriter writer) : IFlowSink
     private void WriteTruncated()
     {
         _truncated = true;
-        var payload = RuntimeStructuredPayloadCodec.Serialize(new RuntimeFlowPayload(
-            "truncated",
-            null,
-            null,
-            Environment.CurrentManagedThreadId,
-            Task.CurrentId,
-            null,
-            null,
-            true));
+        var payload = RuntimeStructuredPayloadCodec.Serialize(new RuntimeFlowPayload("truncated", null, null, Environment.CurrentManagedThreadId, Task.CurrentId, null, null, true));
         writer.Write(RuntimeFrameKind.Flow, payload);
     }
 
     private static RuntimeSourceRange? CreateRange(FlowRecord flow) =>
         flow.StartLine < 0
-            ? null
-            : new RuntimeSourceRange(
-                Math.Max(0, flow.StartLine - 1),
-                Math.Max(0, flow.StartColumn - 1),
-                Math.Max(0, flow.EndLine - 1),
-                Math.Max(0, flow.EndColumn - 1));
+            ? null : new RuntimeSourceRange(Math.Max(0, flow.StartLine - 1), Math.Max(0, flow.StartColumn - 1), Math.Max(0, flow.EndLine - 1), Math.Max(0, flow.EndColumn - 1));
 
     private static string ToEventKind(FlowEventKind kind) => kind switch
     {

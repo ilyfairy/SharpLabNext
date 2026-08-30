@@ -7,16 +7,11 @@ namespace SharpLabNext.IntegrationTests;
 
 internal static class GatewayTestCatalog
 {
-    private const string TestReferenceSetRootEnvironmentVariable =
-        "SHARPLABNEXT_TEST_CORECLR_REFERENCE_SETS";
+    private const string TestReferenceSetRootEnvironmentVariable = "SHARPLABNEXT_TEST_CORECLR_REFERENCE_SETS";
 
     public static async Task<CatalogDocument> GetAsync(HttpClient client)
     {
-        return await client.GetFromJsonAsync<CatalogDocument>(
-            "/api/v1/catalog",
-            ContractJson.CreateSerializerOptions(),
-            TestContext.Current.CancellationToken)
-            ?? throw new InvalidOperationException("Gateway catalog response was empty.");
+        return await client.GetFromJsonAsync<CatalogDocument>("/api/v1/catalog", ContractJson.CreateSerializerOptions(), TestContext.Current.CancellationToken) ?? throw new InvalidOperationException("Gateway catalog response was empty.");
     }
 
     public static async Task<string> GetRevisionAsync(HttpClient client)
@@ -27,31 +22,22 @@ internal static class GatewayTestCatalog
     public static async Task<CatalogDocument> LoadRepositoryAsync(CancellationToken cancellationToken)
     {
         var repositoryRoot = FindRepositoryRoot();
-        var catalog = await CatalogLoader.LoadCatalogAsync(
-            Path.Combine(repositoryRoot, "profiles", "catalog", "catalog.json"),
-            cancellationToken);
-        var releaseLock = await CatalogLoader.LoadReleaseLockAsync(
-            Path.Combine(repositoryRoot, "profiles", "lock.json"),
-            cancellationToken);
+        var catalog = await CatalogLoader.LoadCatalogAsync(Path.Combine(repositoryRoot, "profiles", "catalog", "catalog.json"), cancellationToken);
+        var releaseLock = await CatalogLoader.LoadReleaseLockAsync(Path.Combine(repositoryRoot, "profiles", "lock.json"), cancellationToken);
         if (!string.Equals(catalog.ReleaseId, releaseLock.ReleaseId, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException(
-                $"Test Catalog release '{catalog.ReleaseId}' does not match release lock '{releaseLock.ReleaseId}'.");
+            throw new InvalidOperationException($"Test Catalog release '{catalog.ReleaseId}' does not match release lock '{releaseLock.ReleaseId}'.");
         }
 
         return catalog;
     }
 
-    public static void AddRoslynStableReferenceSets(
-        IDictionary<string, string?> environment,
-        CatalogDocument catalog)
+    public static void AddRoslynStableReferenceSets(IDictionary<string, string?> environment, CatalogDocument catalog)
     {
         var root = Environment.GetEnvironmentVariable(TestReferenceSetRootEnvironmentVariable);
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
         {
-            throw new DirectoryNotFoundException(
-                $"Run eng/test.ps1 or eng/test.sh to materialize the locked CoreCLR reference sets " +
-                $"and set {TestReferenceSetRootEnvironmentVariable}.");
+            throw new DirectoryNotFoundException($"Run eng/test.ps1 or eng/test.sh to materialize the locked CoreCLR reference sets " + $"and set {TestReferenceSetRootEnvironmentVariable}.");
         }
 
         var toolchain = catalog.Toolchains.Single(static item => item.Id == "roslyn-stable");
@@ -70,16 +56,10 @@ internal static class GatewayTestCatalog
             var id = referenceSet.GetProperty("id").GetString();
             var targetFramework = referenceSet.GetProperty("targetFramework").GetString();
             var digest = referenceSet.GetProperty("digest").GetString();
-            var resolvedVersion = referenceSet.GetProperty("provenance")
-                .GetProperty("resolvedVersion")
-                .GetString();
-            if (!string.Equals(id, referenceSetId, StringComparison.Ordinal) ||
-                !string.Equals(targetFramework, expected.TargetFramework, StringComparison.Ordinal) ||
-                !string.Equals(digest, expected.Digest, StringComparison.Ordinal) ||
-                string.IsNullOrWhiteSpace(resolvedVersion))
+            var resolvedVersion = referenceSet.GetProperty("provenance").GetProperty("resolvedVersion").GetString();
+            if (!string.Equals(id, referenceSetId, StringComparison.Ordinal) || !string.Equals(targetFramework, expected.TargetFramework, StringComparison.Ordinal) || !string.Equals(digest, expected.Digest, StringComparison.Ordinal) || string.IsNullOrWhiteSpace(resolvedVersion))
             {
-                throw new InvalidDataException(
-                    $"Materialized reference set '{referenceSetId}' does not match the active Catalog.");
+                throw new InvalidDataException($"Materialized reference set '{referenceSetId}' does not match the active Catalog.");
             }
 
             var prefix = $"ReferenceSets__{referenceSetId}__";

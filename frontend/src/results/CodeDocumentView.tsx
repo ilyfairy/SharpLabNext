@@ -1,34 +1,13 @@
 import { selectAll } from '@codemirror/commands'
 import { foldGutter, foldKeymap, foldService } from '@codemirror/language'
 import { EditorState, type Extension, StateEffect, StateField } from '@codemirror/state'
-import {
-  Decoration,
-  type DecorationSet,
-  drawSelection,
-  EditorView,
-  highlightSpecialChars,
-  hoverTooltip,
-  keymap,
-  lineNumbers,
-  type Tooltip,
-} from '@codemirror/view'
+import { Decoration, type DecorationSet, drawSelection, EditorView, highlightSpecialChars, hoverTooltip, keymap, lineNumbers, type Tooltip } from '@codemirror/view'
 import { lazy, type RefObject, Suspense, useEffect, useRef } from 'react'
-import {
-  appendCodeMirrorHoverSections,
-  codeMirrorHoverSections,
-  semanticDecorationRanges,
-} from '../editor/CodeMirrorEditor'
-import {
-  semanticDecorationExtension,
-  setSemanticDecorations,
-} from '../editor/codeMirrorDecorations'
+import { appendCodeMirrorHoverSections, codeMirrorHoverSections, semanticDecorationRanges } from '../editor/CodeMirrorEditor'
+import { semanticDecorationExtension, setSemanticDecorations } from '../editor/codeMirrorDecorations'
 import { codeMirrorReadOnlyExtensions } from '../editor/codeMirrorLanguage'
 import type { EditorFontSize, EditorKind } from '../editor/editorPreference'
-import {
-  type IlOutputLanguageSession,
-  type IlOutputLanguageSessionOptions,
-  useIlOutputLanguageSession,
-} from './ilOutputLanguageSession'
+import { type IlOutputLanguageSession, type IlOutputLanguageSessionOptions, useIlOutputLanguageSession } from './ilOutputLanguageSession'
 import { type OutputFoldingRange, outputFoldingRanges } from './outputFoldingModel'
 import { type SourceAssociation, sourceAssociationClass } from './sourceAssociationModel'
 
@@ -53,7 +32,10 @@ export interface CodeDocumentLineAssociation {
 }
 
 interface NavigableLineState {
-  ranges: readonly (CodeDocumentLineAssociation & { navigable: boolean; active: boolean })[]
+  ranges: readonly (CodeDocumentLineAssociation & {
+    navigable: boolean
+    active: boolean
+  })[]
   decorations: DecorationSet
 }
 
@@ -118,11 +100,7 @@ function CodeMirrorCodeDocumentView({
   activeAssociationRevision = 0,
   onAssociationHover,
 }: CodeDocumentViewProps) {
-  const ilOutputLanguageSession = useIlOutputLanguageSession(
-    text,
-    generationKey,
-    languageId === 'il' ? ilOutputLanguageSessionOptions : null,
-  )
+  const ilOutputLanguageSession = useIlOutputLanguageSession(text, generationKey, languageId === 'il' ? ilOutputLanguageSessionOptions : null)
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const ilOutputLanguageSessionRef = useRef<IlOutputLanguageSession | null>(null)
@@ -133,12 +111,20 @@ function CodeMirrorCodeDocumentView({
   const lineAssociationsRef = useRef(lineAssociations)
   const onAssociationHoverRef = useRef(onAssociationHover)
   const hoveredAssociationKeyRef = useRef<string | null>(null)
-  const pointerGestureRef = useRef<{ x: number; y: number; moved: boolean } | null>(null)
+  const pointerGestureRef = useRef<{
+    x: number
+    y: number
+    moved: boolean
+  } | null>(null)
   const pendingLineActivationRef = useRef<number | null>(null)
   const handledAssociationRevealRevisionRef = useRef<number | null>(null)
   const navigableLinesSignatureRef = useRef<string | null>(null)
   const lineActionsSignature = lineActions.map(lineActionKey).join('|')
-  const pendingActivationInputsRef = useRef({ generationKey, lineActionsSignature, text })
+  const pendingActivationInputsRef = useRef({
+    generationKey,
+    lineActionsSignature,
+    text,
+  })
   const handledAssociationGenerationRef = useRef(generationKey)
   textRef.current = text
   generationKeyRef.current = generationKey
@@ -189,19 +175,11 @@ function CodeMirrorCodeDocumentView({
             },
             mousemove(event, view) {
               const gesture = pointerGestureRef.current
-              if (
-                gesture &&
-                (Math.abs(event.clientX - gesture.x) > 3 || Math.abs(event.clientY - gesture.y) > 3)
-              ) {
+              if (gesture && (Math.abs(event.clientX - gesture.x) > 3 || Math.abs(event.clientY - gesture.y) > 3)) {
                 gesture.moved = true
               }
               const line = lineNumberFromEventTarget(view, event.target)
-              const association =
-                line === null
-                  ? null
-                  : lineAssociationsRef.current.find(
-                      (candidate) => line >= candidate.startLine && line <= candidate.endLine,
-                    )
+              const association = line === null ? null : lineAssociationsRef.current.find((candidate) => line >= candidate.startLine && line <= candidate.endLine)
               updateHoveredAssociation(association?.association.key ?? null)
               return false
             },
@@ -217,13 +195,7 @@ function CodeMirrorCodeDocumentView({
                 window.clearTimeout(pendingLineActivationRef.current)
                 pendingLineActivationRef.current = null
               }
-              if (
-                event.button !== 0 ||
-                event.detail > 1 ||
-                gesture?.moved ||
-                !view.state.selection.main.empty ||
-                window.getSelection()?.isCollapsed === false
-              ) {
+              if (event.button !== 0 || event.detail > 1 || gesture?.moved || !view.state.selection.main.empty || window.getSelection()?.isCollapsed === false) {
                 return false
               }
               const assemblyLabel = languageId === 'asm' ? assemblyLabelTarget(view, event) : null
@@ -235,15 +207,17 @@ function CodeMirrorCodeDocumentView({
                 const scheduledText = textRef.current
                 pendingLineActivationRef.current = window.setTimeout(() => {
                   pendingLineActivationRef.current = null
-                  if (
-                    generationKeyRef.current !== scheduledGenerationKey ||
-                    textRef.current !== scheduledText
-                  ) {
+                  if (generationKeyRef.current !== scheduledGenerationKey || textRef.current !== scheduledText) {
                     return
                   }
                   view.dispatch({
-                    selection: { anchor: assemblyLabel.from, head: assemblyLabel.to },
-                    effects: EditorView.scrollIntoView(assemblyLabel.from, { y: 'center' }),
+                    selection: {
+                      anchor: assemblyLabel.from,
+                      head: assemblyLabel.to,
+                    },
+                    effects: EditorView.scrollIntoView(assemblyLabel.from, {
+                      y: 'center',
+                    }),
                   })
                   view.focus()
                 }, 400)
@@ -251,9 +225,7 @@ function CodeMirrorCodeDocumentView({
               }
               const line = lineNumberFromEventTarget(view, event.target)
               if (line === null) return false
-              const action = lineActionsRef.current.find(
-                (candidate) => line >= candidate.startLine && line <= candidate.endLine,
-              )
+              const action = lineActionsRef.current.find((candidate) => line >= candidate.startLine && line <= candidate.endLine)
               if (!action) return false
               if (pendingLineActivationRef.current !== null) {
                 window.clearTimeout(pendingLineActivationRef.current)
@@ -263,15 +235,10 @@ function CodeMirrorCodeDocumentView({
               const scheduledText = textRef.current
               pendingLineActivationRef.current = window.setTimeout(() => {
                 pendingLineActivationRef.current = null
-                if (
-                  generationKeyRef.current !== scheduledGenerationKey ||
-                  textRef.current !== scheduledText
-                ) {
+                if (generationKeyRef.current !== scheduledGenerationKey || textRef.current !== scheduledText) {
                   return
                 }
-                lineActionsRef.current
-                  .find((candidate) => lineActionKey(candidate) === actionKey)
-                  ?.onActivate()
+                lineActionsRef.current.find((candidate) => lineActionKey(candidate) === actionKey)?.onActivate()
               }, 400)
               return false
             },
@@ -285,7 +252,10 @@ function CodeMirrorCodeDocumentView({
             },
           }),
           ...codeMirrorReadOnlyExtensions(languageId),
-          EditorView.contentAttributes.of({ 'aria-label': ariaLabel, tabindex: '0' }),
+          EditorView.contentAttributes.of({
+            'aria-label': ariaLabel,
+            tabindex: '0',
+          }),
           EditorView.theme({
             '&': { height: '100%' },
             '.cm-scroller': { overflow: 'auto' },
@@ -336,9 +306,10 @@ function CodeMirrorCodeDocumentView({
       window.clearTimeout(pendingLineActivationRef.current)
       pendingLineActivationRef.current = null
     }
-    view.scrollDOM.addEventListener('scroll', cancelPendingActivationOnScroll, { passive: true })
-    const resizeObserver =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => view.requestMeasure())
+    view.scrollDOM.addEventListener('scroll', cancelPendingActivationOnScroll, {
+      passive: true,
+    })
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => view.requestMeasure())
     resizeObserver?.observe(host)
     return () => {
       if (pendingLineActivationRef.current !== null) {
@@ -355,12 +326,12 @@ function CodeMirrorCodeDocumentView({
 
   useEffect(() => {
     const previous = pendingActivationInputsRef.current
-    pendingActivationInputsRef.current = { generationKey, lineActionsSignature, text }
-    if (
-      previous.generationKey === generationKey &&
-      previous.lineActionsSignature === lineActionsSignature &&
-      previous.text === text
-    ) {
+    pendingActivationInputsRef.current = {
+      generationKey,
+      lineActionsSignature,
+      text,
+    }
+    if (previous.generationKey === generationKey && previous.lineActionsSignature === lineActionsSignature && previous.text === text) {
       return
     }
     if (pendingLineActivationRef.current !== null) {
@@ -388,11 +359,7 @@ function CodeMirrorCodeDocumentView({
     const view = viewRef.current
     if (!view) return
     view.dispatch({
-      effects: setSemanticDecorations.of(
-        languageId === 'il'
-          ? semanticDecorationRanges(view.state.doc, ilOutputLanguageSession.semanticTokens)
-          : [],
-      ),
+      effects: setSemanticDecorations.of(languageId === 'il' ? semanticDecorationRanges(view.state.doc, ilOutputLanguageSession.semanticTokens) : []),
     })
   }, [ilOutputLanguageSession.semanticTokens, languageId])
 
@@ -403,16 +370,9 @@ function CodeMirrorCodeDocumentView({
       endLine,
       association,
       active: association.key === activeAssociationKey,
-      navigable: lineActions.some(
-        (action) => action.startLine <= endLine && action.endLine >= startLine,
-      ),
+      navigable: lineActions.some((action) => action.startLine <= endLine && action.endLine >= startLine),
     }))
-    const signature = ranges
-      .map(
-        (range) =>
-          `${range.startLine}:${range.endLine}:${range.association.key}:${range.active ? 1 : 0}:${range.navigable ? 1 : 0}`,
-      )
-      .join('|')
+    const signature = ranges.map((range) => `${range.startLine}:${range.endLine}:${range.association.key}:${range.active ? 1 : 0}:${range.navigable ? 1 : 0}`).join('|')
     if (navigableLinesSignatureRef.current === signature) return
     navigableLinesSignatureRef.current = signature
     viewRef.current?.dispatch({
@@ -424,9 +384,7 @@ function CodeMirrorCodeDocumentView({
     const view = viewRef.current
     if (!view || !activeAssociationKey) return
     if (handledAssociationRevealRevisionRef.current === activeAssociationRevision) return
-    const association = lineAssociations.find(
-      (candidate) => candidate.association.key === activeAssociationKey,
-    )
+    const association = lineAssociations.find((candidate) => candidate.association.key === activeAssociationKey)
     if (!association || association.startLine < 1 || association.startLine > view.state.doc.lines) {
       return
     }
@@ -446,9 +404,7 @@ function CodeMirrorCodeDocumentView({
   return <div ref={hostRef} className="code-document-view codemirror-host" />
 }
 
-export function codeDocumentIlHoverSource(
-  ilLanguageSessionRef: RefObject<IlOutputLanguageSession | null>,
-) {
+export function codeDocumentIlHoverSource(ilLanguageSessionRef: RefObject<IlOutputLanguageSession | null>) {
   return async (view: EditorView, position: number): Promise<Tooltip | null> => {
     const ilLanguageSession = ilLanguageSessionRef.current
     if (ilLanguageSession?.status === 'ready') {
@@ -484,14 +440,10 @@ export function codeDocumentIlHoverSource(
   }
 }
 
-export function codeDocumentSourceMapHoverSource(
-  lineTooltipsRef: RefObject<readonly CodeDocumentLineTooltip[]>,
-) {
+export function codeDocumentSourceMapHoverSource(lineTooltipsRef: RefObject<readonly CodeDocumentLineTooltip[]>) {
   return (view: EditorView, position: number): Tooltip | null => {
     const line = view.state.doc.lineAt(position)
-    const tooltip = lineTooltipsRef.current?.find(
-      (candidate) => line.number >= candidate.startLine && line.number <= candidate.endLine,
-    )
+    const tooltip = lineTooltipsRef.current?.find((candidate) => line.number >= candidate.startLine && line.number <= candidate.endLine)
     if (!tooltip) return null
     return {
       pos: line.from,
@@ -514,16 +466,13 @@ export function codeDocumentSourceMapHoverSource(
 
 function codeDocumentOffsetsForRange(
   state: EditorState,
-  range: { start: { line: number; character: number }; end: { line: number; character: number } },
+  range: {
+    start: { line: number; character: number }
+    end: { line: number; character: number }
+  },
 ): { from: number; to: number } | null {
   const offset = (position: { line: number; character: number }): number | null => {
-    if (
-      !Number.isSafeInteger(position.line) ||
-      !Number.isSafeInteger(position.character) ||
-      position.line < 0 ||
-      position.character < 0 ||
-      position.line >= state.doc.lines
-    ) {
+    if (!Number.isSafeInteger(position.line) || !Number.isSafeInteger(position.character) || position.line < 0 || position.character < 0 || position.line >= state.doc.lines) {
       return null
     }
     const line = state.doc.line(position.line + 1)
@@ -534,10 +483,7 @@ function codeDocumentOffsetsForRange(
   return from !== null && to !== null && to >= from ? { from, to } : null
 }
 
-function navigableLineDecorations(
-  state: EditorState,
-  ranges: NavigableLineState['ranges'],
-): DecorationSet {
+function navigableLineDecorations(state: EditorState, ranges: NavigableLineState['ranges']): DecorationSet {
   const rangeByLine = new Map<number, NavigableLineState['ranges'][number]>()
   for (const range of ranges) {
     const startLine = Math.max(1, Math.min(state.doc.lines, range.startLine))
@@ -551,13 +497,7 @@ function navigableLineDecorations(
     [...rangeByLine.entries()].map(([lineNumber, range]) =>
       Decoration.line({
         attributes: {
-          class: [
-            range.navigable ? 'cm-source-navigable' : '',
-            range.active ? 'cm-source-association-active' : '',
-            sourceAssociationClass(range.association.colorIndex),
-          ]
-            .filter(Boolean)
-            .join(' '),
+          class: [range.navigable ? 'cm-source-navigable' : '', range.active ? 'cm-source-association-active' : '', sourceAssociationClass(range.association.colorIndex)].filter(Boolean).join(' '),
         },
       }).range(state.doc.line(lineNumber).from),
     ),
@@ -569,10 +509,7 @@ export function codeDocumentFoldingExtensions(languageId: string): Extension[] {
   if (languageId !== 'asm' && languageId !== 'il') return []
   const rangeField = StateField.define<readonly OutputFoldingRange[]>({
     create: (state) => outputFoldingRanges(state.doc.toString(), languageId),
-    update: (ranges, transaction) =>
-      transaction.docChanged
-        ? outputFoldingRanges(transaction.state.doc.toString(), languageId)
-        : ranges,
+    update: (ranges, transaction) => (transaction.docChanged ? outputFoldingRanges(transaction.state.doc.toString(), languageId) : ranges),
   })
   return [
     rangeField,
@@ -590,8 +527,7 @@ export function codeDocumentFoldingExtensions(languageId: string): Extension[] {
 }
 
 function lineNumberFromEventTarget(view: EditorView, target: EventTarget | null): number | null {
-  const element =
-    target instanceof Element ? target : target instanceof Node ? target.parentElement : null
+  const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null
   const line = element?.closest('.cm-line')
   if (!line || !view.contentDOM.contains(line)) return null
   const renderedLines = [...view.contentDOM.querySelectorAll('.cm-line')]
@@ -605,8 +541,7 @@ function lineNumberFromEventTarget(view: EditorView, target: EventTarget | null)
 }
 
 function eventTargetInGutter(target: EventTarget | null): boolean {
-  const element =
-    target instanceof Element ? target : target instanceof Node ? target.parentElement : null
+  const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null
   return element?.closest('.cm-gutter') != null
 }
 
@@ -614,10 +549,7 @@ function lineActionKey(action: CodeDocumentLineAction): string {
   return `${action.startLine}:${action.endLine}:${action.ariaLabel}`
 }
 
-function assemblyLabelTarget(
-  view: EditorView,
-  event: MouseEvent,
-): { from: number; to: number } | null {
+function assemblyLabelTarget(view: EditorView, event: MouseEvent): { from: number; to: number } | null {
   let position: number | null = null
   try {
     position = view.posAtCoords({ x: event.clientX, y: event.clientY })
@@ -634,14 +566,10 @@ function assemblyLabelTarget(
   if (position === null) return null
   const line = view.state.doc.lineAt(position)
   const offset = position - line.from
-  const referenceMatch = [...line.text.matchAll(/\bG_M\w+\b/gi)].find(
-    (match) => offset >= (match.index ?? 0) && offset <= (match.index ?? 0) + match[0].length,
-  )
+  const referenceMatch = [...line.text.matchAll(/\bG_M\w+\b/gi)].find((match) => offset >= (match.index ?? 0) && offset <= (match.index ?? 0) + match[0].length)
   const reference = referenceMatch?.[0]
   if (!reference || line.text[(referenceMatch?.index ?? 0) + reference.length] === ':') return null
-  const declaration = new RegExp(`^\\s*${escapeRegExp(reference)}:`, 'im').exec(
-    view.state.doc.toString(),
-  )
+  const declaration = new RegExp(`^\\s*${escapeRegExp(reference)}:`, 'im').exec(view.state.doc.toString())
   if (!declaration || declaration.index === undefined) return null
   const labelStart = declaration.index + (declaration[0].match(/^\s*/)?.[0].length ?? 0)
   return { from: labelStart, to: labelStart + reference.length }

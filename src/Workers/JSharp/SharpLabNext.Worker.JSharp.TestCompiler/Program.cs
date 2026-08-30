@@ -1,5 +1,4 @@
-var sourcePath = args.LastOrDefault(static argument =>
-    argument.EndsWith(".jsl", StringComparison.OrdinalIgnoreCase));
+var sourcePath = args.LastOrDefault(static argument => argument.EndsWith(".jsl", StringComparison.OrdinalIgnoreCase));
 if (sourcePath is null || !File.Exists(sourcePath))
     return 64;
 
@@ -29,8 +28,7 @@ if (source.Contains("SLEEP", StringComparison.Ordinal))
     return 1;
 }
 
-var output = args.FirstOrDefault(static argument =>
-    argument.StartsWith("/out:", StringComparison.OrdinalIgnoreCase));
+var output = args.FirstOrDefault(static argument => argument.StartsWith("/out:", StringComparison.OrdinalIgnoreCase));
 if (output is null)
     return 64;
 var outputPath = output[5..].Replace('/', Path.DirectorySeparatorChar);

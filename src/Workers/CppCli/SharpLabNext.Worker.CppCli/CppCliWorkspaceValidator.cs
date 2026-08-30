@@ -4,40 +4,30 @@ using SharpLabNext.LanguageWorker.Sdk;
 
 namespace SharpLabNext.Worker.CppCli;
 
-internal sealed record ValidatedCppCliWorkspace(
-    WorkspaceSnapshot Snapshot,
-    ValidatedCppCliWorkspaceFile SourceFile,
-    BuildOptions Options);
+internal sealed record ValidatedCppCliWorkspace(WorkspaceSnapshot Snapshot, ValidatedCppCliWorkspaceFile SourceFile, BuildOptions Options);
 
 internal sealed record ValidatedCppCliWorkspaceFile(string Path, long Version, string Text);
 
 internal static class CppCliWorkspaceValidator
 {
-    public static ValidatedCppCliWorkspace Validate(
-        BuildRequest request,
-        LanguageWorkerCapabilityManifest manifest,
-        string compilerVersion)
+    public static ValidatedCppCliWorkspace Validate(BuildRequest request, LanguageWorkerCapabilityManifest manifest, string compilerVersion)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrWhiteSpace(request.PipelineResolutionId))
             throw Invalid("invalid-request", "Pipeline resolution ID is required.");
         if (request.Target is not (BuildTarget.Artifact or BuildTarget.CompileCheck))
             throw Invalid("unsupported-target", "C++/CLI supports Artifact and Compile Check builds.");
-        if (!StringComparer.Ordinal.Equals(request.ToolchainId, CppCliToolchain.ToolchainId) ||
-            !StringComparer.Ordinal.Equals(request.Workspace.LanguageId, CppCliToolchain.LanguageId))
+        if (!StringComparer.Ordinal.Equals(request.ToolchainId, CppCliToolchain.ToolchainId) || !StringComparer.Ordinal.Equals(request.Workspace.LanguageId, CppCliToolchain.LanguageId))
         {
             throw Invalid("wrong-toolchain", "The request does not target the C++/CLI worker.");
         }
-        if (!StringComparer.Ordinal.Equals(request.ReferenceSetId, CppCliToolchain.ReferenceSetId) ||
-            !StringComparer.Ordinal.Equals(request.Workspace.ReferenceSetId, CppCliToolchain.ReferenceSetId))
+        if (!StringComparer.Ordinal.Equals(request.ReferenceSetId, CppCliToolchain.ReferenceSetId) || !StringComparer.Ordinal.Equals(request.Workspace.ReferenceSetId, CppCliToolchain.ReferenceSetId))
         {
             throw Invalid("unsupported-reference-set", "C++/CLI requires the .NET Framework 4.8 reference set.");
         }
 
         var workspace = request.Workspace;
-        if (workspace.SchemaVersion != ContractSchemaVersions.WorkspaceSnapshot ||
-            workspace.Revision < 0 ||
-            workspace.SelectionRevision < 0)
+        if (workspace.SchemaVersion != ContractSchemaVersions.WorkspaceSnapshot || workspace.Revision < 0 || workspace.SelectionRevision < 0)
         {
             throw Invalid("invalid-workspace", "The C++/CLI workspace metadata is invalid.");
         }
@@ -53,18 +43,13 @@ internal static class CppCliWorkspaceValidator
         if (Encoding.UTF8.GetByteCount(source.Text) > manifest.Limits.MaximumSourceUtf8Bytes)
             throw Invalid("workspace-too-large", "The C++/CLI source exceeds the configured limit.", StatusCodes.Status413PayloadTooLarge);
         ValidateCompilerFileAccess(source.Text);
-        if (workspace.SourceOrder.Count != 1 ||
-            !StringComparer.Ordinal.Equals(NormalizeRelativePath(workspace.SourceOrder[0]), path) ||
-            !StringComparer.Ordinal.Equals(NormalizeRelativePath(workspace.ActiveFile), path))
+        if (workspace.SourceOrder.Count != 1 || !StringComparer.Ordinal.Equals(NormalizeRelativePath(workspace.SourceOrder[0]), path) || !StringComparer.Ordinal.Equals(NormalizeRelativePath(workspace.ActiveFile), path))
         {
             throw Invalid("invalid-workspace", "SourceOrder and ActiveFile must identify the C++/CLI source file.");
         }
 
         ValidateOptions(request.EffectiveOptions, compilerVersion);
-        return new ValidatedCppCliWorkspace(
-            workspace,
-            new ValidatedCppCliWorkspaceFile(path, source.Version, source.Text),
-            request.EffectiveOptions);
+        return new ValidatedCppCliWorkspace(workspace, new ValidatedCppCliWorkspaceFile(path, source.Version, source.Text), request.EffectiveOptions);
     }
 
     internal static string NormalizeRelativePath(string path)
@@ -86,8 +71,7 @@ internal static class CppCliWorkspaceValidator
         while (reader.ReadLine() is { } line)
         {
             var directive = line.AsSpan().TrimStart();
-            if (directive.StartsWith("%:", StringComparison.Ordinal) ||
-                directive.StartsWith("??=", StringComparison.Ordinal))
+            if (directive.StartsWith("%:", StringComparison.Ordinal) || directive.StartsWith("??=", StringComparison.Ordinal))
             {
                 throw UnsafeDirective("Alternative preprocessor directive tokens are not supported.");
             }
@@ -96,8 +80,7 @@ internal static class CppCliWorkspaceValidator
 
             directive = directive[1..].TrimStart();
             var nameLength = 0;
-            while (nameLength < directive.Length &&
-                   (char.IsAsciiLetter(directive[nameLength]) || directive[nameLength] == '_'))
+            while (nameLength < directive.Length && (char.IsAsciiLetter(directive[nameLength]) || directive[nameLength] == '_'))
             {
                 nameLength++;
             }
@@ -106,8 +89,7 @@ internal static class CppCliWorkspaceValidator
 
             var name = directive[..nameLength];
             var argument = directive[nameLength..].Trim();
-            if (name.Equals("include", StringComparison.OrdinalIgnoreCase) ||
-                name.Equals("include_next", StringComparison.OrdinalIgnoreCase))
+            if (name.Equals("include", StringComparison.OrdinalIgnoreCase) || name.Equals("include_next", StringComparison.OrdinalIgnoreCase))
             {
                 ValidateLiteralFileOperand(argument, "include", allowDirectories: true);
                 continue;
@@ -117,16 +99,14 @@ internal static class CppCliWorkspaceValidator
                 ValidateLiteralFileOperand(argument, "using", allowDirectories: false);
                 continue;
             }
-            if (name.Equals("import", StringComparison.OrdinalIgnoreCase) ||
-                name.Equals("embed", StringComparison.OrdinalIgnoreCase))
+            if (name.Equals("import", StringComparison.OrdinalIgnoreCase) || name.Equals("embed", StringComparison.OrdinalIgnoreCase))
             {
                 throw UnsafeDirective($"#{name.ToString()} is not available in the isolated C++/CLI compiler.");
             }
             if (name.Equals("pragma", StringComparison.OrdinalIgnoreCase))
             {
                 var pragma = FirstIdentifier(argument);
-                if (pragma.Equals("comment", StringComparison.OrdinalIgnoreCase) ||
-                    pragma.Equals("include_alias", StringComparison.OrdinalIgnoreCase))
+                if (pragma.Equals("comment", StringComparison.OrdinalIgnoreCase) || pragma.Equals("include_alias", StringComparison.OrdinalIgnoreCase))
                 {
                     throw UnsafeDirective($"#pragma {pragma.ToString()} is not available in the isolated C++/CLI compiler.");
                 }
@@ -134,10 +114,7 @@ internal static class CppCliWorkspaceValidator
         }
     }
 
-    private static void ValidateLiteralFileOperand(
-        ReadOnlySpan<char> argument,
-        string directive,
-        bool allowDirectories)
+    private static void ValidateLiteralFileOperand(ReadOnlySpan<char> argument, string directive, bool allowDirectories)
     {
         if (argument.Length < 3 || argument[0] is not ('<' or '"'))
             throw UnsafeDirective($"#{directive} requires a literal, relative file name.");
@@ -153,17 +130,13 @@ internal static class CppCliWorkspaceValidator
         }
 
         var path = argument[1..closingIndex];
-        if (path.IsEmpty || path.Length > 200 || path.Contains('\0') || path.Contains('\\') ||
-            path.Contains(':') || path[0] == '/' ||
-            path.ToString().Split('/').Any(static segment => segment is "" or "." or "..") ||
-            (!allowDirectories && path.Contains('/')))
+        if (path.IsEmpty || path.Length > 200 || path.Contains('\0') || path.Contains('\\') || path.Contains(':') || path[0] == '/' || path.ToString().Split('/').Any(static segment => segment is "" or "." or "..") || (!allowDirectories && path.Contains('/')))
         {
             throw UnsafeDirective($"#{directive} can only access a safe compiler-provided file name.");
         }
         foreach (var character in path)
         {
-            if (!char.IsAsciiLetterOrDigit(character) &&
-                character is not ('.' or '_' or '-' or '+' or '/'))
+            if (!char.IsAsciiLetterOrDigit(character) && character is not ('.' or '_' or '-' or '+' or '/'))
             {
                 throw UnsafeDirective($"#{directive} contains an unsupported file name.");
             }
@@ -174,8 +147,7 @@ internal static class CppCliWorkspaceValidator
     {
         value = value.TrimStart();
         var length = 0;
-        while (length < value.Length &&
-               (char.IsAsciiLetter(value[length]) || value[length] == '_'))
+        while (length < value.Length && (char.IsAsciiLetter(value[length]) || value[length] == '_'))
         {
             length++;
         }
@@ -193,9 +165,7 @@ internal static class CppCliWorkspaceValidator
             throw Invalid("unsupported-option", "The C# allowUnsafe option does not apply to C++/CLI.");
         if (options.NullableContext is not (NullableContextMode.ProjectDefault or NullableContextMode.Disable))
             throw Invalid("unsupported-option", "C# nullable context options do not apply to C++/CLI.");
-        if (options.LanguageVersion is not null &&
-            options.LanguageVersion is not ("default" or "latest") &&
-            !StringComparer.Ordinal.Equals(options.LanguageVersion, compilerVersion))
+        if (options.LanguageVersion is not null && options.LanguageVersion is not ("default" or "latest") && !StringComparer.Ordinal.Equals(options.LanguageVersion, compilerVersion))
         {
             throw Invalid("unsupported-option", $"C++/CLI compiler version '{options.LanguageVersion}' is not supported.");
         }
@@ -205,8 +175,5 @@ internal static class CppCliWorkspaceValidator
             throw Invalid("unsupported-option", "The C# overflow option does not apply to C++/CLI.");
     }
 
-    private static LanguageWorkerRequestException Invalid(
-        string code,
-        string message,
-        int statusCode = StatusCodes.Status400BadRequest) => new(code, message, statusCode);
+    private static LanguageWorkerRequestException Invalid(string code, string message, int statusCode = StatusCodes.Status400BadRequest) => new(code, message, statusCode);
 }

@@ -18,14 +18,9 @@ public sealed record CandidateReleaseMaterial(
     string ValidationComposePath,
     string ValidationEndpointsPath);
 
-public sealed record CandidateRuntimeProfileMaterial(
-    string Id,
-    string RelativePath,
-    string Path);
+public sealed record CandidateRuntimeProfileMaterial(string Id, string RelativePath, string Path);
 
-public sealed record CandidateReferenceSetConfigurationMaterial(
-    string RelativePath,
-    string Path);
+public sealed record CandidateReferenceSetConfigurationMaterial(string RelativePath, string Path);
 
 public static class CandidateReleaseMaterializer
 {
@@ -38,12 +33,7 @@ public static class CandidateReleaseMaterializer
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
 
-    public static async Task<CandidateReleaseMaterial> WriteAsync(
-        string workspaceRoot,
-        CatalogDocument catalogTemplate,
-        ReleaseLockDocument candidate,
-        string candidateDigest,
-        CancellationToken cancellationToken = default)
+    public static async Task<CandidateReleaseMaterial> WriteAsync(string workspaceRoot, CatalogDocument catalogTemplate, ReleaseLockDocument candidate, string candidateDigest, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceRoot);
         var material = Locate(workspaceRoot);
@@ -51,38 +41,20 @@ public static class CandidateReleaseMaterializer
         ValidateIdentityClosure(candidate, catalog);
         await AtomicFile.WriteAllBytesAsync(material.LockPath, Serialize(candidate), cancellationToken);
         await AtomicFile.WriteAllBytesAsync(material.CatalogPath, Serialize(catalog), cancellationToken);
-        await AtomicFile.WriteAllBytesAsync(
-            material.VersionsPath,
-            Encoding.UTF8.GetBytes(CreateVersionsProps(candidate)),
-            cancellationToken);
+        await AtomicFile.WriteAllBytesAsync(material.VersionsPath, Encoding.UTF8.GetBytes(CreateVersionsProps(candidate)), cancellationToken);
         foreach (var runtimeProfile in material.RuntimeProfiles)
         {
             var template = await File.ReadAllTextAsync(runtimeProfile.Path, cancellationToken);
-            await AtomicFile.WriteAllBytesAsync(
-                runtimeProfile.Path,
-                Encoding.UTF8.GetBytes(CreateRuntimeProfile(template, runtimeProfile.Id, candidate)),
-                cancellationToken);
+            await AtomicFile.WriteAllBytesAsync(runtimeProfile.Path, Encoding.UTF8.GetBytes(CreateRuntimeProfile(template, runtimeProfile.Id, candidate)), cancellationToken);
         }
         foreach (var configuration in material.ReferenceSetConfigurations)
         {
             var template = await File.ReadAllTextAsync(configuration.Path, cancellationToken);
-            await AtomicFile.WriteAllBytesAsync(
-                configuration.Path,
-                Encoding.UTF8.GetBytes(CreateReferenceSetConfiguration(
-                    template,
-                    configuration.RelativePath,
-                    candidate)),
-                cancellationToken);
+            await AtomicFile.WriteAllBytesAsync(configuration.Path, Encoding.UTF8.GetBytes(CreateReferenceSetConfiguration(template, configuration.RelativePath, candidate)), cancellationToken);
         }
         var validation = CreateValidationEndpoints(candidateDigest);
-        await AtomicFile.WriteAllBytesAsync(
-            material.ValidationComposePath,
-            Encoding.UTF8.GetBytes(CreateValidationCompose(validation, candidateDigest)),
-            cancellationToken);
-        await AtomicFile.WriteAllBytesAsync(
-            material.ValidationEndpointsPath,
-            Serialize(validation),
-            cancellationToken);
+        await AtomicFile.WriteAllBytesAsync(material.ValidationComposePath, Encoding.UTF8.GetBytes(CreateValidationCompose(validation, candidateDigest)), cancellationToken);
+        await AtomicFile.WriteAllBytesAsync(material.ValidationEndpointsPath, Serialize(validation), cancellationToken);
         return material;
     }
 
@@ -90,21 +62,10 @@ public static class CandidateReleaseMaterializer
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceRoot);
         var root = Path.GetFullPath(workspaceRoot);
-        return new CandidateReleaseMaterial(
-            root,
-            Path.Combine(root, "profiles", "lock.json"),
-            Path.Combine(root, "profiles", "catalog", "catalog.json"),
-            Path.Combine(root, "profiles", "versions.props"),
-            DiscoverRuntimeProfiles(root),
-            DiscoverReferenceSetConfigurations(root),
-            Path.Combine(root, "artifacts", "profile-candidate", "compose.validation.yaml"),
-            Path.Combine(root, "artifacts", "profile-candidate", "endpoints.json"));
+        return new CandidateReleaseMaterial(root, Path.Combine(root, "profiles", "lock.json"), Path.Combine(root, "profiles", "catalog", "catalog.json"), Path.Combine(root, "profiles", "versions.props"), DiscoverRuntimeProfiles(root), DiscoverReferenceSetConfigurations(root), Path.Combine(root, "artifacts", "profile-candidate", "compose.validation.yaml"), Path.Combine(root, "artifacts", "profile-candidate", "endpoints.json"));
     }
 
-    public static CatalogDocument CreateCatalog(
-        CatalogDocument template,
-        ReleaseLockDocument candidate,
-        string candidateDigest)
+    public static CatalogDocument CreateCatalog(CatalogDocument template, ReleaseLockDocument candidate, string candidateDigest)
     {
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(candidate);
@@ -131,152 +92,51 @@ public static class CandidateReleaseMaterializer
 
         var toolchains = template.Toolchains.Select(toolchain => toolchain.Id switch
         {
-            "roslyn-stable" => toolchain with
-            {
-                DisplayName = $"Roslyn Stable {roslynStable.ResolvedVersion}",
-                ResolvedVersion = roslynStable.ResolvedVersion
-            },
-            "roslyn-stable-netfx48" => toolchain with
-            {
-                DisplayName = $"Roslyn Stable {roslynStableNetFx48.ResolvedVersion} / .NET Framework",
-                ResolvedVersion = roslynStableNetFx48.ResolvedVersion
-            },
-            "roslyn-main" => toolchain with
-            {
-                DisplayName = $"Roslyn Main {roslynMain.ResolvedVersion} ({RequiredCommit(roslynMain, "roslyn-main")[..12]})",
-                ResolvedVersion = roslynMain.ResolvedVersion
-            },
-            "roslyn-const-generics" => toolchain with
-            {
-                DisplayName = $"Roslyn Const Generics {roslynConstGenerics.ResolvedVersion}",
-                ResolvedVersion = roslynConstGenerics.ResolvedVersion
-            },
-            "fsharp-stable" => toolchain with
-            {
-                DisplayName = $"F# Stable {fsharp.ResolvedVersion}",
-                ResolvedVersion = fsharp.ResolvedVersion
-            },
-            "gsharp-stable" => toolchain with
-            {
-                DisplayName = gsharp.ResolvedVersion,
-                ResolvedVersion = gsharp.ResolvedVersion
-            },
-            "peachpie-stable" => toolchain with
-            {
-                DisplayName = $"PeachPie Stable {peachPie.ResolvedVersion}",
-                ResolvedVersion = peachPie.ResolvedVersion
-            },
-            "vjc-jsharp20" => toolchain with
-            {
-                DisplayName = $"Visual J# {jsharp.ResolvedVersion}",
-                ResolvedVersion = jsharp.ResolvedVersion
-            },
-            "mobius-ilasm-stable" => toolchain with
-            {
-                DisplayName = $"Mobius ILAsm Stable {mobius.ResolvedVersion}",
-                ResolvedVersion = mobius.ResolvedVersion
-            },
+            "roslyn-stable" => toolchain with { DisplayName = $"Roslyn Stable {roslynStable.ResolvedVersion}", ResolvedVersion = roslynStable.ResolvedVersion },
+            "roslyn-stable-netfx48" => toolchain with { DisplayName = $"Roslyn Stable {roslynStableNetFx48.ResolvedVersion} / .NET Framework", ResolvedVersion = roslynStableNetFx48.ResolvedVersion },
+            "roslyn-main" => toolchain with { DisplayName = $"Roslyn Main {roslynMain.ResolvedVersion} ({RequiredCommit(roslynMain, "roslyn-main")[..12]})", ResolvedVersion = roslynMain.ResolvedVersion },
+            "roslyn-const-generics" => toolchain with { DisplayName = $"Roslyn Const Generics {roslynConstGenerics.ResolvedVersion}", ResolvedVersion = roslynConstGenerics.ResolvedVersion },
+            "fsharp-stable" => toolchain with { DisplayName = $"F# Stable {fsharp.ResolvedVersion}", ResolvedVersion = fsharp.ResolvedVersion },
+            "gsharp-stable" => toolchain with { DisplayName = gsharp.ResolvedVersion, ResolvedVersion = gsharp.ResolvedVersion },
+            "peachpie-stable" => toolchain with { DisplayName = $"PeachPie Stable {peachPie.ResolvedVersion}", ResolvedVersion = peachPie.ResolvedVersion },
+            "vjc-jsharp20" => toolchain with { DisplayName = $"Visual J# {jsharp.ResolvedVersion}", ResolvedVersion = jsharp.ResolvedVersion },
+            "mobius-ilasm-stable" => toolchain with { DisplayName = $"Mobius ILAsm Stable {mobius.ResolvedVersion}", ResolvedVersion = mobius.ResolvedVersion },
             _ => toolchain
         }).ToArray();
         var referenceSets = template.ReferenceSets.Select(referenceSet =>
         {
             var resolved = candidate.Components.TryGetValue(referenceSet.Id, out var component) &&
                            string.Equals(component.Kind, "reference-set", StringComparison.Ordinal)
-                ? referenceSet with
-                {
-                    Digest = ReferenceSetIdentityResolver.ResolveLockedDigest(component, referenceSet.Id)
-                }
+                ? referenceSet with { Digest = ReferenceSetIdentityResolver.ResolveLockedDigest(component, referenceSet.Id) }
                 : referenceSet;
             return referenceSet.Id switch
             {
                 "net10-ref" => resolved with { DisplayName = ".NET 10" },
                 "net11-preview-ref" => resolved with { DisplayName = ".NET Main" },
                 "const-generics-ref" => resolved with { DisplayName = "Const Generics" },
-                "netfx48-managed-ref" => resolved with
-                {
-                    DisplayName = ".NET Framework 4.8 Reference Assemblies"
-                },
-                "jsharp20-ref" => resolved with
-                {
-                    DisplayName = "Visual J# 2.0 / CLR 2.0 Reference Assemblies"
-                },
+                "netfx48-managed-ref" => resolved with { DisplayName = ".NET Framework 4.8 Reference Assemblies" },
+                "jsharp20-ref" => resolved with { DisplayName = "Visual J# 2.0 / CLR 2.0 Reference Assemblies" },
                 _ => resolved
             };
         }).ToArray();
         var runtimes = template.Runtimes.Select(runtime => runtime.Id switch
         {
-            "dotnet-10-linux-x64" => runtime with
-            {
-                DisplayName = ".NET 10",
-                ResolvedVersion = dotnet10.ResolvedVersion,
-                RuntimeCommit = dotnet10.Commit ?? runtime.RuntimeCommit,
-                JitVersion = dotnet10.JitCommit is null ? runtime.JitVersion : dotnet10.ResolvedVersion,
-                JitCommit = dotnet10.JitCommit ?? runtime.JitCommit,
-                RuntimeImageId = dotnet10.ImageId ?? runtime.RuntimeImageId
-            },
-            "dotnet-11-preview-linux-x64" => runtime with
-            {
-                DisplayName = ".NET Main",
-                ResolvedVersion = dotnet11.ResolvedVersion,
-                RuntimeCommit = dotnet11.Commit ?? runtime.RuntimeCommit,
-                JitVersion = dotnet11.JitCommit is null ? runtime.JitVersion : dotnet11.ResolvedVersion,
-                JitCommit = dotnet11.JitCommit ?? runtime.JitCommit,
-                RuntimeImageId = dotnet11.ImageId ?? runtime.RuntimeImageId
-            },
-            "const-generics-linux-x64" => runtime with
-            {
-                DisplayName = $"Const Generics Runtime {constGenericsRuntime.ResolvedVersion}",
-                ResolvedVersion = constGenericsRuntime.ResolvedVersion,
-                RuntimeCommit = constGenericsRuntime.Commit ?? runtime.RuntimeCommit,
-                JitVersion = constGenericsRuntime.JitCommit is null ? runtime.JitVersion : constGenericsRuntime.ResolvedVersion,
-                JitCommit = constGenericsRuntime.JitCommit ?? runtime.JitCommit,
-                RuntimeImageId = constGenericsRuntime.ImageId ?? runtime.RuntimeImageId
-            },
-            "wine-netfx48-linux-x64" => runtime with
-            {
-                ResolvedVersion = netFx48Runtime.ResolvedVersion,
-                RuntimeImageId = netFx48Runtime.ImageId ?? runtime.RuntimeImageId
-            },
-            "wine-jsharp20-linux-x64" => runtime with
-            {
-                DisplayName = "Visual J# 2.0 / CLR 2.0 / Wine 9.0",
-                ResolvedVersion = jsharpRuntime.ResolvedVersion,
-                RuntimeCommit = jsharpRuntime.Commit ?? runtime.RuntimeCommit,
-                JitVersion = jsharpRuntime.JitCommit is null ? runtime.JitVersion : jsharpRuntime.ResolvedVersion,
-                JitCommit = jsharpRuntime.JitCommit ?? runtime.JitCommit,
-                RuntimeImageId = jsharpRuntime.ImageId ?? runtime.RuntimeImageId
-            },
+            "dotnet-10-linux-x64" => runtime with { DisplayName = ".NET 10", ResolvedVersion = dotnet10.ResolvedVersion, RuntimeCommit = dotnet10.Commit ?? runtime.RuntimeCommit, JitVersion = dotnet10.JitCommit is null ? runtime.JitVersion : dotnet10.ResolvedVersion, JitCommit = dotnet10.JitCommit ?? runtime.JitCommit, RuntimeImageId = dotnet10.ImageId ?? runtime.RuntimeImageId },
+            "dotnet-11-preview-linux-x64" => runtime with { DisplayName = ".NET Main", ResolvedVersion = dotnet11.ResolvedVersion, RuntimeCommit = dotnet11.Commit ?? runtime.RuntimeCommit, JitVersion = dotnet11.JitCommit is null ? runtime.JitVersion : dotnet11.ResolvedVersion, JitCommit = dotnet11.JitCommit ?? runtime.JitCommit, RuntimeImageId = dotnet11.ImageId ?? runtime.RuntimeImageId },
+            "const-generics-linux-x64" => runtime with { DisplayName = $"Const Generics Runtime {constGenericsRuntime.ResolvedVersion}", ResolvedVersion = constGenericsRuntime.ResolvedVersion, RuntimeCommit = constGenericsRuntime.Commit ?? runtime.RuntimeCommit, JitVersion = constGenericsRuntime.JitCommit is null ? runtime.JitVersion : constGenericsRuntime.ResolvedVersion, JitCommit = constGenericsRuntime.JitCommit ?? runtime.JitCommit, RuntimeImageId = constGenericsRuntime.ImageId ?? runtime.RuntimeImageId },
+            "wine-netfx48-linux-x64" => runtime with { ResolvedVersion = netFx48Runtime.ResolvedVersion, RuntimeImageId = netFx48Runtime.ImageId ?? runtime.RuntimeImageId },
+            "wine-jsharp20-linux-x64" => runtime with { DisplayName = "Visual J# 2.0 / CLR 2.0 / Wine 9.0", ResolvedVersion = jsharpRuntime.ResolvedVersion, RuntimeCommit = jsharpRuntime.Commit ?? runtime.RuntimeCommit, JitVersion = jsharpRuntime.JitCommit is null ? runtime.JitVersion : jsharpRuntime.ResolvedVersion, JitCommit = jsharpRuntime.JitCommit ?? runtime.JitCommit, RuntimeImageId = jsharpRuntime.ImageId ?? runtime.RuntimeImageId },
             _ => runtime
         }).ToArray();
         var processors = template.ArtifactProcessors.Select(processor => processor.Id switch
         {
-            "artifacts-default" => processor with
-            {
-                DisplayName = $"ILSpy {Component(candidate, "ilspy").ResolvedVersion} and ILVerify {Component(candidate, "dotnet-ilverify").ResolvedVersion}",
-                ResolvedVersion = defaultArtifacts.ResolvedVersion
-            },
-            "il-assembler" => processor with
-            {
-                DisplayName = $"Public IL Assembler {mobius.ResolvedVersion}",
-                ResolvedVersion = mobius.ResolvedVersion
-            },
-            "artifacts-const-generics" => processor with
-            {
-                DisplayName = $"Const Generics Artifact Processor {constGenericsArtifacts.ResolvedVersion}",
-                ResolvedVersion = constGenericsArtifacts.ResolvedVersion
-            },
+            "artifacts-default" => processor with { DisplayName = $"ILSpy {Component(candidate, "ilspy").ResolvedVersion} and ILVerify {Component(candidate, "dotnet-ilverify").ResolvedVersion}", ResolvedVersion = defaultArtifacts.ResolvedVersion },
+            "il-assembler" => processor with { DisplayName = $"Public IL Assembler {mobius.ResolvedVersion}", ResolvedVersion = mobius.ResolvedVersion },
+            "artifacts-const-generics" => processor with { DisplayName = $"Const Generics Artifact Processor {constGenericsArtifacts.ResolvedVersion}", ResolvedVersion = constGenericsArtifacts.ResolvedVersion },
             _ => processor
         }).ToArray();
 
-        return template with
-        {
-            Revision = $"{candidate.ReleaseId}-h{DigestHex(candidateDigest)[..12]}",
-            ReleaseId = candidate.ReleaseId,
-            Toolchains = toolchains,
-            ReferenceSets = referenceSets,
-            Runtimes = runtimes,
-            ArtifactProcessors = processors
-        };
+        return template with { Revision = $"{candidate.ReleaseId}-h{DigestHex(candidateDigest)[..12]}", ReleaseId = candidate.ReleaseId, Toolchains = toolchains, ReferenceSets = referenceSets, Runtimes = runtimes, ArtifactProcessors = processors };
     }
 
     public static string CreateVersionsProps(ReleaseLockDocument candidate)
@@ -284,10 +144,7 @@ public static class CandidateReleaseMaterializer
         var roslynMain = Component(candidate, "roslyn-main");
         var constGenericsIlSpy = Component(candidate, "const-generics-ilspy-source");
         var constGenericsRuntime = Component(candidate, "const-generics-runtime-source");
-        var constGenericsVerificationRevision = ConstGenericsVerificationRevision(
-            candidate,
-            constGenericsIlSpy,
-            constGenericsRuntime);
+        var constGenericsVerificationRevision = ConstGenericsVerificationRevision(candidate, constGenericsIlSpy, constGenericsRuntime);
         var properties = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["RoslynStableVersion"] = Version(candidate, "roslyn-stable"),
@@ -317,46 +174,30 @@ public static class CandidateReleaseMaterializer
             ["ConstGenericsVerificationProcessorVersion"] =
                 $"$(ConstGenericsRuntimeCommit)+{constGenericsVerificationRevision}"
         };
-        var document = new XDocument(
-            new XElement("Project",
-                new XElement("PropertyGroup", properties.Select(pair => new XElement(pair.Key, pair.Value)))));
-        var settings = new XmlWriterSettings
-        {
-            Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-            Indent = true,
-            OmitXmlDeclaration = true,
-            NewLineChars = "\n",
-            NewLineHandling = NewLineHandling.Replace
-        };
+        var document = new XDocument(new XElement("Project", new XElement("PropertyGroup", properties.Select(pair => new XElement(pair.Key, pair.Value)))));
+        var settings = new XmlWriterSettings { Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), Indent = true, OmitXmlDeclaration = true, NewLineChars = "\n", NewLineHandling = NewLineHandling.Replace };
         var builder = new StringBuilder();
         using (var writer = XmlWriter.Create(builder, settings))
             document.Save(writer);
         return builder.Append('\n').ToString();
     }
 
-    public static string CreateRuntimeProfile(
-        string templateJson,
-        string expectedId,
-        ReleaseLockDocument candidate)
+    public static string CreateRuntimeProfile(string templateJson, string expectedId, ReleaseLockDocument candidate)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(templateJson);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedId);
         ArgumentNullException.ThrowIfNull(candidate);
-        var profile = JsonNode.Parse(templateJson) as JsonObject
-            ?? throw new ProfileUpdateValidationException(
-                $"Runtime profile '{expectedId}' must be a JSON object.");
+        var profile = JsonNode.Parse(templateJson) as JsonObject ?? throw new ProfileUpdateValidationException($"Runtime profile '{expectedId}' must be a JSON object.");
         var id = RequiredJsonString(profile, "id", expectedId);
         if (!string.Equals(id, expectedId, StringComparison.Ordinal))
         {
-            throw new ProfileUpdateValidationException(
-                $"Runtime profile '{expectedId}' contains unexpected ID '{id}'.");
+            throw new ProfileUpdateValidationException($"Runtime profile '{expectedId}' contains unexpected ID '{id}'.");
         }
 
         var runtime = Component(candidate, id);
         if (!string.Equals(runtime.Kind, "runtime", StringComparison.Ordinal))
         {
-            throw new ProfileUpdateValidationException(
-                $"Candidate lock component '{id}' must have kind 'runtime', actual '{runtime.Kind}'.");
+            throw new ProfileUpdateValidationException($"Candidate lock component '{id}' must have kind 'runtime', actual '{runtime.Kind}'.");
         }
         var runtimeVersion = Required(runtime.ResolvedVersion, $"{id}.resolvedVersion");
         var image = RetagImage(RequiredJsonString(profile, "image", id), candidate.ReleaseId);
@@ -374,43 +215,30 @@ public static class CandidateReleaseMaterializer
         return profile.ToJsonString(JsonOptions) + "\n";
     }
 
-    private static string CreateReferenceSetConfiguration(
-        string templateJson,
-        string relativePath,
-        ReleaseLockDocument candidate)
+    private static string CreateReferenceSetConfiguration(string templateJson, string relativePath, ReleaseLockDocument candidate)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(templateJson);
         ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
         ArgumentNullException.ThrowIfNull(candidate);
-        var document = JsonNode.Parse(templateJson) as JsonObject
-            ?? throw new ProfileUpdateValidationException(
-                $"Reference-set configuration '{relativePath}' must be a JSON object.");
-        var referenceSets = document["ReferenceSets"] as JsonObject
-            ?? throw new ProfileUpdateValidationException(
-                $"Reference-set configuration '{relativePath}' must contain a ReferenceSets object.");
+        var document = JsonNode.Parse(templateJson) as JsonObject ?? throw new ProfileUpdateValidationException($"Reference-set configuration '{relativePath}' must be a JSON object.");
+        var referenceSets = document["ReferenceSets"] as JsonObject ?? throw new ProfileUpdateValidationException($"Reference-set configuration '{relativePath}' must contain a ReferenceSets object.");
 
         foreach (var (referenceSetId, value) in referenceSets)
         {
             if (value is not JsonObject definition)
             {
-                throw new ProfileUpdateValidationException(
-                    $"Reference-set configuration '{relativePath}' entry '{referenceSetId}' must be an object.");
+                throw new ProfileUpdateValidationException($"Reference-set configuration '{relativePath}' entry '{referenceSetId}' must be an object.");
             }
 
             var component = Component(candidate, referenceSetId);
             if (!string.Equals(component.Kind, "reference-set", StringComparison.Ordinal))
             {
-                throw new ProfileUpdateValidationException(
-                    $"Candidate lock component '{referenceSetId}' must have kind 'reference-set', actual '{component.Kind}'.");
+                throw new ProfileUpdateValidationException($"Candidate lock component '{referenceSetId}' must have kind 'reference-set', actual '{component.Kind}'.");
             }
-            definition["FrameworkVersion"] = Required(
-                component.ResolvedVersion,
-                $"{referenceSetId}.resolvedVersion");
+            definition["FrameworkVersion"] = Required(component.ResolvedVersion, $"{referenceSetId}.resolvedVersion");
             if (definition.ContainsKey("Digest"))
             {
-                definition["Digest"] = ReferenceSetIdentityResolver.ResolveLockedDigest(
-                    component,
-                    referenceSetId);
+                definition["Digest"] = ReferenceSetIdentityResolver.ResolveLockedDigest(component, referenceSetId);
             }
         }
 
@@ -422,41 +250,33 @@ public static class CandidateReleaseMaterializer
         var runtimeDirectory = Path.Combine(workspaceRoot, "profiles", "runtimes");
         if (!Directory.Exists(runtimeDirectory))
         {
-            throw new ProfileUpdateValidationException(
-                $"Runtime profile directory '{runtimeDirectory}' does not exist.");
+            throw new ProfileUpdateValidationException($"Runtime profile directory '{runtimeDirectory}' does not exist.");
         }
 
         var profiles = new List<CandidateRuntimeProfileMaterial>();
         var ids = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var path in Directory.EnumerateFiles(runtimeDirectory, "*.json", SearchOption.TopDirectoryOnly)
-                     .OrderBy(static path => Path.GetFileName(path), StringComparer.Ordinal))
+        foreach (var path in Directory.EnumerateFiles(runtimeDirectory, "*.json", SearchOption.TopDirectoryOnly).OrderBy(static path => Path.GetFileName(path), StringComparer.Ordinal))
         {
             JsonObject profile;
             try
             {
-                profile = JsonNode.Parse(File.ReadAllText(path)) as JsonObject
-                    ?? throw new JsonException("The root value is not an object.");
+                profile = JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? throw new JsonException("The root value is not an object.");
             }
             catch (JsonException exception)
             {
-                throw new ProfileUpdateValidationException(
-                    $"Runtime profile '{path}' is invalid JSON: {exception.Message}");
+                throw new ProfileUpdateValidationException($"Runtime profile '{path}' is invalid JSON: {exception.Message}");
             }
 
             var id = RequiredJsonString(profile, "id", Path.GetFileName(path));
             var fileId = Path.GetFileNameWithoutExtension(path);
             if (!string.Equals(id, fileId, StringComparison.Ordinal))
             {
-                throw new ProfileUpdateValidationException(
-                    $"Runtime profile file '{Path.GetFileName(path)}' contains ID '{id}'.");
+                throw new ProfileUpdateValidationException($"Runtime profile file '{Path.GetFileName(path)}' contains ID '{id}'.");
             }
             if (!ids.Add(id))
                 throw new ProfileUpdateValidationException($"Runtime profile ID '{id}' is duplicated.");
 
-            profiles.Add(new CandidateRuntimeProfileMaterial(
-                id,
-                Path.Combine("profiles", "runtimes", Path.GetFileName(path)),
-                Path.GetFullPath(path)));
+            profiles.Add(new CandidateRuntimeProfileMaterial(id, Path.Combine("profiles", "runtimes", Path.GetFileName(path)), Path.GetFullPath(path)));
         }
 
         if (profiles.Count == 0)
@@ -464,8 +284,7 @@ public static class CandidateReleaseMaterializer
         return profiles;
     }
 
-    private static List<CandidateReferenceSetConfigurationMaterial> DiscoverReferenceSetConfigurations(
-        string workspaceRoot)
+    private static List<CandidateReferenceSetConfigurationMaterial> DiscoverReferenceSetConfigurations(string workspaceRoot)
     {
         var configurations = new List<CandidateReferenceSetConfigurationMaterial>();
         foreach (var relativeRoot in new[] { Path.Combine("src", "Workers"), "samples" })
@@ -474,10 +293,7 @@ public static class CandidateReleaseMaterializer
             if (!Directory.Exists(searchRoot))
                 continue;
 
-            foreach (var path in Directory.EnumerateFiles(
-                         searchRoot,
-                         "appsettings.json",
-                         SearchOption.AllDirectories))
+            foreach (var path in Directory.EnumerateFiles(searchRoot, "appsettings.json", SearchOption.AllDirectories))
             {
                 var relativePath = Path.GetRelativePath(workspaceRoot, path);
                 if (IsGeneratedPath(relativePath))
@@ -486,45 +302,30 @@ public static class CandidateReleaseMaterializer
                 JsonObject document;
                 try
                 {
-                    document = JsonNode.Parse(File.ReadAllText(path)) as JsonObject
-                        ?? throw new JsonException("The root value is not an object.");
+                    document = JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? throw new JsonException("The root value is not an object.");
                 }
                 catch (JsonException exception)
                 {
-                    throw new ProfileUpdateValidationException(
-                        $"Worker configuration '{relativePath}' is invalid JSON: {exception.Message}");
+                    throw new ProfileUpdateValidationException($"Worker configuration '{relativePath}' is invalid JSON: {exception.Message}");
                 }
 
                 if (document["ReferenceSets"] is null)
                     continue;
                 if (document["ReferenceSets"] is not JsonObject)
                 {
-                    throw new ProfileUpdateValidationException(
-                        $"Worker configuration '{relativePath}' must contain a ReferenceSets object.");
+                    throw new ProfileUpdateValidationException($"Worker configuration '{relativePath}' must contain a ReferenceSets object.");
                 }
-                configurations.Add(new CandidateReferenceSetConfigurationMaterial(
-                    relativePath,
-                    Path.GetFullPath(path)));
+                configurations.Add(new CandidateReferenceSetConfigurationMaterial(relativePath, Path.GetFullPath(path)));
             }
         }
 
-        return configurations
-            .OrderBy(static configuration => configuration.RelativePath, StringComparer.Ordinal)
-            .ToList();
+        return configurations.OrderBy(static configuration => configuration.RelativePath, StringComparer.Ordinal).ToList();
     }
 
     private static bool IsGeneratedPath(string relativePath)
     {
-        var segments = relativePath.Split(
-            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
-            StringSplitOptions.RemoveEmptyEntries);
-        return segments.Any(static segment =>
-            segment.Equals("bin", StringComparison.OrdinalIgnoreCase) ||
-            segment.Equals("obj", StringComparison.OrdinalIgnoreCase) ||
-            segment.Equals(".tmp", StringComparison.OrdinalIgnoreCase) ||
-            segment.Equals("_tmp", StringComparison.OrdinalIgnoreCase) ||
-            segment.Equals("artifacts", StringComparison.OrdinalIgnoreCase) ||
-            segment.Equals("generated", StringComparison.OrdinalIgnoreCase));
+        var segments = relativePath.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        return segments.Any(static segment => segment.Equals("bin", StringComparison.OrdinalIgnoreCase) || segment.Equals("obj", StringComparison.OrdinalIgnoreCase) || segment.Equals(".tmp", StringComparison.OrdinalIgnoreCase) || segment.Equals("_tmp", StringComparison.OrdinalIgnoreCase) || segment.Equals("artifacts", StringComparison.OrdinalIgnoreCase) || segment.Equals("generated", StringComparison.OrdinalIgnoreCase));
     }
 
     private static void UpdateCoreClrFrameworkVersion(JsonObject profile, string runtimeVersion)
@@ -534,10 +335,7 @@ public static class CandidateReleaseMaterializer
 
         foreach (var framework in frameworks.OfType<JsonObject>())
         {
-            if (framework["name"] is JsonValue name &&
-                name.TryGetValue<string>(out var value) &&
-                string.Equals(value, "Microsoft.NETCore.App", StringComparison.Ordinal) &&
-                framework.ContainsKey("exactVersion"))
+            if (framework["name"] is JsonValue name && name.TryGetValue<string>(out var value) && string.Equals(value, "Microsoft.NETCore.App", StringComparison.Ordinal) && framework.ContainsKey("exactVersion"))
             {
                 framework["exactVersion"] = runtimeVersion;
             }
@@ -605,9 +403,7 @@ public static class CandidateReleaseMaterializer
         };
     }
 
-    public static string CreateValidationCompose(
-        CandidateValidationEndpoints endpoints,
-        string candidateDigest)
+    public static string CreateValidationCompose(CandidateValidationEndpoints endpoints, string candidateDigest)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(candidateDigest);
         var services = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -632,82 +428,48 @@ public static class CandidateReleaseMaterializer
         foreach (var service in services)
         {
             var port = new Uri(service.Value).Port;
-            builder.Append("  ").Append(service.Key).Append(":\n")
-                .Append("    ports:\n")
-                .Append("      - \"127.0.0.1:").Append(port).Append(":8080\"\n");
+            builder.Append("  ").Append(service.Key).Append(":\n").Append("    ports:\n").Append("      - \"127.0.0.1:").Append(port).Append(":8080\"\n");
             if (service.Key == "runtime-supervisor")
             {
-                builder.Append("    environment:\n")
-                    .Append("      RuntimeSupervisor__ResourceScope: \"")
-                    .Append(candidateDigest)
-                    .Append("\"\n");
+                builder.Append("    environment:\n").Append("      RuntimeSupervisor__ResourceScope: \"").Append(candidateDigest).Append("\"\n");
             }
         }
         return builder.ToString();
     }
 
-    private static void RequireToolchain(
-        ReleaseLockDocument candidate,
-        CatalogDocument catalog,
-        string componentId,
-        string catalogId) => RequireEqual(
-            Version(candidate, componentId),
-            catalog.Toolchains.Single(item => item.Id == catalogId).ResolvedVersion,
-            $"catalog.toolchains[{catalogId}].resolvedVersion");
+    private static void RequireToolchain(ReleaseLockDocument candidate, CatalogDocument catalog, string componentId, string catalogId) => RequireEqual(Version(candidate, componentId), catalog.Toolchains.Single(item => item.Id == catalogId).ResolvedVersion, $"catalog.toolchains[{catalogId}].resolvedVersion");
 
-    private static void RequireOptionalToolchain(
-        ReleaseLockDocument candidate,
-        CatalogDocument catalog,
-        string componentId,
-        string catalogId)
+    private static void RequireOptionalToolchain(ReleaseLockDocument candidate, CatalogDocument catalog, string componentId, string catalogId)
     {
         var component = Component(candidate, componentId);
         if (!string.Equals(component.Kind, "toolchain", StringComparison.Ordinal))
         {
-            throw new ProfileUpdateValidationException(
-                $"Candidate lock component '{componentId}' must have kind 'toolchain', actual '{component.Kind}'.");
+            throw new ProfileUpdateValidationException($"Candidate lock component '{componentId}' must have kind 'toolchain', actual '{component.Kind}'.");
         }
         if (string.IsNullOrWhiteSpace(component.ResolvedVersion))
         {
-            throw new ProfileUpdateValidationException(
-                $"Candidate lock component '{componentId}' must declare a resolved version.");
+            throw new ProfileUpdateValidationException($"Candidate lock component '{componentId}' must declare a resolved version.");
         }
 
-        var toolchain = catalog.Toolchains.SingleOrDefault(item =>
-                string.Equals(item.Id, catalogId, StringComparison.Ordinal))
-            ?? catalog.Toolchains.SingleOrDefault(item =>
-                item.LegacyAliases.Any(alias => string.Equals(alias, catalogId, StringComparison.Ordinal)));
+        var toolchain = catalog.Toolchains.SingleOrDefault(item => string.Equals(item.Id, catalogId, StringComparison.Ordinal)) ?? catalog.Toolchains.SingleOrDefault(item => item.LegacyAliases.Any(alias => string.Equals(alias, catalogId, StringComparison.Ordinal)));
         if (toolchain is not null)
         {
-            RequireEqual(
-                component.ResolvedVersion,
-                toolchain.ResolvedVersion,
-                $"catalog.toolchains[{catalogId}].resolvedVersion");
+            RequireEqual(component.ResolvedVersion, toolchain.ResolvedVersion, $"catalog.toolchains[{catalogId}].resolvedVersion");
         }
     }
 
-    private static void RequireDerivedToolchain(
-        ReleaseLockDocument candidate,
-        string sourceComponentId,
-        string derivedComponentId)
+    private static void RequireDerivedToolchain(ReleaseLockDocument candidate, string sourceComponentId, string derivedComponentId)
     {
         var source = Component(candidate, sourceComponentId);
         var derived = Component(candidate, derivedComponentId);
         var expected = source with { PatchDigest = null, ImageId = null };
         if (derived != expected)
         {
-            throw new ProfileUpdateValidationException(
-                $"Candidate derived toolchain '{derivedComponentId}' must copy the complete input identity of '{sourceComponentId}'.");
+            throw new ProfileUpdateValidationException($"Candidate derived toolchain '{derivedComponentId}' must copy the complete input identity of '{sourceComponentId}'.");
         }
     }
 
-    private static void RequireRuntime(
-        ReleaseLockDocument candidate,
-        CatalogDocument catalog,
-        string id) => RequireEqual(
-            Version(candidate, id),
-            catalog.Runtimes.Single(item => item.Id == id).ResolvedVersion,
-            $"catalog.runtimes[{id}].resolvedVersion");
+    private static void RequireRuntime(ReleaseLockDocument candidate, CatalogDocument catalog, string id) => RequireEqual(Version(candidate, id), catalog.Runtimes.Single(item => item.Id == id).ResolvedVersion, $"catalog.runtimes[{id}].resolvedVersion");
 
     /// <summary>
     /// Verifies that every runtime which could be selected by a candidate has
@@ -717,24 +479,18 @@ public static class CandidateReleaseMaterializer
     /// payload provenance hint, not a Git commit and must never cross the
     /// promotion boundary as <c>RuntimeCommit</c> or <c>JitCommit</c>.
     /// </summary>
-    private static void ValidateRuntimeIdentityClosure(
-        ReleaseLockDocument candidate,
-        CatalogDocument catalog)
+    private static void ValidateRuntimeIdentityClosure(ReleaseLockDocument candidate, CatalogDocument catalog)
     {
         foreach (var runtime in catalog.Runtimes.Where(static runtime => runtime.Availability.IsSelectable))
         {
             if (!candidate.Components.TryGetValue(runtime.Id, out var component))
             {
-                throw new ProfileUpdateValidationException(
-                    $"Selectable runtime '{runtime.Id}' has no corresponding lock component; " +
-                    "a matrix payload must be materialized into the release lock before promotion.");
+                throw new ProfileUpdateValidationException($"Selectable runtime '{runtime.Id}' has no corresponding lock component; " + "a matrix payload must be materialized into the release lock before promotion.");
             }
 
             if (!string.Equals(component.Kind, "runtime", StringComparison.Ordinal))
             {
-                throw new ProfileUpdateValidationException(
-                    $"Selectable runtime '{runtime.Id}' is backed by lock component kind '{component.Kind}', " +
-                    "not 'runtime'.");
+                throw new ProfileUpdateValidationException($"Selectable runtime '{runtime.Id}' is backed by lock component kind '{component.Kind}', " + "not 'runtime'.");
             }
 
             if (!RequiresCommitIdentity(runtime))
@@ -742,20 +498,14 @@ public static class CandidateReleaseMaterializer
                 // Framework/Wine and Mono runtimes are operator payloads. Their
                 // identity is the immutable image/archive digest, never a
                 // CoreCLR Git commit (and never a payload-sha512 marker).
-                if (!IsAbsentOrNotApplicable(runtime.RuntimeCommit) ||
-                    !IsAbsentOrNotApplicable(runtime.JitVersion) ||
-                    !IsAbsentOrNotApplicable(runtime.JitCommit))
+                if (!IsAbsentOrNotApplicable(runtime.RuntimeCommit) || !IsAbsentOrNotApplicable(runtime.JitVersion) || !IsAbsentOrNotApplicable(runtime.JitCommit))
                 {
-                    throw new ProfileUpdateValidationException(
-                        $"Selectable operator runtime '{runtime.Id}' may only declare the canonical " +
-                        "'not-applicable' RuntimeCommit/JitVersion/JitCommit identity.");
+                    throw new ProfileUpdateValidationException($"Selectable operator runtime '{runtime.Id}' may only declare the canonical " + "'not-applicable' RuntimeCommit/JitVersion/JitCommit identity.");
                 }
 
                 if (!IsSha256(component.Digest))
                 {
-                    throw new ProfileUpdateValidationException(
-                        $"Selectable operator runtime '{runtime.Id}' must have an immutable sha256 lock digest; " +
-                        "a payload-sha512 marker is not an operator image identity.");
+                    throw new ProfileUpdateValidationException($"Selectable operator runtime '{runtime.Id}' must have an immutable sha256 lock digest; " + "a payload-sha512 marker is not an operator image identity.");
                 }
 
                 continue;
@@ -767,16 +517,8 @@ public static class CandidateReleaseMaterializer
             RequireCommitIdentity(expectedJitCommit, $"{runtime.Id}.jitCommit");
             RequireCommitIdentity(runtime.RuntimeCommit, $"catalog.runtimes[{runtime.Id}].runtimeCommit");
             RequireCommitIdentity(runtime.JitCommit, $"catalog.runtimes[{runtime.Id}].jitCommit");
-            RequireEqual(
-                expectedRuntimeCommit,
-                runtime.RuntimeCommit!,
-                $"catalog.runtimes[{runtime.Id}].runtimeCommit",
-                ignoreCase: true);
-            RequireEqual(
-                expectedJitCommit,
-                runtime.JitCommit!,
-                $"catalog.runtimes[{runtime.Id}].jitCommit",
-                ignoreCase: true);
+            RequireEqual(expectedRuntimeCommit, runtime.RuntimeCommit!, $"catalog.runtimes[{runtime.Id}].runtimeCommit", ignoreCase: true);
+            RequireEqual(expectedJitCommit, runtime.JitCommit!, $"catalog.runtimes[{runtime.Id}].jitCommit", ignoreCase: true);
         }
     }
 
@@ -784,16 +526,13 @@ public static class CandidateReleaseMaterializer
         !string.Equals(runtime.Family, "netfx-clr-wine", StringComparison.Ordinal) &&
         !string.Equals(runtime.Family, "mono", StringComparison.Ordinal);
 
-    private static bool IsAbsentOrNotApplicable(string? value) =>
-        value is null || string.Equals(value, "not-applicable", StringComparison.Ordinal);
+    private static bool IsAbsentOrNotApplicable(string? value) => value is null || string.Equals(value, "not-applicable", StringComparison.Ordinal);
 
     private static void RequireCommitIdentity(string? value, string field)
     {
         if (!IsCommit(value))
         {
-            throw new ProfileUpdateValidationException(
-                $"Runtime identity '{field}' must be a 40- or 64-character hexadecimal commit; " +
-                "payload-sha512 markers must be materialized into the lock before promotion.");
+            throw new ProfileUpdateValidationException($"Runtime identity '{field}' must be a 40- or 64-character hexadecimal commit; " + "payload-sha512 markers must be materialized into the lock before promotion.");
         }
     }
 
@@ -806,31 +545,18 @@ public static class CandidateReleaseMaterializer
         value.StartsWith("sha256:", StringComparison.Ordinal) &&
         value[7..].All(static character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
 
-    private static void RequireProcessor(
-        ReleaseLockDocument candidate,
-        CatalogDocument catalog,
-        string componentId,
-        string catalogId) => RequireEqual(
-            Version(candidate, componentId),
-            catalog.ArtifactProcessors.Single(item => item.Id == catalogId).ResolvedVersion,
-            $"catalog.artifactProcessors[{catalogId}].resolvedVersion");
+    private static void RequireProcessor(ReleaseLockDocument candidate, CatalogDocument catalog, string componentId, string catalogId) => RequireEqual(Version(candidate, componentId), catalog.ArtifactProcessors.Single(item => item.Id == catalogId).ResolvedVersion, $"catalog.artifactProcessors[{catalogId}].resolvedVersion");
 
-    private static void RequireEqual(
-        string expected,
-        string actual,
-        string field,
-        bool ignoreCase = false)
+    private static void RequireEqual(string expected, string actual, string field, bool ignoreCase = false)
     {
         var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         if (!string.Equals(expected, actual, comparison))
-            throw new ProfileUpdateValidationException(
-                $"Candidate identity mismatch for {field}: expected '{expected}', actual '{actual}'.");
+            throw new ProfileUpdateValidationException($"Candidate identity mismatch for {field}: expected '{expected}', actual '{actual}'.");
     }
 
     private static LockedComponent Component(ReleaseLockDocument candidate, string id) =>
         candidate.Components.TryGetValue(id, out var component)
-            ? component
-            : throw new ProfileUpdateValidationException($"Candidate lock is missing component '{id}'.");
+            ? component : throw new ProfileUpdateValidationException($"Candidate lock is missing component '{id}'.");
 
     private static string Version(ReleaseLockDocument candidate, string id) => Component(candidate, id).ResolvedVersion;
 
@@ -840,10 +566,7 @@ public static class CandidateReleaseMaterializer
     private static string RequiredJitCommit(LockedComponent component, string id) =>
         Required(component.JitCommit, $"{id}.jitCommit");
 
-    private static string ConstGenericsVerificationRevision(
-        ReleaseLockDocument candidate,
-        LockedComponent ilSpySource,
-        LockedComponent runtimeSource)
+    private static string ConstGenericsVerificationRevision(ReleaseLockDocument candidate, LockedComponent ilSpySource, LockedComponent runtimeSource)
     {
         var ilSpyCommit = RequiredCommit(ilSpySource, "const-generics-ilspy-source");
         var runtimeCommit = RequiredCommit(runtimeSource, "const-generics-runtime-source");
@@ -851,54 +574,37 @@ public static class CandidateReleaseMaterializer
         var prefix = $"{ilSpyCommit[..12]}-{runtimeCommit[..12]}-";
         if (!componentVersion.StartsWith(prefix, StringComparison.Ordinal))
         {
-            throw new ProfileUpdateValidationException(
-                "Candidate lock component 'artifacts-const-generics' does not match its ILSpy and runtime source commits.");
+            throw new ProfileUpdateValidationException("Candidate lock component 'artifacts-const-generics' does not match its ILSpy and runtime source commits.");
         }
         var revision = componentVersion[prefix.Length..];
-        if (revision.Length == 0 ||
-            !(char.IsAsciiLetterLower(revision[0]) || char.IsAsciiDigit(revision[0])) ||
-            revision.Any(static character =>
-                !(char.IsAsciiLetterLower(character) ||
-                  char.IsAsciiDigit(character) ||
-                  character is '.' or '-')))
+        if (revision.Length == 0 || !(char.IsAsciiLetterLower(revision[0]) || char.IsAsciiDigit(revision[0])) || revision.Any(static character => !(char.IsAsciiLetterLower(character) || char.IsAsciiDigit(character) || character is '.' or '-')))
         {
-            throw new ProfileUpdateValidationException(
-                "Candidate lock component 'artifacts-const-generics' has an invalid processor revision.");
+            throw new ProfileUpdateValidationException("Candidate lock component 'artifacts-const-generics' has an invalid processor revision.");
         }
         return revision;
     }
 
     private static string PackageDigest(LockedComponent component, string id) =>
         !string.IsNullOrWhiteSpace(component.PackageContentHash)
-            ? component.PackageContentHash
-            : !string.IsNullOrWhiteSpace(component.Sha512)
-                ? $"sha512:{component.Sha512}"
-                : throw new ProfileUpdateValidationException(
-                    $"Candidate lock component '{id}' has no package digest.");
+            ? component.PackageContentHash : !string.IsNullOrWhiteSpace(component.Sha512)
+                ? $"sha512:{component.Sha512}" : throw new ProfileUpdateValidationException($"Candidate lock component '{id}' has no package digest.");
 
     private static string Required(string? value, string field) =>
         !string.IsNullOrWhiteSpace(value)
-            ? value
-            : throw new ProfileUpdateValidationException($"Candidate lock field '{field}' is required.");
+            ? value : throw new ProfileUpdateValidationException($"Candidate lock field '{field}' is required.");
 
-    private static string RequiredJsonString(
-        JsonObject document,
-        string property,
-        string profileId) =>
+    private static string RequiredJsonString(JsonObject document, string property, string profileId) =>
         document[property] is JsonValue value &&
         value.TryGetValue<string>(out var text) &&
         !string.IsNullOrWhiteSpace(text)
-            ? text
-            : throw new ProfileUpdateValidationException(
-                $"Runtime profile '{profileId}' field '{property}' is required.");
+            ? text : throw new ProfileUpdateValidationException($"Runtime profile '{profileId}' field '{property}' is required.");
 
     private static string RetagImage(string image, string releaseId)
     {
         var tag = Required(releaseId, "releaseId");
         if (image.Contains('@', StringComparison.Ordinal))
         {
-            throw new ProfileUpdateValidationException(
-                "ConstGenerics development runtime profile must use a repository tag, not a digest.");
+            throw new ProfileUpdateValidationException("ConstGenerics development runtime profile must use a repository tag, not a digest.");
         }
         var lastSlash = image.LastIndexOf('/');
         var lastColon = image.LastIndexOf(':');

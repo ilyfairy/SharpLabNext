@@ -50,65 +50,21 @@ const string source = """
       }
     }
     """;
-var options = new
-{
-    configuration = "release",
-    optimize = true,
-    outputKind = "console",
-    allowUnsafe = false,
-    emitPortablePdb = true,
-    nullableContext = "disable",
-    languageVersion = "ecma-335",
-    preprocessorSymbols = Array.Empty<string>(),
-    checkOverflow = false
-};
-var workspace = new
-{
-    schemaVersion = 1,
-    revision = 7,
-    selectionRevision = 3,
-    languageId = "il",
-    files = new[] { new { path = "Program.il", version = 1, text = source } },
-    activeFile = "Program.il",
-    sourceOrder = new[] { "Program.il" },
-    referenceSetId = "net11-preview-ref",
-    buildOptions = options
-};
+var options = new { configuration = "release", optimize = true, outputKind = "console", allowUnsafe = false, emitPortablePdb = true, nullableContext = "disable", languageVersion = "ecma-335", preprocessorSymbols = Array.Empty<string>(), checkOverflow = false };
+var workspace = new { schemaVersion = 1, revision = 7, selectionRevision = 3, languageId = "il", files = new[] { new { path = "Program.il", version = 1, text = source } }, activeFile = "Program.il", sourceOrder = new[] { "Program.il" }, referenceSetId = "net11-preview-ref", buildOptions = options };
 var pipelineResolutionId = "smoke-pipeline";
 if (languageOnly)
 {
     var catalog = await http.GetFromJsonAsync<JsonElement>("/api/v1/catalog", jsonOptions, timeout.Token);
-    var selectionRequest = new
-    {
-        languageId = "il",
-        toolchainId = "mobius-ilasm-stable",
-        referenceSetId = "net11-preview-ref",
-        outputId = "compile-check",
-        runtimeId = (string?)null,
-        buildMode = "release",
-        catalogRevision = catalog.GetProperty("Revision").GetString(),
-        workspaceRevision = workspace.revision
-    };
+    var selectionRequest = new { languageId = "il", toolchainId = "mobius-ilasm-stable", referenceSetId = "net11-preview-ref", outputId = "compile-check", runtimeId = (string?)null, buildMode = "release", catalogRevision = catalog.GetProperty("Revision").GetString(), workspaceRevision = workspace.revision };
     using var selected = await http.PostAsJsonAsync("/api/v1/selections/resolve", selectionRequest, jsonOptions, timeout.Token);
     await EnsureSuccessAsync(selected, "resolve selection");
     using var selectedJson = JsonDocument.Parse(await selected.Content.ReadAsByteArrayAsync(timeout.Token));
-    pipelineResolutionId = selectedJson.RootElement.GetProperty("PipelineResolutionId").GetString()
-        ?? throw new InvalidOperationException("Selection resolution returned no ID.");
+    pipelineResolutionId = selectedJson.RootElement.GetProperty("PipelineResolutionId").GetString() ?? throw new InvalidOperationException("Selection resolution returned no ID.");
 }
 if (!languageOnly)
 {
-    var buildRequest = new
-    {
-        requestId = $"smoke-build-{Guid.NewGuid():N}",
-        idempotencyKey = $"smoke-idempotency-{Guid.NewGuid():N}",
-        pipelineResolutionId,
-        toolchainId = "mobius-ilasm-stable",
-        referenceSetId = "net11-preview-ref",
-        workspace,
-        deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(20),
-        options,
-        target = "artifact"
-    };
+    var buildRequest = new { requestId = $"smoke-build-{Guid.NewGuid():N}", idempotencyKey = $"smoke-idempotency-{Guid.NewGuid():N}", pipelineResolutionId, toolchainId = "mobius-ilasm-stable", referenceSetId = "net11-preview-ref", workspace, deadlineUtc = DateTimeOffset.UtcNow.AddSeconds(20), options, target = "artifact" };
     using var build = await http.PostAsJsonAsync("/api/v1/build", buildRequest, jsonOptions, timeout.Token);
     await EnsureSuccessAsync(build, "build");
     using var buildJson = JsonDocument.Parse(await build.Content.ReadAsByteArrayAsync(timeout.Token));
@@ -119,21 +75,11 @@ if (!languageOnly)
     Require(root.GetProperty("DevelopmentArtifact").GetProperty("PeImageBase64").GetString()!.Length > 100, "Build returned no PE payload.");
 }
 
-var openRequest = new
-{
-    requestId = $"smoke-lsp-{Guid.NewGuid():N}",
-    pipelineResolutionId,
-    languageId = "il",
-    toolchainId = "mobius-ilasm-stable",
-    referenceSetId = "net11-preview-ref",
-    workspace,
-    lspVersion = "3.17"
-};
+var openRequest = new { requestId = $"smoke-lsp-{Guid.NewGuid():N}", pipelineResolutionId, languageId = "il", toolchainId = "mobius-ilasm-stable", referenceSetId = "net11-preview-ref", workspace, lspVersion = "3.17" };
 using var opened = await http.PostAsJsonAsync("/api/v1/language-sessions", openRequest, jsonOptions, timeout.Token);
 await EnsureSuccessAsync(opened, "open language session");
 using var openedJson = JsonDocument.Parse(await opened.Content.ReadAsByteArrayAsync(timeout.Token));
-var sessionId = openedJson.RootElement.GetProperty("SessionId").GetString()
-    ?? throw new InvalidOperationException("Language session returned no ID.");
+var sessionId = openedJson.RootElement.GetProperty("SessionId").GetString() ?? throw new InvalidOperationException("Language session returned no ID.");
 
 try
 {
@@ -156,14 +102,8 @@ try
 
     const string uri = "sharplabnext:///Program.il";
     await SendAsync(socket, new { jsonrpc = "2.0", method = "initialized", @params = new { } }, lspJsonOptions, timeout.Token);
-    await SendAsync(socket, new
-    {
-        jsonrpc = "2.0",
-        method = "textDocument/didOpen",
-        @params = new { textDocument = new { uri, languageId = "il", version = 1, text = source } }
-    }, lspJsonOptions, timeout.Token);
-    using (var diagnostics = await ReceiveUntilAsync(socket, static root =>
-        root.TryGetProperty("method", out var method) && method.GetString() == "textDocument/publishDiagnostics", timeout.Token))
+    await SendAsync(socket, new { jsonrpc = "2.0", method = "textDocument/didOpen", @params = new { textDocument = new { uri, languageId = "il", version = 1, text = source } } }, lspJsonOptions, timeout.Token);
+    using (var diagnostics = await ReceiveUntilAsync(socket, static root => root.TryGetProperty("method", out var method) && method.GetString() == "textDocument/publishDiagnostics", timeout.Token))
     {
         Require(diagnostics.RootElement.GetProperty("params").GetProperty("diagnostics").GetArrayLength() == 0, "Valid IL produced live diagnostics.");
     }
@@ -181,58 +121,26 @@ try
         """;
     var completionLines = completionSource.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
     const int completionLine = 6;
-    await SendAsync(socket, new
-    {
-        jsonrpc = "2.0",
-        method = "textDocument/didChange",
-        @params = new
-        {
-            textDocument = new { uri, version = 2 },
-            contentChanges = new[] { new { text = completionSource } }
-        }
-    }, lspJsonOptions, timeout.Token);
-    using (await ReceiveUntilAsync(socket, static root =>
-        root.TryGetProperty("method", out var method) && method.GetString() == "textDocument/publishDiagnostics", timeout.Token))
-    {
-    }
-    await SendAsync(socket, new
-    {
-        jsonrpc = "2.0",
-        id = 2,
-        method = "textDocument/completion",
-        @params = new
-        {
-            textDocument = new { uri },
-            position = new { line = completionLine, character = completionLines[completionLine].Length },
-            context = new { triggerKind = 1, triggerCharacter = (string?)null }
-        }
-    }, lspJsonOptions, timeout.Token);
+    await SendAsync(socket, new { jsonrpc = "2.0", method = "textDocument/didChange", @params = new { textDocument = new { uri, version = 2 }, contentChanges = new[] { new { text = completionSource } } } }, lspJsonOptions, timeout.Token);
+    using (await ReceiveUntilAsync(socket, static root => root.TryGetProperty("method", out var method) && method.GetString() == "textDocument/publishDiagnostics", timeout.Token)) { }
+    await SendAsync(socket, new { jsonrpc = "2.0", id = 2, method = "textDocument/completion", @params = new { textDocument = new { uri }, position = new { line = completionLine, character = completionLines[completionLine].Length }, context = new { triggerKind = 1, triggerCharacter = (string?)null } } }, lspJsonOptions, timeout.Token);
     using (var completion = await ReceiveUntilAsync(socket, static root => HasId(root, 2), timeout.Token))
     {
         var items = completion.RootElement.GetProperty("result").GetProperty("items").EnumerateArray().ToArray();
-        var importedRuntime = items.Any(static item =>
-            item.GetProperty("label").GetString() == "System.Runtime" &&
-            item.GetProperty("data").GetProperty("origin").GetString() == "ImportedAssembly" &&
-            item.GetProperty("textEdit").GetProperty("newText").GetString() == "System.Runtime]");
-        var candidates = items.Select(static item =>
-            $"{item.GetProperty("label").GetString()} ({item.GetProperty("data").GetProperty("origin").GetString()})");
-        Require(importedRuntime,
-            $"Imported reference-set assembly completion is missing. Available candidates: {string.Join(", ", candidates)}");
+        var importedRuntime = items.Any(static item => item.GetProperty("label").GetString() == "System.Runtime" && item.GetProperty("data").GetProperty("origin").GetString() == "ImportedAssembly" && item.GetProperty("textEdit").GetProperty("newText").GetString() == "System.Runtime]");
+        var candidates = items.Select(static item => $"{item.GetProperty("label").GetString()} ({item.GetProperty("data").GetProperty("origin").GetString()})");
+        Require(importedRuntime, $"Imported reference-set assembly completion is missing. Available candidates: {string.Join(", ", candidates)}");
     }
 
     await SendAsync(socket, new { jsonrpc = "2.0", id = 3, method = "shutdown", @params = new { } }, lspJsonOptions, timeout.Token);
-    using (await ReceiveUntilAsync(socket, static root => HasId(root, 3), timeout.Token))
-    {
-    }
+    using (await ReceiveUntilAsync(socket, static root => HasId(root, 3), timeout.Token)) { }
     await SendAsync(socket, new { jsonrpc = "2.0", method = "exit", @params = new { } }, lspJsonOptions, timeout.Token);
 }
 finally
 {
     await TryCloseSessionAsync(http, sessionId);
 }
-Console.WriteLine(languageOnly
-    ? "IL gateway smoke passed: health, WebSocket LSP, diagnostics and reference completion."
-    : "IL Kestrel smoke passed: health, net11 Build/PE, WebSocket LSP, diagnostics and reference completion.");
+Console.WriteLine(languageOnly ? "IL gateway smoke passed: health, WebSocket LSP, diagnostics and reference completion." : "IL Kestrel smoke passed: health, net11 Build/PE, WebSocket LSP, diagnostics and reference completion.");
 
 static async Task TryCloseSessionAsync(HttpClient http, string sessionId)
 {
@@ -257,20 +165,11 @@ static async Task EnsureSuccessAsync(HttpResponseMessage response, string operat
     throw new InvalidOperationException($"{operation} failed with {(int)response.StatusCode}: {body}");
 }
 
-static void Require(bool condition, string message)
-{
-    if (!condition)
-        throw new InvalidOperationException(message);
-}
+static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
 
-static bool HasId(JsonElement root, int expected) =>
-    root.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number && id.GetInt32() == expected;
+static bool HasId(JsonElement root, int expected) => root.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number && id.GetInt32() == expected;
 
-static async Task SendAsync(
-    ClientWebSocket socket,
-    object payload,
-    JsonSerializerOptions options,
-    CancellationToken cancellationToken)
+static async Task SendAsync(ClientWebSocket socket, object payload, JsonSerializerOptions options, CancellationToken cancellationToken)
 {
     var bytes = JsonSerializer.SerializeToUtf8Bytes(payload, options);
     await socket.SendAsync(bytes, WebSocketMessageType.Text, true, cancellationToken);
@@ -288,10 +187,7 @@ static JsonSerializerOptions CreateLspJsonOptions() => new(JsonSerializerDefault
     TypeInfoResolver = new DefaultJsonTypeInfoResolver()
 };
 
-static async Task<JsonDocument> ReceiveUntilAsync(
-    ClientWebSocket socket,
-    Func<JsonElement, bool> predicate,
-    CancellationToken cancellationToken)
+static async Task<JsonDocument> ReceiveUntilAsync(ClientWebSocket socket, Func<JsonElement, bool> predicate, CancellationToken cancellationToken)
 {
     for (var attempt = 0; attempt < 20; attempt++)
     {
@@ -320,6 +216,5 @@ sealed class PascalCaseJsonNamingPolicy : JsonNamingPolicy
 
     public override string ConvertName(string name) =>
         name.Length == 0 || !char.IsAsciiLetterLower(name[0])
-            ? name
-            : char.ToUpperInvariant(name[0]) + name[1..];
+            ? name : char.ToUpperInvariant(name[0]) + name[1..];
 }

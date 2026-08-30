@@ -19,10 +19,7 @@ public sealed class RuntimeJitMappingContractTests
     {
         var (profileBytes, receiptBytes) = CreateDotNet6Context(mappingSource);
 
-        var context = RuntimeCapabilityEvidencePreflightValidator.CreateContext(
-            profileBytes,
-            receiptBytes,
-            "runtime-job-default");
+        var context = RuntimeCapabilityEvidencePreflightValidator.CreateContext(profileBytes, receiptBytes, "runtime-job-default");
 
         Assert.Equal("dotnet-6-linux-x64", context.ProfileId);
         Assert.True(context.RequiresJit);
@@ -33,25 +30,15 @@ public sealed class RuntimeJitMappingContractTests
     {
         var (profileBytes, receiptBytes) = CreateDotNet6Context("ordinary");
 
-        var exception = Assert.Throws<BundleValidationException>(() =>
-            RuntimeCapabilityEvidencePreflightValidator.CreateContext(
-                profileBytes,
-                receiptBytes,
-                "runtime-job-default"));
+        var exception = Assert.Throws<BundleValidationException>(() => RuntimeCapabilityEvidencePreflightValidator.CreateContext(profileBytes, receiptBytes, "runtime-job-default"));
 
         Assert.Contains("mapping-free or method-level", exception.Message, StringComparison.Ordinal);
     }
 
     private static (byte[] Profile, byte[] Receipt) CreateDotNet6Context(string mappingSource)
     {
-        var profileBytes = File.ReadAllBytes(Path.Combine(
-            FindRepositoryRoot(),
-            "profiles",
-            "runtimes",
-            "candidates",
-            "dotnet-6-linux-x64.json"));
-        var profile = JsonSerializer.Deserialize<RuntimeProfileDefinition>(profileBytes, Json)
-            ?? throw new InvalidOperationException("The .NET 6 candidate profile is empty.");
+        var profileBytes = File.ReadAllBytes(Path.Combine(FindRepositoryRoot(), "profiles", "runtimes", "candidates", "dotnet-6-linux-x64.json"));
+        var profile = JsonSerializer.Deserialize<RuntimeProfileDefinition>(profileBytes, Json) ?? throw new InvalidOperationException("The .NET 6 candidate profile is empty.");
         var receipt = new RuntimePromotionReceiptDocument
         {
             SchemaVersion = 2,
@@ -61,43 +48,11 @@ public sealed class RuntimeJitMappingContractTests
             Platform = "linux",
             Family = profile.Family,
             ResolvedVersion = profile.RuntimeVersion,
-            Image = new RuntimePromotionImageIdentity
-            {
-                Reference = $"registry.example/runtime@{Sha('1')}",
-                ImageId = Sha('2'),
-                SizeBytes = 1
-            },
-            ComponentIdentity = new RuntimePromotionComponentIdentity
-            {
-                SourceUri = "https://example.invalid/dotnet-runtime.tar.gz",
-                SourceDigest = Sha('3')
-            },
-            RuntimeIdentity = new RuntimePromotionRuntimeIdentity
-            {
-                RuntimeCommit = profile.RuntimeCommit,
-                JitVersion = profile.JitVersion,
-                JitCommit = profile.JitCommit
-            },
-            Operations = new RuntimePromotionOperations
-            {
-                Run = Helper(
-                    profile.Operations!.Run!.ImplementationId,
-                    "/opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll",
-                    '4'),
-                Jit = Helper(
-                    profile.Operations.Jit!.ImplementationId,
-                    "/opt/sharplabnext/SharpLabNext.CheckedJitBridge.dll",
-                    '5')
-            },
-            Performance = new RuntimePromotionPerformanceBinding
-            {
-                Result = "passed",
-                PolicyId = "runtime-image-linux-x64-v1",
-                PolicyPath = "profiles/runtime-performance-policies/runtime-image-linux-x64-v1.json",
-                PolicySha256 = Sha('6'),
-                EvidencePath = $"profiles/runtime-promotion-evidence/{profile.Id}/performance.json",
-                EvidenceSha256 = Sha('7')
-            },
+            Image = new RuntimePromotionImageIdentity { Reference = $"registry.example/runtime@{Sha('1')}", ImageId = Sha('2'), SizeBytes = 1 },
+            ComponentIdentity = new RuntimePromotionComponentIdentity { SourceUri = "https://example.invalid/dotnet-runtime.tar.gz", SourceDigest = Sha('3') },
+            RuntimeIdentity = new RuntimePromotionRuntimeIdentity { RuntimeCommit = profile.RuntimeCommit, JitVersion = profile.JitVersion, JitCommit = profile.JitCommit },
+            Operations = new RuntimePromotionOperations { Run = Helper(profile.Operations!.Run!.ImplementationId, "/opt/sharplabnext/SharpLabNext.LegacyJitInspector.dll", '4'), Jit = Helper(profile.Operations.Jit!.ImplementationId, "/opt/sharplabnext/SharpLabNext.CheckedJitBridge.dll", '5') },
+            Performance = new RuntimePromotionPerformanceBinding { Result = "passed", PolicyId = "runtime-image-linux-x64-v1", PolicyPath = "profiles/runtime-performance-policies/runtime-image-linux-x64-v1.json", PolicySha256 = Sha('6'), EvidencePath = $"profiles/runtime-promotion-evidence/{profile.Id}/performance.json", EvidenceSha256 = Sha('7') },
             SourceRevision = new string('8', 40),
             Checks =
             [
@@ -108,10 +63,7 @@ public sealed class RuntimeJitMappingContractTests
         return (profileBytes, JsonSerializer.SerializeToUtf8Bytes(receipt, Json));
     }
 
-    private static RuntimePromotionOperationHelper Helper(
-        string implementation,
-        string path,
-        char digest) =>
+    private static RuntimePromotionOperationHelper Helper(string implementation, string path, char digest) =>
         new()
         {
             Implementation = implementation,
@@ -119,12 +71,7 @@ public sealed class RuntimeJitMappingContractTests
             AssemblySha256 = Sha(digest)
         };
 
-    private static RuntimePromotionCapabilityCheck Check(
-        string profileId,
-        string capability,
-        string sourceMappingKind,
-        string mappingSource,
-        char digest) =>
+    private static RuntimePromotionCapabilityCheck Check(string profileId, string capability, string sourceMappingKind, string mappingSource, char digest) =>
         new()
         {
             Capability = capability,
@@ -145,7 +92,6 @@ public sealed class RuntimeJitMappingContractTests
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "SharpLabNext.slnx")))
             directory = directory.Parent;
-        return directory?.FullName
-            ?? throw new DirectoryNotFoundException("Could not locate the repository root.");
+        return directory?.FullName ?? throw new DirectoryNotFoundException("Could not locate the repository root.");
     }
 }

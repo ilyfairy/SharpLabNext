@@ -8,11 +8,7 @@ public sealed class IlCompilerProtocolTests
     [Fact]
     public void CompilerChildPayloadUsesPascalCaseMemberNames()
     {
-        var request = new IlCompilerRequest(
-            IlCompilerProtocol.Version,
-            "dll",
-            1024,
-            [new IlCompilerSource("Program.il", ".assembly extern mscorlib {}")]);
+        var request = new IlCompilerRequest(IlCompilerProtocol.Version, "dll", 1024, [new IlCompilerSource("Program.il", ".assembly extern mscorlib {}")]);
 
         var json = JsonSerializer.Serialize(request, IlCompilerProtocol.JsonOptions);
 

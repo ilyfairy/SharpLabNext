@@ -11,12 +11,7 @@ internal static class RoslynAstConverter
 {
     private static readonly TextRange EmptyRange = new(0, 0, 0, 0);
 
-    public static AstDocument Convert(
-        ValidatedWorkspace workspace,
-        IReadOnlyList<SyntaxTree> syntaxTrees,
-        string toolchainId,
-        AstLimits limits,
-        CancellationToken cancellationToken)
+    public static AstDocument Convert(ValidatedWorkspace workspace, IReadOnlyList<SyntaxTree> syntaxTrees, string toolchainId, AstLimits limits, CancellationToken cancellationToken)
     {
         if (workspace.OrderedFiles.Count != syntaxTrees.Count)
             throw new InvalidOperationException("The syntax tree count does not match the validated workspace.");
@@ -54,12 +49,7 @@ internal static class RoslynAstConverter
             else
                 properties["childrenTruncated"] = "true";
 
-            documents.Add(new AstNode(
-                "Document",
-                ToRange(input.Text, new TextSpan(0, input.Text.Length)),
-                null,
-                properties,
-                children));
+            documents.Add(new AstNode("Document", ToRange(input.Text, new TextSpan(0, input.Text.Length)), null, properties, children));
         }
 
         var workspaceProperties = new Dictionary<string, string?>(StringComparer.Ordinal)
@@ -71,29 +61,13 @@ internal static class RoslynAstConverter
         if (state.Truncated)
             workspaceProperties["childrenTruncated"] = "true";
 
-        return new AstDocument(
-            workspace.Snapshot.LanguageId,
-            toolchainId,
-            workspace.Snapshot.Revision,
-            new AstNode("Workspace", EmptyRange, null, workspaceProperties, documents),
-            state.Truncated);
+        return new AstDocument(workspace.Snapshot.LanguageId, toolchainId, workspace.Snapshot.Revision, new AstNode("Workspace", EmptyRange, null, workspaceProperties, documents), state.Truncated);
     }
 
-    private static AstNode? ConvertNode(
-        SyntaxNode node,
-        SourceText text,
-        int depth,
-        ConversionState state)
+    private static AstNode? ConvertNode(SyntaxNode node, SourceText text, int depth, ConversionState state)
     {
         state.CancellationToken.ThrowIfCancellationRequested();
-        var properties = CreateCommonProperties(
-            node.RawKind,
-            node.GetType().Name,
-            node.Language,
-            isNode: true,
-            isToken: false,
-            isTrivia: false,
-            Preview(text, node.Span, state.Limits.MaxTextPreviewCharacters));
+        var properties = CreateCommonProperties(node.RawKind, node.GetType().Name, node.Language, isNode: true, isToken: false, isTrivia: false, Preview(text, node.Span, state.Limits.MaxTextPreviewCharacters));
         properties["containsDiagnostics"] = Boolean(node.ContainsDiagnostics);
         properties["containsDirectives"] = Boolean(node.ContainsDirectives);
         properties["containsSkippedText"] = Boolean(node.ContainsSkippedText);
@@ -119,8 +93,7 @@ internal static class RoslynAstConverter
             {
                 state.CancellationToken.ThrowIfCancellationRequested();
                 var converted = child.IsNode
-                    ? ConvertNode(child.AsNode()!, text, depth + 1, state)
-                    : ConvertToken(child.AsToken(), text, depth + 1, state);
+                    ? ConvertNode(child.AsNode()!, text, depth + 1, state) : ConvertToken(child.AsToken(), text, depth + 1, state);
                 if (converted is null)
                 {
                     properties["childrenTruncated"] = "true";
@@ -131,33 +104,15 @@ internal static class RoslynAstConverter
             }
         }
 
-        return new AstNode(
-            kind,
-            ToRange(text, node.Span),
-            ToRange(text, node.FullSpan),
-            properties,
-            children);
+        return new AstNode(kind, ToRange(text, node.Span), ToRange(text, node.FullSpan), properties, children);
     }
 
-    private static AstNode? ConvertToken(
-        SyntaxToken token,
-        SourceText text,
-        int depth,
-        ConversionState state)
+    private static AstNode? ConvertToken(SyntaxToken token, SourceText text, int depth, ConversionState state)
     {
         state.CancellationToken.ThrowIfCancellationRequested();
-        var properties = CreateCommonProperties(
-            token.RawKind,
-            nameof(SyntaxToken),
-            token.Language,
-            isNode: false,
-            isToken: true,
-            isTrivia: false,
-            Preview(text, token.Span, state.Limits.MaxTextPreviewCharacters));
+        var properties = CreateCommonProperties(token.RawKind, nameof(SyntaxToken), token.Language, isNode: false, isToken: true, isTrivia: false, Preview(text, token.Span, state.Limits.MaxTextPreviewCharacters));
         properties["valueText"] = TruncateAndEscape(token.ValueText, state.Limits.MaxTextPreviewCharacters);
-        properties["value"] = TruncateAndEscape(
-            System.Convert.ToString(token.Value, CultureInfo.InvariantCulture) ?? string.Empty,
-            state.Limits.MaxTextPreviewCharacters);
+        properties["value"] = TruncateAndEscape(System.Convert.ToString(token.Value, CultureInfo.InvariantCulture) ?? string.Empty, state.Limits.MaxTextPreviewCharacters);
         properties["containsDiagnostics"] = Boolean(token.ContainsDiagnostics);
         properties["containsDirectives"] = Boolean(token.ContainsDirectives);
         properties["hasLeadingTrivia"] = Boolean(token.HasLeadingTrivia);
@@ -192,29 +147,13 @@ internal static class RoslynAstConverter
             state.MarkTruncated();
         }
 
-        return new AstNode(
-            kind,
-            ToRange(text, token.Span),
-            ToRange(text, token.FullSpan),
-            properties,
-            children);
+        return new AstNode(kind, ToRange(text, token.Span), ToRange(text, token.FullSpan), properties, children);
     }
 
-    private static AstNode? ConvertTrivia(
-        SyntaxTrivia trivia,
-        SourceText text,
-        int depth,
-        ConversionState state)
+    private static AstNode? ConvertTrivia(SyntaxTrivia trivia, SourceText text, int depth, ConversionState state)
     {
         state.CancellationToken.ThrowIfCancellationRequested();
-        var properties = CreateCommonProperties(
-            trivia.RawKind,
-            nameof(SyntaxTrivia),
-            trivia.Language,
-            isNode: false,
-            isToken: false,
-            isTrivia: true,
-            Preview(text, trivia.Span, state.Limits.MaxTextPreviewCharacters));
+        var properties = CreateCommonProperties(trivia.RawKind, nameof(SyntaxTrivia), trivia.Language, isNode: false, isToken: false, isTrivia: true, Preview(text, trivia.Span, state.Limits.MaxTextPreviewCharacters));
         properties["containsDiagnostics"] = Boolean(trivia.ContainsDiagnostics);
         properties["hasStructure"] = Boolean(trivia.HasStructure);
 
@@ -244,22 +183,10 @@ internal static class RoslynAstConverter
             }
         }
 
-        return new AstNode(
-            kind,
-            ToRange(text, trivia.Span),
-            ToRange(text, trivia.FullSpan),
-            properties,
-            children);
+        return new AstNode(kind, ToRange(text, trivia.Span), ToRange(text, trivia.FullSpan), properties, children);
     }
 
-    private static Dictionary<string, string?> CreateCommonProperties(
-        int rawKind,
-        string type,
-        string language,
-        bool isNode,
-        bool isToken,
-        bool isTrivia,
-        string textPreview) =>
+    private static Dictionary<string, string?> CreateCommonProperties(int rawKind, string type, string language, bool isNode, bool isToken, bool isTrivia, string textPreview) =>
         new(StringComparer.Ordinal)
         {
             ["type"] = type,
@@ -274,8 +201,7 @@ internal static class RoslynAstConverter
     private static bool IsKeyword(SyntaxToken token) => token.Language switch
     {
         LanguageNames.CSharp => SyntaxFacts.IsKeywordKind((SyntaxKind)token.RawKind),
-        LanguageNames.VisualBasic => Microsoft.CodeAnalysis.VisualBasic.SyntaxFacts.IsKeywordKind(
-            (Microsoft.CodeAnalysis.VisualBasic.SyntaxKind)token.RawKind),
+        LanguageNames.VisualBasic => Microsoft.CodeAnalysis.VisualBasic.SyntaxFacts.IsKeywordKind((Microsoft.CodeAnalysis.VisualBasic.SyntaxKind)token.RawKind),
         _ => false
     };
 
@@ -314,31 +240,19 @@ internal static class RoslynAstConverter
     private static string TruncateAndEscape(string value, int maxCharacters)
     {
         var truncated = value.Length <= maxCharacters
-            ? value
-            : string.Concat(value.AsSpan(0, maxCharacters), "...");
+            ? value : string.Concat(value.AsSpan(0, maxCharacters), "...");
         return Escape(truncated);
     }
 
-    private static string Escape(string value) => value
-        .Replace("\\", "\\\\", StringComparison.Ordinal)
-        .Replace("\r", "\\r", StringComparison.Ordinal)
-        .Replace("\n", "\\n", StringComparison.Ordinal)
-        .Replace("\t", "\\t", StringComparison.Ordinal);
+    private static string Escape(string value) => value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\r", "\\r", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal).Replace("\t", "\\t", StringComparison.Ordinal);
 
     private static TextRange ToRange(SourceText text, TextSpan span)
     {
         var lineSpan = text.Lines.GetLinePositionSpan(span);
-        return new TextRange(
-            lineSpan.Start.Line,
-            lineSpan.Start.Character,
-            lineSpan.End.Line,
-            lineSpan.End.Character);
+        return new TextRange(lineSpan.Start.Line, lineSpan.Start.Character, lineSpan.End.Line, lineSpan.End.Character);
     }
 
-    private sealed record DocumentInput(
-        ValidatedWorkspaceFile File,
-        SyntaxTree Tree,
-        SourceText Text);
+    private sealed record DocumentInput(ValidatedWorkspaceFile File, SyntaxTree Tree, SourceText Text);
 
     private sealed class ConversionState(AstLimits limits, CancellationToken cancellationToken)
     {

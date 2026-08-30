@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { buildRuntimeFrameworkDeploymentBridge, runRuntimeFrameworkDeploymentBridgeCli } from './runtime-framework-deployment-bridge.mjs'
+import { buildRuntimeFrameworkDeploymentBridge, runRuntimeFrameworkDeploymentBridgeCli } from '../smoke/runtime-framework-deployment-bridge.mjs'
 
 const hash = value => `sha256:${crypto.createHash('sha256').update(value).digest('hex')}`
 const profileId = 'wine-netfx48-linux-x64'

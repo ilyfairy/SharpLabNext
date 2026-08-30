@@ -39,10 +39,7 @@ namespace SharpLabNext.TargetRuntimeRunner
         private bool _outputLimitReached;
         private bool _emitted;
 
-        private RunOutputCapture(
-            string stdoutPath,
-            string stderrPath,
-            RuntimeFrameWriter frameWriter)
+        private RunOutputCapture(string stdoutPath, string stderrPath, RuntimeFrameWriter frameWriter)
         {
             _stdoutPath = stdoutPath;
             _stderrPath = stderrPath;
@@ -63,9 +60,7 @@ namespace SharpLabNext.TargetRuntimeRunner
             if (frameWriter == null)
                 throw new ArgumentNullException(nameof(frameWriter));
             string token = Guid.NewGuid().ToString("N");
-            string directory = ResolveCaptureDirectory(
-                Environment.GetEnvironmentVariable("SHARPLABNEXT_CAPTURE_DIRECTORY"),
-                RuntimePlatform.IsWindows);
+            string directory = ResolveCaptureDirectory(Environment.GetEnvironmentVariable("SHARPLABNEXT_CAPTURE_DIRECTORY"), RuntimePlatform.IsWindows);
             string stdoutPath = Path.Combine(directory, "sharplabnext-target-run-" + token + ".stdout");
             string stderrPath = Path.Combine(directory, "sharplabnext-target-run-" + token + ".stderr");
             RedirectNativeOutput(stdoutPath, stderrPath);
@@ -76,11 +71,9 @@ namespace SharpLabNext.TargetRuntimeRunner
         {
             if (configuredDirectory == null || configuredDirectory.Trim().Length == 0)
                 return Path.GetTempPath();
-            if (!isWindows ||
-                !string.Equals(configuredDirectory, @"Z:\tmp", StringComparison.OrdinalIgnoreCase))
+            if (!isWindows || !string.Equals(configuredDirectory, @"Z:\tmp", StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException(
-                    "SHARPLABNEXT_CAPTURE_DIRECTORY must be the fixed Wine path 'Z:\\tmp'.");
+                throw new InvalidOperationException("SHARPLABNEXT_CAPTURE_DIRECTORY must be the fixed Wine path 'Z:\\tmp'.");
             }
             return configuredDirectory;
         }
@@ -109,9 +102,7 @@ namespace SharpLabNext.TargetRuntimeRunner
                 _stdoutWriter.Flush();
                 _stderrWriter.Flush();
             }
-            catch (ObjectDisposedException)
-            {
-            }
+            catch (ObjectDisposedException) { }
             Console.SetOut(TextWriter.Null);
             Console.SetError(TextWriter.Null);
             _stdoutWriter.Dispose();
@@ -149,11 +140,7 @@ namespace SharpLabNext.TargetRuntimeRunner
             }
         }
 
-        private bool DrainAvailable(
-            FileStream stream,
-            RuntimeFrameKind kind,
-            ref long offset,
-            bool allowAfterStop)
+        private bool DrainAvailable(FileStream stream, RuntimeFrameKind kind, ref long offset, bool allowAfterStop)
         {
             bool progressed = false;
             while (allowAfterStop || Thread.VolatileRead(ref _stopRequested) == 0)
@@ -192,8 +179,7 @@ namespace SharpLabNext.TargetRuntimeRunner
                     return;
                 long remaining = _maximumOutputBytes - _observedOutputBytes;
                 long requested = remaining <= 0
-                    ? 1
-                    : Math.Min((long)count, remaining == long.MaxValue ? long.MaxValue : remaining + 1);
+                    ? 1 : Math.Min((long)count, remaining == long.MaxValue ? long.MaxValue : remaining + 1);
                 int emitCount = (int)Math.Min(requested, int.MaxValue);
                 _frameWriter.Write(kind, bytes, 0, emitCount);
                 _observedOutputBytes += emitCount;
@@ -209,24 +195,14 @@ namespace SharpLabNext.TargetRuntimeRunner
 
         private static FileStream OpenCaptureReader(string path)
         {
-            return new FileStream(
-                path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete,
-                PumpBufferSize,
-                FileOptions.SequentialScan);
+            return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, PumpBufferSize, FileOptions.SequentialScan);
         }
 
         private static long ReadMaximumOutputBytes()
         {
             string value = Environment.GetEnvironmentVariable("SHARPLABNEXT_MAX_OUTPUT_BYTES");
             long parsed;
-            if (long.TryParse(
-                value,
-                System.Globalization.NumberStyles.None,
-                System.Globalization.CultureInfo.InvariantCulture,
-                out parsed) && parsed > 0)
+            if (long.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out parsed) && parsed > 0)
             {
                 return parsed;
             }
@@ -252,10 +228,7 @@ namespace SharpLabNext.TargetRuntimeRunner
 
         private static void RedirectUnix(string path, int destination)
         {
-            int descriptor = OpenUnix(
-                path,
-                UnixWriteOnly | UnixCreate | UnixTruncate,
-                Convert.ToInt32("600", 8));
+            int descriptor = OpenUnix(path, UnixWriteOnly | UnixCreate | UnixTruncate, Convert.ToInt32("600", 8));
             if (descriptor < 0)
                 throw new IOException("The Unix run output file could not be opened.");
             try
@@ -294,10 +267,7 @@ namespace SharpLabNext.TargetRuntimeRunner
         {
             try
             {
-                int descriptor = OpenUcrt(
-                    path,
-                    WindowsWriteOnly | WindowsCreate | WindowsAppend | WindowsBinary,
-                    OwnerRead | OwnerWrite);
+                int descriptor = OpenUcrt(path, WindowsWriteOnly | WindowsCreate | WindowsAppend | WindowsBinary, OwnerRead | OwnerWrite);
                 if (descriptor < 0)
                     return;
                 try
@@ -313,12 +283,8 @@ namespace SharpLabNext.TargetRuntimeRunner
                     _ = CloseUcrt(descriptor);
                 }
             }
-            catch (DllNotFoundException)
-            {
-            }
-            catch (EntryPointNotFoundException)
-            {
-            }
+            catch (DllNotFoundException) { }
+            catch (EntryPointNotFoundException) { }
         }
 
         private static void TryDelete(string path)
@@ -327,12 +293,8 @@ namespace SharpLabNext.TargetRuntimeRunner
             {
                 File.Delete(path);
             }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         private sealed class NativeDescriptorStream : Stream
@@ -344,19 +306,19 @@ namespace SharpLabNext.TargetRuntimeRunner
                 _descriptor = descriptor;
             }
 
-            public override bool CanRead { get { return false; } }
-            public override bool CanSeek { get { return false; } }
-            public override bool CanWrite { get { return true; } }
-            public override long Length { get { throw new NotSupportedException(); } }
+            public override bool CanRead => false;
+            public override bool CanSeek => false;
+            public override bool CanWrite => true;
+            public override long Length => throw new NotSupportedException();
             public override long Position
             {
                 get { throw new NotSupportedException(); }
                 set { throw new NotSupportedException(); }
             }
             public override void Flush() { }
-            public override int Read(byte[] buffer, int offset, int count) { throw new NotSupportedException(); }
-            public override long Seek(long offset, SeekOrigin origin) { throw new NotSupportedException(); }
-            public override void SetLength(long value) { throw new NotSupportedException(); }
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
 
             public override void Write(byte[] buffer, int offset, int count)
             {
@@ -373,10 +335,7 @@ namespace SharpLabNext.TargetRuntimeRunner
                     int result;
                     if (RuntimePlatform.IsUnix)
                     {
-                        long nativeResult = WriteUnix(
-                            _descriptor,
-                            segment,
-                            new UIntPtr((uint)remaining)).ToInt64();
+                        long nativeResult = WriteUnix(_descriptor, segment, new UIntPtr((uint)remaining)).ToInt64();
                         result = nativeResult > int.MaxValue ? -1 : (int)nativeResult;
                     }
                     else
@@ -404,24 +363,12 @@ namespace SharpLabNext.TargetRuntimeRunner
                 {
                     _ = FlushUcrt(IntPtr.Zero);
                 }
-                catch (DllNotFoundException)
-                {
-                }
-                catch (EntryPointNotFoundException)
-                {
-                }
+                catch (DllNotFoundException) { }
+                catch (EntryPointNotFoundException) { }
             }
         }
 
-        [DllImport(
-            "libc",
-            EntryPoint = "open",
-            CallingConvention = CallingConvention.Cdecl,
-            CharSet = CharSet.Ansi,
-            ExactSpelling = true,
-            BestFitMapping = false,
-            ThrowOnUnmappableChar = true,
-            SetLastError = true)]
+        [DllImport("libc", EntryPoint = "open", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, ExactSpelling = true, BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
         private static extern int OpenUnix([MarshalAs(UnmanagedType.LPStr)] string path, int flags, int mode);
         [DllImport("libc", EntryPoint = "dup2", CallingConvention = CallingConvention.Cdecl, SetLastError = true)]
         private static extern int DuplicateUnix(int source, int destination);

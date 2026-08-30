@@ -13,10 +13,7 @@ public sealed record WorkspaceSnapshot(
     string ReferenceSetId,
     BuildOptions BuildOptions);
 
-public sealed record WorkspaceFile(
-    string Path,
-    long Version,
-    string Text);
+public sealed record WorkspaceFile(string Path, long Version, string Text);
 
 public sealed record BuildOptions(
     BuildConfiguration Configuration,

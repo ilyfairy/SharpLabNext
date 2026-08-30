@@ -13,14 +13,10 @@ describe('language document URIs', () => {
     const workspaceUri = createLanguageWorkspaceUri('csharp', 'workspace-test')
 
     expect(workspaceUri).toBe('sharplabnext://workspace-test/')
-    expect(createLanguageDocumentUri(workspaceUri, 'src/My File.cs')).toBe(
-      'sharplabnext://workspace-test/src/My%20File.cs',
-    )
+    expect(createLanguageDocumentUri(workspaceUri, 'src/My File.cs')).toBe('sharplabnext://workspace-test/src/My%20File.cs')
   })
 
   it('encodes punctuation in each path segment', () => {
-    expect(createLanguageDocumentUri('sharplabnext:///', 'Folder/a#b.il')).toBe(
-      'sharplabnext:///Folder/a%23b.il',
-    )
+    expect(createLanguageDocumentUri('sharplabnext:///', 'Folder/a#b.il')).toBe('sharplabnext:///Folder/a%23b.il')
   })
 })

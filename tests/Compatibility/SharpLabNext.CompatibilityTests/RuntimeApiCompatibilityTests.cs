@@ -92,9 +92,7 @@ public sealed class RuntimeApiCompatibilityTests
 
         Assert.NotNull(jitUsage);
         Assert.True(jitUsage.AllowMultiple);
-        Assert.Equal(
-            AttributeTargets.Method | AttributeTargets.Class | AttributeTargets.Struct,
-            jitUsage.ValidOn);
+        Assert.Equal(AttributeTargets.Method | AttributeTargets.Class | AttributeTargets.Struct, jitUsage.ValidOn);
         Assert.NotNull(noRewriteUsage);
         Assert.Equal(AttributeTargets.Assembly, noRewriteUsage.ValidOn);
     }
@@ -103,10 +101,7 @@ public sealed class RuntimeApiCompatibilityTests
     {
         public List<InspectionRecord> Records { get; } = [];
 
-        public void Write(InspectionRecord inspection)
-        {
-            Records.Add(inspection);
-        }
+        public void Write(InspectionRecord inspection) => Records.Add(inspection);
     }
 
     private static string RenderPublicApi(Assembly assembly)
@@ -116,11 +111,7 @@ public sealed class RuntimeApiCompatibilityTests
         {
             output.Append(TypeKind(type)).Append(' ').Append(TypeName(type)).AppendLine();
             foreach (var constructor in type.GetConstructors(DeclaredPublicMembers).OrderBy(MemberSortKey, StringComparer.Ordinal))
-            {
-                output.Append("  ctor ").Append(type.Name).Append('(')
-                    .Append(string.Join(", ", constructor.GetParameters().Select(ParameterSignature)))
-                    .AppendLine(")");
-            }
+                output.Append("  ctor ").Append(type.Name).Append('(').Append(string.Join(", ", constructor.GetParameters().Select(ParameterSignature))).AppendLine(")");
             foreach (var field in type.GetFields(DeclaredPublicMembers).OrderBy(MemberSortKey, StringComparer.Ordinal))
             {
                 output.Append("  field ");
@@ -150,18 +141,14 @@ public sealed class RuntimeApiCompatibilityTests
                     output.Append("set; ");
                 output.AppendLine("}");
             }
-            foreach (var method in type.GetMethods(DeclaredPublicMembers)
-                         .Where(static method => !method.IsSpecialName)
-                         .OrderBy(MemberSortKey, StringComparer.Ordinal))
+            foreach (var method in type.GetMethods(DeclaredPublicMembers).Where(static method => !method.IsSpecialName).OrderBy(MemberSortKey, StringComparer.Ordinal))
             {
                 output.Append("  method ");
                 if (method.IsStatic)
                     output.Append("static ");
                 output.Append(TypeDisplay(method.ReturnType)).Append(' ').Append(method.Name);
                 if (method.IsGenericMethodDefinition)
-                {
                     output.Append('<').Append(string.Join(", ", method.GetGenericArguments().Select(static argument => argument.Name))).Append('>');
-                }
                 output.Append('(').Append(string.Join(", ", method.GetParameters().Select(ParameterSignature))).AppendLine(")");
             }
             output.AppendLine();
@@ -173,16 +160,11 @@ public sealed class RuntimeApiCompatibilityTests
         BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
 
     private static string TypeKind(Type type) => type.IsEnum
-        ? "enum"
-        : type.IsInterface
-            ? "interface"
-            : type.IsValueType
-                ? "struct"
-                : type.IsAbstract && type.IsSealed
-                    ? "static class"
-                    : type.IsSealed
-                        ? "sealed class"
-                        : "class";
+        ? "enum" : type.IsInterface
+            ? "interface" : type.IsValueType
+                ? "struct" : type.IsAbstract && type.IsSealed
+                    ? "static class" : type.IsSealed
+                        ? "sealed class" : "class";
 
     private static string TypeName(Type type)
     {
@@ -207,17 +189,12 @@ public sealed class RuntimeApiCompatibilityTests
     {
         var modifier = parameter.ParameterType.IsByRef
             ? parameter.IsOut
-                ? "out "
-                : parameter.IsIn
-                    ? "in "
-                    : "ref "
-            : string.Empty;
+                ? "out " : parameter.IsIn
+                    ? "in " : "ref " : string.Empty;
         var type = parameter.ParameterType.IsByRef
-            ? parameter.ParameterType.GetElementType()!
-            : parameter.ParameterType;
+            ? parameter.ParameterType.GetElementType()! : parameter.ParameterType;
         var optional = parameter.HasDefaultValue
-            ? $" = {FormatDefaultValue(parameter.DefaultValue)}"
-            : string.Empty;
+            ? $" = {FormatDefaultValue(parameter.DefaultValue)}" : string.Empty;
         return $"{modifier}{TypeDisplay(type)} {parameter.Name}{optional}";
     }
 

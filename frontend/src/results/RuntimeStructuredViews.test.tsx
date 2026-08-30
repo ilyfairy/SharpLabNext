@@ -2,12 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { OperationEvent, OperationEventPayload, OutputChannel } from '../api/types'
 import { createExecutionFlowSourceModel } from './executionFlowModel'
-import {
-  parseRuntimePayloads,
-  RuntimeFlowView,
-  type RuntimeInspectionPayload,
-  RuntimeInspectionView,
-} from './RuntimeStructuredViews'
+import { parseRuntimePayloads, RuntimeFlowView, type RuntimeInspectionPayload, RuntimeInspectionView } from './RuntimeStructuredViews'
 
 function event(sequence: number, channel: OutputChannel, value: unknown): OperationEvent {
   const payload: OperationEventPayload = {
@@ -60,14 +55,19 @@ const wireGraph = {
 
 describe('runtime structured views', () => {
   it('keeps frame boundaries while parsing inspection payloads', () => {
-    const payload = { Kind: 'MemoryGraph', Title: 'Memory Graph', Graph: wireGraph }
-    const parsed = parseRuntimePayloads<RuntimeInspectionPayload>(
-      [event(2, 'inspection', payload), event(3, 'stdout', 'ignored')],
-      'inspection',
-    )
+    const payload = {
+      Kind: 'MemoryGraph',
+      Title: 'Memory Graph',
+      Graph: wireGraph,
+    }
+    const parsed = parseRuntimePayloads<RuntimeInspectionPayload>([event(2, 'inspection', payload), event(3, 'stdout', 'ignored')], 'inspection')
 
     expect(parsed).toEqual([
-      { sequence: 2, value: { kind: 'MemoryGraph', title: 'Memory Graph', graph }, error: null },
+      {
+        sequence: 2,
+        value: { kind: 'MemoryGraph', title: 'Memory Graph', graph },
+        error: null,
+      },
     ])
   })
 
@@ -123,7 +123,12 @@ describe('runtime structured views', () => {
     }
     const model = createExecutionFlowSourceModel(
       [event(4, 'flow', flow)],
-      [{ path: 'Program.cs', text: 'line 1\nline 2\nline 3\n0123456789012345' }],
+      [
+        {
+          path: 'Program.cs',
+          text: 'line 1\nline 2\nline 3\n0123456789012345',
+        },
+      ],
     )
     const onNavigate = vi.fn()
     render(<RuntimeFlowView model={model} onNavigate={onNavigate} />)

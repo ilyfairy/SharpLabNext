@@ -1,59 +1,16 @@
 import { Check, Copy } from 'lucide-react'
-import {
-  type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
-import type {
-  AstDocument,
-  Diagnostic,
-  ExplanationDocument,
-  GeneratedSourceDocument,
-  JitResult,
-  OperationEvent,
-  OperationResult,
-  OutputChannel,
-  OutputManifest,
-  RunResult,
-  UserExceptionInfo,
-} from '../api/types'
-import {
-  defaultEditorFontSize,
-  type EditorFontSize,
-  type EditorKind,
-} from '../editor/editorPreference'
+import { type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
+import type { AstDocument, Diagnostic, ExplanationDocument, GeneratedSourceDocument, JitResult, OperationEvent, OperationResult, OutputChannel, OutputManifest, RunResult, UserExceptionInfo } from '../api/types'
+import { defaultEditorFontSize, type EditorFontSize, type EditorKind } from '../editor/editorPreference'
 import { AstTreeView } from './AstTreeView'
-import {
-  type AnsiSgrDocument,
-  type AnsiSgrOutputChunk,
-  type AnsiSgrStyle,
-  parseAnsiSgrOutputChunks,
-} from './ansiSgr'
+import { type AnsiSgrDocument, type AnsiSgrOutputChunk, type AnsiSgrStyle, parseAnsiSgrOutputChunks } from './ansiSgr'
 import { createAstSourceMap } from './astSourceMapModel'
 import { CodeDocumentView } from './CodeDocumentView'
-import {
-  createExecutionFlowSourceModel,
-  type ExecutionFlowSourceModel,
-  type ExecutionFlowSourceTarget,
-} from './executionFlowModel'
+import { createExecutionFlowSourceModel, type ExecutionFlowSourceModel, type ExecutionFlowSourceTarget } from './executionFlowModel'
 import type { IlOutputLanguageSessionOptions } from './ilOutputLanguageSession'
 import { createIlSourceLinks } from './ilSourceMapModel'
-import {
-  composeJitAssembly,
-  type JitAssemblySection,
-  type JitSourceFile,
-  parseJitAssembly,
-  remapJitLineRange,
-} from './jitAssemblyModel'
-import {
-  parseRuntimePayloads,
-  RuntimeFlowView,
-  type RuntimeInspectionPayload,
-  RuntimeInspectionView,
-} from './RuntimeStructuredViews'
+import { composeJitAssembly, type JitAssemblySection, type JitSourceFile, parseJitAssembly, remapJitLineRange } from './jitAssemblyModel'
+import { parseRuntimePayloads, RuntimeFlowView, type RuntimeInspectionPayload, RuntimeInspectionView } from './RuntimeStructuredViews'
 import { createSourceAssociation, type SourceAssociation } from './sourceAssociationModel'
 
 export interface OperationContentView {
@@ -129,13 +86,7 @@ export function findTypedResult(events: readonly OperationEvent[]): OperationRes
 }
 
 function outputChunks(events: readonly OperationEvent[], channel: OutputChannel): string[] {
-  return events
-    .filter(
-      (event) => event.payload.kind === 'output-chunk' && event.payload.chunk.channel === channel,
-    )
-    .map((event) =>
-      event.payload.kind === 'output-chunk' ? decodeOutputChunk(event.payload.chunk.data) : '',
-    )
+  return events.filter((event) => event.payload.kind === 'output-chunk' && event.payload.chunk.channel === channel).map((event) => (event.payload.kind === 'output-chunk' ? decodeOutputChunk(event.payload.chunk.data) : ''))
 }
 
 function outputChunksInOrder(events: readonly OperationEvent[]): AnsiSgrOutputChunk[] {
@@ -158,31 +109,15 @@ function outputText(events: readonly OperationEvent[], channel: OutputChannel): 
   return outputChunks(events, channel).join('')
 }
 
-function diagnosticsFrom(
-  results: readonly OperationResult[],
-  events: readonly OperationEvent[],
-): Diagnostic[] {
+function diagnosticsFrom(results: readonly OperationResult[], events: readonly OperationEvent[]): Diagnostic[] {
   const seen = new Set<string>()
   const diagnostics: Diagnostic[] = []
   const candidates = [
-    ...results.flatMap((result) =>
-      'diagnostics' in result && Array.isArray(result.diagnostics)
-        ? (result.diagnostics as Diagnostic[])
-        : [],
-    ),
-    ...events.flatMap((event) =>
-      event.payload.kind === 'diagnostic' ? [event.payload.diagnostic] : [],
-    ),
+    ...results.flatMap((result) => ('diagnostics' in result && Array.isArray(result.diagnostics) ? (result.diagnostics as Diagnostic[]) : [])),
+    ...events.flatMap((event) => (event.payload.kind === 'diagnostic' ? [event.payload.diagnostic] : [])),
   ]
   for (const diagnostic of candidates) {
-    const key = [
-      diagnostic.source,
-      diagnostic.code,
-      diagnostic.message,
-      diagnostic.filePath,
-      diagnostic.range?.startLine,
-      diagnostic.range?.startCharacter,
-    ].join(':')
+    const key = [diagnostic.source, diagnostic.code, diagnostic.message, diagnostic.filePath, diagnostic.range?.startLine, diagnostic.range?.startCharacter].join(':')
     if (seen.has(key)) continue
     seen.add(key)
     diagnostics.push(diagnostic)
@@ -212,29 +147,11 @@ function findUserException(results: readonly OperationResult[]): UserExceptionIn
   return null
 }
 
-function diagnosticsCopyText(
-  diagnostics: readonly Diagnostic[],
-  failure: Error | null,
-  userException: UserExceptionInfo | null,
-): string {
-  const lines = userException
-    ? [formatUserException(userException)]
-    : failure
-      ? [`Operation failed: ${failure.message}`]
-      : []
+function diagnosticsCopyText(diagnostics: readonly Diagnostic[], failure: Error | null, userException: UserExceptionInfo | null): string {
+  const lines = userException ? [formatUserException(userException)] : failure ? [`Operation failed: ${failure.message}`] : []
   for (const diagnostic of diagnostics) {
-    const location = diagnostic.filePath
-      ? `${diagnostic.filePath}${
-          diagnostic.range
-            ? `:${diagnostic.range.startLine + 1}:${diagnostic.range.startCharacter + 1}`
-            : ''
-        }`
-      : null
-    lines.push(
-      `${[diagnostic.severity.toUpperCase(), diagnostic.code, location]
-        .filter(Boolean)
-        .join(' ')}: ${diagnostic.message}`,
-    )
+    const location = diagnostic.filePath ? `${diagnostic.filePath}${diagnostic.range ? `:${diagnostic.range.startLine + 1}:${diagnostic.range.startCharacter + 1}` : ''}` : null
+    lines.push(`${[diagnostic.severity.toUpperCase(), diagnostic.code, location].filter(Boolean).join(' ')}: ${diagnostic.message}`)
   }
   return lines.join('\n')
 }
@@ -245,15 +162,7 @@ function generatedSourceCopyText(document: GeneratedSourceContentView | null): s
   return document.text ?? ''
 }
 
-function DiagnosticsView({
-  diagnostics,
-  failure,
-  userException,
-}: {
-  diagnostics: readonly Diagnostic[]
-  failure: Error | null
-  userException: UserExceptionInfo | null
-}) {
+function DiagnosticsView({ diagnostics, failure, userException }: { diagnostics: readonly Diagnostic[]; failure: Error | null; userException: UserExceptionInfo | null }) {
   if (diagnostics.length === 0 && !failure && !userException) {
     return <div className="result-tab-empty">No diagnostics.</div>
   }
@@ -273,19 +182,14 @@ function DiagnosticsView({
       {diagnostics.length > 0 && (
         <ol className="diagnostic-list">
           {diagnostics.map((diagnostic) => (
-            <li
-              key={`${diagnostic.source}:${diagnostic.code}:${diagnostic.message}:${diagnostic.filePath}:${diagnostic.range?.startLine}:${diagnostic.range?.startCharacter}`}
-              data-severity={diagnostic.severity}
-            >
+            <li key={`${diagnostic.source}:${diagnostic.code}:${diagnostic.message}:${diagnostic.filePath}:${diagnostic.range?.startLine}:${diagnostic.range?.startCharacter}`} data-severity={diagnostic.severity}>
               <div>
                 <strong>{diagnostic.code}</strong>
                 <span>{diagnostic.severity}</span>
                 {diagnostic.filePath && (
                   <code>
                     {diagnostic.filePath}
-                    {diagnostic.range
-                      ? `:${diagnostic.range.startLine + 1}:${diagnostic.range.startCharacter + 1}`
-                      : ''}
+                    {diagnostic.range ? `:${diagnostic.range.startLine + 1}:${diagnostic.range.startCharacter + 1}` : ''}
                   </code>
                 )}
               </div>
@@ -312,12 +216,7 @@ function ansiStyle(style: AnsiSgrStyle): CSSProperties {
 }
 
 function selectOutputText(event: ReactKeyboardEvent<HTMLElement>) {
-  if (
-    event.key.toLowerCase() !== 'a' ||
-    (!event.ctrlKey && !event.metaKey) ||
-    event.altKey ||
-    event.shiftKey
-  ) {
+  if (event.key.toLowerCase() !== 'a' || (!event.ctrlKey && !event.metaKey) || event.altKey || event.shiftKey) {
     return
   }
 
@@ -332,32 +231,14 @@ function selectOutputText(event: ReactKeyboardEvent<HTMLElement>) {
   event.stopPropagation()
 }
 
-function AnsiTextView({
-  document,
-  empty,
-  ariaLabel,
-}: {
-  document: AnsiSgrDocument
-  empty: string
-  ariaLabel: string
-}) {
+function AnsiTextView({ document, empty, ariaLabel }: { document: AnsiSgrDocument; empty: string; ariaLabel: string }) {
   if (!document.text) return <div className="result-tab-empty">{empty}</div>
   let segmentOffset = 0
   const segments = document.segments.map((segment) => {
     const key = segmentOffset
     segmentOffset += segment.text.length
     return (
-      <span
-        className={[
-          'ansi-segment',
-          segment.style.bold ? 'ansi-segment--bold' : '',
-          segment.style.underline ? 'ansi-segment--underline' : '',
-        ]
-          .filter(Boolean)
-          .join(' ')}
-        key={key}
-        style={ansiStyle(segment.style)}
-      >
+      <span className={['ansi-segment', segment.style.bold ? 'ansi-segment--bold' : '', segment.style.underline ? 'ansi-segment--underline' : ''].filter(Boolean).join(' ')} key={key} style={ansiStyle(segment.style)}>
         {segment.text}
       </span>
     )
@@ -464,16 +345,9 @@ function GeneratedSourceView({
   onSelectedKeyChange: (key: string) => void
   editorKind: EditorKind
 }) {
-  const selected =
-    documents.find((document) => generatedSourceDocumentKey(document) === selectedKey) ??
-    documents[0] ??
-    null
+  const selected = documents.find((document) => generatedSourceDocumentKey(document) === selectedKey) ?? documents[0] ?? null
   if (!selected) {
-    return pending ? (
-      <div className="result-tab-empty">Loading generated source...</div>
-    ) : (
-      <div className="result-tab-empty">No generated source documents were produced.</div>
-    )
+    return pending ? <div className="result-tab-empty">Loading generated source...</div> : <div className="result-tab-empty">No generated source documents were produced.</div>
   }
 
   return (
@@ -484,16 +358,9 @@ function GeneratedSourceView({
         </span>
         <label className="generated-source-picker">
           <span>Document</span>
-          <select
-            aria-label="Generated source document"
-            value={generatedSourceDocumentKey(selected)}
-            onChange={(event) => onSelectedKeyChange(event.target.value)}
-          >
+          <select aria-label="Generated source document" value={generatedSourceDocumentKey(selected)} onChange={(event) => onSelectedKeyChange(event.target.value)}>
             {documents.map((document) => (
-              <option
-                key={generatedSourceDocumentKey(document)}
-                value={generatedSourceDocumentKey(document)}
-              >
+              <option key={generatedSourceDocumentKey(document)} value={generatedSourceDocumentKey(document)}>
                 {document.path}
               </option>
             ))}
@@ -505,14 +372,7 @@ function GeneratedSourceView({
       ) : selected.error ? (
         <div className="result-tab-error">{selected.error.message}</div>
       ) : selected.text !== null ? (
-        <CodeDocumentView
-          text={selected.text}
-          languageId={selected.languageId}
-          ariaLabel={`Generated source ${selected.path}`}
-          fontSize={fontSize}
-          generationKey={resultGenerationKey}
-          editorKind={editorKind}
-        />
+        <CodeDocumentView text={selected.text} languageId={selected.languageId} ariaLabel={`Generated source ${selected.path}`} fontSize={fontSize} generationKey={resultGenerationKey} editorKind={editorKind} />
       ) : (
         <div className="result-tab-empty">{selected.path} returned no text.</div>
       )}
@@ -559,13 +419,7 @@ export function RunStatus({ result }: { result: RunResult | undefined }) {
   )
 }
 
-export function AstStatus({
-  document,
-  nodeCount,
-}: {
-  document: AstDocument | undefined
-  nodeCount: number
-}) {
+export function AstStatus({ document, nodeCount }: { document: AstDocument | undefined; nodeCount: number }) {
   if (!document) return null
   return (
     <div className="ast-status" role="status" aria-label="AST status">
@@ -612,10 +466,7 @@ function formatRunElapsed(elapsed: string): string {
   return `${totalSeconds.toFixed(1)} s`
 }
 
-export function createJitOutputSourceLinks(
-  sections: readonly JitAssemblySection[],
-  sourceFiles: readonly JitSourceFile[],
-): OutputSourceLink[] {
+export function createJitOutputSourceLinks(sections: readonly JitAssemblySection[], sourceFiles: readonly JitSourceFile[]): OutputSourceLink[] {
   const links: OutputSourceLink[] = []
   let sectionStartLine = 1
   for (const section of sections) {
@@ -626,10 +477,7 @@ export function createJitOutputSourceLinks(
       const mapped = remapJitLineRange(section, linkedRange.outputRange.startLine, rawEndLine)
       const source = createIlSourceLinks([linkedRange], sourceFiles)[0]
       if (!mapped || !source) continue
-      const label =
-        linkedRange.precision === 'sequence-point'
-          ? `JIT source: ${source.heading}`
-          : `Approximate JIT source: ${source.heading}`
+      const label = linkedRange.precision === 'sequence-point' ? `JIT source: ${source.heading}` : `Approximate JIT source: ${source.heading}`
       links.push({
         startLine: sectionStartLine + mapped.startLine,
         endLine: sectionStartLine + mapped.endLine,
@@ -670,21 +518,11 @@ export function createJitOutputSourceLinks(
   return links
 }
 
-function inclusiveEndLine(range: {
-  startLine: number
-  endLine: number
-  endCharacter: number
-}): number {
-  return range.endLine > range.startLine && range.endCharacter === 0
-    ? range.endLine - 1
-    : range.endLine
+function inclusiveEndLine(range: { startLine: number; endLine: number; endCharacter: number }): number {
+  return range.endLine > range.startLine && range.endCharacter === 0 ? range.endLine - 1 : range.endLine
 }
 
-function createIlOutputSourceLinks(
-  linkedRanges: Parameters<typeof createIlSourceLinks>[0],
-  sourceFiles: readonly JitSourceFile[],
-  text: string | null | undefined,
-): OutputSourceLink[] {
+function createIlOutputSourceLinks(linkedRanges: Parameters<typeof createIlSourceLinks>[0], sourceFiles: readonly JitSourceFile[], text: string | null | undefined): OutputSourceLink[] {
   return createIlSourceLinks(linkedRanges, sourceFiles, text ?? undefined).map((link) => ({
     startLine: link.startLine,
     endLine: link.endLine,
@@ -791,13 +629,14 @@ function ExplanationView({ document }: { document: ExplanationDocument }) {
             {file.nodes.map((node) => (
               <li
                 key={`${node.kind}:${node.range.startLine}:${node.range.startCharacter}:${node.range.endLine}:${node.range.endCharacter}:${node.depth}:${node.title}`}
-                style={{ paddingLeft: `${10 + Math.min(node.depth, 12) * 12}px` }}
+                style={{
+                  paddingLeft: `${10 + Math.min(node.depth, 12) * 12}px`,
+                }}
               >
                 <div>
                   <strong>{node.title}</strong>
                   <code>
-                    {node.range.startLine + 1}:{node.range.startCharacter + 1}-
-                    {node.range.endLine + 1}:{node.range.endCharacter + 1}
+                    {node.range.startLine + 1}:{node.range.startCharacter + 1}-{node.range.endLine + 1}:{node.range.endCharacter + 1}
                   </code>
                 </div>
                 <p>{node.description}</p>
@@ -863,92 +702,37 @@ export function OperationResults({
   onSourceAssociationHover,
   toolbarActions,
 }: OperationResultsProps) {
-  const diagnostics = useMemo(
-    () => diagnosticsFrom([...results, ...activityResults], activityEvents),
-    [activityEvents, activityResults, results],
-  )
+  const diagnostics = useMemo(() => diagnosticsFrom([...results, ...activityResults], activityEvents), [activityEvents, activityResults, results])
   const ast = results.find((result) => result.resultType === 'ast')
-  const astSourceMap = useMemo(
-    () => (ast?.resultType === 'ast' ? createAstSourceMap(ast.document) : null),
-    [ast],
-  )
+  const astSourceMap = useMemo(() => (ast?.resultType === 'ast' ? createAstSourceMap(ast.document) : null), [ast])
   const generatedSource = results.find((result) => result.resultType === 'generated-source')
   const explain = results.find((result) => result.resultType === 'explain')
   const verification = results.find((result) => result.resultType === 'artifact-verification')
-  const artifactRender = [...results]
-    .reverse()
-    .find((result) => result.resultType === 'artifact-render')
+  const artifactRender = [...results].reverse().find((result) => result.resultType === 'artifact-render')
   const run = results.find((result) => result.resultType === 'run')
   const jit = results.find((result) => result.resultType === 'jit')
-  const outputDocument = useMemo(
-    () => parseAnsiSgrOutputChunks(outputChunksInOrder(events)),
-    [events],
-  )
-  const userException = useMemo(
-    () => findUserException([...results, ...activityResults]),
-    [activityResults, results],
-  )
+  const outputDocument = useMemo(() => parseAnsiSgrOutputChunks(outputChunksInOrder(events)), [events])
+  const userException = useMemo(() => findUserException([...results, ...activityResults]), [activityResults, results])
   const inspection = parseRuntimePayloads<RuntimeInspectionPayload>(events, 'inspection')
   const fallbackExecutionFlow = useMemo(() => createExecutionFlowSourceModel(events, []), [events])
   const flow = executionFlow ?? fallbackExecutionFlow
   const jitStream = outputText(events, 'jit')
-  const preferredGeneratedSourceKey = generatedSourceContents[0]
-    ? generatedSourceDocumentKey(generatedSourceContents[0])
-    : null
-  const [selectedGeneratedSourceKey, setSelectedGeneratedSourceKey] = useState<string | null>(
-    preferredGeneratedSourceKey,
-  )
+  const preferredGeneratedSourceKey = generatedSourceContents[0] ? generatedSourceDocumentKey(generatedSourceContents[0]) : null
+  const [selectedGeneratedSourceKey, setSelectedGeneratedSourceKey] = useState<string | null>(preferredGeneratedSourceKey)
   useEffect(() => {
-    if (
-      !generatedSourceContents.some(
-        (document) => generatedSourceDocumentKey(document) === selectedGeneratedSourceKey,
-      )
-    ) {
+    if (!generatedSourceContents.some((document) => generatedSourceDocumentKey(document) === selectedGeneratedSourceKey)) {
       setSelectedGeneratedSourceKey(preferredGeneratedSourceKey)
     }
   }, [generatedSourceContents, preferredGeneratedSourceKey, selectedGeneratedSourceKey])
-  const selectedGeneratedSource =
-    generatedSourceContents.find(
-      (document) => generatedSourceDocumentKey(document) === selectedGeneratedSourceKey,
-    ) ??
-    generatedSourceContents[0] ??
-    null
+  const selectedGeneratedSource = generatedSourceContents.find((document) => generatedSourceDocumentKey(document) === selectedGeneratedSourceKey) ?? generatedSourceContents[0] ?? null
   const jitText = content?.text ?? jitStream
   const jitResult = jit?.resultType === 'jit' ? jit : undefined
-  const jitSections = useMemo(
-    () => parseJitAssembly(jitText, jitResult?.methods, sourceFiles),
-    [jitResult?.methods, jitText, sourceFiles],
-  )
+  const jitSections = useMemo(() => parseJitAssembly(jitText, jitResult?.methods, sourceFiles), [jitResult?.methods, jitText, sourceFiles])
   const visibleJitText = jitSections.length > 0 ? composeJitAssembly(jitSections) : jitText
-  const jitSourceLinks = useMemo(
-    () => createJitOutputSourceLinks(jitSections, sourceFiles),
-    [jitSections, sourceFiles],
-  )
-  const ilSourceLinks = useMemo(
-    () =>
-      createIlOutputSourceLinks(
-        artifactRender?.resultType === 'artifact-render' ? artifactRender.linkedRanges : [],
-        sourceFiles,
-        content?.text,
-      ),
-    [artifactRender, content?.text, sourceFiles],
-  )
-  const outputSourceLinks = useMemo(
-    () =>
-      output?.id === 'jit-asm'
-        ? jitSourceLinks
-        : output?.id === 'il' || output?.id === 'run-il' || output?.id === 'generated-il'
-          ? ilSourceLinks
-          : [],
-    [ilSourceLinks, jitSourceLinks, output?.id],
-  )
-  const outputSourceAssociations = useMemo(
-    () =>
-      output?.id === 'ast'
-        ? (astSourceMap?.associations ?? [])
-        : uniqueSourceAssociations(outputSourceLinks),
-    [astSourceMap?.associations, output?.id, outputSourceLinks],
-  )
+  const jitSourceLinks = useMemo(() => createJitOutputSourceLinks(jitSections, sourceFiles), [jitSections, sourceFiles])
+  const ilSourceLinks = useMemo(() => createIlOutputSourceLinks(artifactRender?.resultType === 'artifact-render' ? artifactRender.linkedRanges : [], sourceFiles, content?.text), [artifactRender, content?.text, sourceFiles])
+  const outputSourceLinks = useMemo(() => (output?.id === 'jit-asm' ? jitSourceLinks : output?.id === 'il' || output?.id === 'run-il' || output?.id === 'generated-il' ? ilSourceLinks : []), [ilSourceLinks, jitSourceLinks, output?.id])
+  const outputSourceAssociations = useMemo(() => (output?.id === 'ast' ? (astSourceMap?.associations ?? []) : uniqueSourceAssociations(outputSourceLinks)), [astSourceMap?.associations, output?.id, outputSourceLinks])
   useEffect(() => {
     onSourceAssociationsChange?.(outputSourceAssociations)
   }, [onSourceAssociationsChange, outputSourceAssociations])
@@ -958,13 +742,7 @@ export function OperationResults({
       {
         id: 'diagnostics',
         label: `Diagnostics${diagnostics.length + (userException ? 1 : 0) > 0 ? ` (${diagnostics.length + (userException ? 1 : 0)})` : ''}`,
-        content: (
-          <DiagnosticsView
-            diagnostics={diagnostics}
-            failure={failure}
-            userException={userException}
-          />
-        ),
+        content: <DiagnosticsView diagnostics={diagnostics} failure={failure} userException={userException} />,
         copyText: diagnosticsCopyText(diagnostics, failure, userException),
       },
     ]
@@ -1009,14 +787,8 @@ export function OperationResults({
       items.push({
         id: 'explain',
         label: 'Explain',
-        content:
-          explain?.resultType === 'explain' ? (
-            <ExplanationView document={explain.document} />
-          ) : (
-            <div className="result-tab-empty">No explanation was produced.</div>
-          ),
-        copyText:
-          explain?.resultType === 'explain' ? JSON.stringify(explain.document, null, 2) : '',
+        content: explain?.resultType === 'explain' ? <ExplanationView document={explain.document} /> : <div className="result-tab-empty">No explanation was produced.</div>,
+        copyText: explain?.resultType === 'explain' ? JSON.stringify(explain.document, null, 2) : '',
       })
     }
     if (output?.id === 'il' || output?.id === 'run-il') {
@@ -1071,17 +843,7 @@ export function OperationResults({
       items.push({
         id: 'decompiled-csharp',
         label: 'Decompiled C#',
-        content: (
-          <ContentTextView
-            content={content}
-            pending={pending}
-            resultGenerationKey={resultGenerationKey}
-            languageId="csharp"
-            ariaLabel="Decompiled C sharp"
-            fontSize={codeFontSize}
-            editorKind={editorKind}
-          />
-        ),
+        content: <ContentTextView content={content} pending={pending} resultGenerationKey={resultGenerationKey} languageId="csharp" ariaLabel="Decompiled C sharp" fontSize={codeFontSize} editorKind={editorKind} />,
         copyText: content?.error?.message ?? content?.text ?? '',
       })
     }
@@ -1089,17 +851,7 @@ export function OperationResults({
       items.push({
         id: 'javascript',
         label: output.displayName,
-        content: (
-          <ContentTextView
-            content={content}
-            pending={pending}
-            resultGenerationKey={resultGenerationKey}
-            languageId="javascript"
-            ariaLabel="JavaScript output"
-            fontSize={codeFontSize}
-            editorKind={editorKind}
-          />
-        ),
+        content: <ContentTextView content={content} pending={pending} resultGenerationKey={resultGenerationKey} languageId="javascript" ariaLabel="JavaScript output" fontSize={codeFontSize} editorKind={editorKind} />,
         copyText: content?.error?.message ?? content?.text ?? '',
       })
     }
@@ -1125,15 +877,14 @@ export function OperationResults({
                       <div>
                         <strong>{finding.code}</strong>
                         {finding.metadataToken != null && (
-                          <code>0x{finding.metadataToken.toString(16).padStart(8, '0')}</code>
+                          <code>
+                            0x
+                            {finding.metadataToken.toString(16).padStart(8, '0')}
+                          </code>
                         )}
                       </div>
                       <p>{finding.message}</p>
-                      {(finding.typeName || finding.methodName) && (
-                        <span>
-                          {[finding.typeName, finding.methodName].filter(Boolean).join('.')}
-                        </span>
-                      )}
+                      {(finding.typeName || finding.methodName) && <span>{[finding.typeName, finding.methodName].filter(Boolean).join('.')}</span>}
                     </li>
                   ))}
                 </ol>
@@ -1142,10 +893,7 @@ export function OperationResults({
           ) : (
             <div className="result-tab-empty">No verification result was produced.</div>
           ),
-        copyText:
-          verification?.resultType === 'artifact-verification'
-            ? JSON.stringify(verification, null, 2)
-            : '',
+        copyText: verification?.resultType === 'artifact-verification' ? JSON.stringify(verification, null, 2) : '',
       })
     }
     if (output?.id === 'run' || output?.id === 'execution-flow' || run) {
@@ -1240,24 +988,13 @@ export function OperationResults({
   useEffect(() => setActiveTab(initialTab), [initialTab])
   // biome-ignore lint/correctness/useExhaustiveDependencies: the revision intentionally repeats tab activation for the same association key.
   useEffect(() => {
-    if (
-      activeSourceAssociationKey &&
-      outputSourceAssociations.some((association) => association.key === activeSourceAssociationKey)
-    ) {
+    if (activeSourceAssociationKey && outputSourceAssociations.some((association) => association.key === activeSourceAssociationKey)) {
       setActiveTab(initialTab)
     }
-  }, [
-    activeSourceAssociationKey,
-    activeSourceAssociationRevision,
-    initialTab,
-    outputSourceAssociations,
-  ])
+  }, [activeSourceAssociationKey, activeSourceAssociationRevision, initialTab, outputSourceAssociations])
   const handledAttentionKey = useRef<string | null>(null)
   const autoSelectedDiagnosticsKey = useRef<string | null>(null)
-  const requiresAttention =
-    failure !== null ||
-    userException !== null ||
-    diagnostics.some((diagnostic) => diagnostic.severity === 'error')
+  const requiresAttention = failure !== null || userException !== null || diagnostics.some((diagnostic) => diagnostic.severity === 'error')
   useEffect(() => {
     if (!requiresAttention || !attentionKey || handledAttentionKey.current === attentionKey) return
     handledAttentionKey.current = attentionKey
@@ -1265,12 +1002,7 @@ export function OperationResults({
     setActiveTab('diagnostics')
   }, [attentionKey, requiresAttention])
   useEffect(() => {
-    if (
-      pending ||
-      requiresAttention ||
-      !recoveryKey ||
-      autoSelectedDiagnosticsKey.current === null
-    ) {
+    if (pending || requiresAttention || !recoveryKey || autoSelectedDiagnosticsKey.current === null) {
       return
     }
     autoSelectedDiagnosticsKey.current = null
@@ -1296,33 +1028,15 @@ export function OperationResults({
       <div className="result-tabs-toolbar">
         <div className="result-tabs" role="tablist" aria-label="Result views">
           {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              data-result-tab={tab.id}
-              type="button"
-              role="tab"
-              title={tab.label}
-              aria-selected={selected?.id === tab.id}
-              onClick={() => selectTab(tab.id)}
-            >
+            <button key={tab.id} data-result-tab={tab.id} type="button" role="tab" title={tab.label} aria-selected={selected?.id === tab.id} onClick={() => selectTab(tab.id)}>
               {tab.label}
             </button>
           ))}
         </div>
         <div className="result-actions" role="toolbar" aria-label="Result controls">
           {toolbarActions}
-          <button
-            className="icon-button"
-            type="button"
-            title="Copy output"
-            aria-label="Copy output"
-            onClick={() => void copySelectedOutput()}
-          >
-            {copied ? (
-              <Check aria-hidden="true" size={15} />
-            ) : (
-              <Copy aria-hidden="true" size={15} />
-            )}
+          <button className="icon-button" type="button" title="Copy output" aria-label="Copy output" onClick={() => void copySelectedOutput()}>
+            {copied ? <Check aria-hidden="true" size={15} /> : <Copy aria-hidden="true" size={15} />}
           </button>
         </div>
       </div>

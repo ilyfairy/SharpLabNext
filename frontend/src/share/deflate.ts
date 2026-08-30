@@ -1,19 +1,9 @@
 import { ShareUrlError } from './errors'
 
-const lengthBases = [
-  3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131,
-  163, 195, 227, 258,
-] as const
-const lengthExtraBits = [
-  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0,
-] as const
-const distanceBases = [
-  1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1_025, 1_537,
-  2_049, 3_073, 4_097, 6_145, 8_193, 12_289, 16_385, 24_577,
-] as const
-const distanceExtraBits = [
-  0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13,
-] as const
+const lengthBases = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258] as const
+const lengthExtraBits = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0] as const
+const distanceBases = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1_025, 1_537, 2_049, 3_073, 4_097, 6_145, 8_193, 12_289, 16_385, 24_577] as const
+const distanceExtraBits = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13] as const
 const codeLengthOrder = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15] as const
 
 class BitReader {
@@ -114,9 +104,7 @@ const fixedDistanceLengths = new Array<number>(32).fill(5)
 const fixedLiteralTable = buildHuffmanTable(fixedLiteralLengths, 'fixed literal/length')
 const fixedDistanceTable = buildHuffmanTable(fixedDistanceLengths, 'fixed distance')
 
-const readDynamicTables = (
-  reader: BitReader,
-): { literalTable: HuffmanTable; distanceTable: HuffmanTable | null } => {
+const readDynamicTables = (reader: BitReader): { literalTable: HuffmanTable; distanceTable: HuffmanTable | null } => {
   const literalCount = reader.readBits(5) + 257
   const distanceCount = reader.readBits(5) + 1
   const codeLengthCount = reader.readBits(4) + 4
@@ -169,30 +157,19 @@ const readDynamicTables = (
   const distanceLengths = lengths.slice(literalCount)
   return {
     literalTable: buildHuffmanTable(literalLengths, 'literal/length'),
-    distanceTable: distanceLengths.every((length) => length === 0)
-      ? null
-      : buildHuffmanTable(distanceLengths, 'distance'),
+    distanceTable: distanceLengths.every((length) => length === 0) ? null : buildHuffmanTable(distanceLengths, 'distance'),
   }
 }
 
 const addOutput = (current: number, addition: number, expectedLength: number): number => {
   const next = current + addition
   if (next > expectedLength) {
-    throw new ShareUrlError(
-      'length-mismatch',
-      'The raw DEFLATE stream expands beyond its declared payload length.',
-    )
+    throw new ShareUrlError('length-mismatch', 'The raw DEFLATE stream expands beyond its declared payload length.')
   }
   return next
 }
 
-const readCompressedBlock = (
-  reader: BitReader,
-  literalTable: HuffmanTable,
-  distanceTable: HuffmanTable | null,
-  initialOutputLength: number,
-  expectedLength: number,
-): number => {
+const readCompressedBlock = (reader: BitReader, literalTable: HuffmanTable, distanceTable: HuffmanTable | null, initialOutputLength: number, expectedLength: number): number => {
   let outputLength = initialOutputLength
   while (true) {
     const symbol = decodeSymbol(reader, literalTable)
@@ -202,35 +179,21 @@ const readCompressedBlock = (
     }
     if (symbol === 256) return outputLength
     if (symbol < 257 || symbol > 285) {
-      throw new ShareUrlError(
-        'decompression-failed',
-        'The DEFLATE stream has an invalid length code.',
-      )
+      throw new ShareUrlError('decompression-failed', 'The DEFLATE stream has an invalid length code.')
     }
 
     const lengthIndex = symbol - 257
-    const matchLength =
-      (lengthBases[lengthIndex] ?? 0) + reader.readBits(lengthExtraBits[lengthIndex] ?? 0)
+    const matchLength = (lengthBases[lengthIndex] ?? 0) + reader.readBits(lengthExtraBits[lengthIndex] ?? 0)
     if (!distanceTable) {
-      throw new ShareUrlError(
-        'decompression-failed',
-        'The DEFLATE stream uses a match without a distance tree.',
-      )
+      throw new ShareUrlError('decompression-failed', 'The DEFLATE stream uses a match without a distance tree.')
     }
     const distanceSymbol = decodeSymbol(reader, distanceTable)
     if (distanceSymbol > 29) {
-      throw new ShareUrlError(
-        'decompression-failed',
-        'The DEFLATE stream has an invalid distance code.',
-      )
+      throw new ShareUrlError('decompression-failed', 'The DEFLATE stream has an invalid distance code.')
     }
-    const distance =
-      (distanceBases[distanceSymbol] ?? 0) + reader.readBits(distanceExtraBits[distanceSymbol] ?? 0)
+    const distance = (distanceBases[distanceSymbol] ?? 0) + reader.readBits(distanceExtraBits[distanceSymbol] ?? 0)
     if (distance === 0 || distance > outputLength) {
-      throw new ShareUrlError(
-        'decompression-failed',
-        'The DEFLATE stream references invalid history.',
-      )
+      throw new ShareUrlError('decompression-failed', 'The DEFLATE stream references invalid history.')
     }
     outputLength = addOutput(outputLength, matchLength, expectedLength)
   }
@@ -252,35 +215,17 @@ export const validateDeflateRaw = (data: Uint8Array, expectedLength: number): vo
       const length = reader.readBits(16)
       const complement = reader.readBits(16)
       if (((length ^ 0xffff) & 0xffff) !== complement) {
-        throw new ShareUrlError(
-          'decompression-failed',
-          'A stored DEFLATE block has an invalid length.',
-        )
+        throw new ShareUrlError('decompression-failed', 'A stored DEFLATE block has an invalid length.')
       }
       outputLength = addOutput(outputLength, length, expectedLength)
       for (let index = 0; index < length; index += 1) reader.readBits(8)
     } else if (blockType === 1) {
-      outputLength = readCompressedBlock(
-        reader,
-        fixedLiteralTable,
-        fixedDistanceTable,
-        outputLength,
-        expectedLength,
-      )
+      outputLength = readCompressedBlock(reader, fixedLiteralTable, fixedDistanceTable, outputLength, expectedLength)
     } else if (blockType === 2) {
       const { literalTable, distanceTable } = readDynamicTables(reader)
-      outputLength = readCompressedBlock(
-        reader,
-        literalTable,
-        distanceTable,
-        outputLength,
-        expectedLength,
-      )
+      outputLength = readCompressedBlock(reader, literalTable, distanceTable, outputLength, expectedLength)
     } else {
-      throw new ShareUrlError(
-        'decompression-failed',
-        'The raw DEFLATE stream has a reserved block type.',
-      )
+      throw new ShareUrlError('decompression-failed', 'The raw DEFLATE stream has a reserved block type.')
     }
   }
 
@@ -288,9 +233,6 @@ export const validateDeflateRaw = (data: Uint8Array, expectedLength: number): vo
     throw new ShareUrlError('decompression-failed', 'The raw DEFLATE stream has trailing bytes.')
   }
   if (outputLength !== expectedLength) {
-    throw new ShareUrlError(
-      'length-mismatch',
-      `The raw DEFLATE stream produced ${outputLength} bytes, not ${expectedLength}.`,
-    )
+    throw new ShareUrlError('length-mismatch', `The raw DEFLATE stream produced ${outputLength} bytes, not ${expectedLength}.`)
   }
 }

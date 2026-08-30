@@ -31,11 +31,7 @@ const methodHeader = /^; Assembly listing for method\s+(.+?)(?:\s+\([^)]*Opts\))
 const jitBlockLabelDeclaration = /^\s*(G_M\d+_IG\d+):(?:\s*;.*)?\s*$/i
 const jitBlockLabelReference = /\bG_M\d+_IG\d+\b/gi
 
-export function parseJitAssembly(
-  text: string,
-  summaries?: readonly JitMethodSummary[],
-  sourceFiles: readonly JitSourceFile[] = [],
-): JitAssemblySection[] {
+export function parseJitAssembly(text: string, summaries?: readonly JitMethodSummary[], sourceFiles: readonly JitSourceFile[] = []): JitAssemblySection[] {
   const matches = [...text.matchAll(methodHeader)]
   if (matches.length === 0) return []
 
@@ -59,10 +55,7 @@ export function parseJitAssembly(
   return summaries === undefined ? sections : sections.filter((section) => section.summary !== null)
 }
 
-function compactJitAssemblySection(
-  text: string,
-  signature: string,
-): Pick<JitAssemblySection, 'text' | 'rawLineToCompactLine'> {
+function compactJitAssemblySection(text: string, signature: string): Pick<JitAssemblySection, 'text' | 'rawLineToCompactLine'> {
   const rawLines = text.replace(/\r\n?/g, '\n').split('\n')
   const lines = rawLines.slice(1)
   const referencedLabels = new Set<string>()
@@ -92,22 +85,11 @@ function compactJitAssemblySection(
   return { text: compactLines.join('\n'), rawLineToCompactLine }
 }
 
-export function remapJitLineRange(
-  section: JitAssemblySection,
-  rawStartLine: number,
-  rawEndLine: number,
-): { startLine: number; endLine: number } | null {
-  if (
-    !Number.isSafeInteger(rawStartLine) ||
-    !Number.isSafeInteger(rawEndLine) ||
-    rawStartLine < 0 ||
-    rawEndLine < rawStartLine
-  ) {
+export function remapJitLineRange(section: JitAssemblySection, rawStartLine: number, rawEndLine: number): { startLine: number; endLine: number } | null {
+  if (!Number.isSafeInteger(rawStartLine) || !Number.isSafeInteger(rawEndLine) || rawStartLine < 0 || rawEndLine < rawStartLine) {
     return null
   }
-  const mapped = section.rawLineToCompactLine
-    .slice(rawStartLine, rawEndLine + 1)
-    .filter((line): line is number => line !== null)
+  const mapped = section.rawLineToCompactLine.slice(rawStartLine, rawEndLine + 1).filter((line): line is number => line !== null)
   const startLine = mapped[0]
   const endLine = mapped.at(-1)
   return startLine === undefined || endLine === undefined ? null : { startLine, endLine }
@@ -131,9 +113,7 @@ export function composeJitAssembly(sections: readonly JitAssemblySection[]): str
   return sections.map((section) => section.text).join('\n\n')
 }
 
-export function jitAssemblySourceTooltips(
-  sections: readonly JitAssemblySection[],
-): JitAssemblySourceTooltip[] {
+export function jitAssemblySourceTooltips(sections: readonly JitAssemblySection[]): JitAssemblySourceTooltip[] {
   const tooltips: JitAssemblySourceTooltip[] = []
   let startLine = 1
   for (const section of sections) {
@@ -151,28 +131,18 @@ export function jitAssemblySourceTooltips(
   return tooltips
 }
 
-export function preferredJitSectionId(
-  sections: readonly JitAssemblySection[],
-  sourceMethodName: string | null | undefined,
-): string | null {
+export function preferredJitSectionId(sections: readonly JitAssemblySection[], sourceMethodName: string | null | undefined): string | null {
   if (sections.length === 0) return null
   if (sourceMethodName) {
     const exact = sections.find((section) => methodName(section.displayName) === sourceMethodName)
     if (exact) return exact.id
-    const contains = sections.find((section) =>
-      section.displayName.toLowerCase().includes(sourceMethodName.toLowerCase()),
-    )
+    const contains = sections.find((section) => section.displayName.toLowerCase().includes(sourceMethodName.toLowerCase()))
     if (contains) return contains.id
   }
-  return (
-    sections.find((section) => !section.displayName.includes('<'))?.id ?? sections[0]?.id ?? null
-  )
+  return sections.find((section) => !section.displayName.includes('<'))?.id ?? sections[0]?.id ?? null
 }
 
-function takeMatchingSummary(
-  displayName: string,
-  summaries: JitMethodSummary[],
-): JitMethodSummary | null {
+function takeMatchingSummary(displayName: string, summaries: JitMethodSummary[]): JitMethodSummary | null {
   const index = summaries.findIndex((summary) => methodNamesMatch(displayName, summary.displayName))
   if (index < 0) return null
   return summaries.splice(index, 1)[0] ?? null
@@ -182,10 +152,7 @@ function methodNamesMatch(jitDisplayName: string, summaryDisplayName: string): b
   const jitName = normalizeMethodDisplayName(jitDisplayName)
   const summaryName = normalizeMethodDisplayName(summaryDisplayName)
   const jitNameWithoutSignature = removeSignature(jitName)
-  return (
-    jitName.includes(summaryName) ||
-    (jitNameWithoutSignature.length > 0 && summaryName.includes(jitNameWithoutSignature))
-  )
+  return jitName.includes(summaryName) || (jitNameWithoutSignature.length > 0 && summaryName.includes(jitNameWithoutSignature))
 }
 
 function normalizeMethodDisplayName(displayName: string): string {
@@ -205,10 +172,7 @@ function methodName(displayName: string): string {
   return candidate.replace(/\[.*$/, '').replace(/^<|>\$?$/g, '')
 }
 
-function findJitSourcePreview(
-  displayName: string,
-  sourceFiles: readonly JitSourceFile[],
-): JitSourcePreview | null {
+function findJitSourcePreview(displayName: string, sourceFiles: readonly JitSourceFile[]): JitSourcePreview | null {
   if (sourceFiles.length === 0) return null
   const name = sourceMethodName(displayName)
   if (!name) return null
@@ -255,20 +219,10 @@ function sourceMethodName(displayName: string): string | null {
 function declarationScore(line: string, name: string): number {
   const escaped = escapeRegExp(name)
   if (!new RegExp(`\\b${escaped}\\b`, 'u').test(line)) return 0
-  if (
-    new RegExp(
-      `\\b(?:func|fn|function|sub|let|member)\\s+(?:[A-Za-z_][\\w']*\\.)?${escaped}\\b`,
-      'iu',
-    ).test(line)
-  ) {
+  if (new RegExp(`\\b(?:func|fn|function|sub|let|member)\\s+(?:[A-Za-z_][\\w']*\\.)?${escaped}\\b`, 'iu').test(line)) {
     return 4
   }
-  if (
-    new RegExp(
-      `(?:^|\\s)(?:[A-Za-z_][\\w.<>,?\\[\\]']*\\s+)+${escaped}\\s*(?:<[^>{}]*>)?\\s*\\(`,
-      'u',
-    ).test(line)
-  ) {
+  if (new RegExp(`(?:^|\\s)(?:[A-Za-z_][\\w.<>,?\\[\\]']*\\s+)+${escaped}\\s*(?:<[^>{}]*>)?\\s*\\(`, 'u').test(line)) {
     return 3
   }
   if (new RegExp(`\\b${escaped}\\s*\\([^;]*\\)\\s*(?:=>|\\{)`, 'u').test(line)) return 2
@@ -293,13 +247,7 @@ function firstTopLevelStatement(lines: readonly string[]): number | null {
       }
       line = line.slice(end + 2).trim()
     }
-    if (
-      !line ||
-      line.startsWith('//') ||
-      line.startsWith('#') ||
-      /^(?:global\s+)?using\b/.test(line) ||
-      /^extern\s+alias\b/.test(line)
-    ) {
+    if (!line || line.startsWith('//') || line.startsWith('#') || /^(?:global\s+)?using\b/.test(line) || /^extern\s+alias\b/.test(line)) {
       continue
     }
     return index

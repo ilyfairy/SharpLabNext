@@ -22,52 +22,27 @@ public sealed class ConstGenericsRuntimeTests
     public async Task SourceIdentityIsPinnedAcrossBuildLockAndProvenance()
     {
         var root = FindRepositoryRoot();
-        var dockerfile = await File.ReadAllTextAsync(
-            Path.Combine(root, "deploy", "docker", "Dockerfile.runtime-const-generics"),
-            TestContext.Current.CancellationToken);
-        var workerDockerfile = await File.ReadAllTextAsync(
-            Path.Combine(root, "deploy", "docker", "Dockerfile.worker-roslyn-const-generics"),
-            TestContext.Current.CancellationToken);
-        var releaseLock = await CatalogLoader.LoadReleaseLockAsync(
-            Path.Combine(root, "profiles", "lock.json"),
-            TestContext.Current.CancellationToken);
-        var catalog = await CatalogLoader.LoadCatalogAsync(
-            Path.Combine(root, "profiles", "catalog", "catalog.json"),
-            TestContext.Current.CancellationToken);
-        await using var provenanceStream = File.OpenRead(
-            Path.Combine(root, "profiles", "provenance", "const-generics-runtime.json"));
-        using var provenance = await JsonDocument.ParseAsync(
-            provenanceStream,
-            cancellationToken: TestContext.Current.CancellationToken);
-        await using var roslynProvenanceStream = File.OpenRead(
-            Path.Combine(root, "profiles", "provenance", "const-generics-roslyn.json"));
-        using var roslynProvenance = await JsonDocument.ParseAsync(
-            roslynProvenanceStream,
-            cancellationToken: TestContext.Current.CancellationToken);
-        await using var ilspyProvenanceStream = File.OpenRead(
-            Path.Combine(root, "profiles", "provenance", "const-generics-ilspy.json"));
-        using var ilspyProvenance = await JsonDocument.ParseAsync(
-            ilspyProvenanceStream,
-            cancellationToken: TestContext.Current.CancellationToken);
-        await using var runtimeProfileStream = File.OpenRead(
-            Path.Combine(root, "profiles", "runtimes", "const-generics-linux-x64.json"));
-        using var runtimeProfile = await JsonDocument.ParseAsync(
-            runtimeProfileStream,
-            cancellationToken: TestContext.Current.CancellationToken);
+        var dockerfile = await File.ReadAllTextAsync(Path.Combine(root, "deploy", "docker", "Dockerfile.runtime-const-generics"), TestContext.Current.CancellationToken);
+        var workerDockerfile = await File.ReadAllTextAsync(Path.Combine(root, "deploy", "docker", "Dockerfile.worker-roslyn-const-generics"), TestContext.Current.CancellationToken);
+        var releaseLock = await CatalogLoader.LoadReleaseLockAsync(Path.Combine(root, "profiles", "lock.json"), TestContext.Current.CancellationToken);
+        var catalog = await CatalogLoader.LoadCatalogAsync(Path.Combine(root, "profiles", "catalog", "catalog.json"), TestContext.Current.CancellationToken);
+        await using var provenanceStream = File.OpenRead(Path.Combine(root, "profiles", "provenance", "const-generics-runtime.json"));
+        using var provenance = await JsonDocument.ParseAsync(provenanceStream, cancellationToken: TestContext.Current.CancellationToken);
+        await using var roslynProvenanceStream = File.OpenRead(Path.Combine(root, "profiles", "provenance", "const-generics-roslyn.json"));
+        using var roslynProvenance = await JsonDocument.ParseAsync(roslynProvenanceStream, cancellationToken: TestContext.Current.CancellationToken);
+        await using var ilspyProvenanceStream = File.OpenRead(Path.Combine(root, "profiles", "provenance", "const-generics-ilspy.json"));
+        using var ilspyProvenance = await JsonDocument.ParseAsync(ilspyProvenanceStream, cancellationToken: TestContext.Current.CancellationToken);
+        await using var runtimeProfileStream = File.OpenRead(Path.Combine(root, "profiles", "runtimes", "const-generics-linux-x64.json"));
+        using var runtimeProfile = await JsonDocument.ParseAsync(runtimeProfileStream, cancellationToken: TestContext.Current.CancellationToken);
         await using var baseImagesStream = File.OpenRead(Path.Combine(root, "profiles", "base-images.json"));
-        using var baseImages = await JsonDocument.ParseAsync(
-            baseImagesStream,
-            cancellationToken: TestContext.Current.CancellationToken);
+        using var baseImages = await JsonDocument.ParseAsync(baseImagesStream, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains("ARG CONST_GENERICS_RUNTIME_COMMIT", dockerfile, StringComparison.Ordinal);
         Assert.Contains("ARG CONST_GENERICS_RUNTIME_ARCHIVE_SHA256", dockerfile, StringComparison.Ordinal);
         Assert.Contains("sha256sum --check --strict", dockerfile, StringComparison.Ordinal);
         Assert.Contains("clr+libs+host.native+host.tools+host.pkg+packs.product", dockerfile, StringComparison.Ordinal);
         Assert.Contains("/p:EnableSourceLink=false", dockerfile, StringComparison.Ordinal);
-        Assert.Contains(
-            "Microsoft.NETCore.App.Ref.${CONST_GENERICS_REFERENCE_VERSION}.nupkg",
-            dockerfile,
-            StringComparison.Ordinal);
+        Assert.Contains("Microsoft.NETCore.App.Ref.${CONST_GENERICS_REFERENCE_VERSION}.nupkg", dockerfile, StringComparison.Ordinal);
         Assert.Contains("FROM runtime-source-build-base AS runtime-assets", dockerfile, StringComparison.Ordinal);
         Assert.Contains("ConstGenerics reference source identity digest mismatch", dockerfile, StringComparison.Ordinal);
         Assert.Contains("referenceIdentityKind", dockerfile, StringComparison.Ordinal);
@@ -83,74 +58,41 @@ public sealed class ConstGenericsRuntimeTests
         Assert.Equal("Microsoft.DotNet.VersionTools.Tasks", versionTools.Package);
         Assert.Matches("^sha256:[0-9a-f]{64}$", versionTools.Digest);
         Assert.Equal(ReferenceDigest, releaseLock.Components["const-generics-ref"].Digest);
-        Assert.Equal(
-            "https://codeload.github.com/hez2010/runtime/tar.gz/79f7f1408b2c811904c983419b45139e654f1e46",
-            releaseLock.Components["const-generics-ref"].SourceUri);
-        Assert.Equal(
-            ReferenceDigest,
-            Assert.Single(catalog.ReferenceSets, static item => item.Id == "const-generics-ref").Digest);
+        Assert.Equal("https://codeload.github.com/hez2010/runtime/tar.gz/79f7f1408b2c811904c983419b45139e654f1e46", releaseLock.Components["const-generics-ref"].SourceUri);
+        Assert.Equal(ReferenceDigest, Assert.Single(catalog.ReferenceSets, static item => item.Id == "const-generics-ref").Digest);
         Assert.Null(releaseLock.Components["const-generics-linux-x64"].ImageId);
         Assert.Null(releaseLock.Components["roslyn-const-generics"].ImageId);
         Assert.Null(releaseLock.Components["artifacts-const-generics"].ImageId);
         Assert.All(releaseLock.Components.Values, static component => Assert.Null(component.PatchDigest));
         AssertMaintainedSourceReference(provenance.RootElement, releaseLock, "const-generics-runtime-source");
-        AssertPatchSeriesIsDerivedFromFiles(
-            root,
-            provenance.RootElement,
-            "eng/patches/const-generics-runtime");
-        Assert.Equal(
-            "const-generics-ref",
-            provenance.RootElement.GetProperty("build").GetProperty("referenceSet").GetProperty("componentId").GetString());
-        var bootstrapOverride = provenance.RootElement
-            .GetProperty("build")
-            .GetProperty("bootstrapDependencyOverrides")[0];
+        AssertPatchSeriesIsDerivedFromFiles(root, provenance.RootElement, "eng/patches/const-generics-runtime");
+        Assert.Equal("const-generics-ref", provenance.RootElement.GetProperty("build").GetProperty("referenceSet").GetProperty("componentId").GetString());
+        var bootstrapOverride = provenance.RootElement.GetProperty("build").GetProperty("bootstrapDependencyOverrides")[0];
         Assert.Equal("const-generics-versiontools", bootstrapOverride.GetProperty("componentId").GetString());
         Assert.False(bootstrapOverride.TryGetProperty("resolvedVersion", out _));
         Assert.False(bootstrapOverride.TryGetProperty("sourceUri", out _));
         Assert.False(bootstrapOverride.TryGetProperty("sha256", out _));
         Assert.Equal(RuntimeImageTag, runtimeProfile.RootElement.GetProperty("runtimeImageId").GetString());
 
-        AssertMaintainedSourceReference(
-            roslynProvenance.RootElement,
-            releaseLock,
-            "const-generics-roslyn-source");
-        AssertPatchSeriesIsDerivedFromFiles(
-            root,
-            roslynProvenance.RootElement,
-            "eng/patches/roslyn-const-generics");
-        Assert.Equal(
-            "const-generics-runtime-source",
-            roslynProvenance.RootElement.GetProperty("build").GetProperty("metadataRuntimeSourceComponentId").GetString());
+        AssertMaintainedSourceReference(roslynProvenance.RootElement, releaseLock, "const-generics-roslyn-source");
+        AssertPatchSeriesIsDerivedFromFiles(root, roslynProvenance.RootElement, "eng/patches/roslyn-const-generics");
+        Assert.Equal("const-generics-runtime-source", roslynProvenance.RootElement.GetProperty("build").GetProperty("metadataRuntimeSourceComponentId").GetString());
         Assert.False(roslynProvenance.RootElement.GetProperty("build").TryGetProperty("compilerVersion", out _));
-        Assert.Equal(
-            "const-generics-ref",
-            roslynProvenance.RootElement.GetProperty("build").GetProperty("referenceSetId").GetString());
+        Assert.Equal("const-generics-ref", roslynProvenance.RootElement.GetProperty("build").GetProperty("referenceSetId").GetString());
 
-        AssertMaintainedSourceReference(
-            ilspyProvenance.RootElement,
-            releaseLock,
-            "const-generics-ilspy-source");
-        AssertPatchSeriesIsDerivedFromFiles(
-            root,
-            ilspyProvenance.RootElement,
-            "eng/patches/const-generics-runtime",
-            "eng/patches/ilspy-const-generics");
+        AssertMaintainedSourceReference(ilspyProvenance.RootElement, releaseLock, "const-generics-ilspy-source");
+        AssertPatchSeriesIsDerivedFromFiles(root, ilspyProvenance.RootElement, "eng/patches/const-generics-runtime", "eng/patches/ilspy-const-generics");
         var runtimeDependency = ilspyProvenance.RootElement.GetProperty("runtimeDependency");
         Assert.Equal("const-generics-runtime-source", runtimeDependency.GetProperty("sourceComponentId").GetString());
         Assert.Equal("const-generics-linux-x64", runtimeDependency.GetProperty("runtimeComponentId").GetString());
         Assert.False(runtimeDependency.TryGetProperty("runtimeVersion", out _));
         Assert.Equal("target:runtime-const-generics", runtimeDependency.GetProperty("namedContext").GetString());
-        Assert.Equal(
-            "/opt/const-runtime/dotnet",
-            ilspyProvenance.RootElement.GetProperty("build").GetProperty("processorRuntime").GetString());
+        Assert.Equal("/opt/const-runtime/dotnet", ilspyProvenance.RootElement.GetProperty("build").GetProperty("processorRuntime").GetString());
 
         AssertStaticProvenanceContainsOnlyMaintainedInputs(provenance.RootElement);
         AssertStaticProvenanceContainsOnlyMaintainedInputs(roslynProvenance.RootElement);
         AssertStaticProvenanceContainsOnlyMaintainedInputs(ilspyProvenance.RootElement);
-        var baseImageIds = baseImages.RootElement.GetProperty("images")
-            .EnumerateArray()
-            .Select(static image => image.GetProperty("id").GetString())
-            .ToHashSet(StringComparer.Ordinal);
+        var baseImageIds = baseImages.RootElement.GetProperty("images").EnumerateArray().Select(static image => image.GetProperty("id").GetString()).ToHashSet(StringComparer.Ordinal);
         Assert.Contains(provenance.RootElement.GetProperty("builder").GetProperty("imageId").GetString(), baseImageIds);
         Assert.Contains(roslynProvenance.RootElement.GetProperty("builder").GetProperty("imageId").GetString(), baseImageIds);
         Assert.Contains(ilspyProvenance.RootElement.GetProperty("builder").GetProperty("imageId").GetString(), baseImageIds);
@@ -159,16 +101,9 @@ public sealed class ConstGenericsRuntimeTests
     [Fact]
     public async Task RuntimeProfileDeclaresOnlyTheAtomicFeatureContract()
     {
-        var profilePath = Path.Combine(
-            FindRepositoryRoot(),
-            "profiles",
-            "runtimes",
-            "const-generics-linux-x64.json");
+        var profilePath = Path.Combine(FindRepositoryRoot(), "profiles", "runtimes", "const-generics-linux-x64.json");
         await using var stream = File.OpenRead(profilePath);
-        var profile = await JsonSerializer.DeserializeAsync<RuntimeProfileDefinition>(
-            stream,
-            JsonOptions,
-            TestContext.Current.CancellationToken);
+        var profile = await JsonSerializer.DeserializeAsync<RuntimeProfileDefinition>(stream, JsonOptions, TestContext.Current.CancellationToken);
 
         Assert.NotNull(profile);
         Assert.Empty(RuntimeProfileValidation.ValidatePackage(profile, requireDigestPinnedImage: false));
@@ -186,19 +121,9 @@ public sealed class ConstGenericsRuntimeTests
     public async Task RuntimeTemplateUsesADevelopmentTagAndDocumentsGeneratedReleaseIdentity()
     {
         var root = FindRepositoryRoot();
-        await using var stream = File.OpenRead(Path.Combine(
-            root,
-            "samples",
-            "Runtimes",
-            "dotnet-runtime-template",
-            "runtime-profile.json"));
-        var profile = await JsonSerializer.DeserializeAsync<RuntimeProfileDefinition>(
-            stream,
-            JsonOptions,
-            TestContext.Current.CancellationToken);
-        var readme = await File.ReadAllTextAsync(
-            Path.Combine(root, "samples", "Runtimes", "dotnet-runtime-template", "README.md"),
-            TestContext.Current.CancellationToken);
+        await using var stream = File.OpenRead(Path.Combine(root, "samples", "Runtimes", "dotnet-runtime-template", "runtime-profile.json"));
+        var profile = await JsonSerializer.DeserializeAsync<RuntimeProfileDefinition>(stream, JsonOptions, TestContext.Current.CancellationToken);
+        var readme = await File.ReadAllTextAsync(Path.Combine(root, "samples", "Runtimes", "dotnet-runtime-template", "README.md"), TestContext.Current.CancellationToken);
 
         Assert.NotNull(profile);
         Assert.Equal("sharplabnext/runtime-example:development", profile.Image);
@@ -212,54 +137,20 @@ public sealed class ConstGenericsRuntimeTests
     public async Task ComposeTemplatesDoNotHardCodeLocalBuildOutputDigests()
     {
         var root = FindRepositoryRoot();
-        var developmentCompose = await File.ReadAllTextAsync(
-            Path.Combine(root, "deploy", "compose.dev.yaml"),
-            TestContext.Current.CancellationToken);
-        var productionCompose = await File.ReadAllTextAsync(
-            Path.Combine(root, "deploy", "compose.prod.yaml"),
-            TestContext.Current.CancellationToken);
+        var developmentCompose = await File.ReadAllTextAsync(Path.Combine(root, "deploy", "compose.dev.yaml"), TestContext.Current.CancellationToken);
+        var productionCompose = await File.ReadAllTextAsync(Path.Combine(root, "deploy", "compose.prod.yaml"), TestContext.Current.CancellationToken);
 
-        Assert.Contains(
-            $"Services__LanguageWorkers__roslyn-const-generics__ExpectedWorkerImageId: {RoslynImageTag}",
-            developmentCompose,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            $"RoslynWorker__WorkerImageId: {RoslynImageTag}",
-            developmentCompose,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            $"Services__ArtifactWorkers__artifacts-const-generics__ExpectedWorkerImageId: {ArtifactWorkerImageTag}",
-            developmentCompose,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            $"ConstGenericsArtifactWorker__WorkerImageId: {ArtifactWorkerImageTag}",
-            developmentCompose,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            $"RuntimeSupervisor__Profiles__2__RuntimeImageId: ${{SHARPLABNEXT_CONST_GENERICS_RUNTIME_IMAGE_ID:-{RuntimeImageTag}}}",
-            developmentCompose,
-            StringComparison.Ordinal);
+        Assert.Contains($"Services__LanguageWorkers__roslyn-const-generics__ExpectedWorkerImageId: {RoslynImageTag}", developmentCompose, StringComparison.Ordinal);
+        Assert.Contains($"RoslynWorker__WorkerImageId: {RoslynImageTag}", developmentCompose, StringComparison.Ordinal);
+        Assert.Contains($"Services__ArtifactWorkers__artifacts-const-generics__ExpectedWorkerImageId: {ArtifactWorkerImageTag}", developmentCompose, StringComparison.Ordinal);
+        Assert.Contains($"ConstGenericsArtifactWorker__WorkerImageId: {ArtifactWorkerImageTag}", developmentCompose, StringComparison.Ordinal);
+        Assert.Contains($"RuntimeSupervisor__Profiles__2__RuntimeImageId: ${{SHARPLABNEXT_CONST_GENERICS_RUNTIME_IMAGE_ID:-{RuntimeImageTag}}}", developmentCompose, StringComparison.Ordinal);
 
-        Assert.Contains(
-            "Services__LanguageWorkers__roslyn-const-generics__ExpectedWorkerImageId: ${SHARPLABNEXT_ROSLYN_CONST_GENERICS_IMAGE_ID:-bundle-overlay-required}",
-            productionCompose,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "RoslynWorker__WorkerImageId: ${SHARPLABNEXT_ROSLYN_CONST_GENERICS_IMAGE_ID:-unverified}",
-            productionCompose,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "Services__ArtifactWorkers__artifacts-const-generics__ExpectedWorkerImageId: ${SHARPLABNEXT_ARTIFACTS_CONST_GENERICS_IMAGE_ID:-bundle-overlay-required}",
-            productionCompose,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "ConstGenericsArtifactWorker__WorkerImageId: ${SHARPLABNEXT_ARTIFACTS_CONST_GENERICS_IMAGE_ID:-unverified}",
-            productionCompose,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "RuntimeSupervisor__Profiles__2__RuntimeImageId: ${SHARPLABNEXT_CONST_GENERICS_RUNTIME_IMAGE_ID:-unverified}",
-            productionCompose,
-            StringComparison.Ordinal);
+        Assert.Contains("Services__LanguageWorkers__roslyn-const-generics__ExpectedWorkerImageId: ${SHARPLABNEXT_ROSLYN_CONST_GENERICS_IMAGE_ID:-bundle-overlay-required}", productionCompose, StringComparison.Ordinal);
+        Assert.Contains("RoslynWorker__WorkerImageId: ${SHARPLABNEXT_ROSLYN_CONST_GENERICS_IMAGE_ID:-unverified}", productionCompose, StringComparison.Ordinal);
+        Assert.Contains("Services__ArtifactWorkers__artifacts-const-generics__ExpectedWorkerImageId: ${SHARPLABNEXT_ARTIFACTS_CONST_GENERICS_IMAGE_ID:-bundle-overlay-required}", productionCompose, StringComparison.Ordinal);
+        Assert.Contains("ConstGenericsArtifactWorker__WorkerImageId: ${SHARPLABNEXT_ARTIFACTS_CONST_GENERICS_IMAGE_ID:-unverified}", productionCompose, StringComparison.Ordinal);
+        Assert.Contains("RuntimeSupervisor__Profiles__2__RuntimeImageId: ${SHARPLABNEXT_CONST_GENERICS_RUNTIME_IMAGE_ID:-unverified}", productionCompose, StringComparison.Ordinal);
 
         Assert.All(ConstGenericsIdentityLines(developmentCompose), AssertNoSha256Identity);
         Assert.All(ConstGenericsIdentityLines(productionCompose), AssertNoSha256Identity);
@@ -271,9 +162,7 @@ public sealed class ConstGenericsRuntimeTests
         var root = FindRepositoryRoot();
         foreach (var fileName in new[] { "compose.dev.yaml", "compose.prod.yaml" })
         {
-            var compose = await File.ReadAllTextAsync(
-                Path.Combine(root, "deploy", fileName),
-                TestContext.Current.CancellationToken);
+            var compose = await File.ReadAllTextAsync(Path.Combine(root, "deploy", fileName), TestContext.Current.CancellationToken);
 
             Assert.Contains(
                 """
@@ -292,9 +181,7 @@ public sealed class ConstGenericsRuntimeTests
     [Fact]
     public async Task CatalogDoesNotAdvertiseUnsupportedConstGenericsTransforms()
     {
-        var catalog = await CatalogLoader.LoadCatalogAsync(
-            Path.Combine(FindRepositoryRoot(), "profiles", "catalog", "catalog.json"),
-            TestContext.Current.CancellationToken);
+        var catalog = await CatalogLoader.LoadCatalogAsync(Path.Combine(FindRepositoryRoot(), "profiles", "catalog", "catalog.json"), TestContext.Current.CancellationToken);
         var runtime = Assert.Single(catalog.Runtimes, static item => item.Id == "const-generics-linux-x64");
         var processor = Assert.Single(catalog.ArtifactProcessors, static item => item.Id == "artifacts-const-generics");
 
@@ -307,8 +194,7 @@ public sealed class ConstGenericsRuntimeTests
     [Fact]
     public void OrdinaryRuntimeRejectsConstGenericsArtifact()
     {
-        var exception = Assert.Throws<RuntimeJobFailureException>(() =>
-            RuntimeJobExecutor.ValidateCompatibility(ConstGenericsManifest(), OrdinaryRuntime()));
+        var exception = Assert.Throws<RuntimeJobFailureException>(() => RuntimeJobExecutor.ValidateCompatibility(ConstGenericsManifest(), OrdinaryRuntime()));
 
         Assert.Equal("incompatible-artifact", exception.Code);
         Assert.Equal(WorkerErrorCategory.IncompatibleArtifact, exception.Category);
@@ -320,8 +206,7 @@ public sealed class ConstGenericsRuntimeTests
         var profile = OrdinaryRuntime();
         profile.Family = "coreclr-const-generics";
 
-        var exception = Assert.Throws<RuntimeJobFailureException>(() =>
-            RuntimeJobExecutor.ValidateCompatibility(ConstGenericsManifest(), profile));
+        var exception = Assert.Throws<RuntimeJobFailureException>(() => RuntimeJobExecutor.ValidateCompatibility(ConstGenericsManifest(), profile));
 
         Assert.Equal("incompatible-feature-tags", exception.Code);
     }
@@ -329,8 +214,7 @@ public sealed class ConstGenericsRuntimeTests
     [Fact]
     public void ConstGenericsRuntimeRejectsOrdinaryArtifact()
     {
-        var exception = Assert.Throws<RuntimeJobFailureException>(() =>
-            RuntimeJobExecutor.ValidateCompatibility(OrdinaryManifest(), ConstGenericsRuntime()));
+        var exception = Assert.Throws<RuntimeJobFailureException>(() => RuntimeJobExecutor.ValidateCompatibility(OrdinaryManifest(), ConstGenericsRuntime()));
 
         Assert.Equal("incompatible-artifact", exception.Code);
     }
@@ -371,29 +255,17 @@ public sealed class ConstGenericsRuntimeTests
         AllowedSecurityPolicyIds = ["runtime-job-default"]
     };
 
-    private static ArtifactManifest ConstGenericsManifest() => Manifest(
-        "coreclr-const-generics",
-        ["runtime.const-generics.v1"],
-        ["metadata.const-generics.v1"]);
+    private static ArtifactManifest ConstGenericsManifest() => Manifest("coreclr-const-generics", ["runtime.const-generics.v1"], ["metadata.const-generics.v1"]);
 
     private static ArtifactManifest OrdinaryManifest() => Manifest("coreclr", [], []);
 
-    private static ArtifactManifest Manifest(
-        string family,
-        IReadOnlyList<string> runtimeFeatureTags,
-        IReadOnlyList<string> metadataFeatureTags)
+    private static ArtifactManifest Manifest(string family, IReadOnlyList<string> runtimeFeatureTags, IReadOnlyList<string> metadataFeatureTags)
     {
         var artifactRef = new ArtifactRef($"sha256:{new string('a', 64)}");
         return new ArtifactManifest(
             1,
             artifactRef,
-            new ArtifactProducer(
-                "development",
-                "csharp",
-                family == "coreclr-const-generics" ? "roslyn-const-generics" : "roslyn-stable",
-                "test",
-                null,
-                "test-image"),
+            new ArtifactProducer("development", "csharp", family == "coreclr-const-generics" ? "roslyn-const-generics" : "roslyn-stable", "test", null, "test-image"),
             family == "coreclr-const-generics" ? "const-generics-ref" : "net10-ref",
             family == "coreclr-const-generics" ? "net9.0-const-generics" : "net10.0",
             "dotnet-managed-pe-v1",
@@ -407,26 +279,14 @@ public sealed class ConstGenericsRuntimeTests
             null);
     }
 
-    private static void AssertPatchSeriesIsDerivedFromFiles(
-        string repositoryRoot,
-        JsonElement provenance,
-        params string[] patchDirectories)
+    private static void AssertPatchSeriesIsDerivedFromFiles(string repositoryRoot, JsonElement provenance, params string[] patchDirectories)
     {
-        var expectedPaths = patchDirectories
-            .SelectMany(patchDirectory => Directory.EnumerateFiles(
-                Path.Combine(repositoryRoot, patchDirectory),
-                "*.patch"))
-            .Select(path => Path.GetRelativePath(repositoryRoot, path).Replace('\\', '/'))
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        var declaredPaths = provenance.GetProperty("patchSeries")
-            .EnumerateArray()
-            .Select(item =>
+        var expectedPaths = patchDirectories.SelectMany(patchDirectory => Directory.EnumerateFiles(Path.Combine(repositoryRoot, patchDirectory), "*.patch")).Select(path => Path.GetRelativePath(repositoryRoot, path).Replace('\\', '/')).Order(StringComparer.Ordinal).ToArray();
+        var declaredPaths = provenance.GetProperty("patchSeries").EnumerateArray().Select(item =>
             {
                 Assert.False(item.TryGetProperty("sha256", out _));
                 return item.GetProperty("path").GetString()!;
-            })
-            .ToArray();
+            }).ToArray();
 
         Assert.Equal(expectedPaths, declaredPaths);
 
@@ -434,10 +294,7 @@ public sealed class ConstGenericsRuntimeTests
         foreach (var relativePath in declaredPaths)
         {
             var fullPath = Path.GetFullPath(Path.Combine(repositoryRoot, relativePath));
-            Assert.StartsWith(
-                Path.TrimEndingDirectorySeparator(repositoryRoot) + Path.DirectorySeparatorChar,
-                fullPath,
-                StringComparison.OrdinalIgnoreCase);
+            Assert.StartsWith(Path.TrimEndingDirectorySeparator(repositoryRoot) + Path.DirectorySeparatorChar, fullPath, StringComparison.OrdinalIgnoreCase);
             var bytes = File.ReadAllBytes(fullPath);
             series.Write(bytes);
             Assert.Matches("^[0-9a-f]{64}$", Convert.ToHexStringLower(SHA256.HashData(bytes)));
@@ -446,10 +303,7 @@ public sealed class ConstGenericsRuntimeTests
         Assert.Matches("^[0-9a-f]{64}$", Convert.ToHexStringLower(SHA256.HashData(series.ToArray())));
     }
 
-    private static void AssertMaintainedSourceReference(
-        JsonElement provenance,
-        ReleaseLockDocument releaseLock,
-        string expectedSourceComponentId)
+    private static void AssertMaintainedSourceReference(JsonElement provenance, ReleaseLockDocument releaseLock, string expectedSourceComponentId)
     {
         Assert.Equal(expectedSourceComponentId, provenance.GetProperty("sourceComponentId").GetString());
         Assert.Equal("MIT", provenance.GetProperty("license").GetString());
@@ -506,9 +360,7 @@ public sealed class ConstGenericsRuntimeTests
     }
 
     private static IEnumerable<string> ConstGenericsIdentityLines(string compose) =>
-        compose.ReplaceLineEndings("\n")
-            .Split('\n')
-            .Where(static line =>
+        compose.ReplaceLineEndings("\n").Split('\n').Where(static line =>
                 line.Contains("roslyn-const-generics__ExpectedWorkerImageId", StringComparison.Ordinal) ||
                 line.Contains("artifacts-const-generics__ExpectedWorkerImageId", StringComparison.Ordinal) ||
                 line.Contains("RuntimeSupervisor__Profiles__2__RuntimeImageId", StringComparison.Ordinal) ||
@@ -516,8 +368,7 @@ public sealed class ConstGenericsRuntimeTests
                 line.Contains("ROSLYN_CONST_GENERICS", StringComparison.Ordinal) ||
                 line.Contains("ConstGenericsArtifactWorker__WorkerImageId", StringComparison.Ordinal));
 
-    private static void AssertNoSha256Identity(string line) =>
-        Assert.DoesNotContain("sha256:", line, StringComparison.Ordinal);
+    private static void AssertNoSha256Identity(string line) => Assert.DoesNotContain("sha256:", line, StringComparison.Ordinal);
 
     private static string FindRepositoryRoot()
     {

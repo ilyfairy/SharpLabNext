@@ -9,18 +9,12 @@ public interface IToolchainWorkerClient
 {
     Task<WorkerDescriptor> DescribeAsync(CancellationToken cancellationToken = default);
 
-    Task<ToolchainBuildResponse> BuildAsync(
-        BuildRequest request,
-        CancellationToken cancellationToken = default);
+    Task<ToolchainBuildResponse> BuildAsync(BuildRequest request, CancellationToken cancellationToken = default);
 
-    Task<ToolchainExplainResponse> ExplainAsync(
-        ExplainRequest request,
-        CancellationToken cancellationToken = default);
+    Task<ToolchainExplainResponse> ExplainAsync(ExplainRequest request, CancellationToken cancellationToken = default);
 }
 
-public sealed class ToolchainWorkerClient(
-    HttpClient httpClient,
-    ToolchainWorkerClientSettings settings) : IToolchainWorkerClient
+public sealed class ToolchainWorkerClient(HttpClient httpClient, ToolchainWorkerClientSettings settings) : IToolchainWorkerClient
 {
     private static readonly JsonSerializerOptions JsonOptions = ContractJson.CreateSerializerOptions();
 
@@ -28,16 +22,12 @@ public sealed class ToolchainWorkerClient(
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/worker/describe");
         using var response = await SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var descriptor = await response.Content.ReadFromJsonAsync<WorkerDescriptor>(JsonOptions, cancellationToken)
-            .ConfigureAwait(false)
-            ?? throw ProtocolFailure("Worker describe response was empty.");
+        var descriptor = await response.Content.ReadFromJsonAsync<WorkerDescriptor>(JsonOptions, cancellationToken).ConfigureAwait(false) ?? throw ProtocolFailure("Worker describe response was empty.");
         ValidateDescriptor(descriptor);
         return descriptor;
     }
 
-    public async Task<ToolchainBuildResponse> BuildAsync(
-        BuildRequest request,
-        CancellationToken cancellationToken = default)
+    public async Task<ToolchainBuildResponse> BuildAsync(BuildRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         var descriptor = await DescribeAsync(cancellationToken).ConfigureAwait(false);
@@ -49,16 +39,12 @@ public sealed class ToolchainWorkerClient(
             Content = JsonContent.Create(request, options: JsonOptions)
         };
         using var response = await SendAsync(message, cancellationToken).ConfigureAwait(false);
-        var result = await response.Content.ReadFromJsonAsync<ToolchainBuildResponse>(JsonOptions, cancellationToken)
-            .ConfigureAwait(false)
-            ?? throw ProtocolFailure("Worker build response was empty.", descriptor.WorkerImageId);
+        var result = await response.Content.ReadFromJsonAsync<ToolchainBuildResponse>(JsonOptions, cancellationToken).ConfigureAwait(false) ?? throw ProtocolFailure("Worker build response was empty.", descriptor.WorkerImageId);
         ValidateBuildResponse(request, result, descriptor.WorkerImageId);
         return result;
     }
 
-    public async Task<ToolchainExplainResponse> ExplainAsync(
-        ExplainRequest request,
-        CancellationToken cancellationToken = default)
+    public async Task<ToolchainExplainResponse> ExplainAsync(ExplainRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         var descriptor = await DescribeAsync(cancellationToken).ConfigureAwait(false);
@@ -70,38 +56,25 @@ public sealed class ToolchainWorkerClient(
             Content = JsonContent.Create(request, options: JsonOptions)
         };
         using var response = await SendAsync(message, cancellationToken).ConfigureAwait(false);
-        var result = await response.Content.ReadFromJsonAsync<ToolchainExplainResponse>(
-            JsonOptions,
-            cancellationToken).ConfigureAwait(false)
-            ?? throw ProtocolFailure("Worker explain response was empty.", descriptor.WorkerImageId);
+        var result = await response.Content.ReadFromJsonAsync<ToolchainExplainResponse>(JsonOptions, cancellationToken).ConfigureAwait(false) ?? throw ProtocolFailure("Worker explain response was empty.", descriptor.WorkerImageId);
         if (!StringComparer.Ordinal.Equals(request.RequestId, result.RequestId))
             throw ProtocolFailure("Worker explain response request ID did not match the request.", descriptor.WorkerImageId);
         if (result.Result.Identity is null)
             throw ProtocolFailure("Worker explain response omitted its build identity.", descriptor.WorkerImageId);
         ValidateExplainIdentity(request, result.Result.Identity, descriptor, descriptor.WorkerImageId);
-        if (!StringComparer.Ordinal.Equals(request.Workspace.LanguageId, result.Result.Document.LanguageId)
-            || !StringComparer.Ordinal.Equals(
-                result.Result.Identity.ToolchainId,
-                result.Result.Document.ToolchainId)
-            || request.Workspace.Revision != result.Result.Document.WorkspaceRevision
-            || request.Workspace.SelectionRevision != result.Result.Document.SelectionRevision)
+        if (!StringComparer.Ordinal.Equals(request.Workspace.LanguageId, result.Result.Document.LanguageId) || !StringComparer.Ordinal.Equals(result.Result.Identity.ToolchainId, result.Result.Document.ToolchainId) || request.Workspace.Revision != result.Result.Document.WorkspaceRevision || request.Workspace.SelectionRevision != result.Result.Document.SelectionRevision)
         {
             throw ProtocolFailure("Worker explain response identity did not match the request.", descriptor.WorkerImageId);
         }
         return result;
     }
 
-    private async Task<HttpResponseMessage> SendAsync(
-        HttpRequestMessage request,
-        CancellationToken cancellationToken)
+    private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         HttpResponseMessage response;
         try
         {
-            response = await httpClient.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken).ConfigureAwait(false);
+            response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -109,16 +82,7 @@ public sealed class ToolchainWorkerClient(
         }
         catch (HttpRequestException exception)
         {
-            throw Failure(
-                "worker-unavailable",
-                WorkerErrorCategory.Unavailable,
-                "The toolchain worker is unavailable.",
-                retryable: true,
-                safeToRetry: true,
-                traceId: "worker-client",
-                settings.ExpectedWorkerImageId ?? "unknown",
-                null,
-                exception);
+            throw Failure("worker-unavailable", WorkerErrorCategory.Unavailable, "The toolchain worker is unavailable.", retryable: true, safeToRetry: true, traceId: "worker-client", settings.ExpectedWorkerImageId ?? "unknown", null, exception);
         }
 
         if (response.IsSuccessStatusCode)
@@ -137,9 +101,7 @@ public sealed class ToolchainWorkerClient(
         }
     }
 
-    private async Task<ToolchainWorkerException> CreateHttpFailureAsync(
-        HttpResponseMessage response,
-        CancellationToken cancellationToken)
+    private async Task<ToolchainWorkerException> CreateHttpFailureAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         string? code = null;
         string? detail = null;
@@ -158,9 +120,7 @@ public sealed class ToolchainWorkerClient(
             traceId = GetString(root, "TraceId");
             workerId = GetString(root, "WorkerId");
         }
-        catch (JsonException)
-        {
-        }
+        catch (JsonException) { }
 
         var statusCode = (int)response.StatusCode;
         var category = statusCode switch
@@ -176,24 +136,12 @@ public sealed class ToolchainWorkerClient(
         var retryable = category is WorkerErrorCategory.DeadlineExceeded
             or WorkerErrorCategory.Unavailable
             or WorkerErrorCategory.Internal;
-        return Failure(
-            code ?? $"worker-http-{statusCode}",
-            category,
-            detail ?? PublicMessage(category),
-            retryable,
-            safeToRetry: retryable,
-            traceId ?? "worker-client",
-            settings.ExpectedWorkerImageId ?? "unknown",
-            statusCode,
-            innerException: null,
-            workerId ?? settings.WorkerId);
+        return Failure(code ?? $"worker-http-{statusCode}", category, detail ?? PublicMessage(category), retryable, safeToRetry: retryable, traceId ?? "worker-client", settings.ExpectedWorkerImageId ?? "unknown", statusCode, innerException: null, workerId ?? settings.WorkerId);
     }
 
     private void ValidateDescriptor(WorkerDescriptor descriptor)
     {
-        if (!string.Equals(descriptor.Service.Id, settings.WorkerId, StringComparison.Ordinal)
-            || descriptor.Service.Kind != ServiceKind.ToolchainWorker
-            || descriptor.WorkerKind != WorkerKind.Toolchain)
+        if (!string.Equals(descriptor.Service.Id, settings.WorkerId, StringComparison.Ordinal) || descriptor.Service.Kind != ServiceKind.ToolchainWorker || descriptor.WorkerKind != WorkerKind.Toolchain)
         {
             throw ProtocolFailure("The endpoint did not describe the expected toolchain worker.", descriptor.WorkerImageId);
         }
@@ -203,24 +151,14 @@ public sealed class ToolchainWorkerClient(
             throw ProtocolFailure("The toolchain worker release does not match the Gateway release.", descriptor.WorkerImageId);
         }
 
-        if (settings.ExpectedWorkerImageId is not null
-            && !string.Equals(descriptor.WorkerImageId, settings.ExpectedWorkerImageId, StringComparison.Ordinal))
+        if (settings.ExpectedWorkerImageId is not null && !string.Equals(descriptor.WorkerImageId, settings.ExpectedWorkerImageId, StringComparison.Ordinal))
         {
             throw ProtocolFailure("The toolchain worker image identity is not approved.", descriptor.WorkerImageId);
         }
 
-        if (descriptor.NegotiatedProtocol.Major != ProtocolVersion.WorkerV1.Major
-            || descriptor.Service.Protocol.Major != ProtocolVersion.WorkerV1.Major
-            || !descriptor.SupportedProtocolVersions.Any(version => version.Major == ProtocolVersion.WorkerV1.Major))
+        if (descriptor.NegotiatedProtocol.Major != ProtocolVersion.WorkerV1.Major || descriptor.Service.Protocol.Major != ProtocolVersion.WorkerV1.Major || !descriptor.SupportedProtocolVersions.Any(version => version.Major == ProtocolVersion.WorkerV1.Major))
         {
-            throw Failure(
-                "worker-protocol-incompatible",
-                WorkerErrorCategory.UnsupportedCapability,
-                "The toolchain worker protocol is incompatible with the Gateway.",
-                retryable: false,
-                safeToRetry: false,
-                traceId: "worker-client",
-                descriptor.WorkerImageId);
+            throw Failure("worker-protocol-incompatible", WorkerErrorCategory.UnsupportedCapability, "The toolchain worker protocol is incompatible with the Gateway.", retryable: false, safeToRetry: false, traceId: "worker-client", descriptor.WorkerImageId);
         }
 
         ValidateReferenceSetAttestations(descriptor);
@@ -236,13 +174,7 @@ public sealed class ToolchainWorkerClient(
         var attestations = new Dictionary<string, ReferenceSetAttestation>(StringComparer.Ordinal);
         foreach (var attestation in descriptor.ReferenceSets)
         {
-            if (string.IsNullOrWhiteSpace(attestation.Id) ||
-                !attestations.TryAdd(attestation.Id, attestation) ||
-                string.IsNullOrWhiteSpace(attestation.TargetFramework) ||
-                !IsSha256(attestation.ContentDigest) ||
-                attestation.Provenance is null ||
-                string.IsNullOrWhiteSpace(attestation.Provenance.Kind) ||
-                string.IsNullOrWhiteSpace(attestation.Provenance.ResolvedVersion))
+            if (string.IsNullOrWhiteSpace(attestation.Id) || !attestations.TryAdd(attestation.Id, attestation) || string.IsNullOrWhiteSpace(attestation.TargetFramework) || !IsSha256(attestation.ContentDigest) || attestation.Provenance is null || string.IsNullOrWhiteSpace(attestation.Provenance.Kind) || string.IsNullOrWhiteSpace(attestation.Provenance.ResolvedVersion))
             {
                 throw ProtocolFailure("The toolchain worker reported an invalid reference-set attestation.", descriptor.WorkerImageId);
             }
@@ -250,12 +182,9 @@ public sealed class ToolchainWorkerClient(
 
         foreach (var pair in expected)
         {
-            if (!attestations.TryGetValue(pair.Key, out var attestation) ||
-                !string.Equals(attestation.Digest, pair.Value, StringComparison.Ordinal))
+            if (!attestations.TryGetValue(pair.Key, out var attestation) || !string.Equals(attestation.Digest, pair.Value, StringComparison.Ordinal))
             {
-                throw ProtocolFailure(
-                    $"The toolchain worker reference set '{pair.Key}' does not match the active release lock.",
-                    descriptor.WorkerImageId);
+                throw ProtocolFailure($"The toolchain worker reference set '{pair.Key}' does not match the active release lock.", descriptor.WorkerImageId);
             }
         }
     }
@@ -264,14 +193,9 @@ public sealed class ToolchainWorkerClient(
     {
         if (settings.ExpectedReferenceSetDigests is not { Count: > 0 } expected)
             return;
-        if (!expected.ContainsKey(referenceSetId) ||
-            descriptor.ReferenceSets?.Any(item =>
-                string.Equals(item.Id, referenceSetId, StringComparison.Ordinal) &&
-                string.Equals(item.Digest, expected[referenceSetId], StringComparison.Ordinal)) != true)
+        if (!expected.ContainsKey(referenceSetId) || descriptor.ReferenceSets?.Any(item => string.Equals(item.Id, referenceSetId, StringComparison.Ordinal) && string.Equals(item.Digest, expected[referenceSetId], StringComparison.Ordinal)) != true)
         {
-            throw ProtocolFailure(
-                "The requested reference set is not attested for this toolchain worker.",
-                descriptor.WorkerImageId);
+            throw ProtocolFailure("The requested reference set is not attested for this toolchain worker.", descriptor.WorkerImageId);
         }
     }
 
@@ -311,55 +235,26 @@ public sealed class ToolchainWorkerClient(
         }
     }
 
-    private void ValidateAnyCapability(
-        WorkerDescriptor descriptor,
-        IReadOnlyList<string> acceptedCapabilities,
-        string toolchainId)
+    private void ValidateAnyCapability(WorkerDescriptor descriptor, IReadOnlyList<string> acceptedCapabilities, string toolchainId)
     {
-        if (descriptor.Capabilities.Any(capability =>
-                capability.Available &&
-                acceptedCapabilities.Contains(capability.Id, StringComparer.Ordinal) &&
-                capability.ProfileIds.Contains(toolchainId, StringComparer.Ordinal)))
+        if (descriptor.Capabilities.Any(capability => capability.Available && acceptedCapabilities.Contains(capability.Id, StringComparer.Ordinal) && capability.ProfileIds.Contains(toolchainId, StringComparer.Ordinal)))
         {
             return;
         }
-        throw Failure(
-            "worker-capability-unavailable",
-            WorkerErrorCategory.UnsupportedCapability,
-            $"The toolchain worker does not provide any required capability: {string.Join(", ", acceptedCapabilities)}.",
-            retryable: false,
-            safeToRetry: false,
-            traceId: "worker-client",
-            descriptor.WorkerImageId);
+        throw Failure("worker-capability-unavailable", WorkerErrorCategory.UnsupportedCapability, $"The toolchain worker does not provide any required capability: {string.Join(", ", acceptedCapabilities)}.", retryable: false, safeToRetry: false, traceId: "worker-client", descriptor.WorkerImageId);
     }
 
-    private void ValidateCapability(
-        WorkerDescriptor descriptor,
-        string requiredCapability,
-        string? toolchainId = null)
+    private void ValidateCapability(WorkerDescriptor descriptor, string requiredCapability, string? toolchainId = null)
     {
-        var available = descriptor.Capabilities.Any(item =>
-            string.Equals(item.Id, requiredCapability, StringComparison.Ordinal) &&
-            item.Available &&
-            (toolchainId is null || item.ProfileIds.Contains(toolchainId, StringComparer.Ordinal)));
+        var available = descriptor.Capabilities.Any(item => string.Equals(item.Id, requiredCapability, StringComparison.Ordinal) && item.Available && (toolchainId is null || item.ProfileIds.Contains(toolchainId, StringComparer.Ordinal)));
         if (!available)
         {
-            throw Failure(
-                "worker-capability-unavailable",
-                WorkerErrorCategory.UnsupportedCapability,
-                $"The toolchain worker does not provide the required '{requiredCapability}' capability.",
-                retryable: false,
-                safeToRetry: false,
-                traceId: "worker-client",
-                descriptor.WorkerImageId);
+            throw Failure("worker-capability-unavailable", WorkerErrorCategory.UnsupportedCapability, $"The toolchain worker does not provide the required '{requiredCapability}' capability.", retryable: false, safeToRetry: false, traceId: "worker-client", descriptor.WorkerImageId);
         }
 
     }
 
-    private void ValidateBuildResponse(
-        BuildRequest request,
-        ToolchainBuildResponse response,
-        string workerImageId)
+    private void ValidateBuildResponse(BuildRequest request, ToolchainBuildResponse response, string workerImageId)
     {
         if (!string.Equals(request.RequestId, response.RequestId, StringComparison.Ordinal))
         {
@@ -388,25 +283,13 @@ public sealed class ToolchainWorkerClient(
                 ValidateBuildIdentity(request, check.Identity, check.WorkspaceRevision, check.SelectionRevision, workerImageId);
                 break;
             case GeneratedSourceResult generated:
-                ValidateBuildIdentity(
-                    request,
-                    generated.Identity,
-                    generated.WorkspaceRevision,
-                    generated.SelectionRevision,
-                    workerImageId);
+                ValidateBuildIdentity(request, generated.Identity, generated.WorkspaceRevision, generated.SelectionRevision, workerImageId);
                 break;
             case AstResult { Identity: null }:
                 throw ProtocolFailure("Worker AST result omitted its build identity.", workerImageId);
             case AstResult ast:
-                ValidateBuildIdentity(
-                    request,
-                    ast.Identity,
-                    ast.Document.WorkspaceRevision,
-                    request.Workspace.SelectionRevision,
-                    workerImageId);
-                if (!string.Equals(ast.Document.LanguageId, request.Workspace.LanguageId, StringComparison.Ordinal) ||
-                    !string.Equals(ast.Document.ToolchainId, request.ToolchainId, StringComparison.Ordinal) ||
-                    ast.Document.WorkspaceRevision != request.Workspace.Revision)
+                ValidateBuildIdentity(request, ast.Identity, ast.Document.WorkspaceRevision, request.Workspace.SelectionRevision, workerImageId);
+                if (!string.Equals(ast.Document.LanguageId, request.Workspace.LanguageId, StringComparison.Ordinal) || !string.Equals(ast.Document.ToolchainId, request.ToolchainId, StringComparison.Ordinal) || ast.Document.WorkspaceRevision != request.Workspace.Revision)
                 {
                     throw ProtocolFailure("Worker AST result identity did not match the request.", workerImageId);
                 }
@@ -433,18 +316,11 @@ public sealed class ToolchainWorkerClient(
             response.DevelopmentArtifact is { } envelope &&
             (envelope.ArtifactRef != artifactRef || envelope.Manifest.ArtifactId != artifactRef))
         {
-            throw ProtocolFailure(
-                "The development artifact envelope identity did not match the build result.",
-                workerImageId);
+            throw ProtocolFailure("The development artifact envelope identity did not match the build result.", workerImageId);
         }
     }
 
-    private void ValidateBuildIdentity(
-        BuildRequest request,
-        BuildIdentity identity,
-        long workspaceRevision,
-        long selectionRevision,
-        string workerImageId)
+    private void ValidateBuildIdentity(BuildRequest request, BuildIdentity identity, long workspaceRevision, long selectionRevision, string workerImageId)
     {
         if (!string.Equals(identity.ReleaseId, settings.ExpectedReleaseId, StringComparison.Ordinal) ||
             !string.Equals(identity.LanguageId, request.Workspace.LanguageId, StringComparison.Ordinal) ||
@@ -459,16 +335,9 @@ public sealed class ToolchainWorkerClient(
         }
     }
 
-    private void ValidateExplainIdentity(
-        ExplainRequest request,
-        BuildIdentity identity,
-        WorkerDescriptor descriptor,
-        string workerImageId)
+    private void ValidateExplainIdentity(ExplainRequest request, BuildIdentity identity, WorkerDescriptor descriptor, string workerImageId)
     {
-        var supportsExplainProfile = descriptor.Capabilities.Any(item =>
-            string.Equals(item.Id, "explain", StringComparison.Ordinal) &&
-            item.Available &&
-            item.ProfileIds.Contains(identity.ToolchainId, StringComparer.Ordinal));
+        var supportsExplainProfile = descriptor.Capabilities.Any(item => string.Equals(item.Id, "explain", StringComparison.Ordinal) && item.Available && item.ProfileIds.Contains(identity.ToolchainId, StringComparer.Ordinal));
         if (!string.Equals(identity.ReleaseId, settings.ExpectedReleaseId, StringComparison.Ordinal) ||
             !string.Equals(identity.LanguageId, request.Workspace.LanguageId, StringComparison.Ordinal) ||
             !descriptor.ProfileIds.Contains(identity.ToolchainId, StringComparer.Ordinal) ||
@@ -482,41 +351,12 @@ public sealed class ToolchainWorkerClient(
     }
 
     private ToolchainWorkerException ProtocolFailure(string message, string? workerImageId = null) =>
-        Failure(
-            "worker-protocol-invalid",
-            WorkerErrorCategory.Internal,
-            message,
-            retryable: false,
-            safeToRetry: false,
-            traceId: "worker-client",
-            workerImageId ?? settings.ExpectedWorkerImageId ?? "unknown");
+        Failure("worker-protocol-invalid", WorkerErrorCategory.Internal, message, retryable: false, safeToRetry: false, traceId: "worker-client", workerImageId ?? settings.ExpectedWorkerImageId ?? "unknown");
 
-    private ToolchainWorkerException Failure(
-        string code,
-        WorkerErrorCategory category,
-        string publicMessage,
-        bool retryable,
-        bool safeToRetry,
-        string traceId,
-        string workerImageId,
-        int? statusCode = null,
-        Exception? innerException = null,
-        string? workerId = null) =>
-        new(
-            new WorkerError(
-                code,
-                category,
-                publicMessage,
-                retryable,
-                safeToRetry,
-                traceId,
-                workerId ?? settings.WorkerId,
-                workerImageId),
-            statusCode,
-            innerException);
+    private ToolchainWorkerException Failure(string code, WorkerErrorCategory category, string publicMessage, bool retryable, bool safeToRetry, string traceId, string workerImageId, int? statusCode = null, Exception? innerException = null, string? workerId = null) =>
+        new(new WorkerError(code, category, publicMessage, retryable, safeToRetry, traceId, workerId ?? settings.WorkerId, workerImageId), statusCode, innerException);
 
-    private static string? GetString(JsonElement root, string propertyName) =>
-        ContractJson.GetString(root, propertyName);
+    private static string? GetString(JsonElement root, string propertyName) => ContractJson.GetString(root, propertyName);
 
     private static string PublicMessage(WorkerErrorCategory category) => category switch
     {

@@ -1,19 +1,19 @@
-import crypto from 'node:crypto'
-import fs from 'node:fs'
-import https from 'node:https'
-import path from 'node:path'
-import { pipeline } from 'node:stream/promises'
-import tls from 'node:tls'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import https from 'node:https';
+import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
+import tls from 'node:tls';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const defaultRepositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const defaultManifestPath = path.join(defaultRepositoryRoot, 'eng', 'release-prerequisites.json')
-const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE'
-const contentSourceIdentityMode = 'content'
-const sha256Pattern = /^[0-9a-f]{64}$/
-const imageIdPattern = /^sha256:[0-9a-f]{64}$/
-const maximumRedirects = 5
-const maximumAttempts = 4
+const defaultRepositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const defaultManifestPath = path.join(defaultRepositoryRoot, 'eng', 'release-prerequisites.json');
+const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE';
+const contentSourceIdentityMode = 'content';
+const sha256Pattern = /^[0-9a-f]{64}$/;
+const imageIdPattern = /^sha256:[0-9a-f]{64}$/;
+const maximumRedirects = 5;
+const maximumAttempts = 4;
 const constGenericsFeed =
   'https://pkgs.dev.azure.com/hez2010/20ccb654-b3c8-4f40-9c42-7d84d39993fd/' +
   '_packaging/c52a6fa0-f11c-489f-bb91-743b56cf080f/nuget/v3/flat2'
@@ -28,13 +28,9 @@ export class PrerequisiteCacheError extends Error {
   }
 }
 
-function fail(message, options) {
-  throw new PrerequisiteCacheError(message, options)
-}
+function fail(message, options) { throw new PrerequisiteCacheError(message, options); }
 
-function isObject(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
+function isObject(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 
 function exactKeys(value, keys, label) {
   if (!isObject(value) ||
@@ -243,15 +239,9 @@ function requireLfsAttribute(root, relativePath, id) {
 
 export async function validateRepositoryFiles(repositoryRoot, items) {
   const files = {}
-  const contentIdentityMode = String(
-    process.env[sourceIdentityModeEnvironmentVariable] ?? '',
-  ).toLowerCase() === contentSourceIdentityMode
+  const contentIdentityMode = String(process.env[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() === contentSourceIdentityMode;
   for (const item of items) {
-    const { root, filename } = repositoryPath(
-      repositoryRoot,
-      item.path,
-      `repository file '${item.id}'`,
-    )
+    const { root, filename } = repositoryPath(repositoryRoot, item.path, `repository file '${item.id}'`);
     let info
     try { info = fs.lstatSync(filename) } catch {
       fail(
@@ -450,11 +440,7 @@ export async function runPrerequisiteCache(argv, output = console) {
     if (!options.acceptMicrosoftLicenses) {
       fail('--accept-microsoft-licenses is required to acquire or use Microsoft proprietary inputs')
     }
-    const manifestPath = path.join(
-      options.repositoryRoot,
-      'eng',
-      'release-prerequisites.json',
-    )
+    const manifestPath = path.join(options.repositoryRoot, 'eng', 'release-prerequisites.json')
     const manifest = readPrerequisiteManifest(manifestPath)
     options.cacheRoot = ensureCacheDirectory(
       options.cacheRoot,
@@ -467,10 +453,7 @@ export async function runPrerequisiteCache(argv, output = console) {
       if (!destination.startsWith(`${options.cacheRoot}${path.sep}`)) {
         fail(`download '${item.id}' escapes the cache root`)
       }
-      const parent = ensureCacheDirectory(
-        path.dirname(destination),
-        `download '${item.id}' cache directory`,
-      )
+      const parent = ensureCacheDirectory(path.dirname(destination), `download '${item.id}' cache directory`);
       if (parent !== options.cacheRoot &&
           !parent.startsWith(`${options.cacheRoot}${path.sep}`)) {
         fail(`download '${item.id}' cache directory resolves outside the cache root`)
@@ -485,10 +468,7 @@ export async function runPrerequisiteCache(argv, output = console) {
       downloads[item.id] = destination
     }
 
-    const repositoryFiles = await validateRepositoryFiles(
-      options.repositoryRoot,
-      manifest.value.repositoryFiles,
-    )
+    const repositoryFiles = await validateRepositoryFiles(options.repositoryRoot, manifest.value.repositoryFiles);
     output.log(JSON.stringify({
       cacheRoot: options.cacheRoot,
       manifestSha256: manifest.sha256,

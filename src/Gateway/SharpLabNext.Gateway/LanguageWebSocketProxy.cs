@@ -4,9 +4,7 @@ using SharpLabNext.Contracts;
 
 namespace SharpLabNext.Gateway;
 
-public sealed class LanguageWebSocketProxy(
-    LanguageSessionGatewayService sessions,
-    LanguageSessionGatewayOptions options)
+public sealed class LanguageWebSocketProxy(LanguageSessionGatewayService sessions, LanguageSessionGatewayOptions options)
 {
     public async Task RunAsync(string sessionId, HttpContext context)
     {
@@ -35,15 +33,11 @@ public sealed class LanguageWebSocketProxy(
         {
             using (connection)
             {
-                using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-                    context.RequestAborted,
-                    connection.State.Closed);
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, connection.State.Closed);
                 ClientWebSocket upstream;
                 try
                 {
-                    upstream = await sessions
-                        .ConnectUpstreamAsync(connection.State, linked.Token)
-                        .ConfigureAwait(false);
+                    upstream = await sessions.ConnectUpstreamAsync(connection.State, linked.Token).ConfigureAwait(false);
                 }
                 catch (GatewayLanguageSessionException exception)
                 {
@@ -77,19 +71,11 @@ public sealed class LanguageWebSocketProxy(
                     }
                     catch (OperationCanceledException) when (linked.IsCancellationRequested)
                     {
-                        await ClosePairAsync(
-                            browser,
-                            upstream,
-                            WebSocketCloseStatus.NormalClosure,
-                            "Language session closed.").ConfigureAwait(false);
+                        await ClosePairAsync(browser, upstream, WebSocketCloseStatus.NormalClosure, "Language session closed.").ConfigureAwait(false);
                     }
                     catch (WebSocketException)
                     {
-                        await ClosePairAsync(
-                            browser,
-                            upstream,
-                            WebSocketCloseStatus.EndpointUnavailable,
-                            "Language connection ended.").ConfigureAwait(false);
+                        await ClosePairAsync(browser, upstream, WebSocketCloseStatus.EndpointUnavailable, "Language connection ended.").ConfigureAwait(false);
                         if (browserToWorker is not null && workerToBrowser is not null)
                             await DrainPumpsAsync(linked, browserToWorker, workerToBrowser).ConfigureAwait(false);
                     }
@@ -102,38 +88,26 @@ public sealed class LanguageWebSocketProxy(
         }
     }
 
-    private async Task<PumpResult> PumpAsync(
-        WebSocket source,
-        WebSocket destination,
-        CancellationToken cancellationToken)
+    private async Task<PumpResult> PumpAsync(WebSocket source, WebSocket destination, CancellationToken cancellationToken)
     {
         var buffer = ArrayPool<byte>.Shared.Rent(16 * 1024);
         try
         {
             using var content = new MemoryStream();
-            while (!cancellationToken.IsCancellationRequested &&
-                   source.State is WebSocketState.Open or WebSocketState.CloseSent)
+            while (!cancellationToken.IsCancellationRequested && source.State is WebSocketState.Open or WebSocketState.CloseSent)
             {
-                var result = await source
-                    .ReceiveAsync(buffer.AsMemory(), cancellationToken)
-                    .ConfigureAwait(false);
+                var result = await source.ReceiveAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
-                    return new PumpResult(
-                        source.CloseStatus ?? WebSocketCloseStatus.NormalClosure,
-                        LimitDescription(source.CloseStatusDescription));
+                    return new PumpResult(source.CloseStatus ?? WebSocketCloseStatus.NormalClosure, LimitDescription(source.CloseStatusDescription));
                 }
                 if (result.MessageType != WebSocketMessageType.Text)
                 {
-                    throw new LanguageWebSocketProxyException(
-                        WebSocketCloseStatus.InvalidMessageType,
-                        "LSP requires JSON text messages.");
+                    throw new LanguageWebSocketProxyException(WebSocketCloseStatus.InvalidMessageType, "LSP requires JSON text messages.");
                 }
                 if (content.Length + result.Count > options.MaxMessageBytes)
                 {
-                    throw new LanguageWebSocketProxyException(
-                        WebSocketCloseStatus.MessageTooBig,
-                        "LSP message exceeds the Gateway limit.");
+                    throw new LanguageWebSocketProxyException(WebSocketCloseStatus.MessageTooBig, "LSP message exceeds the Gateway limit.");
                 }
 
                 content.Write(buffer, 0, result.Count);
@@ -142,11 +116,7 @@ public sealed class LanguageWebSocketProxy(
 
                 if (destination.State != WebSocketState.Open)
                     return new PumpResult(WebSocketCloseStatus.EndpointUnavailable, "Language connection ended.");
-                await destination.SendAsync(
-                    content.GetBuffer().AsMemory(0, checked((int)content.Length)),
-                    WebSocketMessageType.Text,
-                    endOfMessage: true,
-                    cancellationToken).ConfigureAwait(false);
+                await destination.SendAsync(content.GetBuffer().AsMemory(0, checked((int)content.Length)), WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
                 content.SetLength(0);
             }
             return new PumpResult(WebSocketCloseStatus.NormalClosure, "Language session closed.");
@@ -157,14 +127,8 @@ public sealed class LanguageWebSocketProxy(
         }
     }
 
-    private Task ClosePairAsync(
-        WebSocket browser,
-        WebSocket upstream,
-        WebSocketCloseStatus status,
-        string? description) =>
-        Task.WhenAll(
-            CloseAsync(browser, status, description),
-            CloseAsync(upstream, status, description));
+    private Task ClosePairAsync(WebSocket browser, WebSocket upstream, WebSocketCloseStatus status, string? description) =>
+        Task.WhenAll(CloseAsync(browser, status, description), CloseAsync(upstream, status, description));
 
     private static async Task IgnoreFailuresAsync(params Task[] tasks)
     {
@@ -172,14 +136,10 @@ public sealed class LanguageWebSocketProxy(
         {
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
-        catch (Exception exception) when (exception is OperationCanceledException or WebSocketException or LanguageWebSocketProxyException)
-        {
-        }
+        catch (Exception exception) when (exception is OperationCanceledException or WebSocketException or LanguageWebSocketProxyException) { }
     }
 
-    private async Task DrainPumpsAsync(
-        CancellationTokenSource linked,
-        params Task[] tasks)
+    private async Task DrainPumpsAsync(CancellationTokenSource linked, params Task[] tasks)
     {
         var drain = IgnoreFailuresAsync(tasks);
         var timeout = Task.Delay(options.CloseTimeout);
@@ -188,10 +148,7 @@ public sealed class LanguageWebSocketProxy(
         await drain.ConfigureAwait(false);
     }
 
-    private async Task CloseAsync(
-        WebSocket socket,
-        WebSocketCloseStatus status,
-        string? description)
+    private async Task CloseAsync(WebSocket socket, WebSocketCloseStatus status, string? description)
     {
         using var timeout = new CancellationTokenSource(options.CloseTimeout);
         try
@@ -210,9 +167,7 @@ public sealed class LanguageWebSocketProxy(
 
     private sealed record PumpResult(WebSocketCloseStatus Status, string? Description);
 
-    private sealed class LanguageWebSocketProxyException(
-        WebSocketCloseStatus status,
-        string message) : Exception(message)
+    private sealed class LanguageWebSocketProxyException(WebSocketCloseStatus status, string message) : Exception(message)
     {
         public WebSocketCloseStatus Status { get; } = status;
     }

@@ -32,9 +32,7 @@ internal static class RuntimeValueGraphBuilder
         {
             var graphRoots = new List<RuntimeGraphRoot>();
             foreach (var (name, value) in roots)
-            {
                 graphRoots.Add(new RuntimeGraphRoot(SanitizeName(name), Add(value, 0)));
-            }
             return new RuntimeGraphDocument(graphRoots, _nodes, _truncated, _reason);
         }
 
@@ -111,12 +109,7 @@ internal static class RuntimeValueGraphBuilder
             return new RuntimeGraphNode(id, SafeTypeName(type), "array", $"Length = {array.Length}", edges);
         }
 
-        private RuntimeGraphNode ExpandEnumerable(
-            int id,
-            Type type,
-            IEnumerable enumerable,
-            int depth,
-            string kind)
+        private RuntimeGraphNode ExpandEnumerable(int id, Type type, IEnumerable enumerable, int depth, string kind)
         {
             var edges = new List<RuntimeGraphEdge>();
             try
@@ -135,10 +128,7 @@ internal static class RuntimeValueGraphBuilder
             }
             catch (Exception exception) when (exception is not (OutOfMemoryException or StackOverflowException))
             {
-                edges.Add(new RuntimeGraphEdge("<enumeration-error>", AddTerminal(
-                    exception.GetType().FullName ?? "System.Exception",
-                    "error",
-                    "Collection could not be inspected.")));
+                edges.Add(new RuntimeGraphEdge("<enumeration-error>", AddTerminal(exception.GetType().FullName ?? "System.Exception", "error", "Collection could not be inspected.")));
             }
             return new RuntimeGraphNode(id, SafeTypeName(type), kind, null, edges);
         }
@@ -146,11 +136,7 @@ internal static class RuntimeValueGraphBuilder
         private RuntimeGraphNode ExpandFields(int id, Type type, object value, int depth)
         {
             var edges = new List<RuntimeGraphEdge>();
-            var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                .Where(static field => !field.IsStatic)
-                .OrderBy(static field => field.MetadataToken)
-                .Take(MaximumEdgesPerNode + 1)
-                .ToArray();
+            var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Where(static field => !field.IsStatic).OrderBy(static field => field.MetadataToken).Take(MaximumEdgesPerNode + 1).ToArray();
             foreach (var field in fields.Take(MaximumEdgesPerNode))
             {
                 if (LimitReached(depth + 1))
@@ -230,8 +216,7 @@ internal static class RuntimeValueGraphBuilder
         {
             case string text:
                 display = text.Length <= MaximumStringCharacters
-                    ? text
-                    : text[..MaximumStringCharacters] + "...";
+                    ? text : text[..MaximumStringCharacters] + "...";
                 return true;
             case char character:
                 display = character.ToString();

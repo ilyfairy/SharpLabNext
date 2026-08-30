@@ -15,21 +15,14 @@ public enum ArtifactBundlePublicationFailure
     Rejected
 }
 
-public sealed class ArtifactBundlePublicationException(
-    ArtifactBundlePublicationFailure failure,
-    string message,
-    Exception? innerException = null) : Exception(message, innerException)
+public sealed class ArtifactBundlePublicationException(ArtifactBundlePublicationFailure failure, string message, Exception? innerException = null) : Exception(message, innerException)
 {
     public ArtifactBundlePublicationFailure Failure { get; } = failure;
 }
 
 public sealed class ArtifactBundlePublisher(IArtifactStoreClient artifactStore)
 {
-    public async Task<PutArtifactResponse> PublishAsync(
-        ArtifactManifest manifest,
-        IReadOnlyList<ArtifactBundleContent> contents,
-        TimeSpan timeToLive,
-        CancellationToken cancellationToken = default)
+    public async Task<PutArtifactResponse> PublishAsync(ArtifactManifest manifest, IReadOnlyList<ArtifactBundleContent> contents, TimeSpan timeToLive, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentNullException.ThrowIfNull(contents);
@@ -37,23 +30,15 @@ public sealed class ArtifactBundlePublisher(IArtifactStoreClient artifactStore)
         if (manifest.ArtifactId != ArtifactIdentity.Compute(manifest))
             throw new ArgumentException("The artifact manifest identity is not canonical.", nameof(manifest));
 
-        var normalized = contents
-            .Select(content =>
+        var normalized = contents.Select(content =>
             {
                 ArgumentNullException.ThrowIfNull(content);
                 ArgumentNullException.ThrowIfNull(content.Content);
                 return content with { Path = ArtifactPath.Normalize(content.Path) };
-            })
-            .ToArray();
+            }).ToArray();
         _ = ArtifactPath.NormalizeDistinct(normalized.Select(static content => content.Path));
-        var expectedPaths = manifest.Files
-            .Select(static file => ArtifactPath.Normalize(file.Path))
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        var actualPaths = normalized
-            .Select(static content => content.Path)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
+        var expectedPaths = manifest.Files.Select(static file => ArtifactPath.Normalize(file.Path)).Order(StringComparer.Ordinal).ToArray();
+        var actualPaths = normalized.Select(static content => content.Path).Order(StringComparer.Ordinal).ToArray();
         if (!expectedPaths.SequenceEqual(actualPaths, StringComparer.Ordinal))
             throw new ArgumentException("Artifact contents must contain every manifest file exactly once.", nameof(contents));
 
@@ -63,31 +48,19 @@ public sealed class ArtifactBundlePublisher(IArtifactStoreClient artifactStore)
         {
             var content = byPath[ArtifactPath.Normalize(file.Path)].Content;
             totalSize = checked(totalSize + content.LongLength);
-            if (file.Size != content.LongLength ||
-                !string.Equals(file.Digest, ContentIdentity.Compute(content).Value, StringComparison.Ordinal))
+            if (file.Size != content.LongLength || !string.Equals(file.Digest, ContentIdentity.Compute(content).Value, StringComparison.Ordinal))
             {
-                throw new ArgumentException(
-                    $"Artifact file '{file.Path}' failed size or checksum validation.",
-                    nameof(contents));
+                throw new ArgumentException($"Artifact file '{file.Path}' failed size or checksum validation.", nameof(contents));
             }
         }
 
-        var uploads = manifest.Files
-            .Select(file => new ArtifactFileUpload(
-                ArtifactPath.Normalize(file.Path),
-                new MemoryStream(byPath[ArtifactPath.Normalize(file.Path)].Content, writable: false),
-                file.Size))
-            .ToArray();
+        var uploads = manifest.Files.Select(file => new ArtifactFileUpload(ArtifactPath.Normalize(file.Path), new MemoryStream(byPath[ArtifactPath.Normalize(file.Path)].Content, writable: false), file.Size)).ToArray();
         try
         {
             PutArtifactResponse stored;
             try
             {
-                stored = await artifactStore.PutArtifactAsync(
-                    manifest,
-                    uploads,
-                    timeToLive,
-                    cancellationToken).ConfigureAwait(false);
+                stored = await artifactStore.PutArtifactAsync(manifest, uploads, timeToLive, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -99,30 +72,23 @@ public sealed class ArtifactBundlePublisher(IArtifactStoreClient artifactStore)
             }
             catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
             {
-                throw new ArtifactBundlePublicationException(
-                    ArtifactBundlePublicationFailure.Unavailable,
-                    "The artifact could not be published because the Artifact Store is unavailable.",
-                    exception);
+                throw new ArtifactBundlePublicationException(ArtifactBundlePublicationFailure.Unavailable, "The artifact could not be published because the Artifact Store is unavailable.", exception);
             }
 
             if (stored.ArtifactRef != manifest.ArtifactId || stored.TotalSize != totalSize)
             {
-                throw new ArtifactBundlePublicationException(
-                    ArtifactBundlePublicationFailure.Rejected,
-                    "Artifact Store returned an unexpected artifact identity or size.");
+                throw new ArtifactBundlePublicationException(ArtifactBundlePublicationFailure.Rejected, "Artifact Store returned an unexpected artifact identity or size.");
             }
 
             return stored;
         }
         finally
         {
-            foreach (var upload in uploads)
-                upload.Content.Dispose();
+            foreach (var upload in uploads) upload.Content.Dispose();
         }
     }
 
-    private static ArtifactBundlePublicationException PublicationFailure(
-        ArtifactStoreHttpException exception)
+    private static ArtifactBundlePublicationException PublicationFailure(ArtifactStoreHttpException exception)
     {
         var failure = exception.StatusCodeValue switch
         {

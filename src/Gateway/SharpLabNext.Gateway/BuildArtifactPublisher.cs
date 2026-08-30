@@ -7,38 +7,24 @@ namespace SharpLabNext.Gateway;
 
 public interface IBuildArtifactPublisher
 {
-    Task<PublishedBuildArtifact> PublishAsync(
-        WorkerArtifactEnvelope envelope,
-        CancellationToken cancellationToken);
+    Task<PublishedBuildArtifact> PublishAsync(WorkerArtifactEnvelope envelope, CancellationToken cancellationToken);
 
-    Task<PublishedBuildArtifact> AcceptPublishedAsync(
-        ArtifactRef artifactRef,
-        BuildIdentity identity,
-        CancellationToken cancellationToken);
+    Task<PublishedBuildArtifact> AcceptPublishedAsync(ArtifactRef artifactRef, BuildIdentity identity, CancellationToken cancellationToken);
 }
 
-public sealed record PublishedBuildArtifact(
-    ArtifactRef ArtifactRef,
-    ArtifactManifest Manifest,
-    string ArtifactFormat);
+public sealed record PublishedBuildArtifact(ArtifactRef ArtifactRef, ArtifactManifest Manifest, string ArtifactFormat);
 
-public sealed class BuildArtifactPublishingException(string message, Exception? innerException = null)
-    : Exception(message, innerException);
+public sealed class BuildArtifactPublishingException(string message, Exception? innerException = null) : Exception(message, innerException);
 
-public sealed class BuildArtifactPublisher(
-    IArtifactStoreClient artifactStore,
-    BuildPipelineOptions options) : IBuildArtifactPublisher
+public sealed class BuildArtifactPublisher(IArtifactStoreClient artifactStore, BuildPipelineOptions options) : IBuildArtifactPublisher
 {
-    public async Task<PublishedBuildArtifact> PublishAsync(
-        WorkerArtifactEnvelope envelope,
-        CancellationToken cancellationToken)
+    public async Task<PublishedBuildArtifact> PublishAsync(WorkerArtifactEnvelope envelope, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(envelope);
         ValidateEnvelopeMetadata(envelope);
 
         var contents = envelope.FileContentsBase64 is null
-            ? ReadLegacyManagedPeEnvelope(envelope)
-            : ReadGenericEnvelope(envelope);
+            ? ReadLegacyManagedPeEnvelope(envelope) : ReadGenericEnvelope(envelope);
         if (contents.Values.Sum(static value => value.LongLength) > options.MaximumWorkerArtifactBytes)
             throw new BuildArtifactPublishingException("The worker artifact exceeds the Gateway transfer limit.");
 
@@ -63,18 +49,11 @@ public sealed class BuildArtifactPublisher(
         PutArtifactResponse stored;
         try
         {
-            stored = await artifactStore.PutArtifactAsync(
-                canonicalManifest,
-                uploads,
-                options.ArtifactTimeToLive,
-                cancellationToken).ConfigureAwait(false);
+            stored = await artifactStore.PutArtifactAsync(canonicalManifest, uploads, options.ArtifactTimeToLive, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            foreach (var upload in uploads)
-            {
-                upload.Content.Dispose();
-            }
+            foreach (var upload in uploads) upload.Content.Dispose();
         }
         if (stored.ArtifactRef != canonicalManifest.ArtifactId)
         {
@@ -84,10 +63,7 @@ public sealed class BuildArtifactPublisher(
         return new PublishedBuildArtifact(stored.ArtifactRef, canonicalManifest, envelope.ArtifactFormat);
     }
 
-    public async Task<PublishedBuildArtifact> AcceptPublishedAsync(
-        ArtifactRef artifactRef,
-        BuildIdentity identity,
-        CancellationToken cancellationToken)
+    public async Task<PublishedBuildArtifact> AcceptPublishedAsync(ArtifactRef artifactRef, BuildIdentity identity, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(identity);
         try
@@ -99,14 +75,9 @@ public sealed class BuildArtifactPublisher(
             throw new BuildArtifactPublishingException("The worker artifact reference is invalid.", exception);
         }
 
-        var bundle = await artifactStore.GetArtifactAsync(artifactRef, cancellationToken).ConfigureAwait(false)
-            ?? throw new BuildArtifactPublishingException(
-                "The worker returned an artifact reference that is not present in the Artifact Store.");
+        var bundle = await artifactStore.GetArtifactAsync(artifactRef, cancellationToken).ConfigureAwait(false) ?? throw new BuildArtifactPublishingException("The worker returned an artifact reference that is not present in the Artifact Store.");
         ValidatePublishedBundle(artifactRef, identity, bundle);
-        return new PublishedBuildArtifact(
-            artifactRef,
-            bundle.Manifest,
-            bundle.Manifest.ArtifactFormat);
+        return new PublishedBuildArtifact(artifactRef, bundle.Manifest, bundle.Manifest.ArtifactFormat);
     }
 
     private Dictionary<string, byte[]> ReadLegacyManagedPeEnvelope(WorkerArtifactEnvelope envelope)
@@ -115,8 +86,7 @@ public sealed class BuildArtifactPublisher(
             throw new BuildArtifactPublishingException("The worker PE image was empty.");
         var peImage = DecodeBase64(envelope.PeImageBase64, "PE image");
         var portablePdb = envelope.PortablePdbBase64 is null
-            ? null
-            : DecodeBase64(envelope.PortablePdbBase64, "portable PDB");
+            ? null : DecodeBase64(envelope.PortablePdbBase64, "portable PDB");
         var primaryAssembly = SingleFileByRole(envelope.Manifest.Files, "primary-assembly", required: true)!;
         var portablePdbFile = SingleFileByRole(envelope.Manifest.Files, "portable-pdb", required: false);
         if (!string.Equals(primaryAssembly.Path, envelope.Manifest.EntryAssembly, StringComparison.Ordinal))
@@ -182,9 +152,7 @@ public sealed class BuildArtifactPublisher(
 
     private static void ValidateEnvelopeMetadata(WorkerArtifactEnvelope envelope)
     {
-        if (!string.Equals(envelope.ArtifactFormat, envelope.Manifest.ArtifactFormat, StringComparison.Ordinal)
-            || !string.Equals(envelope.ReferenceSetId, envelope.Manifest.ReferenceSetId, StringComparison.Ordinal)
-            || !string.Equals(envelope.TargetFramework, envelope.Manifest.TargetFramework, StringComparison.Ordinal))
+        if (!string.Equals(envelope.ArtifactFormat, envelope.Manifest.ArtifactFormat, StringComparison.Ordinal) || !string.Equals(envelope.ReferenceSetId, envelope.Manifest.ReferenceSetId, StringComparison.Ordinal) || !string.Equals(envelope.TargetFramework, envelope.Manifest.TargetFramework, StringComparison.Ordinal))
         {
             throw new BuildArtifactPublishingException("The worker artifact envelope conflicts with its manifest.");
         }
@@ -203,10 +171,7 @@ public sealed class BuildArtifactPublisher(
         }
     }
 
-    private static void ValidatePublishedBundle(
-        ArtifactRef requestedRef,
-        BuildIdentity identity,
-        ArtifactBundleDescriptor bundle)
+    private static void ValidatePublishedBundle(ArtifactRef requestedRef, BuildIdentity identity, ArtifactBundleDescriptor bundle)
     {
         try
         {
@@ -214,15 +179,11 @@ public sealed class BuildArtifactPublisher(
         }
         catch (ArgumentException exception)
         {
-            throw new BuildArtifactPublishingException(
-                "The published artifact manifest is invalid.",
-                exception);
+            throw new BuildArtifactPublishingException("The published artifact manifest is invalid.", exception);
         }
-        if (bundle.Manifest.ArtifactId != requestedRef ||
-            ArtifactIdentity.Compute(bundle.Manifest) != requestedRef)
+        if (bundle.Manifest.ArtifactId != requestedRef || ArtifactIdentity.Compute(bundle.Manifest) != requestedRef)
         {
-            throw new BuildArtifactPublishingException(
-                "The published artifact identity does not match the worker result.");
+            throw new BuildArtifactPublishingException("The published artifact identity does not match the worker result.");
         }
 
         var producer = bundle.Manifest.Producer;
@@ -234,8 +195,7 @@ public sealed class BuildArtifactPublisher(
             !string.Equals(producer.WorkerImageId, identity.WorkerImageId, StringComparison.Ordinal) ||
             !string.Equals(bundle.Manifest.ReferenceSetId, identity.ReferenceSetId, StringComparison.Ordinal))
         {
-            throw new BuildArtifactPublishingException(
-                "The published artifact producer identity does not match the build result.");
+            throw new BuildArtifactPublishingException("The published artifact producer identity does not match the build result.");
         }
 
         if (bundle.Entries.Count != bundle.Manifest.Files.Count)
@@ -243,27 +203,18 @@ public sealed class BuildArtifactPublisher(
         Dictionary<string, ArtifactBundleEntry> entries;
         try
         {
-            entries = bundle.Entries.ToDictionary(
-                static entry => ArtifactPath.Normalize(entry.Path),
-                StringComparer.Ordinal);
+            entries = bundle.Entries.ToDictionary(static entry => ArtifactPath.Normalize(entry.Path), StringComparer.Ordinal);
         }
         catch (ArgumentException exception)
         {
-            throw new BuildArtifactPublishingException(
-                "The published artifact contains invalid or duplicate paths.",
-                exception);
+            throw new BuildArtifactPublishingException("The published artifact contains invalid or duplicate paths.", exception);
         }
         foreach (var file in bundle.Manifest.Files)
         {
             var path = ArtifactPath.Normalize(file.Path);
-            if (!entries.TryGetValue(path, out var entry) ||
-                entry.Size != file.Size ||
-                !string.Equals(entry.Digest, file.Digest, StringComparison.Ordinal) ||
-                !string.Equals(entry.Role, file.Role, StringComparison.Ordinal) ||
-                !string.Equals(entry.ContentRef.Value, file.Digest, StringComparison.Ordinal))
+            if (!entries.TryGetValue(path, out var entry) || entry.Size != file.Size || !string.Equals(entry.Digest, file.Digest, StringComparison.Ordinal) || !string.Equals(entry.Role, file.Role, StringComparison.Ordinal) || !string.Equals(entry.ContentRef.Value, file.Digest, StringComparison.Ordinal))
             {
-                throw new BuildArtifactPublishingException(
-                    $"The published artifact file '{path}' conflicts with its manifest.");
+                throw new BuildArtifactPublishingException($"The published artifact file '{path}' conflicts with its manifest.");
             }
             try
             {
@@ -271,17 +222,12 @@ public sealed class BuildArtifactPublisher(
             }
             catch (ArgumentException exception)
             {
-                throw new BuildArtifactPublishingException(
-                    $"The published artifact file '{path}' has an invalid content reference.",
-                    exception);
+                throw new BuildArtifactPublishingException($"The published artifact file '{path}' has an invalid content reference.", exception);
             }
         }
     }
 
-    private static ArtifactFileDescriptor? SingleFileByRole(
-        IReadOnlyList<ArtifactFileDescriptor> files,
-        string role,
-        bool required)
+    private static ArtifactFileDescriptor? SingleFileByRole(IReadOnlyList<ArtifactFileDescriptor> files, string role, bool required)
     {
         var matches = files.Where(file => string.Equals(file.Role, role, StringComparison.Ordinal)).ToArray();
         if (matches.Length > 1 || (required && matches.Length == 0))
@@ -294,11 +240,9 @@ public sealed class BuildArtifactPublisher(
 
     private static void ValidateFile(ArtifactFileDescriptor descriptor, byte[] content)
     {
-        if (descriptor.Size != content.LongLength
-            || !string.Equals(descriptor.Digest, ContentIdentity.Compute(content).Value, StringComparison.Ordinal))
+        if (descriptor.Size != content.LongLength || !string.Equals(descriptor.Digest, ContentIdentity.Compute(content).Value, StringComparison.Ordinal))
         {
-            throw new BuildArtifactPublishingException(
-                $"The worker artifact file '{descriptor.Path}' failed size or checksum verification.");
+            throw new BuildArtifactPublishingException($"The worker artifact file '{descriptor.Path}' failed size or checksum verification.");
         }
     }
 }

@@ -17,9 +17,7 @@ public sealed class GitHubOAuthTests
     [Fact]
     public void OAuthIsDisabledWhenNoCredentialsAreConfigured()
     {
-        var options = ConfigurationOptions(
-            "Production",
-            ("GitHub:OAuth:Enabled", "false"));
+        var options = ConfigurationOptions("Production", ("GitHub:OAuth:Enabled", "false"));
 
         Assert.False(options.Available);
         Assert.Null(options.ClientId);
@@ -33,10 +31,7 @@ public sealed class GitHubOAuthTests
         var placeholder = WriteSecretFile(string.Empty);
         try
         {
-            var options = ConfigurationOptions(
-                "Production",
-                ("GitHub:OAuth:Enabled", "false"),
-                ("GitHub:OAuth:ClientSecretFile", placeholder));
+            var options = ConfigurationOptions("Production", ("GitHub:OAuth:Enabled", "false"), ("GitHub:OAuth:ClientSecretFile", placeholder));
 
             Assert.False(options.Available);
         }
@@ -52,8 +47,7 @@ public sealed class GitHubOAuthTests
     [InlineData("GitHub:OAuth:ClientSecret", "client-secret")]
     public void PartialOAuthConfigurationIsRejected(string key, string value)
     {
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            ConfigurationOptions("Development", (key, value)));
+        var exception = Assert.Throws<InvalidOperationException>(() => ConfigurationOptions("Development", (key, value)));
 
         Assert.Contains("requires ClientId, CallbackUri", exception.Message, StringComparison.Ordinal);
     }
@@ -101,9 +95,7 @@ public sealed class GitHubOAuthTests
             Assert.True(options.Available);
             Assert.Equal("client-id", options.ClientId);
             Assert.Equal("client-secret", options.ClientSecret);
-            Assert.Equal(
-                new Uri("https://lab.example/api/v1/auth/github/callback"),
-                options.CallbackUri);
+            Assert.Equal(new Uri("https://lab.example/api/v1/auth/github/callback"), options.CallbackUri);
         }
         finally
         {
@@ -158,8 +150,7 @@ public sealed class GitHubOAuthTests
             (key, value));
 
         var endpoint = key.EndsWith("AuthorizationEndpoint", StringComparison.Ordinal)
-            ? options.AuthorizationEndpoint
-            : options.TokenEndpoint;
+            ? options.AuthorizationEndpoint : options.TokenEndpoint;
         Assert.Equal(new Uri(value), endpoint);
     }
 
@@ -208,15 +199,9 @@ public sealed class GitHubOAuthTests
     [Theory]
     [InlineData("Production", "http://localhost:8080/", "HTTPS")]
     [InlineData("Development", "http://github.example/", "loopback")]
-    public void GitHubApiBaseAddressRejectsInsecureTransport(
-        string environmentName,
-        string value,
-        string expectedMessage)
+    public void GitHubApiBaseAddressRejectsInsecureTransport(string environmentName, string value, string expectedMessage)
     {
-        var exception = Assert.Throws<InvalidOperationException>(() => GitHubExternalEndpoint.Parse(
-            value,
-            "GitHub:ApiBaseAddress",
-            new TestHostEnvironment(environmentName)));
+        var exception = Assert.Throws<InvalidOperationException>(() => GitHubExternalEndpoint.Parse(value, "GitHub:ApiBaseAddress", new TestHostEnvironment(environmentName)));
 
         Assert.Contains("GitHub:ApiBaseAddress", exception.Message, StringComparison.Ordinal);
         Assert.Contains(expectedMessage, exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -226,14 +211,9 @@ public sealed class GitHubOAuthTests
     [InlineData("Development", "http://localhost:8080/")]
     [InlineData("Test", "http://127.0.0.1:8080/")]
     [InlineData("Production", "https://api.github.com/")]
-    public void GitHubApiBaseAddressAcceptsHttpsOrNonProductionLoopback(
-        string environmentName,
-        string value)
+    public void GitHubApiBaseAddressAcceptsHttpsOrNonProductionLoopback(string environmentName, string value)
     {
-        var endpoint = GitHubExternalEndpoint.Parse(
-            value,
-            "GitHub:ApiBaseAddress",
-            new TestHostEnvironment(environmentName));
+        var endpoint = GitHubExternalEndpoint.Parse(value, "GitHub:ApiBaseAddress", new TestHostEnvironment(environmentName));
 
         Assert.Equal(new Uri(value), endpoint);
     }
@@ -252,62 +232,37 @@ public sealed class GitHubOAuthTests
     [Fact]
     public async Task HttpsCallbackMakesStateAndSessionCookiesSecureBehindHttpTlsTerminator()
     {
-        using var factory = new OAuthGatewayFactory(
-            "https://lab.example/api/v1/auth/github/callback");
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false,
-            BaseAddress = new Uri("http://gateway.internal"),
-            HandleCookies = false
-        });
+        using var factory = new OAuthGatewayFactory("https://lab.example/api/v1/auth/github/callback");
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("http://gateway.internal"), HandleCookies = false });
 
-        using var startResponse = await client.GetAsync(
-            "/api/v1/auth/github/start",
-            TestContext.Current.CancellationToken);
+        using var startResponse = await client.GetAsync("/api/v1/auth/github/start", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, startResponse.StatusCode);
         var stateCookie = CookieHeader(startResponse, "SharpLabNext.GitHubOAuthState");
         Assert.True(HasCookieAttribute(stateCookie, "Secure"));
 
         var state = CookieValue(stateCookie, "SharpLabNext.GitHubOAuthState");
-        using var callbackRequest = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/api/v1/auth/github/callback?code=test-code&state={Uri.EscapeDataString(state)}");
+        using var callbackRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/auth/github/callback?code=test-code&state={Uri.EscapeDataString(state)}");
         callbackRequest.Headers.Add("Cookie", $"SharpLabNext.GitHubOAuthState={state}");
-        using var callbackResponse = await client.SendAsync(
-            callbackRequest,
-            TestContext.Current.CancellationToken);
+        using var callbackResponse = await client.SendAsync(callbackRequest, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Found, callbackResponse.StatusCode);
-        Assert.True(HasCookieAttribute(
-            CookieHeader(callbackResponse, "SharpLabNext.GitHubOAuthState"),
-            "Secure"));
-        Assert.True(HasCookieAttribute(
-            CookieHeader(callbackResponse, "SharpLabNext.GitHubSession"),
-            "Secure"));
+        Assert.True(HasCookieAttribute(CookieHeader(callbackResponse, "SharpLabNext.GitHubOAuthState"), "Secure"));
+        Assert.True(HasCookieAttribute(CookieHeader(callbackResponse, "SharpLabNext.GitHubSession"), "Secure"));
     }
 
     [Fact]
     public async Task LocalHttpCallbackDoesNotTrustForwardedProtoForCookieSecurity()
     {
-        using var factory = new OAuthGatewayFactory(
-            "http://localhost:8080/api/v1/auth/github/callback");
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            BaseAddress = new Uri("http://localhost"),
-            HandleCookies = false
-        });
+        using var factory = new OAuthGatewayFactory("http://localhost:8080/api/v1/auth/github/callback");
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("http://localhost"), HandleCookies = false });
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/auth/github/start");
         request.Headers.Add("X-Forwarded-Proto", "https");
 
-        using var response = await client.SendAsync(
-            request,
-            TestContext.Current.CancellationToken);
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.False(HasCookieAttribute(
-            CookieHeader(response, "SharpLabNext.GitHubOAuthState"),
-            "Secure"));
+        Assert.False(HasCookieAttribute(CookieHeader(response, "SharpLabNext.GitHubOAuthState"), "Secure"));
     }
 
     [Fact]
@@ -361,16 +316,10 @@ public sealed class GitHubOAuthTests
         TimeSpan.FromMinutes(10),
         TimeSpan.FromHours(8));
 
-    private static GitHubOAuthOptions ConfigurationOptions(
-        string environmentName,
-        params (string Key, string? Value)[] values)
+    private static GitHubOAuthOptions ConfigurationOptions(string environmentName, params (string Key, string? Value)[] values)
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(values.ToDictionary(static value => value.Key, static value => value.Value))
-            .Build();
-        return GitHubOAuthOptions.FromConfiguration(
-            configuration,
-            new TestHostEnvironment(environmentName));
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(values.ToDictionary(static value => value.Key, static value => value.Value)).Build();
+        return GitHubOAuthOptions.FromConfiguration(configuration, new TestHostEnvironment(environmentName));
     }
 
     private static string WriteSecretFile(string secret)
@@ -381,9 +330,7 @@ public sealed class GitHubOAuthTests
     }
 
     private static string CookieHeader(HttpResponseMessage response, string cookieName) =>
-        Assert.Single(
-            response.Headers.GetValues("Set-Cookie"),
-            header => header.StartsWith($"{cookieName}=", StringComparison.Ordinal));
+        Assert.Single(response.Headers.GetValues("Set-Cookie"), header => header.StartsWith($"{cookieName}=", StringComparison.Ordinal));
 
     private static string CookieValue(string header, string cookieName)
     {
@@ -393,8 +340,7 @@ public sealed class GitHubOAuthTests
     }
 
     private static bool HasCookieAttribute(string header, string attribute) =>
-        header.Split(';').Skip(1).Any(value =>
-            string.Equals(value.Trim(), attribute, StringComparison.OrdinalIgnoreCase));
+        header.Split(';').Skip(1).Any(value => string.Equals(value.Trim(), attribute, StringComparison.OrdinalIgnoreCase));
 
     private sealed class OAuthGatewayFactory(string callbackUri) : WebApplicationFactory<Program>
     {
@@ -408,8 +354,7 @@ public sealed class GitHubOAuthTests
             builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<GitHubOAuthClient>();
-                services.AddHttpClient<GitHubOAuthClient>()
-                    .ConfigurePrimaryHttpMessageHandler(static () => new RecordingHandler(_ =>
+                services.AddHttpClient<GitHubOAuthClient>().ConfigurePrimaryHttpMessageHandler(static () => new RecordingHandler(_ =>
                         new HttpResponseMessage(HttpStatusCode.OK)
                         {
                             Content = new StringContent(
@@ -427,13 +372,10 @@ public sealed class GitHubOAuthTests
     {
         public string? LastRequestBody { get; private set; }
 
-        protected override async Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             LastRequestBody = request.Content is null
-                ? null
-                : await request.Content.ReadAsStringAsync(cancellationToken);
+                ? null : await request.Content.ReadAsStringAsync(cancellationToken);
             return responseFactory(request);
         }
     }

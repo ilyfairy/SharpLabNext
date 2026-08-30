@@ -35,8 +35,7 @@ public sealed class CppCliWorkerConfigurationTests
                 ["CppCli:CompilerPath"] = "cl"
             }).Build();
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            CppCliWorkerSettings.FromConfiguration(configuration));
+        var exception = Assert.Throws<InvalidOperationException>(() => CppCliWorkerSettings.FromConfiguration(configuration));
 
         Assert.Contains("absolute path", exception.Message, StringComparison.Ordinal);
     }

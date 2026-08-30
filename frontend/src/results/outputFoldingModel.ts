@@ -7,24 +7,15 @@ export interface OutputFoldingRange {
 }
 
 export function outputFoldingRanges(text: string, languageId: string): OutputFoldingRange[] {
-  if (!text) return []
-  const lines = text.replace(/\r\n?/g, '\n').split('\n')
-  const ranges =
-    languageId === 'asm'
-      ? jitFoldingRanges(lines)
-      : languageId === 'il'
-        ? ilFoldingRanges(lines)
-        : []
-  return ranges.sort(
-    (left, right) => left.startLine - right.startLine || right.endLine - left.endLine,
-  )
+  if (!text) return [];
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  const ranges = languageId === 'asm' ? jitFoldingRanges(lines) : languageId === 'il' ? ilFoldingRanges(lines) : []
+  return ranges.sort((left, right) => left.startLine - right.startLine || right.endLine - left.endLine);
 }
 
 function jitFoldingRanges(lines: readonly string[]): OutputFoldingRange[] {
   const ranges: OutputFoldingRange[] = []
-  const methodLines = lines
-    .map((line, index) => (isJitMethodHeader(line) ? index + 1 : 0))
-    .filter((lineNumber) => lineNumber > 0)
+  const methodLines = lines.map((line, index) => (isJitMethodHeader(line) ? index + 1 : 0)).filter((lineNumber) => lineNumber > 0)
 
   for (let index = 0; index < methodLines.length; index += 1) {
     const startLine = methodLines[index]
@@ -41,12 +32,7 @@ function jitFoldingRanges(lines: readonly string[]): OutputFoldingRange[] {
       const labelLine = labelLines[labelIndex]
       if (!labelLine) continue
       const nextLabelLine = labelLines[labelIndex + 1] ?? endLine + 1
-      addRange(
-        ranges,
-        labelLine,
-        trimTrailingBlankLines(lines, labelLine, nextLabelLine - 1),
-        'block',
-      )
+      addRange(ranges, labelLine, trimTrailingBlankLines(lines, labelLine, nextLabelLine - 1), 'block')
     }
   }
   return ranges
@@ -55,7 +41,10 @@ function jitFoldingRanges(lines: readonly string[]): OutputFoldingRange[] {
 function ilFoldingRanges(lines: readonly string[]): OutputFoldingRange[] {
   const ranges: OutputFoldingRange[] = []
   const stack: Array<{ startLine: number; kind: OutputFoldingKind }> = []
-  let pendingDeclaration: { startLine: number; kind: OutputFoldingKind } | null = null
+  let pendingDeclaration: {
+    startLine: number
+    kind: OutputFoldingKind
+  } | null = null
   let blockComment = false
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -105,10 +94,7 @@ function ilDeclarationKind(line: string): OutputFoldingKind | null {
   }
 }
 
-function structuralBraces(
-  line: string,
-  startsInBlockComment: boolean,
-): { characters: Array<'{' | '}'>; blockComment: boolean } {
+function structuralBraces(line: string, startsInBlockComment: boolean): { characters: Array<'{' | '}'>; blockComment: boolean } {
   const characters: Array<'{' | '}'> = []
   let blockComment = startsInBlockComment
   let quote: '"' | "'" | null = null
@@ -142,28 +128,15 @@ function structuralBraces(
   return { characters, blockComment }
 }
 
-function trimTrailingBlankLines(
-  lines: readonly string[],
-  startLine: number,
-  candidateEndLine: number,
-): number {
+function trimTrailingBlankLines(lines: readonly string[], startLine: number, candidateEndLine: number): number {
   let endLine = Math.min(lines.length, candidateEndLine)
   while (endLine > startLine && !lines[endLine - 1]?.trim()) endLine -= 1
   return endLine
 }
 
-function addRange(
-  ranges: OutputFoldingRange[],
-  startLine: number,
-  endLine: number,
-  kind: OutputFoldingKind,
-): void {
+function addRange(ranges: OutputFoldingRange[], startLine: number, endLine: number, kind: OutputFoldingKind): void {
   if (startLine < 1 || endLine <= startLine) return
-  if (
-    ranges.some(
-      (range) => range.startLine === startLine && range.endLine === endLine && range.kind === kind,
-    )
-  ) {
+  if (ranges.some((range) => range.startLine === startLine && range.endLine === endLine && range.kind === kind)) {
     return
   }
   ranges.push({ startLine, endLine, kind })

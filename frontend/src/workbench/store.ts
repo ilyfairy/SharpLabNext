@@ -1,13 +1,7 @@
 import { create } from 'zustand'
 import type { BuildConfiguration, LanguageManifest, ResolvedSelection } from '../api/types'
 import { fallbackLanguage, type MobilePane, type SelectionIntent } from './catalog'
-import {
-  clearLanguageWorkspaces,
-  readLanguageWorkspace,
-  removeLanguageWorkspace,
-  type StoredLanguageWorkspace,
-  writeLanguageWorkspace,
-} from './languageWorkspaceStorage'
+import { clearLanguageWorkspaces, readLanguageWorkspace, removeLanguageWorkspace, type StoredLanguageWorkspace, writeLanguageWorkspace } from './languageWorkspaceStorage'
 
 interface SelectionRevisionGuard {
   selectionRevision: number
@@ -62,13 +56,7 @@ interface WorkbenchState extends SelectionIntent {
 }
 
 function selectionChanged(state: SelectionIntent, selection: SelectionIntent): boolean {
-  return (
-    state.languageId !== selection.languageId ||
-    state.toolchainId !== selection.toolchainId ||
-    state.referenceSetId !== selection.referenceSetId ||
-    state.outputId !== selection.outputId ||
-    state.runtimeId !== selection.runtimeId
-  )
+  return state.languageId !== selection.languageId || state.toolchainId !== selection.toolchainId || state.referenceSetId !== selection.referenceSetId || state.outputId !== selection.outputId || state.runtimeId !== selection.runtimeId
 }
 
 function browserStorage(): Storage | null {
@@ -92,12 +80,8 @@ function defaultWorkspaceForLanguage(language: LanguageManifest): StoredLanguage
 }
 
 function workspaceState(language: LanguageManifest, workspace = workspaceForLanguage(language)) {
-  const activeFile =
-    workspace.files.find((file) => file.path === workspace.activeFile) ?? workspace.files[0]
-  const sourceIsTemplate =
-    workspace.files.length === 1 &&
-    activeFile?.path === language.defaultFileName &&
-    activeFile.text === language.defaultSource
+  const activeFile = workspace.files.find((file) => file.path === workspace.activeFile) ?? workspace.files[0]
+  const sourceIsTemplate = workspace.files.length === 1 && activeFile?.path === language.defaultFileName && activeFile.text === language.defaultSource
   return {
     files: workspace.files.map((file) => ({ ...file })),
     activeFile: activeFile?.path ?? language.defaultFileName,
@@ -118,12 +102,7 @@ function storedWorkspace(state: Pick<WorkbenchState, 'files' | 'activeFile' | 's
   }
 }
 
-function persistLanguageWorkspace(
-  state: Pick<
-    WorkbenchState,
-    'languageId' | 'files' | 'activeFile' | 'sourceOrder' | 'sourceIsTemplate'
-  >,
-): void {
+function persistLanguageWorkspace(state: Pick<WorkbenchState, 'languageId' | 'files' | 'activeFile' | 'sourceOrder' | 'sourceIsTemplate'>): void {
   if (state.sourceIsTemplate) {
     removeLanguageWorkspace(browserStorage(), state.languageId)
     return
@@ -155,15 +134,8 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
       set((state) => {
         const switchingLanguage = state.languageId !== language.id
         if (switchingLanguage) persistLanguageWorkspace(state)
-        const refreshingTemplate =
-          !switchingLanguage &&
-          state.sourceIsTemplate &&
-          state.templateSource !== language.defaultSource
-        const nextWorkspace = switchingLanguage
-          ? workspaceState(language)
-          : refreshingTemplate
-            ? workspaceState(language, defaultWorkspaceForLanguage(language))
-            : null
+        const refreshingTemplate = !switchingLanguage && state.sourceIsTemplate && state.templateSource !== language.defaultSource
+        const nextWorkspace = switchingLanguage ? workspaceState(language) : refreshingTemplate ? workspaceState(language, defaultWorkspaceForLanguage(language)) : null
         const selectionDidChange = selectionChanged(state, selection)
         if (!nextWorkspace && !selectionDidChange) return state
 
@@ -171,41 +143,32 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
           ...selection,
           ...(nextWorkspace ?? {}),
           workspaceRevision: nextWorkspace ? state.workspaceRevision + 1 : state.workspaceRevision,
-          selectionRevision: selectionDidChange
-            ? state.selectionRevision + 1
-            : state.selectionRevision,
+          selectionRevision: selectionDidChange ? state.selectionRevision + 1 : state.selectionRevision,
         }
       }),
 
     applyResolvedSelection: (selection, guard) => {
       const state = get()
-      if (
-        state.selectionRevision !== guard.selectionRevision ||
-        state.workspaceRevision !== guard.workspaceRevision
-      ) {
+      if (state.selectionRevision !== guard.selectionRevision || state.workspaceRevision !== guard.workspaceRevision) {
         return false
       }
 
-      const effective: SelectionIntent = { ...selection, runtimeId: selection.runtimeId ?? null }
+      const effective: SelectionIntent = {
+        ...selection,
+        runtimeId: selection.runtimeId ?? null,
+      }
       if (!selectionChanged(state, effective)) return true
       set({ ...effective, selectionRevision: state.selectionRevision + 1 })
       return true
     },
 
-    setBuildMode: (buildMode) =>
-      set((state) =>
-        state.buildMode === buildMode
-          ? state
-          : { buildMode, selectionRevision: state.selectionRevision + 1 },
-      ),
+    setBuildMode: (buildMode) => set((state) => (state.buildMode === buildMode ? state : { buildMode, selectionRevision: state.selectionRevision + 1 })),
     setMobilePane: (mobilePane) => set({ mobilePane }),
     setSource: (source) =>
       set((state) => {
         if (state.source === source) return state
         return {
-          files: state.files.map((file) =>
-            file.path === state.activeFile ? { ...file, text: source } : file,
-          ),
+          files: state.files.map((file) => (file.path === state.activeFile ? { ...file, text: source } : file)),
           source,
           sourceIsTemplate: state.files.length === 1 && source === state.templateSource,
           workspaceRevision: state.workspaceRevision + 1,
@@ -217,9 +180,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
         if (!file || file.text === source) return state
         const active = path === state.activeFile
         return {
-          files: state.files.map((candidate) =>
-            candidate.path === path ? { ...candidate, text: source } : candidate,
-          ),
+          files: state.files.map((candidate) => (candidate.path === path ? { ...candidate, text: source } : candidate)),
           ...(active
             ? {
                 source,
@@ -262,7 +223,10 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
       const state = get()
       if (!state.files.some((file) => file.path === path)) return false
       if (state.files.length === 1) {
-        const templateFile = { path: state.templateFileName, text: state.templateSource }
+        const templateFile = {
+          path: state.templateFileName,
+          text: state.templateSource,
+        }
         set({
           files: [templateFile],
           sourceOrder: [templateFile.path],
@@ -278,8 +242,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
       const firstFile = files[0]
       if (!firstFile) return false
       const sourceOrder = state.sourceOrder.filter((candidate) => candidate !== path)
-      const nextActive =
-        path === state.activeFile ? (sourceOrder[0] ?? firstFile.path) : state.activeFile
+      const nextActive = path === state.activeFile ? (sourceOrder[0] ?? firstFile.path) : state.activeFile
       const activeFile = files.find((file) => file.path === nextActive) ?? firstFile
       set({
         files,
@@ -287,10 +250,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
         activeFile: activeFile.path,
         fileName: activeFile.path,
         source: activeFile.text,
-        sourceIsTemplate:
-          files.length === 1 &&
-          activeFile.path === state.templateFileName &&
-          activeFile.text === state.templateSource,
+        sourceIsTemplate: files.length === 1 && activeFile.path === state.templateFileName && activeFile.text === state.templateSource,
         workspaceRevision: state.workspaceRevision + 1,
       })
       return true
@@ -298,22 +258,14 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
 
     renameFile: (path, nextPath) => {
       const state = get()
-      if (
-        !nextPath ||
-        !state.files.some((file) => file.path === path) ||
-        state.files.some((file) => file.path === nextPath)
-      ) {
+      if (!nextPath || !state.files.some((file) => file.path === path) || state.files.some((file) => file.path === nextPath)) {
         return false
       }
-      const files = state.files.map((file) =>
-        file.path === path ? { ...file, path: nextPath } : file,
-      )
+      const files = state.files.map((file) => (file.path === path ? { ...file, path: nextPath } : file))
       const activeFile = state.activeFile === path ? nextPath : state.activeFile
       set({
         files,
-        sourceOrder: state.sourceOrder.map((candidate) =>
-          candidate === path ? nextPath : candidate,
-        ),
+        sourceOrder: state.sourceOrder.map((candidate) => (candidate === path ? nextPath : candidate)),
         activeFile,
         fileName: activeFile,
         sourceIsTemplate: false,
@@ -327,24 +279,13 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
       const offset = direction === 'earlier' ? -1 : direction === 'later' ? 1 : 0
       const filePaths = new Set(state.files.map((file) => file.path))
       const sourcePaths = new Set(state.sourceOrder)
-      if (
-        offset === 0 ||
-        filePaths.size !== state.files.length ||
-        sourcePaths.size !== state.sourceOrder.length ||
-        state.sourceOrder.length !== state.files.length ||
-        state.sourceOrder.some((candidate) => !filePaths.has(candidate))
-      ) {
+      if (offset === 0 || filePaths.size !== state.files.length || sourcePaths.size !== state.sourceOrder.length || state.sourceOrder.length !== state.files.length || state.sourceOrder.some((candidate) => !filePaths.has(candidate))) {
         return false
       }
 
       const index = state.sourceOrder.indexOf(path)
       const targetIndex = index + offset
-      if (
-        index < 0 ||
-        !filePaths.has(path) ||
-        targetIndex < 0 ||
-        targetIndex >= state.sourceOrder.length
-      ) {
+      if (index < 0 || !filePaths.has(path) || targetIndex < 0 || targetIndex >= state.sourceOrder.length) {
         return false
       }
 
@@ -359,18 +300,12 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
 
     replaceWorkspace: (replacement) =>
       set((state) => {
-        const activeFile =
-          replacement.files.find((file) => file.path === replacement.activeFile) ??
-          replacement.files[0]
+        const activeFile = replacement.files.find((file) => file.path === replacement.activeFile) ?? replacement.files[0]
         if (!activeFile) return state
         const selection = replacement.selection ?? currentSelection(state)
         if (selection.languageId !== state.languageId) persistLanguageWorkspace(state)
         const selectionDidChange = selectionChanged(state, selection)
-        const sourceIsTemplate =
-          replacement.template !== undefined &&
-          replacement.files.length === 1 &&
-          activeFile.path === replacement.template.fileName &&
-          activeFile.text === replacement.template.source
+        const sourceIsTemplate = replacement.template !== undefined && replacement.files.length === 1 && activeFile.path === replacement.template.fileName && activeFile.text === replacement.template.source
         return {
           ...selection,
           buildMode: replacement.buildMode ?? state.buildMode,
@@ -383,23 +318,14 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
           templateSource: replacement.template?.source ?? state.templateSource,
           sourceIsTemplate,
           workspaceRevision: state.workspaceRevision + 1,
-          selectionRevision:
-            selectionDidChange || replacement.buildMode !== undefined
-              ? state.selectionRevision + 1
-              : state.selectionRevision,
+          selectionRevision: selectionDidChange || replacement.buildMode !== undefined ? state.selectionRevision + 1 : state.selectionRevision,
         }
       }),
   }
 })
 
 useWorkbenchStore.subscribe((state, previous) => {
-  if (
-    state.languageId !== previous.languageId ||
-    state.files !== previous.files ||
-    state.activeFile !== previous.activeFile ||
-    state.sourceOrder !== previous.sourceOrder ||
-    state.sourceIsTemplate !== previous.sourceIsTemplate
-  ) {
+  if (state.languageId !== previous.languageId || state.files !== previous.files || state.activeFile !== previous.activeFile || state.sourceOrder !== previous.sourceOrder || state.sourceIsTemplate !== previous.sourceIsTemplate) {
     persistLanguageWorkspace(state)
   }
 })
@@ -417,9 +343,6 @@ function currentSelection(state: SelectionIntent): SelectionIntent {
 export function resetWorkbenchStore(options: { preserveLanguageWorkspaces?: boolean } = {}): void {
   if (!options.preserveLanguageWorkspaces) clearLanguageWorkspaces(browserStorage())
   const initial = useWorkbenchStore.getInitialState()
-  const workspace = workspaceState(
-    fallbackLanguage,
-    options.preserveLanguageWorkspaces ? workspaceForLanguage(fallbackLanguage) : undefined,
-  )
+  const workspace = workspaceState(fallbackLanguage, options.preserveLanguageWorkspaces ? workspaceForLanguage(fallbackLanguage) : undefined)
   useWorkbenchStore.setState({ ...initial, ...workspace }, true)
 }

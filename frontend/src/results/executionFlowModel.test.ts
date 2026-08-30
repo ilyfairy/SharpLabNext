@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { OperationEvent } from '../api/types'
-import {
-  createExecutionFlowSourceModel,
-  currentExecutionFlowSourceModel,
-  toEditorRange,
-  validateSourceRange,
-} from './executionFlowModel'
+import { createExecutionFlowSourceModel, currentExecutionFlowSourceModel, toEditorRange, validateSourceRange } from './executionFlowModel'
 
 function flowEvent(sequence: number, value: unknown): OperationEvent {
   return {
@@ -42,16 +37,9 @@ describe('execution-flow source model', () => {
   const files = [{ path: 'Program.cs', text: 'line 1\nline 2\nline 3' }]
 
   it('normalizes runtime coordinates once and aggregates identical range kinds', () => {
-    const model = createExecutionFlowSourceModel(
-      [flowEvent(1, payload()), flowEvent(2, payload()), flowEvent(3, payload('branch'))],
-      files,
-    )
+    const model = createExecutionFlowSourceModel([flowEvent(1, payload()), flowEvent(2, payload()), flowEvent(3, payload('branch'))], files)
 
-    expect(model.timeline.map((entry) => entry.locationLabel)).toEqual([
-      'Program.cs:2:1',
-      'Program.cs:2:1',
-      'Program.cs:2:1',
-    ])
+    expect(model.timeline.map((entry) => entry.locationLabel)).toEqual(['Program.cs:2:1', 'Program.cs:2:1', 'Program.cs:2:1'])
     expect(model.hits).toMatchObject([
       { documentPath: 'Program.cs', eventKind: 'sequence-point', count: 2 },
       { documentPath: 'Program.cs', eventKind: 'branch', count: 1 },
@@ -77,10 +65,7 @@ describe('execution-flow source model', () => {
       ...payload(),
       Range: { StartLine: 8, StartColumn: 0, EndLine: 8, EndColumn: 1 },
     }
-    const model = createExecutionFlowSourceModel(
-      [flowEvent(1, unknown), flowEvent(2, negative), flowEvent(3, beyond)],
-      files,
-    )
+    const model = createExecutionFlowSourceModel([flowEvent(1, unknown), flowEvent(2, negative), flowEvent(3, beyond)], files)
 
     expect(model.hits).toEqual([])
     expect(model.timeline.map((entry) => entry.target)).toEqual([null, null, null])
@@ -105,19 +90,10 @@ describe('execution-flow source model', () => {
       DocumentPath: 'C:\\work\\build-c3d4\\Library.fs',
     }
 
-    const model = createExecutionFlowSourceModel(
-      [flowEvent(1, linux), flowEvent(2, windows)],
-      nestedFiles,
-    )
+    const model = createExecutionFlowSourceModel([flowEvent(1, linux), flowEvent(2, windows)], nestedFiles)
 
-    expect(model.timeline.map((entry) => entry.locationLabel)).toEqual([
-      'src/Program.fs:2:1',
-      'Library.fs:2:1',
-    ])
-    expect(model.timeline.map((entry) => entry.target?.documentPath)).toEqual([
-      'src/Program.fs',
-      'Library.fs',
-    ])
+    expect(model.timeline.map((entry) => entry.locationLabel)).toEqual(['src/Program.fs:2:1', 'Library.fs:2:1'])
+    expect(model.timeline.map((entry) => entry.target?.documentPath)).toEqual(['src/Program.fs', 'Library.fs'])
   })
 
   it('does not guess when an absolute PDB path matches multiple workspace suffixes', () => {
@@ -157,17 +133,30 @@ describe('execution-flow source model', () => {
 
   it('only exposes decorations for the current execution-flow revisions', () => {
     const model = createExecutionFlowSourceModel([flowEvent(1, payload())], files)
-    const result = { outputId: 'execution-flow', workspaceRevision: 4, selectionRevision: 2 }
+    const result = {
+      outputId: 'execution-flow',
+      workspaceRevision: 4,
+      selectionRevision: 2,
+    }
 
     expect(currentExecutionFlowSourceModel(model, result, result)).toBe(model)
     expect(
-      currentExecutionFlowSourceModel(model, result, { ...result, workspaceRevision: 5 }),
+      currentExecutionFlowSourceModel(model, result, {
+        ...result,
+        workspaceRevision: 5,
+      }),
     ).toBeNull()
     expect(
-      currentExecutionFlowSourceModel(model, result, { ...result, selectionRevision: 3 }),
+      currentExecutionFlowSourceModel(model, result, {
+        ...result,
+        selectionRevision: 3,
+      }),
     ).toBeNull()
     expect(
-      currentExecutionFlowSourceModel(model, result, { ...result, outputId: 'ast' }),
+      currentExecutionFlowSourceModel(model, result, {
+        ...result,
+        outputId: 'ast',
+      }),
     ).toBeNull()
   })
 })

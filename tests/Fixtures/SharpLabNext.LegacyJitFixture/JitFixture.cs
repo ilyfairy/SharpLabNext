@@ -129,12 +129,7 @@ internal static class Program
         return 0;
     }
 
-    private static void WriteInterleaved(
-        int descriptor,
-        System.IO.TextWriter writer,
-        string first,
-        string native,
-        string last)
+    private static void WriteInterleaved(int descriptor, System.IO.TextWriter writer, string first, string native, string last)
     {
         writer.Write(first);
         writer.Flush();

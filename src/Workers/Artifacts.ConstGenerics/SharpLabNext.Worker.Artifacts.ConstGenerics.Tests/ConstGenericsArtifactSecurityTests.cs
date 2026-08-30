@@ -14,23 +14,11 @@ public sealed class ConstGenericsArtifactSecurityTests
         {
             var mutations = new Func<ArtifactManifest, ArtifactManifest>[]
             {
-                manifest => manifest with
-                {
-                    Producer = manifest.Producer with { ToolchainId = "roslyn-stable" }
-                },
+                manifest => manifest with { Producer = manifest.Producer with { ToolchainId = "roslyn-stable" } },
                 manifest => manifest with { ReferenceSetId = "net10-ref" },
                 manifest => manifest with { TargetFramework = "net10.0" },
-                manifest => manifest with
-                {
-                    RuntimeRequirement = manifest.RuntimeRequirement with { Family = "coreclr" }
-                },
-                manifest => manifest with
-                {
-                    RuntimeRequirement = manifest.RuntimeRequirement with
-                    {
-                        RequiredRuntimeFeatureTags = []
-                    }
-                },
+                manifest => manifest with { RuntimeRequirement = manifest.RuntimeRequirement with { Family = "coreclr" } },
+                manifest => manifest with { RuntimeRequirement = manifest.RuntimeRequirement with { RequiredRuntimeFeatureTags = [] } },
                 manifest => manifest with
                 {
                     RuntimeRequirement = manifest.RuntimeRequirement with
@@ -48,9 +36,7 @@ public sealed class ConstGenericsArtifactSecurityTests
                     {
                         Frameworks =
                         [
-                            new FrameworkRequirement(
-                                "Microsoft.NETCore.App",
-                                "9.0.0")
+                            new FrameworkRequirement("Microsoft.NETCore.App", "9.0.0")
                         ]
                     }
                 },
@@ -60,9 +46,7 @@ public sealed class ConstGenericsArtifactSecurityTests
                     {
                         Frameworks =
                         [
-                            new FrameworkRequirement(
-                                "Microsoft.AspNetCore.App",
-                                "9.0.0-constgenerics.1.23470.1")
+                            new FrameworkRequirement("Microsoft.AspNetCore.App", "9.0.0-constgenerics.1.23470.1")
                         ]
                     }
                 },
@@ -72,12 +56,8 @@ public sealed class ConstGenericsArtifactSecurityTests
                     {
                         Frameworks =
                         [
-                            new FrameworkRequirement(
-                                "Microsoft.NETCore.App",
-                                "9.0.0-constgenerics.1.23470.1"),
-                            new FrameworkRequirement(
-                                "Microsoft.AspNetCore.App",
-                                "9.0.0")
+                            new FrameworkRequirement("Microsoft.NETCore.App", "9.0.0-constgenerics.1.23470.1"),
+                            new FrameworkRequirement("Microsoft.AspNetCore.App", "9.0.0")
                         ]
                     }
                 },
@@ -102,15 +82,8 @@ public sealed class ConstGenericsArtifactSecurityTests
             foreach (var mutation in mutations)
             {
                 var handler = new ConstGenericsArtifactStoreHandler(mutation);
-                var materializer = new ConstGenericsArtifactMaterializer(
-                    ConstGenericsTestInfrastructure.CreateClient(handler),
-                    ConstGenericsTestInfrastructure.Settings(root),
-                    ConstGenericsTestInfrastructure.CapabilityManifest());
-                await Assert.ThrowsAsync<ArtifactWorkerIncompatibleArtifactException>(() =>
-                    materializer.MaterializeAsync(
-                        handler.ArtifactRef,
-                        $"op_{Guid.NewGuid():N}",
-                        TestContext.Current.CancellationToken));
+                var materializer = new ConstGenericsArtifactMaterializer(ConstGenericsTestInfrastructure.CreateClient(handler), ConstGenericsTestInfrastructure.Settings(root), ConstGenericsTestInfrastructure.CapabilityManifest());
+                await Assert.ThrowsAsync<ArtifactWorkerIncompatibleArtifactException>(() => materializer.MaterializeAsync(handler.ArtifactRef, $"op_{Guid.NewGuid():N}", TestContext.Current.CancellationToken));
                 Assert.Equal(0, handler.LeaseAcquisitionCount);
                 Assert.Equal(0, handler.FileDownloadCount);
             }
@@ -129,16 +102,9 @@ public sealed class ConstGenericsArtifactSecurityTests
         try
         {
             var handler = new ConstGenericsArtifactStoreHandler(corruptContent: true);
-            var materializer = new ConstGenericsArtifactMaterializer(
-                ConstGenericsTestInfrastructure.CreateClient(handler),
-                ConstGenericsTestInfrastructure.Settings(root),
-                ConstGenericsTestInfrastructure.CapabilityManifest());
+            var materializer = new ConstGenericsArtifactMaterializer(ConstGenericsTestInfrastructure.CreateClient(handler), ConstGenericsTestInfrastructure.Settings(root), ConstGenericsTestInfrastructure.CapabilityManifest());
 
-            await Assert.ThrowsAsync<ArtifactWorkerIncompatibleArtifactException>(() =>
-                materializer.MaterializeAsync(
-                    handler.ArtifactRef,
-                    "op_digest_mismatch",
-                    TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<ArtifactWorkerIncompatibleArtifactException>(() => materializer.MaterializeAsync(handler.ArtifactRef, "op_digest_mismatch", TestContext.Current.CancellationToken));
 
             Assert.Equal(1, handler.LeaseAcquisitionCount);
             Assert.Equal(1, handler.LeaseReleaseCount);
@@ -157,27 +123,14 @@ public sealed class ConstGenericsArtifactSecurityTests
         var root = ConstGenericsTestInfrastructure.CreateRoot();
         try
         {
-            var handler = new ConstGenericsArtifactStoreHandler(manifest => manifest with
-            {
-                MetadataFeatureTags = [],
-                Metadata = null
-            });
+            var handler = new ConstGenericsArtifactStoreHandler(manifest => manifest with { MetadataFeatureTags = [], Metadata = null });
             var client = ConstGenericsTestInfrastructure.CreateClient(handler);
             var settings = ConstGenericsTestInfrastructure.Settings(root);
             var capability = ConstGenericsTestInfrastructure.CapabilityManifest();
             var runner = new ConstGenericsProcessorRunner(settings, capability);
-            var processor = new ConstGenericsArtifactProcessor(
-                new ConstGenericsArtifactMaterializer(client, settings, capability),
-                runner,
-                client,
-                settings,
-                capability);
+            var processor = new ConstGenericsArtifactProcessor(new ConstGenericsArtifactMaterializer(client, settings, capability), runner, client, settings, capability);
 
-            await Assert.ThrowsAsync<ArtifactWorkerIncompatibleArtifactException>(() => processor.RenderAsync(
-                ConstGenericsTestInfrastructure.RenderRequest(handler.ArtifactRef, "il"),
-                "op_ordinary",
-                ConstGenericsProcessorOperation.Il,
-                TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<ArtifactWorkerIncompatibleArtifactException>(() => processor.RenderAsync(ConstGenericsTestInfrastructure.RenderRequest(handler.ArtifactRef, "il"), "op_ordinary", ConstGenericsProcessorOperation.Il, TestContext.Current.CancellationToken));
 
             Assert.Equal(0, runner.StartedProcessCount);
             Assert.Equal(0, handler.LeaseAcquisitionCount);

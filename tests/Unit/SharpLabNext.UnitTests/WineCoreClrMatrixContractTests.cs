@@ -28,10 +28,7 @@ public sealed class WineCoreClrMatrixContractTests
 
     [Theory]
     [MemberData(nameof(ExactRows))]
-    public void ExactProfileKeepsTheProvenWineCapabilityBoundary(
-        string fileName,
-        string runtimeVersion,
-        bool supportsJit)
+    public void ExactProfileKeepsTheProvenWineCapabilityBoundary(string fileName, string runtimeVersion, bool supportsJit)
     {
         var profile = LoadProfile(fileName);
 
@@ -40,9 +37,7 @@ public sealed class WineCoreClrMatrixContractTests
         Assert.Equal(runtimeVersion, profile.RuntimeVersion);
         Assert.Equal(runtimeVersion, profile.JitVersion);
         Assert.Equal(["coreclr-wine", "coreclr"], profile.AcceptedRuntimeFamilies);
-        Assert.Equal(
-            supportsJit ? RunAndJitCapabilities : RunCapabilities,
-            profile.Capabilities);
+        Assert.Equal(supportsJit ? RunAndJitCapabilities : RunCapabilities, profile.Capabilities);
         Assert.Equal(RuntimeContainerIsolationKinds.Wine, profile.Container.IsolationKind);
         Assert.Equal(RuntimeContainerEnvironmentKinds.Wine, profile.Container.EnvironmentKind);
         Assert.Equal(RuntimeContainerExecutionUsers.NonRoot, profile.Container.ExecutionUser);
@@ -70,14 +65,11 @@ public sealed class WineCoreClrMatrixContractTests
         if (!supportsJit)
         {
             Assert.Null(profile.Operations?.Jit);
-            Assert.Throws<NotSupportedException>(() =>
-                RuntimeProfileCommandBuilder.CreateJitCommand(profile, "app.dll", "Program.Main"));
+            Assert.Throws<NotSupportedException>(() => RuntimeProfileCommandBuilder.CreateJitCommand(profile, "app.dll", "Program.Main"));
             return;
         }
 
-        Assert.Equal(
-            RuntimeOperationImplementationIds.LegacyJitInspector,
-            profile.Operations?.Jit?.ImplementationId);
+        Assert.Equal(RuntimeOperationImplementationIds.LegacyJitInspector, profile.Operations?.Jit?.ImplementationId);
         Assert.Equal(RuntimeJitSourceMappingKinds.None, profile.Operations?.Jit?.SourceMappingKind);
         Assert.Null(profile.Operations?.Jit?.ProfilerPath);
         Assert.Equal(
@@ -99,33 +91,15 @@ public sealed class WineCoreClrMatrixContractTests
 
     [Theory]
     [MemberData(nameof(ExactRows))]
-    public void SupervisorUsesWindowsJitDisasmWithoutProfilerOrMappingClaims(
-        string fileName,
-        string runtimeVersion,
-        bool supportsJit)
+    public void SupervisorUsesWindowsJitDisasmWithoutProfilerOrMappingClaims(string fileName, string runtimeVersion, bool supportsJit)
     {
         if (!supportsJit)
             return;
 
         var profile = LoadProfile(fileName);
-        var request = new JitRequest(
-            "request-1",
-            "idempotency-1",
-            "resolution-1",
-            new ArtifactRef($"sha256:{new string('a', 64)}"),
-            profile.Id,
-            new JitOptions(
-                "WindowsAbi",
-                "tier0-diffable",
-                "disabled",
-                "coreclr-jitdisasm",
-                "runtime-job-default"),
-            DateTimeOffset.UtcNow.AddMinutes(1));
+        var request = new JitRequest("request-1", "idempotency-1", "resolution-1", new ArtifactRef($"sha256:{new string('a', 64)}"), profile.Id, new JitOptions("WindowsAbi", "tier0-diffable", "disabled", "coreclr-jitdisasm", "runtime-job-default"), DateTimeOffset.UtcNow.AddMinutes(1));
 
-        var environment = RuntimeJobExecutor.CreateJitEnvironment(
-            profile,
-            request,
-            "SharpLabNext.User.dll");
+        var environment = RuntimeJobExecutor.CreateJitEnvironment(profile, request, "SharpLabNext.User.dll");
 
         Assert.Equal("*WindowsAbi*", environment["COMPlus_JitDisasm"]);
         Assert.Equal("SharpLabNext.User", environment["COMPlus_JitDisasmAssemblies"]);
@@ -144,21 +118,13 @@ public sealed class WineCoreClrMatrixContractTests
 
     private static RuntimeProfileOptions LoadProfile(string fileName)
     {
-        var path = Path.Combine(
-            FindRepositoryRoot(),
-            "profiles",
-            "runtimes",
-            "candidates",
-            fileName);
-        return JsonSerializer.Deserialize<RuntimeProfileOptions>(File.ReadAllText(path), JsonOptions)
-            ?? throw new InvalidDataException($"Runtime profile '{fileName}' is invalid.");
+        var path = Path.Combine(FindRepositoryRoot(), "profiles", "runtimes", "candidates", fileName);
+        return JsonSerializer.Deserialize<RuntimeProfileOptions>(File.ReadAllText(path), JsonOptions) ?? throw new InvalidDataException($"Runtime profile '{fileName}' is invalid.");
     }
 
     private static string FindRepositoryRoot()
     {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
-             directory is not null;
-             directory = directory.Parent)
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
         {
             if (File.Exists(Path.Combine(directory.FullName, "profiles", "runtime-matrix.json")))
                 return directory.FullName;

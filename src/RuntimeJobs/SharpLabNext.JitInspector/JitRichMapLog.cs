@@ -22,8 +22,7 @@ internal static class JitRichMapLog
             if (file.Length is <= 0 or > MaximumFileBytes)
                 return Empty();
 
-            using var reader = new StreamReader(
-                new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
+            using var reader = new StreamReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
             if (!string.Equals(reader.ReadLine(), "SLJR1", StringComparison.Ordinal))
                 return Empty();
 
@@ -45,11 +44,7 @@ internal static class JitRichMapLog
                     versions = [];
                     methods.Add(parsed.MethodHandle, versions);
                 }
-                if (versions.Count >= MaximumNativeCodeVersions ||
-                    versions.Any(version =>
-                        version.ClrInstanceId == parsed.ClrInstanceId &&
-                        version.NativeVersionId == parsed.NativeVersionId &&
-                        version.IlVersionId == parsed.IlVersionId))
+                if (versions.Count >= MaximumNativeCodeVersions || versions.Any(version => version.ClrInstanceId == parsed.ClrInstanceId && version.NativeVersionId == parsed.NativeVersionId && version.IlVersionId == parsed.IlVersionId))
                 {
                     return Empty();
                 }
@@ -59,15 +54,9 @@ internal static class JitRichMapLog
                 totalMapEntries += parsed.Points.Count;
             }
 
-            return methods.ToDictionary(
-                static pair => pair.Key,
-                static pair => (IReadOnlyList<JitRichMethodMap>)pair.Value.ToArray());
+            return methods.ToDictionary(static pair => pair.Key, static pair => (IReadOnlyList<JitRichMethodMap>)pair.Value.ToArray());
         }
-        catch (Exception exception) when (exception is
-            IOException or
-            UnauthorizedAccessException or
-            InvalidDataException or
-            ArgumentException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
         {
             return Empty();
         }
@@ -115,13 +104,7 @@ internal static class JitRichMapLog
             previousNativeOffset = nativeOffset;
         }
 
-        return new JitRichMethodMap(
-            methodHandle,
-            clrInstanceId,
-            nativeVersionId,
-            ilVersionId,
-            inlineNodeCount,
-            points);
+        return new JitRichMethodMap(methodHandle, clrInstanceId, nativeVersionId, ilVersionId, inlineNodeCount, points);
     }
 
     private static Dictionary<nuint, IReadOnlyList<JitRichMethodMap>> Empty() =>
@@ -131,11 +114,7 @@ internal static class JitRichMapLog
     {
         value = 0;
         return field.StartsWith(prefix, StringComparison.Ordinal) &&
-            nuint.TryParse(
-                field.AsSpan(prefix.Length),
-                NumberStyles.AllowHexSpecifier,
-                CultureInfo.InvariantCulture,
-                out value) &&
+            nuint.TryParse(field.AsSpan(prefix.Length), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value) &&
             value != 0;
     }
 
@@ -143,46 +122,24 @@ internal static class JitRichMapLog
     {
         value = 0;
         return field.StartsWith(prefix, StringComparison.Ordinal) &&
-            ulong.TryParse(
-                field.AsSpan(prefix.Length),
-                NumberStyles.AllowHexSpecifier,
-                CultureInfo.InvariantCulture,
-                out value);
+            ulong.TryParse(field.AsSpan(prefix.Length), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value);
     }
 
     private static bool TryParseUShortField(string field, string prefix, out ushort value)
     {
         value = 0;
         return field.StartsWith(prefix, StringComparison.Ordinal) &&
-            ushort.TryParse(
-                field.AsSpan(prefix.Length),
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out value);
+            ushort.TryParse(field.AsSpan(prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out value);
     }
 
     private static bool TryParseDecimalField(string field, string prefix, out int value)
     {
         value = 0;
         return field.StartsWith(prefix, StringComparison.Ordinal) &&
-            int.TryParse(
-                field.AsSpan(prefix.Length),
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out value);
+            int.TryParse(field.AsSpan(prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out value);
     }
 }
 
-internal sealed record JitRichMethodMap(
-    nuint MethodHandle,
-    ushort ClrInstanceId,
-    ulong NativeVersionId,
-    ulong IlVersionId,
-    int InlineNodeCount,
-    IReadOnlyList<JitRichIlPoint> Points);
+internal sealed record JitRichMethodMap(nuint MethodHandle, ushort ClrInstanceId, ulong NativeVersionId, ulong IlVersionId, int InlineNodeCount, IReadOnlyList<JitRichIlPoint> Points);
 
-internal sealed record JitRichIlPoint(
-    uint NativeOffset,
-    int IlOffset,
-    int Inlinee,
-    byte Source);
+internal sealed record JitRichIlPoint(uint NativeOffset, int IlOffset, int Inlinee, byte Source);

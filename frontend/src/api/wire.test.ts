@@ -57,7 +57,10 @@ describe('application wire naming', () => {
       decodeWire({
         Identity: { customProviderKey: 'value' },
         Dependencies: {
-          'language:roslyn-stable': { Ready: true, RuntimeProfileIds: ['net10'] },
+          'language:roslyn-stable': {
+            Ready: true,
+            RuntimeProfileIds: ['net10'],
+          },
         },
       }),
     ).toEqual({
@@ -82,7 +85,10 @@ describe('application wire naming', () => {
     expect(
       decodeWire<{
         operationId: string
-        payload: { resultType: string; properties: Record<string, string | null> }
+        payload: {
+          resultType: string
+          properties: Record<string, string | null>
+        }
       }>({
         OperationId: 'op-1',
         Payload: { ResultType: 'ast', Properties: { IsStatic: 'true' } },
@@ -94,9 +100,7 @@ describe('application wire naming', () => {
   })
 
   it('rejects lower-camel members instead of silently accepting a legacy response', () => {
-    expect(() => decodeWire({ operationId: 'legacy' })).toThrow(
-      "Invalid SharpLabNext wire member 'operationId'",
-    )
+    expect(() => decodeWire({ operationId: 'legacy' })).toThrow("Invalid SharpLabNext wire member 'operationId'")
     expect(() =>
       decodeWire({
         OperationId: 'op-1',
@@ -106,9 +110,7 @@ describe('application wire naming', () => {
   })
 
   it('serializes only the PascalCase application representation', () => {
-    expect(stringifyWire({ requestId: 'r-1', outputId: 'il' })).toBe(
-      '{"RequestId":"r-1","OutputId":"il"}',
-    )
+    expect(stringifyWire({ requestId: 'r-1', outputId: 'il' })).toBe('{"RequestId":"r-1","OutputId":"il"}')
   })
 
   it('converts fixed operation identities while preserving provider identity maps', () => {

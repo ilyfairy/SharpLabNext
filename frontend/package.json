@@ -11,7 +11,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/precompress-assets.mjs",
     "typecheck": "tsc -b --pretty false",
-    "lint": "biome check .",
+    "lint": "biome lint .",
     "format": "biome format --write .",
     "generate:brand": "node scripts/generate-brand-assets.mjs",
     "test": "vitest run",
@@ -19,7 +19,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "preview": "vite preview",
-    "validate:inputs": "node ../eng/validate-maintained-inputs.mjs"
+    "validate:inputs": "node ../eng/validation/validate-maintained-inputs.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.3",

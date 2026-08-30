@@ -7,7 +7,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const extractor = path.join(repositoryRoot, 'deploy', 'docker', 'extract-netfx48-sdk.py')
 const dockerfile = path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.operator-cppcli-base')
 
@@ -19,9 +19,7 @@ function pythonCommand() {
   return undefined
 }
 
-function sha1(value) {
-  return crypto.createHash('sha1').update(value).digest('hex').toUpperCase()
-}
+function sha1(value) { return crypto.createHash('sha1').update(value).digest('hex').toUpperCase(); }
 
 function writeFixture(root, { corruptCab = false } = {}) {
   const bundle = path.join(root, 'bundle')

@@ -57,9 +57,7 @@ if (args is ["process-bridge", var fixedArgument, var userArgument])
 {
     var stdin = await Console.In.ReadToEndAsync();
     Console.Write($"bridge-stdout:{fixedArgument}:{userArgument}:{stdin}");
-    Console.Error.Write(
-        "wineserver: could not save registry branch to user.reg : Read-only file system\n" +
-        "bridge-stderr");
+    Console.Error.Write("wineserver: could not save registry branch to user.reg : Read-only file system\n" + "bridge-stderr");
     return 23;
 }
 
@@ -70,13 +68,11 @@ if (args is ["runner-descendant-parent", var pidPath])
     {
         FileName = windows ? "cmd.exe" : "/bin/sh",
         Arguments = windows
-            ? "/d /s /c \"ping -t 127.0.0.1 >NUL 2>NUL\""
-            : "-c \"while :; do sleep 60; done >/dev/null 2>&1\"",
+            ? "/d /s /c \"ping -t 127.0.0.1 >NUL 2>NUL\"" : "-c \"while :; do sleep 60; done >/dev/null 2>&1\"",
         UseShellExecute = false,
         CreateNoWindow = true
     };
-    using var descendant = Process.Start(startInfo)
-        ?? throw new InvalidOperationException("Runner descendant did not start.");
+    using var descendant = Process.Start(startInfo) ?? throw new InvalidOperationException("Runner descendant did not start.");
     File.WriteAllText(pidPath, descendant.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
     Console.Write("runner-descendant-parent-output");
     var outputChunk = new string('x', 64 * 1024);

@@ -6,18 +6,9 @@ using SharpLabNext.Worker.Client;
 
 namespace SharpLabNext.Gateway;
 
-public sealed class BuildOperationExecutor(
-    OperationStore operations,
-    BoundedOperationScheduler scheduler,
-    IToolchainWorkerClientFactory workers,
-    IBuildArtifactPublisher artifactPublisher,
-    BuildPipelineOptions options,
-    ILogger<BuildOperationExecutor> logger)
+public sealed class BuildOperationExecutor(OperationStore operations, BoundedOperationScheduler scheduler, IToolchainWorkerClientFactory workers, IBuildArtifactPublisher artifactPublisher, BuildPipelineOptions options, ILogger<BuildOperationExecutor> logger)
 {
-    private static readonly Action<ILogger, string, Exception?> LogBuildFailure = LoggerMessage.Define<string>(
-        LogLevel.Error,
-        new EventId(20, nameof(LogBuildFailure)),
-        "Build operation {OperationId} failed.");
+    private static readonly Action<ILogger, string, Exception?> LogBuildFailure = LoggerMessage.Define<string>(LogLevel.Error, new EventId(20, nameof(LogBuildFailure)), "Build operation {OperationId} failed.");
 
     public void QueueBuild(OperationStart operation, BuildRequest request, string workerId)
     {
@@ -29,16 +20,11 @@ public sealed class BuildOperationExecutor(
     {
         var started = DateTimeOffset.UtcNow;
         using var deadlineCancellation = CreateDeadlineCancellation(request, started);
-        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-            operation.CancellationToken,
-            deadlineCancellation.Token);
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(operation.CancellationToken, deadlineCancellation.Token);
         try
         {
             linkedCancellation.Token.ThrowIfCancellationRequested();
-            Append(operation, new ProgressOperationEventPayload(
-                $"{workerId}-build",
-                "Compiling the immutable workspace snapshot.",
-                0.1));
+            Append(operation, new ProgressOperationEventPayload($"{workerId}-build", "Compiling the immutable workspace snapshot.", 0.1));
             var worker = workers.Create(workerId);
             var response = await worker.BuildAsync(request, linkedCancellation.Token).ConfigureAwait(false);
             linkedCancellation.Token.ThrowIfCancellationRequested();
@@ -47,82 +33,46 @@ public sealed class BuildOperationExecutor(
             AppendDiagnostics(operation, result);
             if (result is BuildResult { Outcome: BuildOutcome.Succeeded } buildResult)
             {
-                var artifactRef = buildResult.ArtifactRef
-                    ?? throw new BuildArtifactPublishingException(
-                        "The worker omitted the artifact reference for a successful build.");
-                Append(operation, new ProgressOperationEventPayload(
-                    "artifact-store",
-                    response.DevelopmentArtifact is null
-                        ? "Verifying the compiler-published artifact."
-                        : "Verifying and publishing the development artifact envelope.",
-                    0.8));
+                var artifactRef = buildResult.ArtifactRef ?? throw new BuildArtifactPublishingException("The worker omitted the artifact reference for a successful build.");
+                Append(operation, new ProgressOperationEventPayload("artifact-store", response.DevelopmentArtifact is null ? "Verifying the compiler-published artifact." : "Verifying and publishing the development artifact envelope.", 0.8));
                 PublishedBuildArtifact published;
                 if (response.DevelopmentArtifact is { } envelope)
                 {
                     if (envelope.ArtifactRef != artifactRef)
                     {
-                        throw new BuildArtifactPublishingException(
-                            "The development artifact envelope identity does not match the build result.");
+                        throw new BuildArtifactPublishingException("The development artifact envelope identity does not match the build result.");
                     }
-                    published = await artifactPublisher.PublishAsync(envelope, linkedCancellation.Token)
-                        .ConfigureAwait(false);
+                    published = await artifactPublisher.PublishAsync(envelope, linkedCancellation.Token).ConfigureAwait(false);
                     if (published.ArtifactRef != artifactRef)
                     {
-                        throw new BuildArtifactPublishingException(
-                            "The development artifact publication changed its content address.");
+                        throw new BuildArtifactPublishingException("The development artifact publication changed its content address.");
                     }
                 }
                 else
                 {
-                    published = await artifactPublisher.AcceptPublishedAsync(
-                        artifactRef,
-                        buildResult.Identity,
-                        linkedCancellation.Token).ConfigureAwait(false);
+                    published = await artifactPublisher.AcceptPublishedAsync(artifactRef, buildResult.Identity, linkedCancellation.Token).ConfigureAwait(false);
                 }
                 result = buildResult;
-                Append(operation, new ArtifactProducedOperationEventPayload(
-                    published.ArtifactRef,
-                    published.ArtifactFormat,
-                    "build-output"));
+                Append(operation, new ArtifactProducedOperationEventPayload(published.ArtifactRef, published.ArtifactFormat, "build-output"));
             }
 
             linkedCancellation.Token.ThrowIfCancellationRequested();
             Append(operation, new TypedResultOperationEventPayload(result));
-            Append(operation, new CompletedOperationEventPayload(
-                OperationCompletionStatus.Completed,
-                DateTimeOffset.UtcNow - started));
+            Append(operation, new CompletedOperationEventPayload(OperationCompletionStatus.Completed, DateTimeOffset.UtcNow - started));
         }
         catch (OperationCanceledException) when (operation.CancellationToken.IsCancellationRequested)
         {
-            Append(operation, new CompletedOperationEventPayload(
-                OperationCompletionStatus.Cancelled,
-                DateTimeOffset.UtcNow - started));
+            Append(operation, new CompletedOperationEventPayload(OperationCompletionStatus.Cancelled, DateTimeOffset.UtcNow - started));
         }
         catch (OperationCanceledException exception) when (deadlineCancellation.IsCancellationRequested)
         {
             LogBuildFailure(logger, operation.Handle.OperationId, exception);
-            AppendFailure(operation, new WorkerError(
-                "build-deadline-exceeded",
-                WorkerErrorCategory.DeadlineExceeded,
-                "The build deadline elapsed.",
-                true,
-                true,
-                operation.Handle.OperationId,
-                workerId,
-                "unknown"));
+            AppendFailure(operation, new WorkerError("build-deadline-exceeded", WorkerErrorCategory.DeadlineExceeded, "The build deadline elapsed.", true, true, operation.Handle.OperationId, workerId, "unknown"));
         }
         catch (ToolchainWorkerEndpointUnavailableException exception)
         {
             LogBuildFailure(logger, operation.Handle.OperationId, exception);
-            AppendFailure(operation, new WorkerError(
-                "worker-unavailable",
-                WorkerErrorCategory.Unavailable,
-                "The selected compiler worker is not installed.",
-                true,
-                true,
-                operation.Handle.OperationId,
-                workerId,
-                "unknown"));
+            AppendFailure(operation, new WorkerError("worker-unavailable", WorkerErrorCategory.Unavailable, "The selected compiler worker is not installed.", true, true, operation.Handle.OperationId, workerId, "unknown"));
         }
         catch (ToolchainWorkerException exception)
         {
@@ -142,28 +92,12 @@ public sealed class BuildOperationExecutor(
         catch (BuildArtifactPublishingException exception)
         {
             LogBuildFailure(logger, operation.Handle.OperationId, exception);
-            AppendFailure(operation, new WorkerError(
-                "worker-artifact-invalid",
-                WorkerErrorCategory.Internal,
-                "The toolchain worker returned an invalid artifact.",
-                false,
-                false,
-                operation.Handle.OperationId,
-                workerId,
-                "unknown"));
+            AppendFailure(operation, new WorkerError("worker-artifact-invalid", WorkerErrorCategory.Internal, "The toolchain worker returned an invalid artifact.", false, false, operation.Handle.OperationId, workerId, "unknown"));
         }
         catch (Exception exception)
         {
             LogBuildFailure(logger, operation.Handle.OperationId, exception);
-            AppendFailure(operation, new WorkerError(
-                "build-pipeline-internal",
-                WorkerErrorCategory.Internal,
-                "The build pipeline failed.",
-                true,
-                true,
-                operation.Handle.OperationId,
-                workerId,
-                "unknown"));
+            AppendFailure(operation, new WorkerError("build-pipeline-internal", WorkerErrorCategory.Internal, "The build pipeline failed.", true, true, operation.Handle.OperationId, workerId, "unknown"));
         }
     }
 
@@ -191,16 +125,12 @@ public sealed class BuildOperationExecutor(
             _ => []
         };
         foreach (var diagnostic in diagnostics)
-        {
             Append(operation, new DiagnosticOperationEventPayload(diagnostic));
-        }
     }
 
-    private void Append(OperationStart operation, OperationEventPayload payload) =>
-        operations.Append(operation.Handle.OperationId, payload, DateTimeOffset.UtcNow);
+    private void Append(OperationStart operation, OperationEventPayload payload) => operations.Append(operation.Handle.OperationId, payload, DateTimeOffset.UtcNow);
 
-    private void AppendFailure(OperationStart operation, WorkerError error) =>
-        Append(operation, new FailedOperationEventPayload(error));
+    private void AppendFailure(OperationStart operation, WorkerError error) => Append(operation, new FailedOperationEventPayload(error));
 
     private static WorkerError ArtifactStoreFailure(OperationStart operation, HttpStatusCode? statusCode)
     {
@@ -211,16 +141,12 @@ public sealed class BuildOperationExecutor(
             or HttpStatusCode.GatewayTimeout;
         return new WorkerError(
             resourceExhausted
-                ? "artifact-store-limit-exceeded"
-                : unavailable ? "artifact-store-unavailable" : "artifact-store-rejected-artifact",
+                ? "artifact-store-limit-exceeded" : unavailable ? "artifact-store-unavailable" : "artifact-store-rejected-artifact",
             resourceExhausted
-                ? WorkerErrorCategory.ResourceExhausted
-                : unavailable ? WorkerErrorCategory.Unavailable : WorkerErrorCategory.Internal,
+                ? WorkerErrorCategory.ResourceExhausted : unavailable ? WorkerErrorCategory.Unavailable : WorkerErrorCategory.Internal,
             resourceExhausted
-                ? "The compiled artifact exceeds the Artifact Store limit."
-                : unavailable
-                    ? "The Artifact Store is unavailable."
-                    : "The Artifact Store rejected the compiled artifact.",
+                ? "The compiled artifact exceeds the Artifact Store limit." : unavailable
+                    ? "The Artifact Store is unavailable." : "The Artifact Store rejected the compiled artifact.",
             unavailable,
             unavailable,
             operation.Handle.OperationId,

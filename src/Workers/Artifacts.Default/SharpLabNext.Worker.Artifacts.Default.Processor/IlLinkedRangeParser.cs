@@ -9,9 +9,7 @@ internal static partial class IlLinkedRangeParser
 {
     private const int MaximumLinkedRanges = 20_000;
 
-    public static async Task<IlLinkedDocument> ParseAndStripAsync(
-        string path,
-        CancellationToken cancellationToken)
+    public static async Task<IlLinkedDocument> ParseAndStripAsync(string path, CancellationToken cancellationToken)
     {
         var result = new List<ProcessorLinkedRange>();
         var filteredPath = path + ".filtered";
@@ -20,18 +18,8 @@ internal static partial class IlLinkedRangeParser
         try
         {
             using (var reader = new StreamReader(path))
-            await using (var file = new FileStream(
-                filteredPath,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                64 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan))
-            await using (var writer = new StreamWriter(
-                file,
-                new UTF8Encoding(false),
-                64 * 1024,
-                leaveOpen: true) { NewLine = "\n" })
+            await using (var file = new FileStream(filteredPath, FileMode.Create, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            await using (var writer = new StreamWriter(file, new UTF8Encoding(false), 64 * 1024, leaveOpen: true) { NewLine = "\n" })
             {
                 var visibleLineNumber = 0;
                 while (await reader.ReadLineAsync(cancellationToken) is { } line)
@@ -39,14 +27,7 @@ internal static partial class IlLinkedRangeParser
                     var match = SequencePointPattern().Match(line);
                     if (match.Success && result.Count < MaximumLinkedRanges)
                     {
-                        result.Add(new ProcessorLinkedRange(
-                            PortablePdbDebugInfoProvider.SanitizeDocumentPath(match.Groups[5].Value),
-                            new ProcessorTextRange(
-                                ParseCoordinate(match.Groups[1].Value),
-                                ParseCoordinate(match.Groups[2].Value),
-                                ParseCoordinate(match.Groups[3].Value),
-                                ParseCoordinate(match.Groups[4].Value)),
-                            new ProcessorTextRange(visibleLineNumber, 0, visibleLineNumber, 1)));
+                        result.Add(new ProcessorLinkedRange(PortablePdbDebugInfoProvider.SanitizeDocumentPath(match.Groups[5].Value), new ProcessorTextRange(ParseCoordinate(match.Groups[1].Value), ParseCoordinate(match.Groups[2].Value), ParseCoordinate(match.Groups[3].Value), ParseCoordinate(match.Groups[4].Value)), new ProcessorTextRange(visibleLineNumber, 0, visibleLineNumber, 1)));
                     }
                     if (SequencePointCommentPattern().IsMatch(line))
                         continue;
@@ -73,8 +54,7 @@ internal static partial class IlLinkedRangeParser
         }
     }
 
-    private static int ParseCoordinate(string value) =>
-        Math.Max(0, int.Parse(value, NumberStyles.None, CultureInfo.InvariantCulture) - 1);
+    private static int ParseCoordinate(string value) => Math.Max(0, int.Parse(value, NumberStyles.None, CultureInfo.InvariantCulture) - 1);
 
     private static bool HasFinalLineBreak(string path)
     {
@@ -85,15 +65,11 @@ internal static partial class IlLinkedRangeParser
         return stream.ReadByte() is '\r' or '\n';
     }
 
-    [GeneratedRegex(
-        @"^\s*// sequence point: \(line (\d+), col (\d+)\) to \(line (\d+), col (\d+)\) in (.+)$",
-        RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^\s*// sequence point: \(line (\d+), col (\d+)\) to \(line (\d+), col (\d+)\) in (.+)$", RegexOptions.CultureInvariant)]
     private static partial Regex SequencePointPattern();
 
     [GeneratedRegex(@"^\s*// sequence point(?::.*)?$", RegexOptions.CultureInvariant)]
     private static partial Regex SequencePointCommentPattern();
 }
 
-internal sealed record IlLinkedDocument(
-    IReadOnlyList<ProcessorLinkedRange> LinkedRanges,
-    long CharactersWritten);
+internal sealed record IlLinkedDocument(IReadOnlyList<ProcessorLinkedRange> LinkedRanges, long CharactersWritten);

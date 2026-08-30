@@ -15,9 +15,7 @@ internal static class ProcessorEngine
 {
     private const string NetFxMixedPeArtifactFormat = "dotnet-framework-mixed-pe-v1";
 
-    public static async Task<ProcessorResponse> ExecuteAsync(
-        ProcessorRequest request,
-        CancellationToken cancellationToken)
+    public static async Task<ProcessorResponse> ExecuteAsync(ProcessorRequest request, CancellationToken cancellationToken)
     {
         Validate(request);
         return request.Operation switch
@@ -32,59 +30,25 @@ internal static class ProcessorEngine
 
     public static ProcessorResponse ToFailureResponse(Exception exception) => exception switch
     {
-        ProcessorLimitExceededException => Response(
-            ProcessorOutcome.LimitExceeded,
-            "artifacts-default",
-            ProcessorProtocol.IlSpyVersion,
-            "text/plain",
-            publicMessage: "Artifact processing exceeded a configured limit."),
-        BadImageFormatException or InvalidDataException => Response(
-            ProcessorOutcome.InvalidArtifact,
-            "artifacts-default",
-            ProcessorProtocol.IlSpyVersion,
-            "text/plain",
-            publicMessage: "The artifact is not a supported managed PE or portable PDB."),
-        OutOfMemoryException => Response(
-            ProcessorOutcome.LimitExceeded,
-            "artifacts-default",
-            ProcessorProtocol.IlSpyVersion,
-            "text/plain",
-            publicMessage: "Artifact processing exceeded its memory limit."),
-        _ => Response(
-            ProcessorOutcome.Failed,
-            "artifacts-default",
-            ProcessorProtocol.IlSpyVersion,
-            "text/plain",
-            publicMessage: $"The artifact processor failed ({exception.GetType().Name}).")
+        ProcessorLimitExceededException => Response(ProcessorOutcome.LimitExceeded, "artifacts-default", ProcessorProtocol.IlSpyVersion, "text/plain", publicMessage: "Artifact processing exceeded a configured limit."),
+        BadImageFormatException or InvalidDataException => Response(ProcessorOutcome.InvalidArtifact, "artifacts-default", ProcessorProtocol.IlSpyVersion, "text/plain", publicMessage: "The artifact is not a supported managed PE or portable PDB."),
+        OutOfMemoryException => Response(ProcessorOutcome.LimitExceeded, "artifacts-default", ProcessorProtocol.IlSpyVersion, "text/plain", publicMessage: "Artifact processing exceeded its memory limit."),
+        _ => Response(ProcessorOutcome.Failed, "artifacts-default", ProcessorProtocol.IlSpyVersion, "text/plain", publicMessage: $"The artifact processor failed ({exception.GetType().Name}).")
     };
 
-    private static async Task<ProcessorResponse> RenderIlAsync(
-        ProcessorRequest request,
-        CancellationToken cancellationToken)
+    private static async Task<ProcessorResponse> RenderIlAsync(ProcessorRequest request, CancellationToken cancellationToken)
     {
         long charactersWritten;
         {
-            await using var file = new FileStream(
-                request.OutputPath,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 64 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            await using var streamWriter = new StreamWriter(
-                file,
-                new UTF8Encoding(false),
-                64 * 1024,
-                leaveOpen: true)
+            await using var file = new FileStream(request.OutputPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await using var streamWriter = new StreamWriter(file, new UTF8Encoding(false), 64 * 1024, leaveOpen: true)
             {
                 NewLine = "\n"
             };
             var writer = new LimitedTextWriter(streamWriter, request.MaxCharacters);
             writer.WriteLine($"// ICSharpCode.Decompiler {ProcessorProtocol.IlSpyVersion}");
             using var module = new PEFile(request.AssemblyPath, PEStreamOptions.PrefetchEntireImage);
-            using var resolver = new BoundedAssemblyResolver(
-                Path.GetDirectoryName(request.AssemblyPath)!,
-                request.ReferenceRoots);
+            using var resolver = new BoundedAssemblyResolver(Path.GetDirectoryName(request.AssemblyPath)!, request.ReferenceRoots);
             using var debugInfo = PortablePdbDebugInfoProvider.TryOpen(request.PortablePdbPath);
             var output = new PlainTextOutput(writer)
             {
@@ -114,28 +78,16 @@ internal static class ProcessorEngine
         IReadOnlyList<ProcessorLinkedRange> linkedRanges = [];
         if (request.IncludeSequencePoints)
         {
-            var linkedDocument = await IlLinkedRangeParser.ParseAndStripAsync(
-                request.OutputPath,
-                cancellationToken);
+            var linkedDocument = await IlLinkedRangeParser.ParseAndStripAsync(request.OutputPath, cancellationToken);
             linkedRanges = linkedDocument.LinkedRanges;
             charactersWritten = linkedDocument.CharactersWritten;
         }
-        return Response(
-            ProcessorOutcome.Succeeded,
-            "icsharpcode-decompiler-il",
-            ProcessorProtocol.IlSpyVersion,
-            "text/x-il",
-            charactersWritten,
-            linkedRanges);
+        return Response(ProcessorOutcome.Succeeded, "icsharpcode-decompiler-il", ProcessorProtocol.IlSpyVersion, "text/x-il", charactersWritten, linkedRanges);
     }
 
-    private static async Task<ProcessorResponse> RenderCSharpAsync(
-        ProcessorRequest request,
-        CancellationToken cancellationToken)
+    private static async Task<ProcessorResponse> RenderCSharpAsync(ProcessorRequest request, CancellationToken cancellationToken)
     {
-        using var resolver = new BoundedAssemblyResolver(
-            Path.GetDirectoryName(request.AssemblyPath)!,
-            request.ReferenceRoots);
+        using var resolver = new BoundedAssemblyResolver(Path.GetDirectoryName(request.AssemblyPath)!, request.ReferenceRoots);
         using var debugInfo = PortablePdbDebugInfoProvider.TryOpen(request.PortablePdbPath);
         var settings = CreateCSharpDecompilerSettings(request.IncludeCompilerGeneratedMembers);
         var decompiler = new CSharpDecompiler(request.AssemblyPath, resolver, settings)
@@ -146,10 +98,8 @@ internal static class ProcessorEngine
         var peachPieAssembly = IsPeachPieAssembly(request.AssemblyPath);
         var cppCliMixedPe = IsCppCliMixedPe(request);
         var syntaxTree = peachPieAssembly
-            ? DecompilePeachPieUserTypes(decompiler, request.AssemblyPath)
-            : cppCliMixedPe
-                ? DecompileCppCliUserSurface(decompiler, request.AssemblyPath)
-                : decompiler.DecompileWholeModuleAsSingleFile();
+            ? DecompilePeachPieUserTypes(decompiler, request.AssemblyPath) : cppCliMixedPe
+                ? DecompileCppCliUserSurface(decompiler, request.AssemblyPath) : decompiler.DecompileWholeModuleAsSingleFile();
         if (!request.IncludeCompilerGeneratedMembers)
             RemoveCompilerGeneratedMembers(syntaxTree);
         var source = syntaxTree.ToString(CreateCSharpFormattingOptions());
@@ -162,49 +112,23 @@ internal static class ProcessorEngine
             header += "// MSVC C++/CLI CRT and compiler bootstrap members are omitted.\n";
         if (header.Length + source.Length > request.MaxCharacters)
             throw new ProcessorLimitExceededException();
-        await File.WriteAllTextAsync(
-            request.OutputPath,
-            header + source.Replace("\r\n", "\n", StringComparison.Ordinal),
-            new UTF8Encoding(false),
-            cancellationToken);
-        return Response(
-            ProcessorOutcome.Succeeded,
-            "icsharpcode-decompiler-csharp",
-            ProcessorProtocol.IlSpyVersion,
-            "text/x-csharp",
-            header.Length + source.Length);
+        await File.WriteAllTextAsync(request.OutputPath, header + source.Replace("\r\n", "\n", StringComparison.Ordinal), new UTF8Encoding(false), cancellationToken);
+        return Response(ProcessorOutcome.Succeeded, "icsharpcode-decompiler-csharp", ProcessorProtocol.IlSpyVersion, "text/x-csharp", header.Length + source.Length);
     }
 
     private static bool IsPeachPieAssembly(string assemblyPath)
     {
-        using var stream = new FileStream(
-            assemblyPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 16 * 1024,
-            FileOptions.SequentialScan);
+        using var stream = new FileStream(assemblyPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 16 * 1024, FileOptions.SequentialScan);
         using var peReader = new PEReader(stream, PEStreamOptions.PrefetchMetadata);
         if (!peReader.HasMetadata)
             return false;
         var metadata = peReader.GetMetadataReader();
-        return metadata.AssemblyReferences.Any(handle =>
-            StringComparer.Ordinal.Equals(
-                metadata.GetString(metadata.GetAssemblyReference(handle).Name),
-                "Peachpie.Runtime"));
+        return metadata.AssemblyReferences.Any(handle => StringComparer.Ordinal.Equals(metadata.GetString(metadata.GetAssemblyReference(handle).Name), "Peachpie.Runtime"));
     }
 
-    private static SyntaxTree DecompilePeachPieUserTypes(
-        CSharpDecompiler decompiler,
-        string assemblyPath)
+    private static SyntaxTree DecompilePeachPieUserTypes(CSharpDecompiler decompiler, string assemblyPath)
     {
-        using var stream = new FileStream(
-            assemblyPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 16 * 1024,
-            FileOptions.SequentialScan);
+        using var stream = new FileStream(assemblyPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 16 * 1024, FileOptions.SequentialScan);
         using var peReader = new PEReader(stream, PEStreamOptions.PrefetchMetadata);
         var metadata = peReader.GetMetadataReader();
         var userTypes = metadata.TypeDefinitions.Where(handle =>
@@ -218,23 +142,14 @@ internal static class ProcessorEngine
         return decompiler.DecompileTypes(userTypes);
     }
 
-    private static SyntaxTree DecompileCppCliUserSurface(
-        CSharpDecompiler decompiler,
-        string assemblyPath)
+    private static SyntaxTree DecompileCppCliUserSurface(CSharpDecompiler decompiler, string assemblyPath)
     {
-        using var stream = new FileStream(
-            assemblyPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 16 * 1024,
-            FileOptions.SequentialScan);
+        using var stream = new FileStream(assemblyPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 16 * 1024, FileOptions.SequentialScan);
         using var peReader = new PEReader(stream, PEStreamOptions.PrefetchMetadata);
         var metadata = peReader.GetMetadataReader();
         var entities = CppCliUserEntities(metadata).ToArray();
         return entities.Length == 0
-            ? decompiler.DecompileWholeModuleAsSingleFile()
-            : decompiler.Decompile(entities);
+            ? decompiler.DecompileWholeModuleAsSingleFile() : decompiler.Decompile(entities);
     }
 
     private static IEnumerable<EntityHandle> CppCliUserEntities(MetadataReader metadata)
@@ -259,22 +174,13 @@ internal static class ProcessorEngine
         }
     }
 
-    private static bool IsCppCliUserMethod(
-        MetadataReader metadata,
-        MethodDefinitionHandle methodHandle)
+    private static bool IsCppCliUserMethod(MetadataReader metadata, MethodDefinitionHandle methodHandle)
     {
         var method = metadata.GetMethodDefinition(methodHandle);
         var name = metadata.GetString(method.Name);
         if (name is "main" or "wmain")
             return true;
-        if ((method.Attributes & (System.Reflection.MethodAttributes.SpecialName |
-                                  System.Reflection.MethodAttributes.RTSpecialName |
-                                  System.Reflection.MethodAttributes.PinvokeImpl)) != 0 ||
-            name.Length == 0 ||
-            name[0] is '_' or '?' or '<' ||
-            name.Contains("CRT", StringComparison.Ordinal) ||
-            name.Contains("<CrtImplementationDetails>", StringComparison.Ordinal) ||
-            name.Contains("<CppImplementationDetails>", StringComparison.Ordinal))
+        if ((method.Attributes & (System.Reflection.MethodAttributes.SpecialName | System.Reflection.MethodAttributes.RTSpecialName | System.Reflection.MethodAttributes.PinvokeImpl)) != 0 || name.Length == 0 || name[0] is '_' or '?' or '<' || name.Contains("CRT", StringComparison.Ordinal) || name.Contains("<CrtImplementationDetails>", StringComparison.Ordinal) || name.Contains("<CppImplementationDetails>", StringComparison.Ordinal))
         {
             return false;
         }
@@ -288,9 +194,7 @@ internal static class ProcessorEngine
         return true;
     }
 
-    private static bool IsCppCliBootstrapType(
-        MetadataReader metadata,
-        TypeDefinition type)
+    private static bool IsCppCliBootstrapType(MetadataReader metadata, TypeDefinition type)
     {
         var name = metadata.GetString(type.Name);
         var @namespace = metadata.GetString(type.Namespace);
@@ -314,9 +218,7 @@ internal static class ProcessorEngine
                    "_IMAGE_DOS_HEADER" or "_IMAGE_NT_HEADERS64";
     }
 
-    private static void WriteCppCliUserIl(
-        ReflectionDisassembler disassembler,
-        PEFile module)
+    private static void WriteCppCliUserIl(ReflectionDisassembler disassembler, PEFile module)
     {
         disassembler.WriteAssemblyHeader(module);
         disassembler.WriteAssemblyReferences(module.Metadata);
@@ -340,10 +242,7 @@ internal static class ProcessorEngine
 
     private static DecompilerSettings CreateCSharpDecompilerSettings(bool includeCompilerGeneratedMembers)
     {
-        var settings = new DecompilerSettings
-        {
-            ThrowOnAssemblyResolveErrors = false
-        };
+        var settings = new DecompilerSettings { ThrowOnAssemblyResolveErrors = false };
         if (!includeCompilerGeneratedMembers)
             return settings;
 
@@ -379,10 +278,7 @@ internal static class ProcessorEngine
 
     private static void RemoveCompilerGeneratedMembers(SyntaxTree syntaxTree)
     {
-        var generated = syntaxTree.Descendants
-            .OfType<EntityDeclaration>()
-            .Where(IsCompilerGenerated)
-            .ToArray();
+        var generated = syntaxTree.Descendants.OfType<EntityDeclaration>().Where(IsCompilerGenerated).ToArray();
         foreach (var declaration in generated)
         {
             if (!declaration.Ancestors.OfType<EntityDeclaration>().Any(IsCompilerGenerated))
@@ -391,9 +287,7 @@ internal static class ProcessorEngine
     }
 
     private static bool IsCompilerGenerated(EntityDeclaration declaration) =>
-        declaration.Attributes
-            .SelectMany(static section => section.Attributes)
-            .Any(static attribute =>
+        declaration.Attributes.SelectMany(static section => section.Attributes).Any(static attribute =>
             {
                 var typeName = attribute.Type.ToString();
                 return typeName.EndsWith("CompilerGenerated", StringComparison.Ordinal) ||
@@ -403,28 +297,10 @@ internal static class ProcessorEngine
     private static ProcessorResponse RewriteRuntimeInstrumentation(ProcessorRequest request)
     {
         var result = RuntimeInstrumentationRewriter.Rewrite(request);
-        return Response(
-            ProcessorOutcome.Succeeded,
-            "runtime-instrumentation-v1",
-            ProcessorProtocol.RuntimeInstrumentationVersion,
-            "application/vnd.sharplabnext.managed-pe",
-            publicMessage: result.PublicMessage,
-            rewriteApplied: result.RewriteApplied,
-            instrumentationPointCount: result.InstrumentationPointCount);
+        return Response(ProcessorOutcome.Succeeded, "runtime-instrumentation-v1", ProcessorProtocol.RuntimeInstrumentationVersion, "application/vnd.sharplabnext.managed-pe", publicMessage: result.PublicMessage, rewriteApplied: result.RewriteApplied, instrumentationPointCount: result.InstrumentationPointCount);
     }
 
-    private static ProcessorResponse Response(
-        ProcessorOutcome outcome,
-        string processorId,
-        string processorVersion,
-        string mediaType,
-        long outputCharacters = 0,
-        IReadOnlyList<ProcessorLinkedRange>? linkedRanges = null,
-        IReadOnlyList<ProcessorFinding>? findings = null,
-        bool truncated = false,
-        string? publicMessage = null,
-        bool? rewriteApplied = null,
-        int? instrumentationPointCount = null) => new(
+    private static ProcessorResponse Response(ProcessorOutcome outcome, string processorId, string processorVersion, string mediaType, long outputCharacters = 0, IReadOnlyList<ProcessorLinkedRange>? linkedRanges = null, IReadOnlyList<ProcessorFinding>? findings = null, bool truncated = false, string? publicMessage = null, bool? rewriteApplied = null, int? instrumentationPointCount = null) => new(
             ProcessorProtocol.Version,
             outcome,
             processorId,
@@ -443,16 +319,13 @@ internal static class ProcessorEngine
         ArgumentNullException.ThrowIfNull(request);
         if (request.ProtocolVersion != ProcessorProtocol.Version)
             throw new InvalidDataException("The processor protocol version is unsupported.");
-        if (request.ArtifactFormat is not ("dotnet-managed-pe-v1" or
-            "dotnet-framework-managed-pe-v1" or NetFxMixedPeArtifactFormat))
+        if (request.ArtifactFormat is not ("dotnet-managed-pe-v1" or "dotnet-framework-managed-pe-v1" or NetFxMixedPeArtifactFormat))
         {
             throw new InvalidDataException("The artifact format is unsupported.");
         }
-        if (StringComparer.Ordinal.Equals(request.ArtifactFormat, NetFxMixedPeArtifactFormat) &&
-            request.Operation is not (ProcessorOperation.Il or ProcessorOperation.DecompiledCSharp))
+        if (StringComparer.Ordinal.Equals(request.ArtifactFormat, NetFxMixedPeArtifactFormat) && request.Operation is not (ProcessorOperation.Il or ProcessorOperation.DecompiledCSharp))
         {
-            throw new InvalidDataException(
-                "C++/CLI mixed PE artifacts support only IL and Decompiled C# rendering.");
+            throw new InvalidDataException("C++/CLI mixed PE artifacts support only IL and Decompiled C# rendering.");
         }
         if (!Path.IsPathFullyQualified(request.AssemblyPath) || !File.Exists(request.AssemblyPath))
             throw new InvalidDataException("The input assembly is unavailable.");
@@ -460,13 +333,11 @@ internal static class ProcessorEngine
             throw new InvalidDataException("The output path is invalid.");
         if (request.PortablePdbOutputPath is not null && !Path.IsPathFullyQualified(request.PortablePdbOutputPath))
             throw new InvalidDataException("The portable PDB output path is invalid.");
-        if (request.PortablePdbPath is not null &&
-            (!Path.IsPathFullyQualified(request.PortablePdbPath) || !File.Exists(request.PortablePdbPath)))
+        if (request.PortablePdbPath is not null && (!Path.IsPathFullyQualified(request.PortablePdbPath) || !File.Exists(request.PortablePdbPath)))
         {
             throw new InvalidDataException("The portable PDB is unavailable.");
         }
-        if (request.ReferenceRoots.Count > 16 || request.ReferenceRoots.Any(path =>
-                !Path.IsPathFullyQualified(path) || !Directory.Exists(path)))
+        if (request.ReferenceRoots.Count > 16 || request.ReferenceRoots.Any(path => !Path.IsPathFullyQualified(path) || !Directory.Exists(path)))
         {
             throw new InvalidDataException("A reference root is invalid.");
         }

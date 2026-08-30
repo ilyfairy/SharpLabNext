@@ -22,11 +22,7 @@ internal static class CppCliTestSettings
     }
 
     public static CppCliWorkerSettings CreateSettings(string root) => new(
-        new CppCliWorkerIdentity(
-            "test-release",
-            CompilerVersion,
-            null,
-            $"sha256:{new string('a', 64)}"),
+        new CppCliWorkerIdentity("test-release", CompilerVersion, null, $"sha256:{new string('a', 64)}"),
         new CppCliReferenceSetIdentity(
             $"sha256:{new string('b', 64)}",
             $"sha256:{new string('c', 64)}",
@@ -36,80 +32,23 @@ internal static class CppCliTestSettings
         Path.Combine(root, "cl"));
 
     public static LanguageWorkerCapabilityManifest LoadManifest() =>
-        LanguageWorkerCapabilityManifestSerializer.Load(Path.Combine(
-            RepositoryRoot,
-            "src",
-            "Workers",
-            "CppCli",
-            "SharpLabNext.Worker.CppCli",
-            "language-worker.json"));
+        LanguageWorkerCapabilityManifestSerializer.Load(Path.Combine(RepositoryRoot, "src", "Workers", "CppCli", "SharpLabNext.Worker.CppCli", "language-worker.json"));
 
-    public static BuildRequest CreateRequest(
-        BuildTarget target,
-        string source = "using namespace System; int main() { Console::WriteLine(42); return 0; }")
+    public static BuildRequest CreateRequest(BuildTarget target, string source = "using namespace System; int main() { Console::WriteLine(42); return 0; }")
     {
-        var options = new BuildOptions(
-            BuildConfiguration.Release,
-            Optimize: true,
-            BuildOutputKind.Console,
-            AllowUnsafe: false,
-            EmitPortablePdb: false,
-            NullableContextMode.Disable,
-            LanguageVersion: CompilerVersion);
-        var workspace = new WorkspaceSnapshot(
-            ContractSchemaVersions.WorkspaceSnapshot,
-            7,
-            3,
-            CppCliToolchain.LanguageId,
-            [new WorkspaceFile("Program.cpp", 1, source)],
-            "Program.cpp",
-            ["Program.cpp"],
-            CppCliToolchain.ReferenceSetId,
-            options);
-        return new BuildRequest(
-            $"request-{Guid.NewGuid():N}",
-            $"idempotency-{Guid.NewGuid():N}",
-            "pipeline-cppcli-test",
-            CppCliToolchain.ToolchainId,
-            CppCliToolchain.ReferenceSetId,
-            workspace,
-            DateTimeOffset.UtcNow.AddSeconds(30),
-            options,
-            target);
+        var options = new BuildOptions(BuildConfiguration.Release, Optimize: true, BuildOutputKind.Console, AllowUnsafe: false, EmitPortablePdb: false, NullableContextMode.Disable, LanguageVersion: CompilerVersion);
+        var workspace = new WorkspaceSnapshot(ContractSchemaVersions.WorkspaceSnapshot, 7, 3, CppCliToolchain.LanguageId, [new WorkspaceFile("Program.cpp", 1, source)], "Program.cpp", ["Program.cpp"], CppCliToolchain.ReferenceSetId, options);
+        return new BuildRequest($"request-{Guid.NewGuid():N}", $"idempotency-{Guid.NewGuid():N}", "pipeline-cppcli-test", CppCliToolchain.ToolchainId, CppCliToolchain.ReferenceSetId, workspace, DateTimeOffset.UtcNow.AddSeconds(30), options, target);
     }
 
     public static byte[] CreateMixedModePe()
     {
         var metadata = new MetadataBuilder();
-        metadata.AddModule(
-            0,
-            metadata.GetOrAddString(CppCliToolchain.OutputFileName),
-            metadata.GetOrAddGuid(Guid.Parse("318d0bae-3e4e-4d6c-9316-df9f365d9112")),
-            default,
-            default);
-        metadata.AddAssembly(
-            metadata.GetOrAddString(CppCliToolchain.AssemblyName),
-            new Version(1, 0, 0, 0),
-            default,
-            default,
-            (AssemblyFlags)0,
-            AssemblyHashAlgorithm.Sha256);
-        metadata.AddTypeDefinition(
-            TypeAttributes.NotPublic,
-            default,
-            metadata.GetOrAddString("<Module>"),
-            default,
-            MetadataTokens.FieldDefinitionHandle(1),
-            MetadataTokens.MethodDefinitionHandle(1));
+        metadata.AddModule(0, metadata.GetOrAddString(CppCliToolchain.OutputFileName), metadata.GetOrAddGuid(Guid.Parse("318d0bae-3e4e-4d6c-9316-df9f365d9112")), default, default);
+        metadata.AddAssembly(metadata.GetOrAddString(CppCliToolchain.AssemblyName), new Version(1, 0, 0, 0), default, default, (AssemblyFlags)0, AssemblyHashAlgorithm.Sha256);
+        metadata.AddTypeDefinition(TypeAttributes.NotPublic, default, metadata.GetOrAddString("<Module>"), default, MetadataTokens.FieldDefinitionHandle(1), MetadataTokens.MethodDefinitionHandle(1));
 
-        var peBuilder = new ManagedPEBuilder(
-            new PEHeaderBuilder(
-                machine: Machine.Amd64,
-                imageCharacteristics: Characteristics.ExecutableImage | Characteristics.LargeAddressAware,
-                subsystem: Subsystem.WindowsCui),
-            new MetadataRootBuilder(metadata),
-            new BlobBuilder(),
-            flags: (CorFlags)0);
+        var peBuilder = new ManagedPEBuilder(new PEHeaderBuilder(machine: Machine.Amd64, imageCharacteristics: Characteristics.ExecutableImage | Characteristics.LargeAddressAware, subsystem: Subsystem.WindowsCui), new MetadataRootBuilder(metadata), new BlobBuilder(), flags: (CorFlags)0);
         var image = new BlobBuilder();
         peBuilder.Serialize(image);
         return image.ToArray();
@@ -125,8 +64,7 @@ internal static class CppCliTestSettings
                     Directory.Delete(root, recursive: true);
                 return;
             }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException && attempt < 9)
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException && attempt < 9)
             {
                 Thread.Sleep(50);
             }
@@ -150,9 +88,7 @@ internal sealed class FakeCppCliCompilerProcess(CppCliCompilerInvocation invocat
 {
     public int CallCount { get; private set; }
 
-    public Task<CppCliCompilerInvocation> CompileAsync(
-        ValidatedCppCliWorkspace workspace,
-        CancellationToken cancellationToken)
+    public Task<CppCliCompilerInvocation> CompileAsync(ValidatedCppCliWorkspace workspace, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         CallCount++;

@@ -5,20 +5,16 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const manifestPath = path.join(repositoryRoot, 'profiles', 'runtime-wine-packages.json')
 const lockPath = path.join(repositoryRoot, 'profiles', 'lock.json')
 const expectedPackageListSha256 =
   'sha256:fa83c245764fc09102029b249f5149a48baeda53a40c0432de973ebe09e39dee'
 const signingFingerprint = 'F6ECB3762474EDA9D21B7022871920D1991BC93C'
 
-function loadManifest() {
-  return JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
-}
+function loadManifest() { return JSON.parse(fs.readFileSync(manifestPath, 'utf8')); }
 
-function indexIdentity(snapshotId, suite, kind, component, path_) {
-  return `${snapshotId}\0${suite}\0${kind}\0${component}\0${path_}`
-}
+function indexIdentity(snapshotId, suite, kind, component, path_) { return `${snapshotId}\0${suite}\0${kind}\0${component}\0${path_}`; }
 
 test('Wine package manifest locks the complete signed no-i386 closure', () => {
   const manifest = loadManifest()

@@ -11,18 +11,12 @@ public sealed class PascalCaseQueryTests
         var context = new DefaultHttpContext();
         context.Request.QueryString = new QueryString("?FromSequence=4");
 
-        Assert.True(PascalCaseQuery.TryGetOptionalInt64(
-            context.Request,
-            "FromSequence",
-            out var value));
+        Assert.True(PascalCaseQuery.TryGetOptionalInt64(context.Request, "FromSequence", out var value));
         Assert.Equal(4, value);
 
         context.Request.QueryString = new QueryString("?fromSequence=4");
 
-        Assert.False(PascalCaseQuery.TryGetOptionalInt64(
-            context.Request,
-            "FromSequence",
-            out value));
+        Assert.False(PascalCaseQuery.TryGetOptionalInt64(context.Request, "FromSequence", out value));
         Assert.Null(value);
     }
 
@@ -32,17 +26,11 @@ public sealed class PascalCaseQueryTests
         var context = new DefaultHttpContext();
         context.Request.QueryString = new QueryString("?ReturnPath=%2F%23one&ReturnPath=%2F%23two");
 
-        Assert.False(PascalCaseQuery.TryGetOptionalSingle(
-            context.Request,
-            "ReturnPath",
-            out var value));
+        Assert.False(PascalCaseQuery.TryGetOptionalSingle(context.Request, "ReturnPath", out var value));
         Assert.Null(value);
 
         context.Request.QueryString = new QueryString("?returnPath=%2F%23one");
-        Assert.False(PascalCaseQuery.TryGetOptionalSingle(
-            context.Request,
-            "ReturnPath",
-            out value));
+        Assert.False(PascalCaseQuery.TryGetOptionalSingle(context.Request, "ReturnPath", out value));
         Assert.Null(value);
     }
 }

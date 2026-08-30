@@ -52,16 +52,7 @@ vi.mock('monaco-editor/esm/vs/basic-languages/vb/vb.js', () => ({
   language: { tokenizer: { root: [] } },
 }))
 
-import {
-  assemblyTokens,
-  cppCliTokens,
-  csharpVsTokens,
-  editorLanguageId,
-  ilTokens,
-  javascriptTokens,
-  registerSourceLanguages,
-  sourceEditorTheme,
-} from './languageRegistration'
+import { assemblyTokens, cppCliTokens, csharpVsTokens, editorLanguageId, ilTokens, javascriptTokens, registerSourceLanguages, sourceEditorTheme } from './languageRegistration'
 
 describe('Monaco language registration', () => {
   beforeAll(() => registerSourceLanguages())
@@ -120,25 +111,10 @@ describe('Monaco language registration', () => {
 
   it('keeps C# predefined aliases and current contextual keywords in the keyword palette', () => {
     expect(mocks.setMonarchTokensProvider).toHaveBeenCalledWith('csharp', csharpVsTokens)
-    expect(csharpVsTokens.keywords).toEqual(
-      expect.arrayContaining([
-        'int',
-        'double',
-        'string',
-        'void',
-        'nint',
-        'nuint',
-        'record',
-        'required',
-        'scoped',
-      ]),
-    )
+    expect(csharpVsTokens.keywords).toEqual(expect.arrayContaining(['int', 'double', 'string', 'void', 'nint', 'nuint', 'record', 'required', 'scoped']))
     expect(csharpVsTokens.tokenizer.root).toEqual(
       expect.arrayContaining([
-        [
-          /(class|struct|interface|enum|record)(\s+)([A-Za-z_]\w*)/,
-          ['keyword', 'white', 'type.identifier'],
-        ],
+        [/(class|struct|interface|enum|record)(\s+)([A-Za-z_]\w*)/, ['keyword', 'white', 'type.identifier']],
         [/[A-Z][A-Za-z0-9_]*(?=\s*(?:\.|<|\[|\?|\s+[A-Za-z_]\w*))/, 'type.identifier'],
       ]),
     )
@@ -151,10 +127,7 @@ describe('Monaco language registration', () => {
     expect(mocks.defineTheme).toHaveBeenCalledWith(
       sourceEditorTheme,
       expect.objectContaining({
-        rules: expect.arrayContaining([
-          expect.objectContaining({ token: 'keyword', foreground: '0000FF' }),
-          expect.objectContaining({ token: 'type', foreground: '2B91AF' }),
-        ]),
+        rules: expect.arrayContaining([expect.objectContaining({ token: 'keyword', foreground: '0000FF' }), expect.objectContaining({ token: 'type', foreground: '2B91AF' })]),
       }),
     )
   })
@@ -233,7 +206,10 @@ describe('Monaco language registration', () => {
       sourceEditorTheme,
       expect.objectContaining({
         rules: expect.arrayContaining([
-          expect.objectContaining({ token: 'stringEscapeCharacter', foreground: 'EE0000' }),
+          expect.objectContaining({
+            token: 'stringEscapeCharacter',
+            foreground: 'EE0000',
+          }),
         ]),
       }),
     )
@@ -244,23 +220,11 @@ describe('Monaco language registration', () => {
     expect(ilTokens.tokenizer.root).toEqual(
       expect.arrayContaining([
         [/^(\s*)([A-Za-z_][\w.$]*)(:(?!:))/, ['white', 'label', 'delimiter']],
-        [
-          /^(\s*)(\.assembly)(\s+)(extern)(\s+)([^\s{]+)/,
-          ['white', 'keyword', 'white', 'keyword', 'white', 'macro'],
-        ],
+        [/^(\s*)(\.assembly)(\s+)(extern)(\s+)([^\s{]+)/, ['white', 'keyword', 'white', 'keyword', 'white', 'macro']],
         [/^(\s*)(\.assembly)(\s+)([^\s{]+)/, ['white', 'keyword', 'white', 'macro']],
-        [
-          /(\[)((?!(?:in|out|opt|retval)\])[^\]\r\n]+)(\])(?=[A-Za-z_'<])/,
-          ['delimiter', 'macro', 'delimiter'],
-        ],
-        [
-          /([A-Za-z_][\w.`]*(?:\.[A-Za-z_][\w.`]*)*)(::)(\.[A-Za-z_][\w.]*)/,
-          ['type.identifier', 'delimiter', 'keyword'],
-        ],
-        [
-          /([A-Za-z_][\w.`]*(?:\.[A-Za-z_][\w.`]*)*)(::)([A-Za-z_.$<>][\w.$<>`]*)/,
-          ['type.identifier', 'delimiter', 'function'],
-        ],
+        [/(\[)((?!(?:in|out|opt|retval)\])[^\]\r\n]+)(\])(?=[A-Za-z_'<])/, ['delimiter', 'macro', 'delimiter']],
+        [/([A-Za-z_][\w.`]*(?:\.[A-Za-z_][\w.`]*)*)(::)(\.[A-Za-z_][\w.]*)/, ['type.identifier', 'delimiter', 'keyword']],
+        [/([A-Za-z_][\w.`]*(?:\.[A-Za-z_][\w.`]*)*)(::)([A-Za-z_.$<>][\w.$<>`]*)/, ['type.identifier', 'delimiter', 'function']],
         [/\.[A-Za-z_][\w.]*/, 'keyword'],
       ]),
     )
@@ -269,14 +233,7 @@ describe('Monaco language registration', () => {
     expect(labelRule[0].test('IL_0000: ret')).toBe(true)
     expect(labelRule[0].test('System.Type::Method')).toBe(false)
 
-    const assemblyScopeRule = rootRules.find(
-      (rule) =>
-        Array.isArray(rule) &&
-        rule[0] instanceof RegExp &&
-        String(rule[0]).includes('[^\\]\\r\\n]+') &&
-        Array.isArray(rule[1]) &&
-        rule[1].includes('macro'),
-    ) as [RegExp, unknown]
+    const assemblyScopeRule = rootRules.find((rule) => Array.isArray(rule) && rule[0] instanceof RegExp && String(rule[0]).includes('[^\\]\\r\\n]+') && Array.isArray(rule[1]) && rule[1].includes('macro')) as [RegExp, unknown]
     expect(assemblyScopeRule[0].test('[System.Runtime]System.Object')).toBe(true)
     expect(assemblyScopeRule[0].test('[out] int32')).toBe(false)
     expect(assemblyScopeRule[0].test('[out]int32')).toBe(false)
@@ -288,7 +245,10 @@ describe('Monaco language registration', () => {
         rules: expect.arrayContaining([
           expect.objectContaining({ token: 'keyword', foreground: '0000FF' }),
           expect.objectContaining({ token: 'macro', foreground: 'AF00DB' }),
-          expect.objectContaining({ token: 'type.identifier', foreground: '2B91AF' }),
+          expect.objectContaining({
+            token: 'type.identifier',
+            foreground: '2B91AF',
+          }),
         ]),
       }),
     )

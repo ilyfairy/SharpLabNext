@@ -7,12 +7,12 @@
  * image nor the Windows host ever carries a raw prefix copy.
  */
 
-import { spawnSync } from 'node:child_process'
-import crypto from 'node:crypto'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   isDigestPinnedImageReference,
@@ -22,11 +22,7 @@ import {
 import { pinnedDockerfileFrontendDirective } from './dockerfile-frontend.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const installerManifestPath = path.join(
-  repositoryRoot,
-  'profiles',
-  'runtime-framework-installers.json',
-)
+const installerManifestPath = path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json')
 const matrixStrategy = 'shared-framework-prefix-input-v1'
 const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE'
 const contentSourceIdentityMode = 'content'
@@ -41,15 +37,9 @@ const imageDigest = /^sha256:[0-9a-f]{64}$/
 // reference grammar.  A generated Dockerfile needs the narrower subset below
 // so an operator-supplied reference can never introduce a parser boundary.
 const safeDigestReference = /^[A-Za-z0-9][A-Za-z0-9._:/-]*@sha256:[0-9a-f]{64}$/
-const requiredFrameworkRows = Object.freeze([
-  'netfx20', 'netfx30', 'netfx35', 'netfx40', 'netfx45', 'netfx451',
-  'netfx452', 'netfx46', 'netfx461', 'netfx462', 'netfx47', 'netfx471',
-  'netfx472', 'netfx48',
-])
+const requiredFrameworkRows = Object.freeze(['netfx20', 'netfx30', 'netfx35', 'netfx40', 'netfx45', 'netfx451', 'netfx452', 'netfx46', 'netfx461', 'netfx462', 'netfx47', 'netfx471', 'netfx472', 'netfx48'])
 
-function fail(message) {
-  throw new Error(message)
-}
+function fail(message) { throw new Error(message); }
 
 function hasRegistryHost(reference) {
   if (typeof reference !== 'string') return false
@@ -63,9 +53,7 @@ function hasRegistryHost(reference) {
   return host === 'localhost' || host.includes('.') || host.includes(':')
 }
 
-function isSafeDigestReference(value) {
-  return isDigestPinnedImageReference(value) && safeDigestReference.test(value)
-}
+function isSafeDigestReference(value) { return isDigestPinnedImageReference(value) && safeDigestReference.test(value); }
 
 function imageRepository(value) {
   const at = value.indexOf('@')
@@ -94,9 +82,7 @@ function readRegularJson(filename, label) {
   return value
 }
 
-function canonicalJson(value) {
-  return `${JSON.stringify(value)}\n`
-}
+function canonicalJson(value) { return `${JSON.stringify(value)}\n`; }
 
 function rowMetadata(row) {
   // matrix-input.json owns the document schema; each copied row also carries
@@ -143,13 +129,9 @@ export function normalizeMatrixInput(document) {
   return { schemaVersion: 1, strategy: matrixStrategy, rows }
 }
 
-export function readMatrixInput(filename) {
-  return normalizeMatrixInput(readRegularJson(filename, 'matrix input'))
-}
+export function readMatrixInput(filename) { return normalizeMatrixInput(readRegularJson(filename, 'matrix input')); }
 
-export function matrixInputDigest(document) {
-  return `sha256:${crypto.createHash('sha256').update(canonicalJson(document)).digest('hex')}`
-}
+export function matrixInputDigest(document) { return `sha256:${crypto.createHash('sha256').update(canonicalJson(document)).digest('hex')}`; }
 
 function expectedOperatorLabels(row) {
   return {
@@ -224,9 +206,7 @@ export function validateOperatorImageInspection(row, imageInfo, expectedImages =
   return failures
 }
 
-function installerManifestSha256() {
-  return crypto.createHash('sha256').update(fs.readFileSync(installerManifestPath)).digest('hex')
-}
+function installerManifestSha256() { return crypto.createHash('sha256').update(fs.readFileSync(installerManifestPath)).digest('hex'); }
 
 function inspectImage(reference, spawn = spawnSync) {
   const result = spawn('docker', ['image', 'inspect', reference], {
@@ -264,9 +244,7 @@ export function createContextDockerfile(document, inputDigest, sourceRevision, v
   // The parent builder mounts each digest-pinned operator image directly.
   const lines = [pinnedDockerfileFrontendDirective, '', 'FROM scratch AS final']
   lines.push('COPY matrix-input.json /matrix-input.json')
-  document.rows.forEach((row) => {
-    lines.push(`COPY rows/${row.id}/row.json /rows/${row.id}/row.json`)
-  })
+  document.rows.forEach((row) => lines.push(`COPY rows/${row.id}/row.json /rows/${row.id}/row.json`));
   const labels = {
     'io.sharplabnext.framework.matrix-context': 'true',
     'io.sharplabnext.framework.matrix-content': metadataContentKind,
@@ -312,11 +290,7 @@ export function createContextBuildArguments(values, buildRoot, dockerfilePath, m
   return args
 }
 
-function inspectGitSource(
-  spawn = spawnSync,
-  fallbackRevision = undefined,
-  environment = process.env,
-) {
+function inspectGitSource(spawn = spawnSync, fallbackRevision = undefined, environment = process.env) {
   if (String(environment?.[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() === contentSourceIdentityMode &&
       isGitCommitIdentity(fallbackRevision)) {
     return { headRevision: fallbackRevision, isDirty: true }

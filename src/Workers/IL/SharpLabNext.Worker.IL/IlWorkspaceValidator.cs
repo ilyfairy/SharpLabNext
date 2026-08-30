@@ -3,11 +3,7 @@ using SharpLabNext.Contracts;
 
 namespace SharpLabNext.Worker.IL;
 
-internal sealed record ValidatedIlWorkspace(
-    WorkspaceSnapshot Snapshot,
-    IReadOnlyList<ValidatedIlWorkspaceFile> OrderedFiles,
-    string ActiveFile,
-    BuildOptions Options);
+internal sealed record ValidatedIlWorkspace(WorkspaceSnapshot Snapshot, IReadOnlyList<ValidatedIlWorkspaceFile> OrderedFiles, string ActiveFile, BuildOptions Options);
 
 internal sealed record ValidatedIlWorkspaceFile(string Path, long Version, string Text);
 
@@ -17,8 +13,7 @@ internal static class IlWorkspaceValidator
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(limits);
-        if (string.IsNullOrWhiteSpace(request.RequestId) || string.IsNullOrWhiteSpace(request.IdempotencyKey) ||
-            string.IsNullOrWhiteSpace(request.PipelineResolutionId))
+        if (string.IsNullOrWhiteSpace(request.RequestId) || string.IsNullOrWhiteSpace(request.IdempotencyKey) || string.IsNullOrWhiteSpace(request.PipelineResolutionId))
         {
             throw new IlBuildRequestValidationException("Request, idempotency and pipeline IDs are required.");
         }

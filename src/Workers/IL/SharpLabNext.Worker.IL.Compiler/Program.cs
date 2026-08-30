@@ -14,13 +14,7 @@ internal static class IlCompilerProgram
         if (arguments is ["--describe"])
         {
             var assemblyVersion = typeof(Driver).Assembly.GetName().Version?.ToString() ?? "unknown";
-            Console.Write(JsonSerializer.Serialize(
-                new IlCompilerDescriptor(
-                    IlCompilerProtocol.Version,
-                    "Mobius.ILasm",
-                    IlCompilerProtocol.PackageVersion,
-                    assemblyVersion),
-                IlCompilerProtocol.JsonOptions));
+            Console.Write(JsonSerializer.Serialize(new IlCompilerDescriptor(IlCompilerProtocol.Version, "Mobius.ILasm", IlCompilerProtocol.PackageVersion, assemblyVersion), IlCompilerProtocol.JsonOptions));
             return 0;
         }
 
@@ -33,21 +27,9 @@ internal static class IlCompilerProgram
             if (!requestInfo.Exists || requestInfo.Length is <= 0 or > IlCompilerProtocol.MaxRequestBytes)
                 return 2;
 
-            await using var requestStream = new FileStream(
-                requestPath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                16 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            var request = await JsonSerializer.DeserializeAsync<IlCompilerRequest>(
-                    requestStream,
-                    IlCompilerProtocol.JsonOptions)
-                .ConfigureAwait(false);
-            if (request is null || request.ProtocolVersion != IlCompilerProtocol.Version ||
-                request.MaxPeBytes is <= 0 or > IlCompilerProtocol.MaxPeBytes ||
-                request.Sources.Count is <= 0 or > IlCompilerProtocol.MaxSources ||
-                request.Target is not ("dll" or "exe"))
+            await using var requestStream = new FileStream(requestPath, FileMode.Open, FileAccess.Read, FileShare.Read, 16 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var request = await JsonSerializer.DeserializeAsync<IlCompilerRequest>(requestStream, IlCompilerProtocol.JsonOptions).ConfigureAwait(false);
+            if (request is null || request.ProtocolVersion != IlCompilerProtocol.Version || request.MaxPeBytes is <= 0 or > IlCompilerProtocol.MaxPeBytes || request.Sources.Count is <= 0 or > IlCompilerProtocol.MaxSources || request.Target is not ("dll" or "exe"))
             {
                 return 2;
             }
@@ -63,19 +45,7 @@ internal static class IlCompilerProgram
         {
             try
             {
-                var response = new IlCompilerResponse(
-                    IlCompilerProtocol.Version,
-                    false,
-                    [new IlCompilerDiagnostic(
-                        IlCompilerDiagnosticSeverity.Error,
-                        "ILASM999",
-                        Limit(exception.Message, 4_096),
-                        null,
-                        null,
-                        null,
-                        null,
-                        null)],
-                    "compiler-exception");
+                var response = new IlCompilerResponse(IlCompilerProtocol.Version, false, [new IlCompilerDiagnostic(IlCompilerDiagnosticSeverity.Error, "ILASM999", Limit(exception.Message, 4_096), null, null, null, null, null)], "compiler-exception");
                 var bytes = JsonSerializer.SerializeToUtf8Bytes(response, IlCompilerProtocol.JsonOptions);
                 await File.WriteAllBytesAsync(responsePath, bytes).ConfigureAwait(false);
                 return 0;
@@ -94,11 +64,7 @@ internal static class IlCompilerProgram
         if (ContainsExternalResourceDirective(source.Text))
         {
             logger.Error("Manifest resource directives are disabled because Mobius.ILasm 0.1.0 resolves resource paths from the process filesystem.");
-            return new IlCompilerResponse(
-                IlCompilerProtocol.Version,
-                false,
-                logger.Diagnostics,
-                "external-resource-disabled");
+            return new IlCompilerResponse(IlCompilerProtocol.Version, false, logger.Diagnostics, "external-resource-disabled");
         }
         var target = request.Target == "exe" ? Driver.Target.Exe : Driver.Target.Dll;
         var driver = new Driver(logger, target, showParser: false, debuggingInfo: false, showTokens: false);
@@ -127,11 +93,7 @@ internal static class IlCompilerProgram
                 logger.Error("The assembler did not produce a managed PE image.");
         }
 
-        return new IlCompilerResponse(
-            IlCompilerProtocol.Version,
-            succeeded,
-            logger.Diagnostics,
-            succeeded ? null : "assembly-failed");
+        return new IlCompilerResponse(IlCompilerProtocol.Version, succeeded, logger.Diagnostics, succeeded ? null : "assembly-failed");
     }
 
     private static string Limit(string value, int maximum) =>
@@ -166,10 +128,7 @@ internal static class IlCompilerProgram
             if (current != '.')
                 continue;
             const string directive = ".mresource";
-            if (index + directive.Length <= text.Length &&
-                text.AsSpan(index, directive.Length).Equals(directive, StringComparison.OrdinalIgnoreCase) &&
-                (index + directive.Length == text.Length ||
-                 !IsDirectiveIdentifierCharacter(text[index + directive.Length])))
+            if (index + directive.Length <= text.Length && text.AsSpan(index, directive.Length).Equals(directive, StringComparison.OrdinalIgnoreCase) && (index + directive.Length == text.Length || !IsDirectiveIdentifierCharacter(text[index + directive.Length])))
             {
                 return true;
             }
@@ -187,9 +146,7 @@ internal static class IlCompilerProgram
         public List<IlCompilerDiagnostic> Diagnostics => _diagnostics;
         public bool HasErrors { get; private set; }
 
-        public void Info(string message)
-        {
-        }
+        public void Info(string message) { }
 
         public void Error(string message) => Add(IlCompilerDiagnosticSeverity.Error, null, message);
 
@@ -208,15 +165,7 @@ internal static class IlCompilerProgram
             if (_diagnostics.Count >= maximumDiagnostics)
                 return;
             var mapped = location is null ? null : source.Map(location.line, location.column);
-            _diagnostics.Add(new IlCompilerDiagnostic(
-                severity,
-                severity == IlCompilerDiagnosticSeverity.Warning ? "ILASMW001" : "ILASM001",
-                Limit(message, 8_192),
-                mapped?.Path,
-                mapped?.Line,
-                mapped?.Character,
-                mapped?.Line,
-                mapped is null ? null : mapped.Character + 1));
+            _diagnostics.Add(new IlCompilerDiagnostic(severity, severity == IlCompilerDiagnosticSeverity.Warning ? "ILASMW001" : "ILASM001", Limit(message, 8_192), mapped?.Path, mapped?.Line, mapped?.Character, mapped?.Line, mapped is null ? null : mapped.Character + 1));
         }
     }
 

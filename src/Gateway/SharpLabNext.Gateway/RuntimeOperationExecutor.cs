@@ -4,63 +4,22 @@ using SharpLabNext.RuntimeSupervisor.Client;
 
 namespace SharpLabNext.Gateway;
 
-public sealed class RuntimeOperationExecutor(
-    OperationStore operations,
-    BoundedOperationScheduler scheduler,
-    IRuntimeSupervisorClient supervisor,
-    RuntimePipelineOptions options,
-    ILogger<RuntimeOperationExecutor> logger)
+public sealed class RuntimeOperationExecutor(OperationStore operations, BoundedOperationScheduler scheduler, IRuntimeSupervisorClient supervisor, RuntimePipelineOptions options, ILogger<RuntimeOperationExecutor> logger)
 {
-    private static readonly Action<ILogger, string, Exception?> LogRuntimeFailure = LoggerMessage.Define<string>(
-        LogLevel.Error,
-        new EventId(30, nameof(LogRuntimeFailure)),
-        "Runtime operation {OperationId} failed.");
+    private static readonly Action<ILogger, string, Exception?> LogRuntimeFailure = LoggerMessage.Define<string>(LogLevel.Error, new EventId(30, nameof(LogRuntimeFailure)), "Runtime operation {OperationId} failed.");
     private static readonly Action<ILogger, string, string, Exception?> LogCancellationPropagationFailure =
-        LoggerMessage.Define<string, string>(
-            LogLevel.Warning,
-            new EventId(31, nameof(LogCancellationPropagationFailure)),
-            "Could not propagate cancellation for Gateway operation {OperationId} to runtime operation {RemoteOperationId}.");
+        LoggerMessage.Define<string, string>(LogLevel.Warning, new EventId(31, nameof(LogCancellationPropagationFailure)), "Could not propagate cancellation for Gateway operation {OperationId} to runtime operation {RemoteOperationId}.");
 
-    public void QueueRun(
-        OperationStart operation,
-        RunRequest request,
-        string? runtimeSessionId = null) =>
-        scheduler.TryQueue(
-            operation,
-            () => ExecuteAsync(
-                operation,
-                OperationKind.Run,
-                request.DeadlineUtc,
-                cancellationToken => supervisor.StartRunAsync(
-                    request,
-                    runtimeSessionId,
-                    cancellationToken)));
+    public void QueueRun(OperationStart operation, RunRequest request, string? runtimeSessionId = null) =>
+        scheduler.TryQueue(operation, () => ExecuteAsync(operation, OperationKind.Run, request.DeadlineUtc, cancellationToken => supervisor.StartRunAsync(request, runtimeSessionId, cancellationToken)));
 
-    public void QueueJit(
-        OperationStart operation,
-        JitRequest request,
-        string? runtimeSessionId = null) =>
-        scheduler.TryQueue(
-            operation,
-            () => ExecuteAsync(
-                operation,
-                OperationKind.Jit,
-                request.DeadlineUtc,
-                cancellationToken => supervisor.StartJitAsync(
-                    request,
-                    runtimeSessionId,
-                    cancellationToken)));
+    public void QueueJit(OperationStart operation, JitRequest request, string? runtimeSessionId = null) =>
+        scheduler.TryQueue(operation, () => ExecuteAsync(operation, OperationKind.Jit, request.DeadlineUtc, cancellationToken => supervisor.StartJitAsync(request, runtimeSessionId, cancellationToken)));
 
-    public Task ReleaseSessionAsync(
-        string runtimeSessionId,
-        CancellationToken cancellationToken = default) =>
+    public Task ReleaseSessionAsync(string runtimeSessionId, CancellationToken cancellationToken = default) =>
         supervisor.ReleaseSessionAsync(runtimeSessionId, cancellationToken);
 
-    private async Task ExecuteAsync(
-        OperationStart operation,
-        OperationKind expectedKind,
-        DateTimeOffset requestedDeadline,
-        Func<CancellationToken, Task<OperationHandle>> startRemoteAsync)
+    private async Task ExecuteAsync(OperationStart operation, OperationKind expectedKind, DateTimeOffset requestedDeadline, Func<CancellationToken, Task<OperationHandle>> startRemoteAsync)
     {
         var started = DateTimeOffset.UtcNow;
         string? remoteOperationId = null;
@@ -73,24 +32,14 @@ public sealed class RuntimeOperationExecutor(
                 return;
             }
 
-            operations.Append(
-                operation.Handle.OperationId,
-                new ProgressOperationEventPayload(
-                    "runtime-supervisor-dispatch",
-                    "Dispatching the runtime operation to Runtime Supervisor.",
-                    0.02),
-                DateTimeOffset.UtcNow);
+            operations.Append(operation.Handle.OperationId, new ProgressOperationEventPayload("runtime-supervisor-dispatch", "Dispatching the runtime operation to Runtime Supervisor.", 0.02), DateTimeOffset.UtcNow);
 
-            using var startCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                deadlineCancellation.Token,
-                operation.CancellationToken);
+            using var startCancellation = CancellationTokenSource.CreateLinkedTokenSource(deadlineCancellation.Token, operation.CancellationToken);
             var remoteStart = startRemoteAsync(startCancellation.Token);
             OperationHandle remoteHandle;
             try
             {
-                remoteHandle = await remoteStart
-                    .WaitAsync(startCancellation.Token)
-                    .ConfigureAwait(false);
+                remoteHandle = await remoteStart.WaitAsync(startCancellation.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -99,24 +48,12 @@ public sealed class RuntimeOperationExecutor(
             }
             remoteOperationId = remoteHandle.OperationId;
             using var forwardingCancellation = new CancellationTokenSource();
-            var forwarding = ForwardEventsAsync(
-                operation,
-                remoteOperationId,
-                remoteHandle.RequestId,
-                expectedKind,
-                forwardingCancellation.Token);
+            var forwarding = ForwardEventsAsync(operation, remoteOperationId, remoteHandle.RequestId, expectedKind, forwardingCancellation.Token);
             var localCancellation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            using var cancellationRegistration = operation.CancellationToken.Register(
-                static state => ((TaskCompletionSource)state!).TrySetResult(),
-                localCancellation);
+            using var cancellationRegistration = operation.CancellationToken.Register(static state => ((TaskCompletionSource)state!).TrySetResult(), localCancellation);
             var deadlineElapsed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            using var deadlineRegistration = deadlineCancellation.Token.Register(
-                static state => ((TaskCompletionSource)state!).TrySetResult(),
-                deadlineElapsed);
-            var first = await Task.WhenAny(
-                forwarding,
-                localCancellation.Task,
-                deadlineElapsed.Task).ConfigureAwait(false);
+            using var deadlineRegistration = deadlineCancellation.Token.Register(static state => ((TaskCompletionSource)state!).TrySetResult(), deadlineElapsed);
+            var first = await Task.WhenAny(forwarding, localCancellation.Task, deadlineElapsed.Task).ConfigureAwait(false);
             if (first == forwarding)
             {
                 await forwarding.ConfigureAwait(false);
@@ -126,10 +63,7 @@ public sealed class RuntimeOperationExecutor(
             if (first == deadlineElapsed.Task)
             {
                 var deadlineGrace = Task.Delay(options.CancellationGracePeriod);
-                first = await Task.WhenAny(
-                    forwarding,
-                    localCancellation.Task,
-                    deadlineGrace).ConfigureAwait(false);
+                first = await Task.WhenAny(forwarding, localCancellation.Task, deadlineGrace).ConfigureAwait(false);
                 if (first == forwarding)
                 {
                     await forwarding.ConfigureAwait(false);
@@ -144,21 +78,14 @@ public sealed class RuntimeOperationExecutor(
                 }
             }
 
-            await PropagateCancellationAsync(
-                operation,
-                remoteOperationId,
-                "gateway-operation-cancelled").ConfigureAwait(false);
+            await PropagateCancellationAsync(operation, remoteOperationId, "gateway-operation-cancelled").ConfigureAwait(false);
             try
             {
                 await forwarding.WaitAsync(options.CancellationGracePeriod).ConfigureAwait(false);
             }
             catch (TimeoutException exception)
             {
-                LogCancellationPropagationFailure(
-                    logger,
-                    operation.Handle.OperationId,
-                    remoteOperationId,
-                    exception);
+                LogCancellationPropagationFailure(logger, operation.Handle.OperationId, remoteOperationId, exception);
                 forwardingCancellation.Cancel();
                 _ = ObserveCompletionAsync(forwarding);
                 CompleteCancelledIfRequired(operation, started);
@@ -168,10 +95,7 @@ public sealed class RuntimeOperationExecutor(
         {
             if (remoteOperationId is not null)
             {
-                await PropagateCancellationAsync(
-                    operation,
-                    remoteOperationId,
-                    "gateway-operation-cancelled").ConfigureAwait(false);
+                await PropagateCancellationAsync(operation, remoteOperationId, "gateway-operation-cancelled").ConfigureAwait(false);
             }
 
             CompleteCancelledIfRequired(operation, started);
@@ -180,22 +104,11 @@ public sealed class RuntimeOperationExecutor(
         {
             if (remoteOperationId is not null)
             {
-                await PropagateCancellationAsync(
-                    operation,
-                    remoteOperationId,
-                    "gateway-deadline-exceeded").ConfigureAwait(false);
+                await PropagateCancellationAsync(operation, remoteOperationId, "gateway-deadline-exceeded").ConfigureAwait(false);
             }
 
             LogRuntimeFailure(logger, operation.Handle.OperationId, exception);
-            AppendFailureIfRequired(operation, new WorkerError(
-                "runtime-pipeline-deadline-exceeded",
-                WorkerErrorCategory.DeadlineExceeded,
-                "The runtime operation deadline elapsed.",
-                true,
-                false,
-                operation.Handle.OperationId,
-                "runtime-supervisor",
-                "unknown"));
+            AppendFailureIfRequired(operation, new WorkerError("runtime-pipeline-deadline-exceeded", WorkerErrorCategory.DeadlineExceeded, "The runtime operation deadline elapsed.", true, false, operation.Handle.OperationId, "runtime-supervisor", "unknown"));
         }
         catch (RuntimeEventForwardingException exception)
         {
@@ -206,15 +119,7 @@ public sealed class RuntimeOperationExecutor(
             }
             else
             {
-                AppendFailureIfRequired(operation, new WorkerError(
-                    "runtime-supervisor-protocol-invalid",
-                    WorkerErrorCategory.Internal,
-                    "The runtime supervisor returned an invalid event stream.",
-                    false,
-                    false,
-                    operation.Handle.OperationId,
-                    "runtime-supervisor",
-                    "unknown"));
+                AppendFailureIfRequired(operation, new WorkerError("runtime-supervisor-protocol-invalid", WorkerErrorCategory.Internal, "The runtime supervisor returned an invalid event stream.", false, false, operation.Handle.OperationId, "runtime-supervisor", "unknown"));
             }
         }
         catch (RuntimeSupervisorClientException exception)
@@ -238,57 +143,35 @@ public sealed class RuntimeOperationExecutor(
             }
             else
             {
-                AppendFailureIfRequired(operation, new WorkerError(
-                    "runtime-pipeline-internal",
-                    WorkerErrorCategory.Internal,
-                    "The runtime pipeline failed.",
-                    true,
-                    false,
-                    operation.Handle.OperationId,
-                    "runtime-supervisor",
-                    "unknown"));
+                AppendFailureIfRequired(operation, new WorkerError("runtime-pipeline-internal", WorkerErrorCategory.Internal, "The runtime pipeline failed.", true, false, operation.Handle.OperationId, "runtime-supervisor", "unknown"));
             }
         }
     }
 
-    private async Task ForwardEventsAsync(
-        OperationStart operation,
-        string remoteOperationId,
-        string remoteRequestId,
-        OperationKind expectedKind,
-        CancellationToken cancellationToken)
+    private async Task ForwardEventsAsync(OperationStart operation, string remoteOperationId, string remoteRequestId, OperationKind expectedKind, CancellationToken cancellationToken)
     {
         var acceptedSeen = false;
         var terminalSeen = false;
         OperationResult? result = null;
         long previousRemoteSequence = 0;
-        await foreach (var remoteEvent in supervisor.WatchEventsAsync(
-                           remoteOperationId,
-                           fromSequence: 0,
-                           cancellationToken).ConfigureAwait(false))
+        await foreach (var remoteEvent in supervisor.WatchEventsAsync(remoteOperationId, fromSequence: 0, cancellationToken).ConfigureAwait(false))
         {
-            if (!string.Equals(remoteEvent.OperationId, remoteOperationId, StringComparison.Ordinal) ||
-                remoteEvent.Sequence <= previousRemoteSequence)
+            if (!string.Equals(remoteEvent.OperationId, remoteOperationId, StringComparison.Ordinal) || remoteEvent.Sequence <= previousRemoteSequence)
             {
-                throw new RuntimeEventForwardingException(
-                    "The runtime supervisor event identity or sequence was invalid.");
+                throw new RuntimeEventForwardingException("The runtime supervisor event identity or sequence was invalid.");
             }
 
             if (terminalSeen)
             {
-                throw new RuntimeEventForwardingException(
-                    "The runtime supervisor emitted an event after a terminal event.");
+                throw new RuntimeEventForwardingException("The runtime supervisor emitted an event after a terminal event.");
             }
 
             previousRemoteSequence = remoteEvent.Sequence;
             if (remoteEvent.Payload is AcceptedOperationEventPayload accepted)
             {
-                if (acceptedSeen || result is not null ||
-                    accepted.OperationKind != expectedKind ||
-                    !string.Equals(accepted.RequestId, remoteRequestId, StringComparison.Ordinal))
+                if (acceptedSeen || result is not null || accepted.OperationKind != expectedKind || !string.Equals(accepted.RequestId, remoteRequestId, StringComparison.Ordinal))
                 {
-                    throw new RuntimeEventForwardingException(
-                        "The runtime supervisor accepted event did not match the Gateway operation.");
+                    throw new RuntimeEventForwardingException("The runtime supervisor accepted event did not match the Gateway operation.");
                 }
 
                 acceptedSeen = true;
@@ -297,16 +180,14 @@ public sealed class RuntimeOperationExecutor(
 
             if (!acceptedSeen)
             {
-                throw new RuntimeEventForwardingException(
-                    "The runtime supervisor event stream did not begin with an accepted event.");
+                throw new RuntimeEventForwardingException("The runtime supervisor event stream did not begin with an accepted event.");
             }
 
             if (remoteEvent.Payload is TypedResultOperationEventPayload typed)
             {
                 if (result is not null || !ResultMatchesKind(typed.Result, expectedKind))
                 {
-                    throw new RuntimeEventForwardingException(
-                        "The runtime supervisor result type or cardinality was invalid.");
+                    throw new RuntimeEventForwardingException("The runtime supervisor result type or cardinality was invalid.");
                 }
 
                 result = typed.Result;
@@ -316,8 +197,7 @@ public sealed class RuntimeOperationExecutor(
             {
                 if (result is null || !CompletionMatchesResult(completed, result))
                 {
-                    throw new RuntimeEventForwardingException(
-                        "The runtime supervisor completion did not match its typed result.");
+                    throw new RuntimeEventForwardingException("The runtime supervisor completion did not match its typed result.");
                 }
 
                 terminalSeen = true;
@@ -326,8 +206,7 @@ public sealed class RuntimeOperationExecutor(
             {
                 if (result is not null)
                 {
-                    throw new RuntimeEventForwardingException(
-                        "The runtime supervisor failed after emitting a typed result.");
+                    throw new RuntimeEventForwardingException("The runtime supervisor failed after emitting a typed result.");
                 }
 
                 terminalSeen = true;
@@ -337,35 +216,23 @@ public sealed class RuntimeOperationExecutor(
             var payload = remoteEvent.Payload is FailedOperationEventPayload failed
                 ? failed with { Error = failed.Error with { SafeToRetry = false } }
                 : remoteEvent.Payload;
-            operations.Append(
-                operation.Handle.OperationId,
-                payload,
-                DateTimeOffset.UtcNow);
+            operations.Append(operation.Handle.OperationId, payload, DateTimeOffset.UtcNow);
         }
 
         if (!acceptedSeen || !terminalSeen)
         {
-            throw new RuntimeEventForwardingException(
-                "The runtime supervisor event stream ended before reaching a terminal event.");
+            throw new RuntimeEventForwardingException("The runtime supervisor event stream ended before reaching a terminal event.");
         }
     }
 
-    private async Task PropagateCancellationAsync(
-        OperationStart operation,
-        string remoteOperationId,
-        string reason)
+    private async Task PropagateCancellationAsync(OperationStart operation, string remoteOperationId, string reason)
     {
         try
         {
-            var remoteCancellation = supervisor.CancelAsync(
-                remoteOperationId,
-                reason,
-                CancellationToken.None);
+            var remoteCancellation = supervisor.CancelAsync(remoteOperationId, reason, CancellationToken.None);
             try
             {
-                _ = await remoteCancellation
-                    .WaitAsync(options.ControlRequestTimeout)
-                    .ConfigureAwait(false);
+                _ = await remoteCancellation.WaitAsync(options.ControlRequestTimeout).ConfigureAwait(false);
             }
             catch (TimeoutException)
             {
@@ -375,17 +242,11 @@ public sealed class RuntimeOperationExecutor(
         }
         catch (Exception exception)
         {
-            LogCancellationPropagationFailure(
-                logger,
-                operation.Handle.OperationId,
-                remoteOperationId,
-                exception);
+            LogCancellationPropagationFailure(logger, operation.Handle.OperationId, remoteOperationId, exception);
         }
     }
 
-    private CancellationTokenSource CreateDeadlineCancellation(
-        DateTimeOffset requestedDeadline,
-        DateTimeOffset now)
+    private CancellationTokenSource CreateDeadlineCancellation(DateTimeOffset requestedDeadline, DateTimeOffset now)
     {
         var remaining = requestedDeadline - now;
         if (remaining <= TimeSpan.Zero)
@@ -395,17 +256,11 @@ public sealed class RuntimeOperationExecutor(
             return expired;
         }
 
-        return new CancellationTokenSource(
-            remaining < options.MaximumDuration ? remaining : options.MaximumDuration);
+        return new CancellationTokenSource(remaining < options.MaximumDuration ? remaining : options.MaximumDuration);
     }
 
     private void CompleteCancelled(OperationStart operation, DateTimeOffset started) =>
-        operations.Append(
-            operation.Handle.OperationId,
-            new CompletedOperationEventPayload(
-                OperationCompletionStatus.Cancelled,
-                DateTimeOffset.UtcNow - started),
-            DateTimeOffset.UtcNow);
+        operations.Append(operation.Handle.OperationId, new CompletedOperationEventPayload(OperationCompletionStatus.Cancelled, DateTimeOffset.UtcNow - started), DateTimeOffset.UtcNow);
 
     private void CompleteCancelledIfRequired(OperationStart operation, DateTimeOffset started)
     {
@@ -419,10 +274,7 @@ public sealed class RuntimeOperationExecutor(
     {
         if (!IsTerminal(operation.Handle.OperationId))
         {
-            operations.Append(
-                operation.Handle.OperationId,
-                new FailedOperationEventPayload(error),
-                DateTimeOffset.UtcNow);
+            operations.Append(operation.Handle.OperationId, new FailedOperationEventPayload(error), DateTimeOffset.UtcNow);
         }
     }
 
@@ -436,15 +288,11 @@ public sealed class RuntimeOperationExecutor(
             (OperationKind.Run, RunResult) or
             (OperationKind.Jit, JitResult);
 
-    private static bool CompletionMatchesResult(
-        CompletedOperationEventPayload completion,
-        OperationResult result)
+    private static bool CompletionMatchesResult(CompletedOperationEventPayload completion, OperationResult result)
     {
         var resultWasCancelled = result is RunResult { Status: RunTerminalStatus.Cancelled }
             or JitResult { Status: JitTerminalStatus.Cancelled };
-        return completion.Status == (resultWasCancelled
-            ? OperationCompletionStatus.Cancelled
-            : OperationCompletionStatus.Completed);
+        return completion.Status == (resultWasCancelled ? OperationCompletionStatus.Cancelled : OperationCompletionStatus.Completed);
     }
 
     private static async Task ObserveCompletionAsync(Task task)
@@ -453,9 +301,7 @@ public sealed class RuntimeOperationExecutor(
         {
             await task.ConfigureAwait(false);
         }
-        catch (Exception)
-        {
-        }
+        catch (Exception) { }
     }
 
     private sealed class RuntimeEventForwardingException(string message) : Exception(message);

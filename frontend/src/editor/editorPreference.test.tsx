@@ -45,9 +45,7 @@ describe('editor preference', () => {
     expect(defaultEditorForViewport(false)).toBe('monaco')
   })
 
-  it.each([
-    721, 800, 860,
-  ])('defaults to CodeMirror across the compact workbench at %i CSS px', (viewportWidth) => {
+  it.each([721, 800, 860])('defaults to CodeMirror across the compact workbench at %i CSS px', (viewportWidth) => {
     vi.stubGlobal('matchMedia', (query: string) => {
       const maxWidth = Number(/max-width:\s*(\d+)px/.exec(query)?.[1])
       return {

@@ -8,8 +8,7 @@ public sealed class JsilWorkerContractTests
     [Fact]
     public void CapabilityManifestExposesOnlyOrdinaryManagedPeToJavaScript()
     {
-        var manifest = ArtifactWorkerCapabilityManifestSerializer.Load(
-            Path.Combine(AppContext.BaseDirectory, "artifact-worker.json"));
+        var manifest = ArtifactWorkerCapabilityManifestSerializer.Load(Path.Combine(AppContext.BaseDirectory, "artifact-worker.json"));
 
         Assert.Equal("artifacts-jsil", manifest.WorkerId);
         Assert.Equal(["javascript"], manifest.Capabilities);
@@ -23,10 +22,8 @@ public sealed class JsilWorkerContractTests
     [Fact]
     public void ReferenceSetSelectionRequiresTheExactTargetFramework()
     {
-        var manifest = ArtifactWorkerCapabilityManifestSerializer.Load(
-            Path.Combine(AppContext.BaseDirectory, "artifact-worker.json"));
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+        var manifest = ArtifactWorkerCapabilityManifestSerializer.Load(Path.Combine(AppContext.BaseDirectory, "artifact-worker.json"));
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Jsil:ReleaseId"] = "test",
                 ["Jsil:WorkerImageId"] = "test-image",
@@ -39,14 +36,12 @@ public sealed class JsilWorkerContractTests
                 ["ReferenceSets:net10-ref:TargetFramework"] = "net10.0",
                 ["ReferenceSets:net10-ref:Path"] = Path.GetTempPath()
             })
-            .Build();
+.Build();
         var settings = JsilWorkerSettings.FromConfiguration(configuration, manifest);
 
         Assert.Equal("net10-ref", settings.GetReferenceSet("net10-ref", "net10.0").Id);
-        Assert.Throws<ArtifactWorkerIncompatibleArtifactException>(() =>
-            settings.GetReferenceSet("net10-ref", "net11.0"));
-        Assert.Throws<ArtifactWorkerIncompatibleArtifactException>(() =>
-            settings.GetReferenceSet("const-generics-ref", "net10.0"));
+        Assert.Throws<ArtifactWorkerIncompatibleArtifactException>(() => settings.GetReferenceSet("net10-ref", "net11.0"));
+        Assert.Throws<ArtifactWorkerIncompatibleArtifactException>(() => settings.GetReferenceSet("const-generics-ref", "net10.0"));
     }
 
     [Fact]
@@ -56,12 +51,8 @@ public sealed class JsilWorkerContractTests
         Directory.CreateDirectory(root);
         try
         {
-            Assert.StartsWith(
-                Path.GetFullPath(root),
-                JsilTemporaryDirectory.ResolvePath(root, "bin/app.dll"),
-                StringComparison.Ordinal);
-            Assert.ThrowsAny<ArgumentException>(() =>
-                JsilTemporaryDirectory.ResolvePath(root, "../outside.dll"));
+            Assert.StartsWith(Path.GetFullPath(root), JsilTemporaryDirectory.ResolvePath(root, "bin/app.dll"), StringComparison.Ordinal);
+            Assert.ThrowsAny<ArgumentException>(() => JsilTemporaryDirectory.ResolvePath(root, "../outside.dll"));
         }
         finally
         {

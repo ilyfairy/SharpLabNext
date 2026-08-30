@@ -9,45 +9,22 @@ public interface IDockerCli
 {
     Task<DockerImageInspection> InspectImageAsync(string reference, CancellationToken cancellationToken);
 
-    Task<DockerImageFileInspection> InspectImageFileAsync(
-        string imageId,
-        string absolutePath,
-        long maximumBytes,
-        CancellationToken cancellationToken);
+    Task<DockerImageFileInspection> InspectImageFileAsync(string imageId, string absolutePath, long maximumBytes, CancellationToken cancellationToken);
 
-    Task<DockerImageFileInspection> CopyImageFileAsync(
-        string imageId,
-        string absolutePath,
-        string destinationPath,
-        long maximumBytes,
-        CancellationToken cancellationToken) =>
-        throw new NotSupportedException("This Docker client does not support copying image files.");
+    Task<DockerImageFileInspection> CopyImageFileAsync(string imageId, string absolutePath, string destinationPath, long maximumBytes, CancellationToken cancellationToken) => throw new NotSupportedException("This Docker client does not support copying image files.");
 
-    Task SaveImagesAsync(
-        IReadOnlyList<string> references,
-        string outputPath,
-        CancellationToken cancellationToken);
+    Task SaveImagesAsync(IReadOnlyList<string> references, string outputPath, CancellationToken cancellationToken);
 }
 
-public sealed record DockerImageInspection(
-    string ImageId,
-    string OperatingSystem,
-    string Architecture,
-    long SizeBytes,
-    IReadOnlyList<string> RepoDigests,
-    IReadOnlyDictionary<string, string> Labels);
+public sealed record DockerImageInspection(string ImageId, string OperatingSystem, string Architecture, long SizeBytes, IReadOnlyList<string> RepoDigests, IReadOnlyDictionary<string, string> Labels);
 
-public sealed record DockerImageFileInspection(
-    string Sha256,
-    long Length);
+public sealed record DockerImageFileInspection(string Sha256, long Length);
 
 public sealed class DockerCli(string command) : IDockerCli
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public async Task<DockerImageInspection> InspectImageAsync(
-        string reference,
-        CancellationToken cancellationToken)
+    public async Task<DockerImageInspection> InspectImageAsync(string reference, CancellationToken cancellationToken)
     {
         var result = await RunAsync(["image", "inspect", reference], cancellationToken);
         using var document = JsonDocument.Parse(result.StandardOutput);
@@ -63,18 +40,9 @@ public sealed class DockerCli(string command) : IDockerCli
         var sizeBytes = RequiredPositiveInt64(image, "Size");
         var repoDigests = image.TryGetProperty("RepoDigests", out var repoDigestValue) &&
                           repoDigestValue.ValueKind == JsonValueKind.Array
-            ? repoDigestValue.EnumerateArray()
-                .Select(static item => item.GetString())
-                .Where(static item => !string.IsNullOrWhiteSpace(item))
-                .Select(static item => item!)
-                .Order(StringComparer.Ordinal)
-                .ToArray()
-            : [];
+            ? repoDigestValue.EnumerateArray().Select(static item => item.GetString()).Where(static item => !string.IsNullOrWhiteSpace(item)).Select(static item => item!).Order(StringComparer.Ordinal).ToArray() : [];
         var labels = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (image.TryGetProperty("Config", out var config) &&
-            config.ValueKind == JsonValueKind.Object &&
-            config.TryGetProperty("Labels", out var labelValue) &&
-            labelValue.ValueKind == JsonValueKind.Object)
+        if (image.TryGetProperty("Config", out var config) && config.ValueKind == JsonValueKind.Object && config.TryGetProperty("Labels", out var labelValue) && labelValue.ValueKind == JsonValueKind.Object)
         {
             foreach (var label in labelValue.EnumerateObject())
             {
@@ -88,75 +56,44 @@ public sealed class DockerCli(string command) : IDockerCli
         return new DockerImageInspection(id, operatingSystem, architecture, sizeBytes, repoDigests, labels);
     }
 
-    public async Task<DockerImageFileInspection> InspectImageFileAsync(
-        string imageId,
-        string absolutePath,
-        long maximumBytes,
-        CancellationToken cancellationToken) =>
-        await ReadImageFileAsync(imageId, absolutePath, null, maximumBytes, cancellationToken);
+    public async Task<DockerImageFileInspection> InspectImageFileAsync(string imageId, string absolutePath, long maximumBytes, CancellationToken cancellationToken) => await ReadImageFileAsync(imageId, absolutePath, null, maximumBytes, cancellationToken);
 
-    public async Task<DockerImageFileInspection> CopyImageFileAsync(
-        string imageId,
-        string absolutePath,
-        string destinationPath,
-        long maximumBytes,
-        CancellationToken cancellationToken)
+    public async Task<DockerImageFileInspection> CopyImageFileAsync(string imageId, string absolutePath, string destinationPath, long maximumBytes, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
         var destination = Path.GetFullPath(destinationPath);
         var parent = Path.GetDirectoryName(destination);
         if (parent is null || !Directory.Exists(parent) || File.Exists(destination) || Directory.Exists(destination))
         {
-            throw new BundleValidationException(
-                "Image file copy destination must be a new file in an existing directory.");
+            throw new BundleValidationException("Image file copy destination must be a new file in an existing directory.");
         }
 
-        return await ReadImageFileAsync(
-            imageId,
-            absolutePath,
-            destination,
-            maximumBytes,
-            cancellationToken);
+        return await ReadImageFileAsync(imageId, absolutePath, destination, maximumBytes, cancellationToken);
     }
 
-    private async Task<DockerImageFileInspection> ReadImageFileAsync(
-        string imageId,
-        string absolutePath,
-        string? destinationPath,
-        long maximumBytes,
-        CancellationToken cancellationToken)
+    private async Task<DockerImageFileInspection> ReadImageFileAsync(string imageId, string absolutePath, string? destinationPath, long maximumBytes, CancellationToken cancellationToken)
     {
         if (!IsCanonicalImageId(imageId))
         {
-            throw new BundleValidationException(
-                "Image file inspection requires a captured sha256 image ID, not a mutable reference.");
+            throw new BundleValidationException("Image file inspection requires a captured sha256 image ID, not a mutable reference.");
         }
         if (!IsSafeAbsoluteContainerPath(absolutePath))
         {
-            throw new BundleValidationException(
-                $"Image file path '{absolutePath}' must be a canonical absolute container path.");
+            throw new BundleValidationException($"Image file path '{absolutePath}' must be a canonical absolute container path.");
         }
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumBytes);
 
-        var create = await RunAsync(
-            ["container", "create", "--entrypoint", "/bin/true", imageId],
-            cancellationToken);
+        var create = await RunAsync(["container", "create", "--entrypoint", "/bin/true", imageId], cancellationToken);
         var containerId = create.StandardOutput.Trim();
         if (!IsContainerId(containerId))
         {
-            throw new BundleValidationException(
-                $"Docker returned an invalid temporary container ID for image '{imageId}'.");
+            throw new BundleValidationException($"Docker returned an invalid temporary container ID for image '{imageId}'.");
         }
 
         Exception? inspectionFailure = null;
         try
         {
-            return await InspectContainerFileAsync(
-                containerId,
-                absolutePath,
-                destinationPath,
-                maximumBytes,
-                cancellationToken);
+            return await InspectContainerFileAsync(containerId, absolutePath, destinationPath, maximumBytes, cancellationToken);
         }
         catch (Exception exception)
         {
@@ -167,9 +104,7 @@ public sealed class DockerCli(string command) : IDockerCli
         {
             try
             {
-                _ = await RunAsync(
-                    ["container", "rm", "--force", containerId],
-                    CancellationToken.None);
+                _ = await RunAsync(["container", "rm", "--force", containerId], CancellationToken.None);
             }
             catch when (inspectionFailure is not null)
             {
@@ -179,10 +114,7 @@ public sealed class DockerCli(string command) : IDockerCli
         }
     }
 
-    public async Task SaveImagesAsync(
-        IReadOnlyList<string> references,
-        string outputPath,
-        CancellationToken cancellationToken)
+    public async Task SaveImagesAsync(IReadOnlyList<string> references, string outputPath, CancellationToken cancellationToken)
     {
         if (references.Count == 0)
         {
@@ -194,13 +126,10 @@ public sealed class DockerCli(string command) : IDockerCli
         _ = await RunAsync(arguments, cancellationToken);
     }
 
-    private async Task<ProcessResult> RunAsync(
-        IReadOnlyList<string> arguments,
-        CancellationToken cancellationToken)
+    private async Task<ProcessResult> RunAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken)
     {
         var startInfo = CreateStartInfo(arguments);
-        using var process = Process.Start(startInfo)
-            ?? throw new BundleValidationException($"Could not start '{command}'.");
+        using var process = Process.Start(startInfo) ?? throw new BundleValidationException($"Could not start '{command}'.");
         var outputTask = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
         var errorTask = process.StandardError.ReadToEndAsync(CancellationToken.None);
         try
@@ -219,24 +148,16 @@ public sealed class DockerCli(string command) : IDockerCli
         if (process.ExitCode != 0)
         {
             var publicError = error.Length > 4096 ? error[..4096] : error;
-            throw new BundleValidationException(
-                $"Docker command failed with exit code {process.ExitCode}: {publicError.Trim()}");
+            throw new BundleValidationException($"Docker command failed with exit code {process.ExitCode}: {publicError.Trim()}");
         }
 
         return new ProcessResult(output, error);
     }
 
-    private async Task<DockerImageFileInspection> InspectContainerFileAsync(
-        string containerId,
-        string absolutePath,
-        string? destinationPath,
-        long maximumBytes,
-        CancellationToken cancellationToken)
+    private async Task<DockerImageFileInspection> InspectContainerFileAsync(string containerId, string absolutePath, string? destinationPath, long maximumBytes, CancellationToken cancellationToken)
     {
-        var startInfo = CreateStartInfo(
-            ["container", "cp", $"{containerId}:{absolutePath}", "-"]);
-        using var process = Process.Start(startInfo)
-            ?? throw new BundleValidationException($"Could not start '{command}'.");
+        var startInfo = CreateStartInfo(["container", "cp", $"{containerId}:{absolutePath}", "-"]);
+        using var process = Process.Start(startInfo) ?? throw new BundleValidationException($"Could not start '{command}'.");
         var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
 
         DockerImageFileInspection? inspection = null;
@@ -252,23 +173,14 @@ public sealed class DockerCli(string command) : IDockerCli
                 }
                 if (inspection is not null)
                 {
-                    throw new BundleValidationException(
-                        $"Image path '{absolutePath}' produced more than one archive entry.");
+                    throw new BundleValidationException($"Image path '{absolutePath}' produced more than one archive entry.");
                 }
-                if (entry.EntryType is not (TarEntryType.RegularFile or
-                    TarEntryType.V7RegularFile or
-                    TarEntryType.ContiguousFile) || entry.DataStream is null)
+                if (entry.EntryType is not (TarEntryType.RegularFile or TarEntryType.V7RegularFile or TarEntryType.ContiguousFile) || entry.DataStream is null)
                 {
-                    throw new BundleValidationException(
-                        $"Image path '{absolutePath}' must resolve to one regular, non-link file.");
+                    throw new BundleValidationException($"Image path '{absolutePath}' must resolve to one regular, non-link file.");
                 }
 
-                inspection = await ComputeDigestAsync(
-                    entry.DataStream,
-                    absolutePath,
-                    destinationPath,
-                    maximumBytes,
-                    cancellationToken);
+                inspection = await ComputeDigestAsync(entry.DataStream, absolutePath, destinationPath, maximumBytes, cancellationToken);
             }
         }
         catch (Exception exception)
@@ -286,31 +198,17 @@ public sealed class DockerCli(string command) : IDockerCli
         if (process.ExitCode != 0)
         {
             var publicError = error.Length > 4096 ? error[..4096] : error;
-            throw new BundleValidationException(
-                $"Docker command failed with exit code {process.ExitCode}: {publicError.Trim()}");
+            throw new BundleValidationException($"Docker command failed with exit code {process.ExitCode}: {publicError.Trim()}");
         }
 
-        return inspection ?? throw new BundleValidationException(
-            $"Image path '{absolutePath}' did not produce a regular file.");
+        return inspection ?? throw new BundleValidationException($"Image path '{absolutePath}' did not produce a regular file.");
     }
 
-    private static async Task<DockerImageFileInspection> ComputeDigestAsync(
-        Stream input,
-        string path,
-        string? destinationPath,
-        long maximumBytes,
-        CancellationToken cancellationToken)
+    private static async Task<DockerImageFileInspection> ComputeDigestAsync(Stream input, string path, string? destinationPath, long maximumBytes, CancellationToken cancellationToken)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         await using var output = destinationPath is null
-            ? null
-            : new FileStream(
-                destinationPath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.Delete,
-                64 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            ? null : new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write, FileShare.Delete, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
         var buffer = new byte[64 * 1024];
         long length = 0;
         try
@@ -326,8 +224,7 @@ public sealed class DockerCli(string command) : IDockerCli
                 length = checked(length + read);
                 if (length > maximumBytes)
                 {
-                    throw new BundleValidationException(
-                        $"Image file '{path}' exceeds the {maximumBytes}-byte validation limit.");
+                    throw new BundleValidationException($"Image file '{path}' exceeds the {maximumBytes}-byte validation limit.");
                 }
                 hash.AppendData(buffer.AsSpan(0, read));
                 if (output is not null)
@@ -341,9 +238,7 @@ public sealed class DockerCli(string command) : IDockerCli
                 throw new BundleValidationException($"Image file '{path}' is empty.");
             }
 
-            return new DockerImageFileInspection(
-                $"sha256:{Convert.ToHexStringLower(hash.GetHashAndReset())}",
-                length);
+            return new DockerImageFileInspection($"sha256:{Convert.ToHexStringLower(hash.GetHashAndReset())}", length);
         }
         catch
         {
@@ -357,18 +252,9 @@ public sealed class DockerCli(string command) : IDockerCli
 
     private ProcessStartInfo CreateStartInfo(IReadOnlyList<string> arguments)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = command,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var startInfo = new ProcessStartInfo { FileName = command, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
         foreach (var argument in arguments)
-        {
             startInfo.ArgumentList.Add(argument);
-        }
 
         return startInfo;
     }
@@ -376,8 +262,7 @@ public sealed class DockerCli(string command) : IDockerCli
     private static bool IsCanonicalImageId(string value) =>
         value.Length == 71 &&
         value.StartsWith("sha256:", StringComparison.Ordinal) &&
-        value.AsSpan(7).ToArray().All(static character =>
-            character is >= '0' and <= '9' or >= 'a' and <= 'f');
+        value.AsSpan(7).ToArray().All(static character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
 
     private static bool IsContainerId(string value) =>
         value.Length == 64 &&
@@ -396,9 +281,7 @@ public sealed class DockerCli(string command) : IDockerCli
         }
 
         return value[1..].Split('/', StringSplitOptions.None)
-            .All(static segment => segment is not "." and not ".." &&
-                segment.Length > 0 &&
-                segment.All(static character => !char.IsControl(character)));
+            .All(static segment => segment is not "." and not ".." && segment.Length > 0 && segment.All(static character => !char.IsControl(character)));
     }
 
     private static async Task WaitForExitQuietlyAsync(Process process)
@@ -408,11 +291,7 @@ public sealed class DockerCli(string command) : IDockerCli
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             await process.WaitForExitAsync(timeout.Token);
         }
-        catch (Exception exception) when (exception is
-            InvalidOperationException or
-            OperationCanceledException)
-        {
-        }
+        catch (Exception exception) when (exception is InvalidOperationException or OperationCanceledException) { }
     }
 
     private static async Task DrainQuietlyAsync(params Task<string>[] streams)
@@ -421,11 +300,7 @@ public sealed class DockerCli(string command) : IDockerCli
         {
             await Task.WhenAll(streams);
         }
-        catch (Exception exception) when (exception is
-            IOException or
-            ObjectDisposedException)
-        {
-        }
+        catch (Exception exception) when (exception is IOException or ObjectDisposedException) { }
     }
 
     private static void TryKill(Process process)
@@ -437,19 +312,13 @@ public sealed class DockerCli(string command) : IDockerCli
                 process.Kill(entireProcessTree: true);
             }
         }
-        catch (InvalidOperationException)
-        {
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-        }
+        catch (InvalidOperationException) { }
+        catch (System.ComponentModel.Win32Exception) { }
     }
 
     private static string RequiredString(JsonElement parent, string propertyName)
     {
-        if (!parent.TryGetProperty(propertyName, out var value) ||
-            value.ValueKind != JsonValueKind.String ||
-            string.IsNullOrWhiteSpace(value.GetString()))
+        if (!parent.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString()))
         {
             throw new BundleValidationException($"Docker inspection property '{propertyName}' is missing.");
         }
@@ -459,13 +328,9 @@ public sealed class DockerCli(string command) : IDockerCli
 
     private static long RequiredPositiveInt64(JsonElement parent, string propertyName)
     {
-        if (!parent.TryGetProperty(propertyName, out var value) ||
-            value.ValueKind != JsonValueKind.Number ||
-            !value.TryGetInt64(out var result) ||
-            result <= 0)
+        if (!parent.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out var result) || result <= 0)
         {
-            throw new BundleValidationException(
-                $"Docker inspection property '{propertyName}' must be a positive 64-bit integer.");
+            throw new BundleValidationException($"Docker inspection property '{propertyName}' must be a positive 64-bit integer.");
         }
 
         return result;

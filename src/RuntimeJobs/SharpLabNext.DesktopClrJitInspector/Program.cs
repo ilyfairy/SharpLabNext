@@ -54,8 +54,7 @@ namespace SharpLabNext.DesktopClrJitInspector
         {
             if (args == null || args.Length < 3 || args.Length > 4 || !string.Equals(args[0], "capture", StringComparison.Ordinal))
             {
-                throw new ArgumentException(
-                    "Usage: SharpLabNext.DesktopClrJitInspector.exe capture <absolute-assembly> <absolute-output> [method-filter]");
+                throw new ArgumentException("Usage: SharpLabNext.DesktopClrJitInspector.exe capture <absolute-assembly> <absolute-output> [method-filter]");
             }
             string assemblyPath = ValidateExistingFile(args[1], "assembly");
             string outputPath = ValidateOutputPath(args[2]);
@@ -83,8 +82,7 @@ namespace SharpLabNext.DesktopClrJitInspector
             if (!string.Equals(fullPath, FixedCapturePath, StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException("The output path is not the fixed desktop CLR capture path.");
             string directory = Path.GetDirectoryName(fullPath);
-            if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory) ||
-                string.IsNullOrEmpty(Path.GetFileName(fullPath)))
+            if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory) || string.IsNullOrEmpty(Path.GetFileName(fullPath)))
             {
                 throw new ArgumentException("The output path must have an existing parent directory.");
             }
@@ -156,17 +154,10 @@ namespace SharpLabNext.DesktopClrJitInspector
                         totalNativeBytes += range.Length;
                         byte[] bytes = new byte[range.Length];
                         Marshal.Copy(range.Start, bytes, 0, bytes.Length);
-                        methods.Add(new DesktopClrJitCaptureMethod(
-                            method.MetadataToken,
-                            identity,
-                            range.Address,
-                            bytes));
+                        methods.Add(new DesktopClrJitCaptureMethod(method.MetadataToken, identity, range.Address, bytes));
                     }
                 }
-                return new DesktopClrJitCaptureDocument(
-                    Environment.Version.ToString(),
-                    assembly.ManifestModule.ModuleVersionId,
-                    methods);
+                return new DesktopClrJitCaptureDocument(Environment.Version.ToString(), assembly.ManifestModule.ModuleVersionId, methods);
             }
             finally
             {
@@ -197,9 +188,7 @@ namespace SharpLabNext.DesktopClrJitInspector
 
         private static bool CanPrepare(MethodBase method)
         {
-            if (method.IsAbstract || method.ContainsGenericParameters ||
-                (method.GetMethodImplementationFlags() & MethodImplAttributes.InternalCall) != 0 ||
-                (method.Attributes & MethodAttributes.PinvokeImpl) != 0)
+            if (method.IsAbstract || method.ContainsGenericParameters || (method.GetMethodImplementationFlags() & MethodImplAttributes.InternalCall) != 0 || (method.Attributes & MethodAttributes.PinvokeImpl) != 0)
             {
                 return false;
             }
@@ -224,8 +213,7 @@ namespace SharpLabNext.DesktopClrJitInspector
             {
                 return null;
             }
-            if (string.IsNullOrEmpty(requested.Name) || requested.Name == "." || requested.Name == ".." ||
-                requested.Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            if (string.IsNullOrEmpty(requested.Name) || requested.Name == "." || requested.Name == ".." || requested.Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
             {
                 return null;
             }
@@ -238,8 +226,7 @@ namespace SharpLabNext.DesktopClrJitInspector
         {
             string typeName = type.FullName ?? type.Name;
             string methodName = method.IsConstructor
-                ? (method.IsStatic ? ".cctor" : ".ctor")
-                : method.Name;
+                ? (method.IsStatic ? ".cctor" : ".ctor") : method.Name;
             return typeName + "." + methodName;
         }
 
@@ -248,8 +235,7 @@ namespace SharpLabNext.DesktopClrJitInspector
             if (string.IsNullOrEmpty(filter))
                 return true;
             return filter.IndexOf('*') >= 0 || filter.IndexOf('?') >= 0
-                ? MatchesWildcard(filter, value)
-                : value.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0;
+                ? MatchesWildcard(filter, value) : value.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static bool MatchesWildcard(string pattern, string value)
@@ -260,9 +246,7 @@ namespace SharpLabNext.DesktopClrJitInspector
             int starValueIndex = -1;
             while (valueIndex < value.Length)
             {
-                if (patternIndex < pattern.Length &&
-                    (pattern[patternIndex] == '?' ||
-                     char.ToUpperInvariant(pattern[patternIndex]) == char.ToUpperInvariant(value[valueIndex])))
+                if (patternIndex < pattern.Length && (pattern[patternIndex] == '?' || char.ToUpperInvariant(pattern[patternIndex]) == char.ToUpperInvariant(value[valueIndex])))
                 {
                     patternIndex++;
                     valueIndex++;
@@ -309,7 +293,7 @@ namespace SharpLabNext.DesktopClrJitInspector
 
         public int Length { get; private set; }
 
-        public ulong Address { get { return unchecked((ulong)Start.ToInt64()); } }
+        public ulong Address => unchecked((ulong)Start.ToInt64());
 
         public static DesktopClrNativeCodeRange Resolve(IntPtr methodPointer)
         {
@@ -319,17 +303,14 @@ namespace SharpLabNext.DesktopClrJitInspector
             ulong imageBase;
             IntPtr entryPointer = RtlLookupFunctionEntry(address, out imageBase, IntPtr.Zero);
             RuntimeFunction entry = entryPointer == IntPtr.Zero
-                ? new RuntimeFunction()
-                : (RuntimeFunction)Marshal.PtrToStructure(entryPointer, typeof(RuntimeFunction));
-            if (entryPointer == IntPtr.Zero || entry.EndAddress <= entry.BeginAddress ||
-                imageBase > ulong.MaxValue - entry.EndAddress)
+                ? new RuntimeFunction() : (RuntimeFunction)Marshal.PtrToStructure(entryPointer, typeof(RuntimeFunction));
+            if (entryPointer == IntPtr.Zero || entry.EndAddress <= entry.BeginAddress || imageBase > ulong.MaxValue - entry.EndAddress)
             {
                 throw new InvalidDataException("The prepared method has no valid x64 unwind range.");
             }
             ulong start = imageBase + entry.BeginAddress;
             ulong end = imageBase + entry.EndAddress;
-            if (start != address || end <= start || end - start > DesktopClrJitCaptureCodec.MaximumMethodBytes ||
-                start > long.MaxValue)
+            if (start != address || end <= start || end - start > DesktopClrJitCaptureCodec.MaximumMethodBytes || start > long.MaxValue)
             {
                 throw new InvalidDataException("The prepared method points to a trampoline or an invalid native range.");
             }
@@ -345,10 +326,7 @@ namespace SharpLabNext.DesktopClrJitInspector
         }
 
         [DllImport("ntdll.dll", ExactSpelling = true)]
-        private static extern IntPtr RtlLookupFunctionEntry(
-            ulong controlPc,
-            out ulong imageBase,
-            IntPtr historyTable);
+        private static extern IntPtr RtlLookupFunctionEntry(ulong controlPc, out ulong imageBase, IntPtr historyTable);
     }
 
     internal static class DesktopClrJitCaptureFile

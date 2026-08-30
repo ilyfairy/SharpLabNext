@@ -3,13 +3,7 @@ import { parseAnsiSgrChunks, parseAnsiSgrOutputChunks } from './ansiSgr'
 
 describe('parseAnsiSgrChunks', () => {
   it('applies reset, standard colors, bold, underline, and inverse video', () => {
-    const document = parseAnsiSgrChunks([
-      '\u001b[31;44;1;4mstyled',
-      '\u001b[7minverse',
-      '\u001b[27;22;24;39;49mplain',
-      '\u001b[90;103mbright',
-      '\u001b[0mreset',
-    ])
+    const document = parseAnsiSgrChunks(['\u001b[31;44;1;4mstyled', '\u001b[7minverse', '\u001b[27;22;24;39;49mplain', '\u001b[90;103mbright', '\u001b[0mreset'])
 
     expect(document.text).toBe('styledinverseplainbrightreset')
     expect(document.copyText).toBe('styledinverseplainbrightreset')
@@ -68,14 +62,7 @@ describe('parseAnsiSgrChunks', () => {
   })
 
   it('supports indexed and true colors across WebSocket chunk boundaries', () => {
-    const document = parseAnsiSgrChunks([
-      '\u001b[38;5;',
-      '196;48;5;226mindexed',
-      '\u001b[38;2;1;',
-      '2;3;48:2::4:5:6mtrue',
-      '\u001b[0',
-      'mplain',
-    ])
+    const document = parseAnsiSgrChunks(['\u001b[38;5;', '196;48;5;226mindexed', '\u001b[38;2;1;', '2;3;48:2::4:5:6mtrue', '\u001b[0', 'mplain'])
 
     expect(document.text).toBe('indexedtrueplain')
     expect(document.copyText).toBe('indexedtrueplain')
@@ -115,14 +102,9 @@ describe('parseAnsiSgrChunks', () => {
     const unsupported = '\u001b[2J\u001b]8;;javascript:alert(1)\u0007click\u001b]8;;\u0007'
     const malformed = '\u001b[31;?m'
     const incomplete = '\u001b[38;5'
-    const document = parseAnsiSgrChunks([
-      `before\u0000${unsupported}${malformed}`,
-      `after${incomplete}`,
-    ])
+    const document = parseAnsiSgrChunks([`before\u0000${unsupported}${malformed}`, `after${incomplete}`])
 
-    expect(document.text).toBe(
-      `before\u2400\u241b[2J\u241b]8;;javascript:alert(1)\u2407click\u241b]8;;\u2407\u241b[31;?mafter\u241b[38;5`,
-    )
+    expect(document.text).toBe(`before\u2400\u241b[2J\u241b]8;;javascript:alert(1)\u2407click\u241b]8;;\u2407\u241b[31;?mafter\u241b[38;5`)
     expect(document.copyText).toBe('beforeclickafter')
     expect(document.segments).toHaveLength(1)
     expect(document.segments[0]?.style).toEqual({

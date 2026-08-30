@@ -6,10 +6,7 @@ using SharpLabNext.Contracts;
 
 namespace SharpLabNext.Gateway;
 
-public sealed record GistLoadOverrides(
-    string? TargetKey,
-    string? BranchId,
-    BuildConfiguration? BuildMode);
+public sealed record GistLoadOverrides(string? TargetKey, string? BranchId, BuildConfiguration? BuildMode);
 
 public sealed partial class GistShareService(IGitHubGistClient github)
 {
@@ -20,39 +17,22 @@ public sealed partial class GistShareService(IGitHubGistClient github)
     private const int MaximumWorkspaceBytes = 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = ContractJson.CreateCanonicalSerializerOptions();
 
-    public async Task<GistDocument> GetAsync(
-        string id,
-        GistLoadOverrides overrides,
-        GitHubOAuthSession? session,
-        CancellationToken cancellationToken)
+    public async Task<GistDocument> GetAsync(string id, GistLoadOverrides overrides, GitHubOAuthSession? session, CancellationToken cancellationToken)
     {
         ValidateGistId(id);
         var gist = await github.GetAsync(id, session?.AccessToken, cancellationToken).ConfigureAwait(false);
         return Parse(gist, overrides, session?.Login);
     }
 
-    public async Task<GistDocument> CreateAsync(
-        CreateGistRequest request,
-        GitHubOAuthSession session,
-        CancellationToken cancellationToken)
+    public async Task<GistDocument> CreateAsync(CreateGistRequest request, GitHubOAuthSession session, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         var files = PrepareFiles(request.Workspace);
-        var gist = await github.CreateAsync(
-            new GitHubGistWriteRequest(
-                ValidateDescription(request.Description),
-                request.IsPublic,
-                files),
-            session.AccessToken,
-            cancellationToken).ConfigureAwait(false);
+        var gist = await github.CreateAsync(new GitHubGistWriteRequest(ValidateDescription(request.Description), request.IsPublic, files), session.AccessToken, cancellationToken).ConfigureAwait(false);
         return Parse(gist, new GistLoadOverrides(null, null, null), session.Login);
     }
 
-    public async Task<GistDocument> UpdateAsync(
-        string id,
-        UpdateGistRequest request,
-        GitHubOAuthSession session,
-        CancellationToken cancellationToken)
+    public async Task<GistDocument> UpdateAsync(string id, UpdateGistRequest request, GitHubOAuthSession session, CancellationToken cancellationToken)
     {
         ValidateGistId(id);
         ArgumentNullException.ThrowIfNull(request);
@@ -66,18 +46,11 @@ public sealed partial class GistShareService(IGitHubGistClient github)
             if (!files.ContainsKey(oldFile))
                 files[oldFile] = null;
         }
-        var gist = await github.UpdateAsync(
-            id,
-            new GitHubGistWriteRequest(ValidateDescription(request.Description), null, files),
-            session.AccessToken,
-            cancellationToken).ConfigureAwait(false);
+        var gist = await github.UpdateAsync(id, new GitHubGistWriteRequest(ValidateDescription(request.Description), null, files), session.AccessToken, cancellationToken).ConfigureAwait(false);
         return Parse(gist, new GistLoadOverrides(null, null, null), session.Login);
     }
 
-    private static GistDocument Parse(
-        GitHubGist gist,
-        GistLoadOverrides overrides,
-        string? authenticatedLogin)
+    private static GistDocument Parse(GitHubGist gist, GistLoadOverrides overrides, string? authenticatedLogin)
     {
         var metadataEntry = gist.Files.FirstOrDefault(static item => IsMetadataFile(item.Key));
         GistWorkspaceState workspace;
@@ -98,17 +71,7 @@ public sealed partial class GistShareService(IGitHubGistClient github)
         if (sourceFormat == "sharplabnext-v1")
             workspace = ApplyOverrides(workspace, overrides, warnings);
         ValidateWorkspace(workspace, requireResolvedProfiles: sourceFormat == "sharplabnext-v1");
-        return new GistDocument(
-            gist.Id,
-            gist.HtmlUrl,
-            gist.OwnerLogin,
-            gist.IsPublic,
-            authenticatedLogin is not null && StringComparer.OrdinalIgnoreCase.Equals(gist.OwnerLogin, authenticatedLogin),
-            gist.Description,
-            sourceFormat,
-            workspace,
-            warnings,
-            gist.UpdatedAtUtc);
+        return new GistDocument(gist.Id, gist.HtmlUrl, gist.OwnerLogin, gist.IsPublic, authenticatedLogin is not null && StringComparer.OrdinalIgnoreCase.Equals(gist.OwnerLogin, authenticatedLogin), gist.Description, sourceFormat, workspace, warnings, gist.UpdatedAtUtc);
     }
 
     private static GistWorkspaceState FromMetadata(GitHubGist gist, SharpLabNextGistMetadata metadata)
@@ -117,10 +80,7 @@ public sealed partial class GistShareService(IGitHubGistClient github)
             throw new GistValidationException("The SharpLabNext Gist metadata version is not supported.");
         var files = metadata.Files.Select(mapping =>
         {
-            if (string.IsNullOrWhiteSpace(mapping.Path)
-                || string.IsNullOrWhiteSpace(mapping.GistFile)
-                || !gist.Files.TryGetValue(mapping.GistFile, out var file)
-                || file.Content is null)
+            if (string.IsNullOrWhiteSpace(mapping.Path) || string.IsNullOrWhiteSpace(mapping.GistFile) || !gist.Files.TryGetValue(mapping.GistFile, out var file) || file.Content is null)
             {
                 throw new GistValidationException("The SharpLabNext Gist metadata references a missing source file.");
             }
@@ -141,16 +101,9 @@ public sealed partial class GistShareService(IGitHubGistClient github)
             metadata.LegacyBranchId);
     }
 
-    private static GistWorkspaceState ParseLegacy(
-        GitHubGist gist,
-        string? metadataContent,
-        GistLoadOverrides overrides,
-        List<string> warnings)
+    private static GistWorkspaceState ParseLegacy(GitHubGist gist, string? metadataContent, GistLoadOverrides overrides, List<string> warnings)
     {
-        var candidates = gist.Files
-            .Where(static item => IsLegacySourceFile(item.Key) && item.Value.Content is not null)
-            .Select(static item => new GistSourceFile(item.Key, item.Value.Content!))
-            .ToArray();
+        var candidates = gist.Files.Where(static item => IsLegacySourceFile(item.Key) && item.Value.Content is not null).Select(static item => new GistSourceFile(item.Key, item.Value.Content!)).ToArray();
         if (candidates.Length == 0)
             throw new GistValidationException("The Gist does not contain a supported source file.");
 
@@ -165,8 +118,7 @@ public sealed partial class GistShareService(IGitHubGistClient github)
                 target = StringProperty(document.RootElement, "target");
                 branch = StringProperty(document.RootElement, "branch");
                 mode = StringComparer.OrdinalIgnoreCase.Equals(StringProperty(document.RootElement, "mode"), "Release")
-                    ? BuildConfiguration.Release
-                    : BuildConfiguration.Debug;
+                    ? BuildConfiguration.Release : BuildConfiguration.Debug;
             }
             catch (JsonException)
             {
@@ -192,10 +144,7 @@ public sealed partial class GistShareService(IGitHubGistClient github)
         return ApplyOverrides(workspace, overrides, warnings);
     }
 
-    private static GistWorkspaceState ApplyOverrides(
-        GistWorkspaceState workspace,
-        GistLoadOverrides overrides,
-        List<string> warnings)
+    private static GistWorkspaceState ApplyOverrides(GistWorkspaceState workspace, GistLoadOverrides overrides, List<string> warnings)
     {
         var outputId = workspace.OutputId;
         if (!string.IsNullOrWhiteSpace(overrides.TargetKey) && overrides.TargetKey != "_")
@@ -211,12 +160,7 @@ public sealed partial class GistShareService(IGitHubGistClient github)
         }
         if (overrides.BuildMode is not null)
             warnings.Add("Applied the build mode override from the legacy Gist URL.");
-        return workspace with
-        {
-            OutputId = outputId,
-            LegacyBranchId = branch,
-            BuildMode = overrides.BuildMode ?? workspace.BuildMode
-        };
+        return workspace with { OutputId = outputId, LegacyBranchId = branch, BuildMode = overrides.BuildMode ?? workspace.BuildMode };
     }
 
     private static Dictionary<string, string?> PrepareFiles(GistWorkspaceState workspace)
@@ -346,8 +290,7 @@ public sealed partial class GistShareService(IGitHubGistClient github)
     {
         var existingSet = existing.ToHashSet(StringComparer.Ordinal);
         var name = workspacePath.Contains('/') || !SimpleGistFileName().IsMatch(workspacePath)
-            ? $"{index + 1:D2}-{SanitizeFileName(workspacePath.Split('/')[^1])}"
-            : workspacePath;
+            ? $"{index + 1:D2}-{SanitizeFileName(workspacePath.Split('/')[^1])}" : workspacePath;
         if (IsMetadataFile(name) || existingSet.Contains(name))
             name = $"{index + 1:D2}-{SanitizeFileName(name)}";
         var suffix = 2;
@@ -432,21 +375,14 @@ public sealed partial class GistShareService(IGitHubGistClient github)
     {
         if ((path.Length > 0 && path[0] == '\u200B') || IsMetadataFile(path))
             return false;
-        if (path.EndsWith(".decompiled.cs", StringComparison.OrdinalIgnoreCase)
-            || path.EndsWith(".explained.json", StringComparison.OrdinalIgnoreCase))
+        if (path.EndsWith(".decompiled.cs", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".explained.json", StringComparison.OrdinalIgnoreCase))
             return false;
-        return path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-            || path.EndsWith(".vb", StringComparison.OrdinalIgnoreCase)
-            || path.EndsWith(".fs", StringComparison.OrdinalIgnoreCase)
-            || path.EndsWith(".fsx", StringComparison.OrdinalIgnoreCase)
-            || path.EndsWith(".php", StringComparison.OrdinalIgnoreCase)
-            || path.EndsWith(".il", StringComparison.OrdinalIgnoreCase);
+        return path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".vb", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".fs", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".fsx", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".php", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".il", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? StringProperty(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
+            ? value.GetString() : null;
 
     [GeneratedRegex("^[0-9a-fA-F]{5,64}$", RegexOptions.CultureInvariant)]
     private static partial Regex GistId();

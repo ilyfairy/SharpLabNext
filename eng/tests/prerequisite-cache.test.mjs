@@ -9,9 +9,17 @@ import test from 'node:test'
 import {
   readPrerequisiteManifest,
   validateRepositoryFiles,
-} from './prerequisite-cache.mjs'
+} from '../prerequisite-cache.mjs'
 
-const repositoryRoot = path.resolve(import.meta.dirname, '..')
+const repositoryRoot = path.resolve(import.meta.dirname, '../..')
+const gitEnvironment = () => {
+  const environment = { ...process.env }
+  delete environment.GIT_DIR
+  delete environment.GIT_WORK_TREE
+  delete environment.GIT_INDEX_FILE
+  return environment
+}
+const gitAvailable = spawnSync('git', ['--version'], { env: gitEnvironment(), windowsHide: true }).status === 0
 
 function writeFixture(root) {
   const manifestValue = {
@@ -61,7 +69,7 @@ function writeFixture(root) {
   return { manifest, manifestPath }
 }
 
-test('repository prerequisites require expanded Git LFS bytes', async t => {
+test('repository prerequisites require expanded Git LFS bytes', { skip: !gitAvailable }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-repository-prerequisite-'))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
   const { manifest } = writeFixture(root)
@@ -69,7 +77,7 @@ test('repository prerequisites require expanded Git LFS bytes', async t => {
   fs.mkdirSync(path.dirname(installer), { recursive: true })
   fs.writeFileSync(path.join(root, '.gitattributes'),
     'eng/prerequisites/jsharp/installer.exe filter=lfs diff=lfs merge=lfs -text\n')
-  assert.equal(spawnSync('git', ['init', '--quiet'], { cwd: root }).status, 0)
+  assert.equal(spawnSync('git', ['init', '--quiet'], { cwd: root, env: gitEnvironment() }).status, 0)
   fs.writeFileSync(installer, Buffer.from([0]))
 
   await assert.rejects(
@@ -124,11 +132,8 @@ test('prerequisite manifest requires the pinned local registry image ID', t => {
 })
 
 test('release prerequisites lock the two const-generics fork packages', () => {
-  const manifest = readPrerequisiteManifest(
-    path.join(repositoryRoot, 'eng', 'release-prerequisites.json'),
-  )
-  const packages = manifest.value.downloads
-    .filter(item => item.kind === 'nuget-package')
+  const manifest = readPrerequisiteManifest(path.join(repositoryRoot, 'eng', 'release-prerequisites.json'));
+  const packages = manifest.value.downloads.filter(item => item.kind === 'nuget-package')
     .map(item => ({
       id: item.id,
       path: item.path,
@@ -164,10 +169,7 @@ test('release prerequisites lock the two const-generics fork packages', () => {
 test('const-generics package URL must match its locked package identity', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-const-package-url-'))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
-  const value = JSON.parse(fs.readFileSync(
-    path.join(repositoryRoot, 'eng', 'release-prerequisites.json'),
-    'utf8',
-  ))
+  const value = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'eng', 'release-prerequisites.json'), 'utf8'));
   const item = value.downloads.find(entry =>
     entry.id === 'const-generics-system-collections-immutable')
   item.url = item.url.replace('system.collections.immutable', 'system.reflection.metadata')

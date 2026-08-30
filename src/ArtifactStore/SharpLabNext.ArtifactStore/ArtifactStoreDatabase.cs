@@ -14,37 +14,24 @@ internal sealed class ArtifactStoreDatabase
 
     public ArtifactStoreDatabase(string databasePath)
     {
-        var builder = new SqliteConnectionStringBuilder
-        {
-            DataSource = databasePath,
-            Mode = SqliteOpenMode.ReadWriteCreate,
-            Cache = SqliteCacheMode.Shared,
-            Pooling = true,
-            ForeignKeys = true,
-            DefaultTimeout = 5
-        };
+        var builder = new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadWriteCreate, Cache = SqliteCacheMode.Shared, Pooling = true, ForeignKeys = true, DefaultTimeout = 5 };
         _connectionString = builder.ToString();
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await using (var pragma = connection.CreateCommand())
-        {
+        await using (var pragma = connection.CreateCommand()) {
             pragma.CommandText = "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;";
             _ = await pragma.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        await using (var versionCommand = connection.CreateCommand())
-        {
+        await using (var versionCommand = connection.CreateCommand()) {
             versionCommand.CommandText = "PRAGMA user_version;";
-            var currentVersion = Convert.ToInt32(
-                await versionCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
-                System.Globalization.CultureInfo.InvariantCulture);
+            var currentVersion = Convert.ToInt32(await versionCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), System.Globalization.CultureInfo.InvariantCulture);
             if (currentVersion > SchemaVersion)
             {
-                throw new InvalidOperationException(
-                    $"Artifact Store database schema {currentVersion} is newer than supported schema {SchemaVersion}.");
+                throw new InvalidOperationException($"Artifact Store database schema {currentVersion} is newer than supported schema {SchemaVersion}.");
             }
         }
 
@@ -96,34 +83,21 @@ internal sealed class ArtifactStoreDatabase
         _ = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task UpsertContentAsync(
-        PublishedContent content,
-        DateTimeOffset now,
-        DateTimeOffset expiresAt,
-        CancellationToken cancellationToken)
+    public async Task UpsertContentAsync(PublishedContent content, DateTimeOffset now, DateTimeOffset expiresAt, CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = connection.BeginTransaction();
-        await UpsertContentCoreAsync(connection, transaction, content, now, expiresAt, cancellationToken)
-            .ConfigureAwait(false);
+        await UpsertContentCoreAsync(connection, transaction, content, now, expiresAt, cancellationToken).ConfigureAwait(false);
         transaction.Commit();
     }
 
-    public async Task<bool> CommitArtifactAsync(
-        ArtifactBundleDescriptor descriptor,
-        string artifactRelativePath,
-        IReadOnlyList<PublishedContent> contents,
-        long totalSize,
-        DateTimeOffset now,
-        DateTimeOffset expiresAt,
-        CancellationToken cancellationToken)
+    public async Task<bool> CommitArtifactAsync(ArtifactBundleDescriptor descriptor, string artifactRelativePath, IReadOnlyList<PublishedContent> contents, long totalSize, DateTimeOffset now, DateTimeOffset expiresAt, CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = connection.BeginTransaction();
         var artifactId = descriptor.Manifest.ArtifactId.Value;
 
-        await using (var existing = connection.CreateCommand())
-        {
+        await using (var existing = connection.CreateCommand()) {
             existing.Transaction = transaction;
             existing.CommandText = "SELECT descriptor_json, relative_path, total_size FROM artifacts WHERE id = $id;";
             existing.Parameters.AddWithValue("$id", artifactId);
@@ -134,29 +108,22 @@ internal sealed class ArtifactStoreDatabase
                 var existingPath = reader.GetString(1);
                 var existingSize = reader.GetInt64(2);
                 var incomingDescriptor = JsonSerializer.Serialize(descriptor, JsonOptions);
-                if (!string.Equals(existingDescriptor, incomingDescriptor, StringComparison.Ordinal)
-                    || !string.Equals(existingPath, artifactRelativePath, StringComparison.Ordinal)
-                    || existingSize != totalSize)
+                if (!string.Equals(existingDescriptor, incomingDescriptor, StringComparison.Ordinal) || !string.Equals(existingPath, artifactRelativePath, StringComparison.Ordinal) || existingSize != totalSize)
                 {
                     throw new ArtifactCorruptedException($"Artifact metadata for '{artifactId}' does not match its content address.");
                 }
 
                 await reader.DisposeAsync().ConfigureAwait(false);
-                await ExtendArtifactExpiryAsync(connection, transaction, artifactId, now, expiresAt, cancellationToken)
-                    .ConfigureAwait(false);
+                await ExtendArtifactExpiryAsync(connection, transaction, artifactId, now, expiresAt, cancellationToken).ConfigureAwait(false);
                 transaction.Commit();
                 return false;
             }
         }
 
         foreach (var content in contents)
-        {
-            await UpsertContentCoreAsync(connection, transaction, content, now, expiresAt, cancellationToken)
-                .ConfigureAwait(false);
-        }
+            await UpsertContentCoreAsync(connection, transaction, content, now, expiresAt, cancellationToken).ConfigureAwait(false);
 
-        await using (var insertArtifact = connection.CreateCommand())
-        {
+        await using (var insertArtifact = connection.CreateCommand()) {
             insertArtifact.Transaction = transaction;
             insertArtifact.CommandText = """
                 INSERT INTO artifacts(id, descriptor_json, relative_path, total_size, created_utc, last_access_utc, expires_utc)
@@ -193,10 +160,7 @@ internal sealed class ArtifactStoreDatabase
         return true;
     }
 
-    public async Task<StoredArtifactMetadata?> GetArtifactAsync(
-        ArtifactRef artifactRef,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
+    public async Task<StoredArtifactMetadata?> GetArtifactAsync(ArtifactRef artifactRef, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
@@ -215,22 +179,14 @@ internal sealed class ArtifactStoreDatabase
             return null;
         }
 
-        var descriptor = JsonSerializer.Deserialize<ArtifactBundleDescriptor>(reader.GetString(0), JsonOptions)
-            ?? throw new ArtifactCorruptedException($"Artifact '{artifactRef}' has an empty descriptor.");
-        var result = new StoredArtifactMetadata(
-            descriptor,
-            reader.GetString(1),
-            reader.GetInt64(2),
-            FromUnixMilliseconds(reader.GetInt64(3)));
+        var descriptor = JsonSerializer.Deserialize<ArtifactBundleDescriptor>(reader.GetString(0), JsonOptions) ?? throw new ArtifactCorruptedException($"Artifact '{artifactRef}' has an empty descriptor.");
+        var result = new StoredArtifactMetadata(descriptor, reader.GetString(1), reader.GetInt64(2), FromUnixMilliseconds(reader.GetInt64(3)));
         await reader.DisposeAsync().ConfigureAwait(false);
         await TouchArtifactAsync(connection, artifactRef.Value, now, cancellationToken).ConfigureAwait(false);
         return result;
     }
 
-    public async Task<(ContentRef ContentRef, long Size, string RelativePath)?> GetContentAsync(
-        ContentRef contentRef,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
+    public async Task<(ContentRef ContentRef, long Size, string RelativePath)?> GetContentAsync(ContentRef contentRef, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
@@ -253,11 +209,7 @@ internal sealed class ArtifactStoreDatabase
         return result;
     }
 
-    public async Task<(ContentRef ContentRef, long Size, string RelativePath)?> GetArtifactEntryAsync(
-        ArtifactRef artifactRef,
-        string path,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
+    public async Task<(ContentRef ContentRef, long Size, string RelativePath)?> GetArtifactEntryAsync(ArtifactRef artifactRef, string path, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
@@ -286,13 +238,7 @@ internal sealed class ArtifactStoreDatabase
         return result;
     }
 
-    public async Task<bool> CreateLeaseAsync(
-        ArtifactRef artifactRef,
-        string tokenHash,
-        string owner,
-        DateTimeOffset now,
-        DateTimeOffset expiresAt,
-        CancellationToken cancellationToken)
+    public async Task<bool> CreateLeaseAsync(ArtifactRef artifactRef, string tokenHash, string owner, DateTimeOffset now, DateTimeOffset expiresAt, CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
@@ -310,11 +256,7 @@ internal sealed class ArtifactStoreDatabase
         return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
     }
 
-    public async Task<(ArtifactRef ArtifactRef, string Owner)?> RenewLeaseAsync(
-        string tokenHash,
-        DateTimeOffset now,
-        DateTimeOffset expiresAt,
-        CancellationToken cancellationToken)
+    public async Task<(ArtifactRef ArtifactRef, string Owner)?> RenewLeaseAsync(string tokenHash, DateTimeOffset now, DateTimeOffset expiresAt, CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = connection.BeginTransaction();
@@ -351,19 +293,14 @@ internal sealed class ArtifactStoreDatabase
         _ = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<GarbageCollectionPlan> CollectGarbageAsync(
-        DateTimeOffset now,
-        int maxArtifacts,
-        int maxContents,
-        CancellationToken cancellationToken)
+    public async Task<GarbageCollectionPlan> CollectGarbageAsync(DateTimeOffset now, int maxArtifacts, int maxContents, CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = connection.BeginTransaction();
         var nowMilliseconds = ToUnixMilliseconds(now);
 
         int expiredLeases;
-        await using (var deleteLeases = connection.CreateCommand())
-        {
+        await using (var deleteLeases = connection.CreateCommand()) {
             deleteLeases.Transaction = transaction;
             deleteLeases.CommandText = "DELETE FROM leases WHERE expires_utc <= $now;";
             deleteLeases.Parameters.AddWithValue("$now", nowMilliseconds);
@@ -371,8 +308,7 @@ internal sealed class ArtifactStoreDatabase
         }
 
         var artifacts = new List<(string Id, string RelativePath)>();
-        await using (var selectArtifacts = connection.CreateCommand())
-        {
+        await using (var selectArtifacts = connection.CreateCommand()) {
             selectArtifacts.Transaction = transaction;
             selectArtifacts.CommandText = """
                 SELECT id, relative_path
@@ -393,8 +329,7 @@ internal sealed class ArtifactStoreDatabase
 
         foreach (var artifact in artifacts)
         {
-            await using (var decrement = connection.CreateCommand())
-            {
+            await using (var decrement = connection.CreateCommand()) {
                 decrement.Transaction = transaction;
                 decrement.CommandText = """
                     UPDATE contents
@@ -415,8 +350,7 @@ internal sealed class ArtifactStoreDatabase
         }
 
         var contents = new List<ContentDeletion>();
-        await using (var selectContents = connection.CreateCommand())
-        {
+        await using (var selectContents = connection.CreateCommand()) {
             selectContents.Transaction = transaction;
             selectContents.CommandText = """
                 SELECT relative_path, size
@@ -465,16 +399,9 @@ internal sealed class ArtifactStoreDatabase
         }
     }
 
-    private static async Task UpsertContentCoreAsync(
-        SqliteConnection connection,
-        SqliteTransaction transaction,
-        PublishedContent content,
-        DateTimeOffset now,
-        DateTimeOffset expiresAt,
-        CancellationToken cancellationToken)
+    private static async Task UpsertContentCoreAsync(SqliteConnection connection, SqliteTransaction transaction, PublishedContent content, DateTimeOffset now, DateTimeOffset expiresAt, CancellationToken cancellationToken)
     {
-        await using (var insert = connection.CreateCommand())
-        {
+        await using (var insert = connection.CreateCommand()) {
             insert.Transaction = transaction;
             insert.CommandText = """
                 INSERT OR IGNORE INTO contents(id, size, relative_path, created_utc, last_access_utc, expires_utc, ref_count)
@@ -488,15 +415,12 @@ internal sealed class ArtifactStoreDatabase
             _ = await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        await using (var verify = connection.CreateCommand())
-        {
+        await using (var verify = connection.CreateCommand()) {
             verify.Transaction = transaction;
             verify.CommandText = "SELECT size, relative_path FROM contents WHERE id = $id;";
             verify.Parameters.AddWithValue("$id", content.ContentRef.Value);
             await using var reader = await verify.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
-                || reader.GetInt64(0) != content.Size
-                || !string.Equals(reader.GetString(1), content.RelativePath, StringComparison.Ordinal))
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false) || reader.GetInt64(0) != content.Size || !string.Equals(reader.GetString(1), content.RelativePath, StringComparison.Ordinal))
             {
                 throw new ArtifactCorruptedException($"Content metadata for '{content.ContentRef}' does not match its digest.");
             }
@@ -516,13 +440,7 @@ internal sealed class ArtifactStoreDatabase
         _ = await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task ExtendArtifactExpiryAsync(
-        SqliteConnection connection,
-        SqliteTransaction transaction,
-        string artifactId,
-        DateTimeOffset now,
-        DateTimeOffset expiresAt,
-        CancellationToken cancellationToken)
+    private static async Task ExtendArtifactExpiryAsync(SqliteConnection connection, SqliteTransaction transaction, string artifactId, DateTimeOffset now, DateTimeOffset expiresAt, CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -538,11 +456,7 @@ internal sealed class ArtifactStoreDatabase
         _ = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task TouchArtifactAsync(
-        SqliteConnection connection,
-        string artifactId,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
+    private static async Task TouchArtifactAsync(SqliteConnection connection, string artifactId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
         command.CommandText = "UPDATE artifacts SET last_access_utc = $now WHERE id = $id;";
@@ -551,11 +465,7 @@ internal sealed class ArtifactStoreDatabase
         _ = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task TouchContentAsync(
-        SqliteConnection connection,
-        string contentId,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
+    private static async Task TouchContentAsync(SqliteConnection connection, string contentId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
         command.CommandText = "UPDATE contents SET last_access_utc = $now WHERE id = $id;";

@@ -35,21 +35,12 @@ public static class ConstGenericsProcessorProtocol
     }
 
     private static string RequiredAssemblyMetadata(string key) =>
-        typeof(ConstGenericsProcessorProtocol).Assembly
-            .GetCustomAttributes<AssemblyMetadataAttribute>()
-            .SingleOrDefault(attribute => string.Equals(attribute.Key, key, StringComparison.Ordinal))
-            ?.Value is { Length: > 0 } value
-                ? value
-                : throw new InvalidOperationException($"Assembly metadata '{key}' is missing.");
+        typeof(ConstGenericsProcessorProtocol).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().SingleOrDefault(attribute => string.Equals(attribute.Key, key, StringComparison.Ordinal))
+?.Value is { Length: > 0 } value
+                ? value : throw new InvalidOperationException($"Assembly metadata '{key}' is missing.");
 }
 
-public sealed record ConstGenericsProcessorDescriptor(
-    int ProtocolVersion,
-    string IlSpyCommit,
-    string RuntimeCommit,
-    string MetadataFeatureTag,
-    string CompatibilityGroup,
-    IReadOnlyList<string> Operations);
+public sealed record ConstGenericsProcessorDescriptor(int ProtocolVersion, string IlSpyCommit, string RuntimeCommit, string MetadataFeatureTag, string CompatibilityGroup, IReadOnlyList<string> Operations);
 
 public sealed record ConstGenericsProcessorRequest(
     int ProtocolVersion,
@@ -77,25 +68,11 @@ public sealed record ConstGenericsProcessorResponse(
     bool Truncated,
     string? PublicMessage);
 
-public sealed record ConstGenericsProcessorLinkedRange(
-    string? SourceFilePath,
-    ConstGenericsProcessorTextRange? SourceRange,
-    ConstGenericsProcessorTextRange OutputRange);
+public sealed record ConstGenericsProcessorLinkedRange(string? SourceFilePath, ConstGenericsProcessorTextRange? SourceRange, ConstGenericsProcessorTextRange OutputRange);
 
-public sealed record ConstGenericsProcessorFinding(
-    string Code,
-    string Message,
-    string? TypeName,
-    string? MethodName,
-    int? MetadataToken,
-    string? FilePath,
-    ConstGenericsProcessorTextRange? Range);
+public sealed record ConstGenericsProcessorFinding(string Code, string Message, string? TypeName, string? MethodName, int? MetadataToken, string? FilePath, ConstGenericsProcessorTextRange? Range);
 
-public sealed record ConstGenericsProcessorTextRange(
-    int StartLine,
-    int StartCharacter,
-    int EndLine,
-    int EndCharacter);
+public sealed record ConstGenericsProcessorTextRange(int StartLine, int StartCharacter, int EndLine, int EndCharacter);
 
 public enum ConstGenericsProcessorOperation
 {

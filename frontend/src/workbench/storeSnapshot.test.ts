@@ -20,18 +20,7 @@ describe('workbench snapshot', () => {
     expect(snapshot).not.toHaveProperty('editor')
     expect(snapshot).not.toHaveProperty('fontSize')
     expect(snapshot).not.toHaveProperty('sourcePanePercent')
-    expect(Object.keys(snapshot).sort()).toEqual(
-      [
-        'activeFile',
-        'buildMode',
-        'fileName',
-        'files',
-        'selectionRevision',
-        'source',
-        'sourceOrder',
-        'workspaceRevision',
-      ].sort(),
-    )
+    expect(Object.keys(snapshot).sort()).toEqual(['activeFile', 'buildMode', 'fileName', 'files', 'selectionRevision', 'source', 'sourceOrder', 'workspaceRevision'].sort())
     expect(localStorage.getItem(editorPreferenceStorageKey)).toBe('codemirror')
     expect(localStorage.getItem(editorFontSizeStorageKey)).toBe('18')
     expect(localStorage.getItem(paneSplitPreferenceStorageKey)).toBe('63.5')

@@ -39,10 +39,7 @@ public sealed class GatewayDependencyHealthTests
             new Uri("http://runtime-supervisor.test/"),
             null);
 
-        var result = await probe.ProbeAsync(
-            target,
-            TimeSpan.FromSeconds(1),
-            TestContext.Current.CancellationToken);
+        var result = await probe.ProbeAsync(target, TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
 
         Assert.True(result.Ready);
         var profile = Assert.Single(result.RuntimeProfiles).Value;
@@ -83,10 +80,7 @@ public sealed class GatewayDependencyHealthTests
             new Uri("http://runtime-supervisor.test/"),
             null);
 
-        var result = await probe.ProbeAsync(
-            target,
-            TimeSpan.FromSeconds(1),
-            TestContext.Current.CancellationToken);
+        var result = await probe.ProbeAsync(target, TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
 
         Assert.False(result.Ready);
         Assert.Equal("Runtime profile probe returned malformed identity data.", result.Reason);
@@ -133,19 +127,14 @@ public sealed class GatewayDependencyHealthTests
             new Uri("http://runtime-supervisor.test/"),
             null);
 
-        var result = await probe.ProbeAsync(
-            target,
-            TimeSpan.FromSeconds(1),
-            TestContext.Current.CancellationToken);
+        var result = await probe.ProbeAsync(target, TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
 
         var profile = Assert.Single(result.RuntimeProfiles).Value;
         Assert.Equal("runtime-commit", profile.RuntimeCommit);
         Assert.Equal("jit-commit", profile.JitCommit);
         Assert.Equal("sha256:test", profile.RuntimeImageId);
         Assert.True(profile.AcceptedRuntimeFamilies!.SetEquals(["coreclr"]));
-        Assert.Contains(
-            "Microsoft.NETCore.App|||10.0.9",
-            profile.AcceptedFrameworks!);
+        Assert.Contains("Microsoft.NETCore.App|||10.0.9", profile.AcceptedFrameworks!);
         Assert.Equal("standard", profile.ContainerIsolationKind);
         Assert.Equal("coreclr", profile.ContainerEnvironmentKind);
         Assert.Equal("none", profile.JitSourceMappingKind);
@@ -155,12 +144,7 @@ public sealed class GatewayDependencyHealthTests
     public void EstablishedHealthyDependencyRequiresTwoConsecutiveFailuresBeforeDowngrade()
     {
         const string dependencyId = "language-worker:test";
-        var healthy = new GatewayDependencyProbeResult(
-            dependencyId,
-            GatewayDependencyKind.LanguageWorker,
-            true,
-            null,
-            EmptyProfiles());
+        var healthy = new GatewayDependencyProbeResult(dependencyId, GatewayDependencyKind.LanguageWorker, true, null, EmptyProfiles());
         var failed = healthy with { Ready = false, Reason = "Transient probe timeout." };
         var hysteresis = new GatewayDependencyFailureHysteresis();
 
@@ -207,12 +191,7 @@ public sealed class GatewayDependencyHealthTests
     public void InitialFailureIsNotMaskedWithoutKnownHealthyState()
     {
         const string dependencyId = "artifact-store";
-        var failed = new GatewayDependencyProbeResult(
-            dependencyId,
-            GatewayDependencyKind.ArtifactStore,
-            false,
-            "Store unavailable.",
-            EmptyProfiles());
+        var failed = new GatewayDependencyProbeResult(dependencyId, GatewayDependencyKind.ArtifactStore, false, "Store unavailable.", EmptyProfiles());
         var hysteresis = new GatewayDependencyFailureHysteresis();
 
         var result = hysteresis.Apply(
@@ -233,12 +212,7 @@ public sealed class GatewayDependencyHealthTests
         var healthy = await healthyService.GetSnapshotAsync(TestContext.Current.CancellationToken);
 
         var dependencyId = GatewayDependencyHealthService.LanguageDependencyId(CompilerWorkerId);
-        var unavailableWorker = new GatewayDependencyProbeResult(
-            dependencyId,
-            GatewayDependencyKind.LanguageWorker,
-            false,
-            "Compiler worker is down.",
-            EmptyProfiles());
+        var unavailableWorker = new GatewayDependencyProbeResult(dependencyId, GatewayDependencyKind.LanguageWorker, false, "Compiler worker is down.", EmptyProfiles());
         using var unavailableService = CreateService(
             catalog,
             new Dictionary<string, GatewayDependencyProbeResult>(StringComparer.Ordinal)
@@ -257,13 +231,9 @@ public sealed class GatewayDependencyHealthTests
         var toolchain = Assert.Single(unavailable.Catalog.Toolchains);
         AssertUnavailable(toolchain.Availability, "Compiler worker is down.");
         var referenceSet = Assert.Single(unavailable.Catalog.ReferenceSets);
-        AssertUnavailable(
-            referenceSet.Availability,
-            $"No healthy toolchain provides reference set '{ReferenceSetId}'.");
+        AssertUnavailable(referenceSet.Availability, $"No healthy toolchain provides reference set '{ReferenceSetId}'.");
         var preset = Assert.Single(unavailable.Catalog.Presets);
-        AssertUnavailable(
-            preset.Availability,
-            $"Preset toolchain '{ToolchainId}' is unavailable.");
+        AssertUnavailable(preset.Availability, $"Preset toolchain '{ToolchainId}' is unavailable.");
     }
 
     [Fact]
@@ -277,13 +247,9 @@ public sealed class GatewayDependencyHealthTests
         Assert.False(snapshot.Ready);
         Assert.True(snapshot.RuntimeSupervisorReady);
         var runtime = Assert.Single(snapshot.Catalog.Runtimes);
-        AssertUnavailable(
-            runtime.Availability,
-            $"Runtime profile '{RuntimeId}' is not loaded by Runtime Supervisor.");
+        AssertUnavailable(runtime.Availability, $"Runtime profile '{RuntimeId}' is not loaded by Runtime Supervisor.");
         var preset = Assert.Single(snapshot.Catalog.Presets);
-        AssertUnavailable(
-            preset.Availability,
-            $"Preset runtime '{RuntimeId}' is unavailable.");
+        AssertUnavailable(preset.Availability, $"Preset runtime '{RuntimeId}' is unavailable.");
     }
 
     [Fact]
@@ -312,12 +278,8 @@ public sealed class GatewayDependencyHealthTests
 
         Assert.False(snapshot.Ready);
         var overlaidRuntime = Assert.Single(snapshot.Catalog.Runtimes);
-        AssertUnavailable(
-            overlaidRuntime.Availability,
-            $"Runtime profile '{RuntimeId}' runtime version mismatch: catalog expects '10.0.0', Supervisor loaded '9.9.9'.");
-        AssertUnavailable(
-            Assert.Single(snapshot.Catalog.Presets).Availability,
-            $"Preset runtime '{RuntimeId}' is unavailable.");
+        AssertUnavailable(overlaidRuntime.Availability, $"Runtime profile '{RuntimeId}' runtime version mismatch: catalog expects '10.0.0', Supervisor loaded '9.9.9'.");
+        AssertUnavailable(Assert.Single(snapshot.Catalog.Presets).Availability, $"Preset runtime '{RuntimeId}' is unavailable.");
     }
 
     [Fact]
@@ -325,10 +287,7 @@ public sealed class GatewayDependencyHealthTests
     {
         var catalog = CreateCatalog();
         var runtime = Assert.Single(catalog.Runtimes);
-        var mismatched = RuntimeIdentity(runtime) with
-        {
-            Capabilities = new HashSet<string>(StringComparer.Ordinal)
-        };
+        var mismatched = RuntimeIdentity(runtime) with { Capabilities = new HashSet<string>(StringComparer.Ordinal) };
         var supervisor = new GatewayDependencyProbeResult(
             GatewayDependencyHealthService.RuntimeSupervisorDependencyId,
             GatewayDependencyKind.RuntimeSupervisor,
@@ -348,9 +307,7 @@ public sealed class GatewayDependencyHealthTests
         var snapshot = await service.GetSnapshotAsync(TestContext.Current.CancellationToken);
 
         Assert.False(snapshot.Ready);
-        AssertUnavailable(
-            Assert.Single(snapshot.Catalog.Runtimes).Availability,
-            $"Runtime profile '{RuntimeId}' capabilities do not match the catalog contract.");
+        AssertUnavailable(Assert.Single(snapshot.Catalog.Runtimes).Availability, $"Runtime profile '{RuntimeId}' capabilities do not match the catalog contract.");
     }
 
     [Fact]
@@ -366,11 +323,7 @@ public sealed class GatewayDependencyHealthTests
             AcceptedRuntimeFamilies = ["dotnet"],
             AcceptedFrameworks =
             [
-                new RuntimeFrameworkManifest
-                {
-                    Name = "Microsoft.NETCore.App",
-                    ExactVersion = "10.0.0"
-                }
+                new RuntimeFrameworkManifest { Name = "Microsoft.NETCore.App", ExactVersion = "10.0.0" }
             ],
             ContainerIsolationKind = "standard",
             ContainerEnvironmentKind = "coreclr",
@@ -397,9 +350,7 @@ public sealed class GatewayDependencyHealthTests
         var snapshot = await service.GetSnapshotAsync(TestContext.Current.CancellationToken);
 
         Assert.False(snapshot.Ready);
-        Assert.Equal(
-            "Runtime profile 'test-runtime' runtime image ID mismatch: catalog expects 'sha256:expected', Supervisor loaded 'sha256:other'.",
-            Assert.Single(snapshot.Catalog.Runtimes).Availability.Reason);
+        Assert.Equal("Runtime profile 'test-runtime' runtime image ID mismatch: catalog expects 'sha256:expected', Supervisor loaded 'sha256:other'.", Assert.Single(snapshot.Catalog.Runtimes).Availability.Reason);
     }
 
     [Fact]
@@ -410,39 +361,20 @@ public sealed class GatewayDependencyHealthTests
 
         var snapshot = await service.GetSnapshotAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(
-            Find(catalog.Toolchains, NotBuiltToolchainId).Availability,
-            Find(snapshot.Catalog.Toolchains, NotBuiltToolchainId).Availability);
-        Assert.Equal(
-            Find(catalog.ReferenceSets, NotBuiltReferenceSetId).Availability,
-            Find(snapshot.Catalog.ReferenceSets, NotBuiltReferenceSetId).Availability);
-        Assert.Equal(
-            Find(catalog.Runtimes, NotBuiltRuntimeId).Availability,
-            Find(snapshot.Catalog.Runtimes, NotBuiltRuntimeId).Availability);
-        Assert.Equal(
-            Find(catalog.ArtifactProcessors, NotBuiltProcessorId).Availability,
-            Find(snapshot.Catalog.ArtifactProcessors, NotBuiltProcessorId).Availability);
-        Assert.Equal(
-            Find(catalog.Presets, NotBuiltPresetId).Availability,
-            Find(snapshot.Catalog.Presets, NotBuiltPresetId).Availability);
+        Assert.Equal(Find(catalog.Toolchains, NotBuiltToolchainId).Availability, Find(snapshot.Catalog.Toolchains, NotBuiltToolchainId).Availability);
+        Assert.Equal(Find(catalog.ReferenceSets, NotBuiltReferenceSetId).Availability, Find(snapshot.Catalog.ReferenceSets, NotBuiltReferenceSetId).Availability);
+        Assert.Equal(Find(catalog.Runtimes, NotBuiltRuntimeId).Availability, Find(snapshot.Catalog.Runtimes, NotBuiltRuntimeId).Availability);
+        Assert.Equal(Find(catalog.ArtifactProcessors, NotBuiltProcessorId).Availability, Find(snapshot.Catalog.ArtifactProcessors, NotBuiltProcessorId).Availability);
+        Assert.Equal(Find(catalog.Presets, NotBuiltPresetId).Availability, Find(snapshot.Catalog.Presets, NotBuiltPresetId).Availability);
     }
 
     [Fact]
     public void PipelineAvailabilityRejectsRecordedProfileUnavailableSelection()
     {
         var snapshot = CreateSnapshot(CreateCatalog(), artifactStoreReady: true);
-        var resolution = CreateResolution(
-            [new SelectionChange(
-                SelectionField.Toolchain,
-                ToolchainId,
-                ToolchainId,
-                SelectionChangeReason.ProfileUnavailable,
-                "The requested profile is temporarily unavailable.")]);
+        var resolution = CreateResolution([new SelectionChange(SelectionField.Toolchain, ToolchainId, ToolchainId, SelectionChangeReason.ProfileUnavailable, "The requested profile is temporarily unavailable.")]);
 
-        var reason = GatewayPipelineAvailability.GetUnavailableReason(
-            snapshot,
-            resolution,
-            requireArtifactStore: false);
+        var reason = GatewayPipelineAvailability.GetUnavailableReason(snapshot, resolution, requireArtifactStore: false);
 
         Assert.Equal("The requested profile is temporarily unavailable.", reason);
     }
@@ -453,16 +385,10 @@ public sealed class GatewayDependencyHealthTests
         var snapshot = CreateSnapshot(CreateCatalog(), artifactStoreReady: false);
         var resolution = CreateResolution();
 
-        var reason = GatewayPipelineAvailability.GetUnavailableReason(
-            snapshot,
-            resolution,
-            requireArtifactStore: true);
+        var reason = GatewayPipelineAvailability.GetUnavailableReason(snapshot, resolution, requireArtifactStore: true);
 
         Assert.Equal("Artifact Store is unavailable.", reason);
-        Assert.Null(GatewayPipelineAvailability.GetUnavailableReason(
-            snapshot,
-            resolution,
-            requireArtifactStore: false));
+        Assert.Null(GatewayPipelineAvailability.GetUnavailableReason(snapshot, resolution, requireArtifactStore: false));
     }
 
     [Fact]
@@ -473,10 +399,7 @@ public sealed class GatewayDependencyHealthTests
         {
             ArtifactProcessors =
             [
-                Find(catalog.ArtifactProcessors, ProcessorId) with
-                {
-                    Availability = Unavailable("Selected processor is down.")
-                }
+                Find(catalog.ArtifactProcessors, ProcessorId) with { Availability = Unavailable("Selected processor is down.") }
             ]
         };
         var snapshot = CreateSnapshot(catalog, artifactStoreReady: true);
@@ -484,40 +407,23 @@ public sealed class GatewayDependencyHealthTests
             stages:
             [
                 BuildStage(),
-                new PipelineStageDescriptor(
-                    "render",
-                    PipelineStageKind.Render,
-                    ArtifactWorkerId,
-                    "dotnet-managed-pe-v1",
-                    "text-v1")
+                new PipelineStageDescriptor("render", PipelineStageKind.Render, ArtifactWorkerId, "dotnet-managed-pe-v1", "text-v1")
             ]);
 
-        var reason = GatewayPipelineAvailability.GetUnavailableReason(
-            snapshot,
-            resolution,
-            requireArtifactStore: false);
+        var reason = GatewayPipelineAvailability.GetUnavailableReason(snapshot, resolution, requireArtifactStore: false);
 
         Assert.Equal("Selected processor is down.", reason);
     }
 
-    private static GatewayDependencyHealthService CreateService(
-        CatalogDocument catalog,
-        IReadOnlyDictionary<string, GatewayDependencyProbeResult>? probeResults = null,
-        IReadOnlySet<string>? runtimeProfileIds = null)
+    private static GatewayDependencyHealthService CreateService(CatalogDocument catalog, IReadOnlyDictionary<string, GatewayDependencyProbeResult>? probeResults = null, IReadOnlySet<string>? runtimeProfileIds = null)
     {
-        var languageWorkers = new LanguageWorkerEndpointRegistry(catalog.Toolchains
-            .Select(static toolchain => toolchain.WorkerId)
-            .Distinct(StringComparer.Ordinal)
-            .Select(static workerId => new LanguageWorkerEndpoint(
+        var languageWorkers = new LanguageWorkerEndpointRegistry(catalog.Toolchains.Select(static toolchain => toolchain.WorkerId).Distinct(StringComparer.Ordinal).Select(static workerId => new LanguageWorkerEndpoint(
                 workerId,
                 new Uri($"http://{workerId}.test/"),
                 "test-release",
                 null,
                 null)));
-        var artifactWorkers = new ArtifactWorkerEndpointRegistry(catalog.ArtifactProcessors
-            .Select(static processor => processor.WorkerId)
-            .Distinct(StringComparer.Ordinal)
-            .Select(static workerId => new ArtifactWorkerEndpoint(
+        var artifactWorkers = new ArtifactWorkerEndpointRegistry(catalog.ArtifactProcessors.Select(static processor => processor.WorkerId).Distinct(StringComparer.Ordinal).Select(static workerId => new ArtifactWorkerEndpoint(
                 workerId,
                 new Uri($"http://{workerId}.test/"),
                 "test-release",
@@ -529,35 +435,16 @@ public sealed class GatewayDependencyHealthTests
             new Uri("http://runtime-supervisor.test/"),
             TimeSpan.FromSeconds(1),
             TimeSpan.FromMilliseconds(100));
-        var selectedRuntimeProfileIds = runtimeProfileIds ?? catalog.Runtimes
-            .Select(static runtime => runtime.Id)
-            .ToHashSet(StringComparer.Ordinal);
-        var loadedRuntimeProfiles = catalog.Runtimes
-            .Where(runtime => selectedRuntimeProfileIds.Contains(runtime.Id))
-            .ToDictionary(
-                static runtime => runtime.Id,
-                RuntimeIdentity,
-                StringComparer.Ordinal);
-        return new GatewayDependencyHealthService(
-            catalog,
-            languageWorkers,
-            artifactWorkers,
-            options,
-            new FakeGatewayDependencyProbe(probeResults, loadedRuntimeProfiles));
+        var selectedRuntimeProfileIds = runtimeProfileIds ?? catalog.Runtimes.Select(static runtime => runtime.Id).ToHashSet(StringComparer.Ordinal);
+        var loadedRuntimeProfiles = catalog.Runtimes.Where(runtime => selectedRuntimeProfileIds.Contains(runtime.Id)).ToDictionary(static runtime => runtime.Id, RuntimeIdentity, StringComparer.Ordinal);
+        return new GatewayDependencyHealthService(catalog, languageWorkers, artifactWorkers, options, new FakeGatewayDependencyProbe(probeResults, loadedRuntimeProfiles));
     }
 
-    private static GatewayDependencySnapshot CreateSnapshot(
-        CatalogDocument catalog,
-        bool artifactStoreReady)
+    private static GatewayDependencySnapshot CreateSnapshot(CatalogDocument catalog, bool artifactStoreReady)
     {
         var dependencies = new Dictionary<string, GatewayDependencyProbeResult>(StringComparer.Ordinal)
         {
-            [GatewayDependencyHealthService.ArtifactStoreDependencyId] = new GatewayDependencyProbeResult(
-                GatewayDependencyHealthService.ArtifactStoreDependencyId,
-                GatewayDependencyKind.ArtifactStore,
-                artifactStoreReady,
-                artifactStoreReady ? null : "Store probe failed.",
-                EmptyProfiles()),
+            [GatewayDependencyHealthService.ArtifactStoreDependencyId] = new GatewayDependencyProbeResult(GatewayDependencyHealthService.ArtifactStoreDependencyId, GatewayDependencyKind.ArtifactStore, artifactStoreReady, artifactStoreReady ? null : "Store probe failed.", EmptyProfiles()),
             [GatewayDependencyHealthService.RuntimeSupervisorDependencyId] = new GatewayDependencyProbeResult(
                 GatewayDependencyHealthService.RuntimeSupervisorDependencyId,
                 GatewayDependencyKind.RuntimeSupervisor,
@@ -571,32 +458,10 @@ public sealed class GatewayDependencyHealthTests
         return new GatewayDependencySnapshot(catalog, dependencies, DateTimeOffset.UnixEpoch, artifactStoreReady);
     }
 
-    private static ResolveSelectionResponse CreateResolution(
-        IReadOnlyList<SelectionChange>? changes = null,
-        IReadOnlyList<PipelineStageDescriptor>? stages = null) =>
-        new(
-            new ResolvedSelection(LanguageId, ToolchainId, ReferenceSetId, OutputId, null),
-            changes ?? [],
-            new EffectiveCapabilities([], [], [], []),
-            "resolution-id",
-            new PipelinePlanDescriptor(
-                "test-release",
-                CompilerWorkerId,
-                CompilerWorkerId,
-                ReferenceSetId,
-                stages ?? [BuildStage()],
-                null,
-                "test-policy",
-                []),
-            DateTimeOffset.MaxValue);
+    private static ResolveSelectionResponse CreateResolution(IReadOnlyList<SelectionChange>? changes = null, IReadOnlyList<PipelineStageDescriptor>? stages = null) =>
+        new(new ResolvedSelection(LanguageId, ToolchainId, ReferenceSetId, OutputId, null), changes ?? [], new EffectiveCapabilities([], [], [], []), "resolution-id", new PipelinePlanDescriptor("test-release", CompilerWorkerId, CompilerWorkerId, ReferenceSetId, stages ?? [BuildStage()], null, "test-policy", []), DateTimeOffset.MaxValue);
 
-    private static PipelineStageDescriptor BuildStage() =>
-        new(
-            "build",
-            PipelineStageKind.Build,
-            CompilerWorkerId,
-            null,
-            "dotnet-managed-pe-v1");
+    private static PipelineStageDescriptor BuildStage() => new("build", PipelineStageKind.Build, CompilerWorkerId, null, "dotnet-managed-pe-v1");
 
     private static CatalogDocument CreateCatalog(bool includeNotBuiltComponents = false)
     {
@@ -675,63 +540,11 @@ public sealed class GatewayDependencyHealthTests
 
         if (includeNotBuiltComponents)
         {
-            toolchains.Add(new ToolchainManifest
-            {
-                Id = NotBuiltToolchainId,
-                DisplayName = "Not-built compiler",
-                WorkerId = "compiler-not-built",
-                ReleaseTrack = "candidate",
-                ResolvedVersion = "0.0.0",
-                DefaultReferenceSetId = NotBuiltReferenceSetId,
-                SupportedLanguageIds = [LanguageId],
-                AllowedReferenceSetIds = [NotBuiltReferenceSetId],
-                ProducesArtifactFormats = ["dotnet-managed-pe-v1"],
-                Capabilities = ["compile-check"],
-                Availability = NotBuilt()
-            });
-            referenceSets.Add(new ReferenceSetManifest
-            {
-                Id = NotBuiltReferenceSetId,
-                DisplayName = "Not-built references",
-                TargetFramework = "net-next.0",
-                Digest = "sha256:not-built",
-                RuntimeFamily = "dotnet",
-                Availability = NotBuilt()
-            });
-            runtimes.Add(new RuntimeManifest
-            {
-                Id = NotBuiltRuntimeId,
-                DisplayName = "Not-built runtime",
-                Family = "dotnet",
-                ResolvedVersion = "0.0.0",
-                Rid = "linux-x64",
-                Architecture = "x64",
-                AcceptedArtifactFormats = ["dotnet-managed-pe-v1"],
-                Capabilities = ["run"],
-                Availability = NotBuilt()
-            });
-            processors.Add(new ArtifactProcessorManifest
-            {
-                Id = NotBuiltProcessorId,
-                DisplayName = "Not-built artifact processor",
-                ResolvedVersion = "not-built-version",
-                WorkerId = "artifact-worker-not-built",
-                AcceptsArtifactFormats = ["dotnet-managed-pe-v1"],
-                ProducesArtifactFormats = ["text-v1"],
-                Capabilities = ["il"],
-                Availability = NotBuilt()
-            });
-            presets.Add(new ProfilePreset
-            {
-                Id = NotBuiltPresetId,
-                DisplayName = "Not-built preset",
-                LanguageId = LanguageId,
-                ToolchainId = NotBuiltToolchainId,
-                ReferenceSetId = NotBuiltReferenceSetId,
-                DefaultOutputId = OutputId,
-                DefaultRuntimeId = NotBuiltRuntimeId,
-                Availability = NotBuilt()
-            });
+            toolchains.Add(new ToolchainManifest { Id = NotBuiltToolchainId, DisplayName = "Not-built compiler", WorkerId = "compiler-not-built", ReleaseTrack = "candidate", ResolvedVersion = "0.0.0", DefaultReferenceSetId = NotBuiltReferenceSetId, SupportedLanguageIds = [LanguageId], AllowedReferenceSetIds = [NotBuiltReferenceSetId], ProducesArtifactFormats = ["dotnet-managed-pe-v1"], Capabilities = ["compile-check"], Availability = NotBuilt() });
+            referenceSets.Add(new ReferenceSetManifest { Id = NotBuiltReferenceSetId, DisplayName = "Not-built references", TargetFramework = "net-next.0", Digest = "sha256:not-built", RuntimeFamily = "dotnet", Availability = NotBuilt() });
+            runtimes.Add(new RuntimeManifest { Id = NotBuiltRuntimeId, DisplayName = "Not-built runtime", Family = "dotnet", ResolvedVersion = "0.0.0", Rid = "linux-x64", Architecture = "x64", AcceptedArtifactFormats = ["dotnet-managed-pe-v1"], Capabilities = ["run"], Availability = NotBuilt() });
+            processors.Add(new ArtifactProcessorManifest { Id = NotBuiltProcessorId, DisplayName = "Not-built artifact processor", ResolvedVersion = "not-built-version", WorkerId = "artifact-worker-not-built", AcceptsArtifactFormats = ["dotnet-managed-pe-v1"], ProducesArtifactFormats = ["text-v1"], Capabilities = ["il"], Availability = NotBuilt() });
+            presets.Add(new ProfilePreset { Id = NotBuiltPresetId, DisplayName = "Not-built preset", LanguageId = LanguageId, ToolchainId = NotBuiltToolchainId, ReferenceSetId = NotBuiltReferenceSetId, DefaultOutputId = OutputId, DefaultRuntimeId = NotBuiltRuntimeId, Availability = NotBuilt() });
         }
 
         return new CatalogDocument
@@ -741,17 +554,7 @@ public sealed class GatewayDependencyHealthTests
             ReleaseId = "test-release",
             Languages =
             [
-                new LanguageManifest
-                {
-                    Id = LanguageId,
-                    DisplayName = "Test language",
-                    MonacoLanguageId = "plaintext",
-                    Extensions = [".test"],
-                    DefaultFileName = "Program.test",
-                    DefaultSource = "test",
-                    DefaultToolchainId = ToolchainId,
-                    Capabilities = ["diagnostics"]
-                }
+                new LanguageManifest { Id = LanguageId, DisplayName = "Test language", MonacoLanguageId = "plaintext", Extensions = [".test"], DefaultFileName = "Program.test", DefaultSource = "test", DefaultToolchainId = ToolchainId, Capabilities = ["diagnostics"] }
             ],
             Toolchains = toolchains,
             ReferenceSets = referenceSets,
@@ -759,14 +562,7 @@ public sealed class GatewayDependencyHealthTests
             ArtifactProcessors = processors,
             Outputs =
             [
-                new OutputManifest
-                {
-                    Id = OutputId,
-                    DisplayName = "Test output",
-                    Renderer = "text",
-                    RequiresRuntime = false,
-                    RequiredCapabilities = []
-                }
+                new OutputManifest { Id = OutputId, DisplayName = "Test output", Renderer = "text", RequiresRuntime = false, RequiredCapabilities = [] }
             ],
             Compatibility = [],
             Presets = presets
@@ -813,8 +609,7 @@ public sealed class GatewayDependencyHealthTests
         _ => throw new InvalidOperationException($"Unsupported catalog item type '{typeof(T).Name}'.")
     };
 
-    private static Dictionary<string, RuntimeProfileProbeIdentity> EmptyProfiles() =>
-        new(StringComparer.Ordinal);
+    private static Dictionary<string, RuntimeProfileProbeIdentity> EmptyProfiles() => new(StringComparer.Ordinal);
 
     private static HashSet<string> EmptyIds() => new(StringComparer.Ordinal);
 
@@ -833,14 +628,9 @@ public sealed class GatewayDependencyHealthTests
         runtime.JitCommit,
         runtime.RuntimeImageId,
         runtime.AcceptedRuntimeFamilies.ToHashSet(StringComparer.Ordinal),
-        runtime.AcceptedFrameworks
-            .Select(static framework => string.Join(
-                '|',
-                framework.Name,
-                framework.MinimumVersion ?? string.Empty,
-                framework.MaximumVersion ?? string.Empty,
-                framework.ExactVersion ?? string.Empty))
-            .ToHashSet(StringComparer.Ordinal),
+            runtime.AcceptedFrameworks
+                .Select(static framework => string.Join('|', framework.Name, framework.MinimumVersion ?? string.Empty, framework.MaximumVersion ?? string.Empty, framework.ExactVersion ?? string.Empty))
+                .ToHashSet(StringComparer.Ordinal),
         runtime.ContainerIsolationKind,
         runtime.ContainerEnvironmentKind,
         runtime.JitSourceMappingKind);
@@ -858,26 +648,18 @@ public sealed class GatewayDependencyHealthTests
         };
     }
 
-    private sealed class DelegateHandler(Func<HttpRequestMessage, HttpResponseMessage> responseFactory)
-        : HttpMessageHandler
+    private sealed class DelegateHandler(Func<HttpRequestMessage, HttpResponseMessage> responseFactory) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(responseFactory(request));
         }
     }
 
-    private sealed class FakeGatewayDependencyProbe(
-        IReadOnlyDictionary<string, GatewayDependencyProbeResult>? configuredResults,
-        IReadOnlyDictionary<string, RuntimeProfileProbeIdentity> runtimeProfiles) : IGatewayDependencyProbe
+    private sealed class FakeGatewayDependencyProbe(IReadOnlyDictionary<string, GatewayDependencyProbeResult>? configuredResults, IReadOnlyDictionary<string, RuntimeProfileProbeIdentity> runtimeProfiles) : IGatewayDependencyProbe
     {
-        public Task<GatewayDependencyProbeResult> ProbeAsync(
-            GatewayDependencyTarget target,
-            TimeSpan timeout,
-            CancellationToken cancellationToken)
+        public Task<GatewayDependencyProbeResult> ProbeAsync(GatewayDependencyTarget target, TimeSpan timeout, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (configuredResults?.TryGetValue(target.Id, out var configured) == true)
@@ -885,14 +667,8 @@ public sealed class GatewayDependencyHealthTests
 
             IReadOnlyDictionary<string, RuntimeProfileProbeIdentity> profiles =
                 target.Kind == GatewayDependencyKind.RuntimeSupervisor
-                    ? runtimeProfiles
-                    : EmptyProfiles();
-            return Task.FromResult(new GatewayDependencyProbeResult(
-                target.Id,
-                target.Kind,
-                true,
-                null,
-                profiles));
+                    ? runtimeProfiles : EmptyProfiles();
+            return Task.FromResult(new GatewayDependencyProbeResult(target.Id, target.Kind, true, null, profiles));
         }
     }
 

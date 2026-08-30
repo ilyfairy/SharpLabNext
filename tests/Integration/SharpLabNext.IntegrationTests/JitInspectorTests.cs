@@ -29,47 +29,18 @@ public sealed class JitInspectorTests
         var sourceRange = new JitSourceTextRange(2, 8, 2, 30);
         var outputRange = new JitSourceTextRange(7, 0, 7, 18);
         var evidence = new JitEvidenceRange(0, 0, 4, "Program.cs", 3, 9, 3, 31);
-        var method = new JitMethodResult(
-            "0x06000001",
-            0x06000001,
-            (nuint)0x1234,
-            (nuint)0x5678,
-            "Program.Main",
-            "prepared",
-            "0x0000000000005678",
-            null,
-            4,
-            1,
-            [new JitSourceLinkedRange(
-                "Program.cs",
-                sourceRange,
-                outputRange,
-                "sequence-point",
-                evidence)])
+        var method = new JitMethodResult("0x06000001", 0x06000001, (nuint)0x1234, (nuint)0x5678, "Program.Main", "prepared", "0x0000000000005678", null, 4, 1, [new JitSourceLinkedRange("Program.cs", sourceRange, outputRange, "sequence-point", evidence)])
         {
             MappingSource = "ordinary"
         };
 
-        var payload = RuntimeStructuredPayloadCodec.Serialize(new
-        {
-            RuntimeVersion = "10.0.10",
-            Assembly = "SharpLabNext.User",
-            MethodFilter = "Program.Main",
-            Methods = new[] { method }
-        });
+        var payload = RuntimeStructuredPayloadCodec.Serialize(new { RuntimeVersion = "10.0.10", Assembly = "SharpLabNext.User", MethodFilter = "Program.Main", Methods = new[] { method } });
         using var summary = JsonDocument.Parse(payload);
-        var serializedMethod = Assert.Single(
-            summary.RootElement.GetProperty("Methods").EnumerateArray());
-        var linkedRange = Assert.Single(
-            serializedMethod.GetProperty("LinkedRanges").EnumerateArray());
-        var evidenceRange = Assert.Single(
-            serializedMethod.GetProperty("EvidenceRanges").EnumerateArray());
+        var serializedMethod = Assert.Single(summary.RootElement.GetProperty("Methods").EnumerateArray());
+        var linkedRange = Assert.Single(serializedMethod.GetProperty("LinkedRanges").EnumerateArray());
+        var evidenceRange = Assert.Single(serializedMethod.GetProperty("EvidenceRanges").EnumerateArray());
 
-        Assert.Equal(
-            ["OutputRange", "Precision", "SourceFilePath", "SourceRange"],
-            linkedRange.EnumerateObject()
-                .Select(static property => property.Name)
-                .Order(StringComparer.Ordinal));
+        Assert.Equal(["OutputRange", "Precision", "SourceFilePath", "SourceRange"], linkedRange.EnumerateObject().Select(static property => property.Name).Order(StringComparer.Ordinal));
         Assert.Equal(
             [
                 "Document",
@@ -81,9 +52,7 @@ public sealed class JitInspectorTests
                 "StartColumn",
                 "StartLine"
             ],
-            evidenceRange.EnumerateObject()
-                .Select(static property => property.Name)
-                .Order(StringComparer.Ordinal));
+            evidenceRange.EnumerateObject().Select(static property => property.Name).Order(StringComparer.Ordinal));
         Assert.Equal(0, evidenceRange.GetProperty("IlOffset").GetInt32());
         Assert.Equal(0, evidenceRange.GetProperty("NativeStartOffset").GetInt32());
         Assert.Equal(4, evidenceRange.GetProperty("NativeEndOffset").GetInt32());
@@ -103,16 +72,11 @@ public sealed class JitInspectorTests
         var fixtureAssembly = Assembly.LoadFrom(fixturePath);
         var programType = inspectorAssembly.GetType("JitInspectorProgram");
         Assert.NotNull(programType);
-        var inspectAssembly = programType.GetMethod(
-            "InspectAssembly",
-            BindingFlags.NonPublic | BindingFlags.Static);
+        var inspectAssembly = programType.GetMethod("InspectAssembly", BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(inspectAssembly);
 
-        var results = Assert.IsAssignableFrom<System.Collections.IEnumerable>(
-            inspectAssembly.Invoke(null, [fixtureAssembly, "FixtureNode..ctor"]));
-        var displayNames = results.Cast<object>()
-            .Select(result => Assert.IsType<string>(result.GetType().GetProperty("DisplayName")?.GetValue(result)))
-            .ToArray();
+        var results = Assert.IsAssignableFrom<System.Collections.IEnumerable>(inspectAssembly.Invoke(null, [fixtureAssembly, "FixtureNode..ctor"]));
+        var displayNames = results.Cast<object>().Select(result => Assert.IsType<string>(result.GetType().GetProperty("DisplayName")?.GetValue(result))).ToArray();
 
         Assert.Contains(displayNames, static name => name.EndsWith("FixtureNode..ctor", StringComparison.Ordinal));
     }
@@ -121,23 +85,17 @@ public sealed class JitInspectorTests
     public void InspectorInstantiatesOnlyAttributedGenericMethods()
     {
         var results = InspectFixture("GenericFixture");
-        var inspected = results.Cast<object>()
-            .Select(result => new
-            {
-                Method = Assert.IsType<string>(result.GetType().GetProperty("Method")?.GetValue(result)),
-                DisplayName = Assert.IsType<string>(result.GetType().GetProperty("DisplayName")?.GetValue(result)),
-                Status = Assert.IsType<string>(result.GetType().GetProperty("Status")?.GetValue(result))
-            })
-            .ToArray();
+        var inspected = results.Cast<object>().Select(result => new
+        {
+            Method = Assert.IsType<string>(result.GetType().GetProperty("Method")?.GetValue(result)),
+            DisplayName = Assert.IsType<string>(result.GetType().GetProperty("DisplayName")?.GetValue(result)),
+            Status = Assert.IsType<string>(result.GetType().GetProperty("Status")?.GetValue(result))
+        }).ToArray();
 
-        var identity = Assert.Single(inspected, static result => result.DisplayName.EndsWith(
-            "GenericFixture.Identity",
-            StringComparison.Ordinal));
+        var identity = Assert.Single(inspected, static result => result.DisplayName.EndsWith("GenericFixture.Identity", StringComparison.Ordinal));
         Assert.Equal("prepared", identity.Status);
         Assert.Contains("System.Int32", identity.Method, StringComparison.Ordinal);
-        Assert.DoesNotContain(inspected, static result => result.DisplayName.EndsWith(
-            "GenericFixture.Unspecified",
-            StringComparison.Ordinal));
+        Assert.DoesNotContain(inspected, static result => result.DisplayName.EndsWith("GenericFixture.Unspecified", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -147,26 +105,14 @@ public sealed class JitInspectorTests
         var inspectorAssembly = Assembly.LoadFrom(inspectorPath);
         var programType = inspectorAssembly.GetType("JitInspectorProgram");
         Assert.NotNull(programType);
-        var methodNamesMatch = programType.GetMethod(
-            "MethodNamesMatch",
-            BindingFlags.NonPublic | BindingFlags.Static);
+        var methodNamesMatch = programType.GetMethod("MethodNamesMatch", BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(methodNamesMatch);
 
-        Assert.False(Assert.IsType<bool>(methodNamesMatch.Invoke(
-            null,
-            ["(dynamicClass).IL_STUB_PInvoke(System.IntPtr).int", "Program.CurrentTarget"])));
-        Assert.True(Assert.IsType<bool>(methodNamesMatch.Invoke(
-            null,
-            ["Program.CurrentTarget().int", "Program.CurrentTarget"])));
-        Assert.False(Assert.IsType<bool>(methodNamesMatch.Invoke(
-            null,
-            ["Program.<Main>(System.String[]).int", "Program.<Main>$"])));
-        Assert.True(Assert.IsType<bool>(methodNamesMatch.Invoke(
-            null,
-            ["Program.<Main>$(System.String[]).int", "Program.<Main>$"])));
-        Assert.True(Assert.IsType<bool>(methodNamesMatch.Invoke(
-            null,
-            ["GenericFixture.Identity[int](int).int", "GenericFixture.Identity"])));
+        Assert.False(Assert.IsType<bool>(methodNamesMatch.Invoke(null, ["(dynamicClass).IL_STUB_PInvoke(System.IntPtr).int", "Program.CurrentTarget"])));
+        Assert.True(Assert.IsType<bool>(methodNamesMatch.Invoke(null, ["Program.CurrentTarget().int", "Program.CurrentTarget"])));
+        Assert.False(Assert.IsType<bool>(methodNamesMatch.Invoke(null, ["Program.<Main>(System.String[]).int", "Program.<Main>$"])));
+        Assert.True(Assert.IsType<bool>(methodNamesMatch.Invoke(null, ["Program.<Main>$(System.String[]).int", "Program.<Main>$"])));
+        Assert.True(Assert.IsType<bool>(methodNamesMatch.Invoke(null, ["GenericFixture.Identity[int](int).int", "GenericFixture.Identity"])));
     }
 
     [Fact]
@@ -206,28 +152,12 @@ public sealed class JitInspectorTests
         Assert.Empty(error);
         var summary = Assert.Single(frames, static frame => frame.Kind == RuntimeFrameKind.JitSummary);
         using var result = JsonDocument.Parse(summary.Payload);
-        Assert.Contains(
-            result.RootElement.GetProperty("Methods").EnumerateArray(),
-            method =>
-                method.GetProperty("Status").GetString() == "prepared" &&
-                method.GetProperty("NativeCodeSize").GetInt32() > 0 &&
-                method.GetProperty("InstructionCount").GetInt32() > 0);
+        Assert.Contains(result.RootElement.GetProperty("Methods").EnumerateArray(), method => method.GetProperty("Status").GetString() == "prepared" && method.GetProperty("NativeCodeSize").GetInt32() > 0 && method.GetProperty("InstructionCount").GetInt32() > 0);
         Assert.Contains(frames, static frame => frame.Kind == RuntimeFrameKind.Exit);
-        var assemblyText = Encoding.UTF8.GetString(frames
-            .Where(static frame => frame.Kind == RuntimeFrameKind.JitAssembly)
-            .SelectMany(static frame => frame.Payload.ToArray())
-            .ToArray());
-        Assert.True(
-            assemblyText.Length > 0,
-            "JIT inspection must return native assembly text, not only prepared method addresses.");
-        Assert.DoesNotContain(
-            "; Assembly listing for method (dynamicClass)",
-            assemblyText,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "; Assembly listing for method JitInspectorProgram:",
-            assemblyText,
-            StringComparison.Ordinal);
+        var assemblyText = Encoding.UTF8.GetString(frames.Where(static frame => frame.Kind == RuntimeFrameKind.JitAssembly).SelectMany(static frame => frame.Payload.ToArray()).ToArray());
+        Assert.True(assemblyText.Length > 0, "JIT inspection must return native assembly text, not only prepared method addresses.");
+        Assert.DoesNotContain("; Assembly listing for method (dynamicClass)", assemblyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("; Assembly listing for method JitInspectorProgram:", assemblyText, StringComparison.Ordinal);
         File.Delete(jitOutputPath);
     }
 
@@ -241,36 +171,25 @@ public sealed class JitInspectorTests
         Assert.NotNull(entryPoint);
         Assert.Equal("JitInspectorBootstrap", entryPoint!.DeclaringType?.Name);
         Assert.Equal(typeof(int), entryPoint.ReturnType);
-        Assert.DoesNotContain(
-            inspectorAssembly.GetTypes(),
-            static type => string.Equals(type.FullName, "Program", StringComparison.Ordinal));
+        Assert.DoesNotContain(inspectorAssembly.GetTypes(), static type => string.Equals(type.FullName, "Program", StringComparison.Ordinal));
     }
 
     [Fact]
     public void NativeMapLogRequiresCompleteBoundedMethodDefRecords()
     {
-        var parsed = JitNativeMapLog.ParseLine(
-            "handle=1234 token=06000001 native=5678 count=3 -2:0:0 0:0:3 9:3:17");
+        var parsed = JitNativeMapLog.ParseLine("handle=1234 token=06000001 native=5678 count=3 -2:0:0 0:0:3 9:3:17");
 
         Assert.NotNull(parsed);
         Assert.Equal((nuint)0x1234, parsed.MethodHandle);
         Assert.Equal(0x06000001, parsed.MetadataToken);
         Assert.Equal(3, parsed.Ranges.Count);
-        var controlFlowMap = JitNativeMapLog.ParseLine(
-            "handle=1234 token=06000001 native=5678 count=7 " +
-            "0:4:6 2:6:8 6:15:17 10:17:19 14:8:15 14:19:23 20:23:23");
+        var controlFlowMap = JitNativeMapLog.ParseLine("handle=1234 token=06000001 native=5678 count=7 " + "0:4:6 2:6:8 6:15:17 10:17:19 14:8:15 14:19:23 20:23:23");
         Assert.NotNull(controlFlowMap);
-        Assert.Equal(
-            [4U, 6U, 8U, 15U, 17U, 19U, 23U],
-            controlFlowMap.Ranges.Select(static range => range.NativeStart));
-        Assert.Null(JitNativeMapLog.ParseLine(
-            "handle=1234 token=06000001 native=5678 count=2 0:0:3"));
-        Assert.Null(JitNativeMapLog.ParseLine(
-            "handle=1234 token=02000001 native=5678 count=1 0:0:3"));
-        Assert.Null(JitNativeMapLog.ParseLine(
-            "handle=1234 token=06000001 native=5678 count=2 0:3:6 1:2:7"));
-        Assert.Null(JitNativeMapLog.ParseLine(
-            "handle=1234 token=06000001 native=5678 count=1 0:0:70000000"));
+        Assert.Equal([4U, 6U, 8U, 15U, 17U, 19U, 23U], controlFlowMap.Ranges.Select(static range => range.NativeStart));
+        Assert.Null(JitNativeMapLog.ParseLine("handle=1234 token=06000001 native=5678 count=2 0:0:3"));
+        Assert.Null(JitNativeMapLog.ParseLine("handle=1234 token=02000001 native=5678 count=1 0:0:3"));
+        Assert.Null(JitNativeMapLog.ParseLine("handle=1234 token=06000001 native=5678 count=2 0:3:6 1:2:7"));
+        Assert.Null(JitNativeMapLog.ParseLine("handle=1234 token=06000001 native=5678 count=1 0:0:70000000"));
     }
 
     [Fact]
@@ -303,9 +222,7 @@ public sealed class JitInspectorTests
     [Fact]
     public void RichMapLogRequiresCompleteBoundedVersionedRecords()
     {
-        var parsed = JitRichMapLog.ParseLine(
-            "method=1234 clr=7 nativeversion=2 ilversion=3 inline=2 count=4 " +
-            "0:0:0:2 3:4:0:2 3:9:0:2 5:12:1:2");
+        var parsed = JitRichMapLog.ParseLine("method=1234 clr=7 nativeversion=2 ilversion=3 inline=2 count=4 " + "0:0:0:2 3:4:0:2 3:9:0:2 5:12:1:2");
 
         Assert.NotNull(parsed);
         Assert.Equal((nuint)0x1234, parsed.MethodHandle);
@@ -313,24 +230,18 @@ public sealed class JitInspectorTests
         Assert.Equal((ulong)2, parsed.NativeVersionId);
         Assert.Equal((ulong)3, parsed.IlVersionId);
         Assert.Equal(4, parsed.Points.Count);
-        Assert.Null(JitRichMapLog.ParseLine(
-            "method=1234 clr=7 nativeversion=2 ilversion=3 inline=1 count=2 0:0:0:2"));
-        Assert.Null(JitRichMapLog.ParseLine(
-            "method=1234 clr=7 nativeversion=2 ilversion=3 inline=1 count=2 3:0:0:2 2:1:0:2"));
-        Assert.Null(JitRichMapLog.ParseLine(
-            "method=1234 clr=7 nativeversion=2 ilversion=3 inline=1 count=1 0:0:1:2"));
-        Assert.Null(JitRichMapLog.ParseLine(
-            "method=1234 clr=7 nativeversion=2 ilversion=3 inline=1 count=1 0:0:0:32"));
-        Assert.Null(JitRichMapLog.ParseLine(
-            "method=1234 clr=7 nativeversion=2 ilversion=3 inline=1 count=20001"));
+        Assert.Null(JitRichMapLog.ParseLine("method=1234 clr=7 nativeversion=2 ilversion=3 inline=1 count=2 0:0:0:2"));
+        Assert.Null(JitRichMapLog.ParseLine("method=1234 clr=7 nativeversion=2 ilversion=3 inline=1 count=2 3:0:0:2 2:1:0:2"));
+        Assert.Null(JitRichMapLog.ParseLine("method=1234 clr=7 nativeversion=2 ilversion=3 inline=1 count=1 0:0:1:2"));
+        Assert.Null(JitRichMapLog.ParseLine("method=1234 clr=7 nativeversion=2 ilversion=3 inline=1 count=1 0:0:0:32"));
+        Assert.Null(JitRichMapLog.ParseLine("method=1234 clr=7 nativeversion=2 ilversion=3 inline=1 count=20001"));
     }
 
     [Fact]
     public void RichMapLogFailsClosedForMalformedOrDuplicateVersionRecords()
     {
         var path = Path.Combine(Path.GetTempPath(), $"sharplabnext-jit-rich-map-{Guid.NewGuid():N}.txt");
-        const string valid =
-            "method=1234 clr=7 nativeversion=2 ilversion=3 inline=1 count=1 0:0:0:2";
+        const string valid = "method=1234 clr=7 nativeversion=2 ilversion=3 inline=1 count=1 0:0:0:2";
         try
         {
             File.WriteAllLines(path, ["SLJR1", valid, "malformed"]);
@@ -356,11 +267,7 @@ public sealed class JitInspectorTests
     [Fact]
     public void RichMapUsesLastRootAtDuplicateNativeOffsetAndOrdinaryCodeEnd()
     {
-        var ordinary = new JitNativeMethodMap(
-            0x2222,
-            0x06000001,
-            0x3333,
-            [new JitNativeIlRange(0, 0, 10)]);
+        var ordinary = new JitNativeMethodMap(0x2222, 0x06000001, 0x3333, [new JitNativeIlRange(0, 0, 10)]);
         IReadOnlyDictionary<nuint, IReadOnlyList<JitRichMethodMap>> richMaps =
             new Dictionary<nuint, IReadOnlyList<JitRichMethodMap>>
             {
@@ -386,27 +293,14 @@ public sealed class JitInspectorTests
         var mapped = JitInspectorProgram.SelectRichNativeMap(ordinary, richMaps);
 
         Assert.NotNull(mapped);
-        Assert.Equal(
-            [(0, 0U, 3U), (9, 3U, 7U), (15, 7U, 10U)],
-            mapped.Ranges.Select(static range =>
-                (range.IlOffset, range.NativeStart, range.NativeEnd)));
+        Assert.Equal([(0, 0U, 3U), (9, 3U, 7U), (15, 7U, 10U)], mapped.Ranges.Select(static range => (range.IlOffset, range.NativeStart, range.NativeEnd)));
     }
 
     [Fact]
     public void RichMapRejectsAmbiguousVersionsAndOutOfBoundsRootOffsets()
     {
-        var ordinary = new JitNativeMethodMap(
-            0x2222,
-            0x06000001,
-            0x3333,
-            [new JitNativeIlRange(0, 0, 10)]);
-        var valid = new JitRichMethodMap(
-            ordinary.MethodHandle,
-            7,
-            2,
-            3,
-            1,
-            [new JitRichIlPoint(0, 0, 0, 2)]);
+        var ordinary = new JitNativeMethodMap(0x2222, 0x06000001, 0x3333, [new JitNativeIlRange(0, 0, 10)]);
+        var valid = new JitRichMethodMap(ordinary.MethodHandle, 7, 2, 3, 1, [new JitRichIlPoint(0, 0, 0, 2)]);
 
         Assert.Null(JitInspectorProgram.SelectRichNativeMap(
             ordinary,
@@ -442,18 +336,7 @@ public sealed class JitInspectorTests
                    C3                   ret
             ; Total bytes of code 4
             """;
-        var result = new JitMethodResult(
-            "0x06000001",
-            metadataToken,
-            methodHandle,
-            0x5678,
-            "MappingFixture.Target",
-            "prepared",
-            "0x5678",
-            null,
-            0,
-            0,
-            []);
+        var result = new JitMethodResult("0x06000001", metadataToken, methodHandle, 0x5678, "MappingFixture.Target", "prepared", "0x5678", null, 0, 0, []);
         IReadOnlyDictionary<int, IReadOnlyList<JitSourcePoint>> sourcePoints =
             new Dictionary<int, IReadOnlyList<JitSourcePoint>>
             {
@@ -465,11 +348,7 @@ public sealed class JitInspectorTests
                     new JitSourcePoint(7, "Program.cs", new JitSourceTextRange(7, 0, 7, 10))
                 ]
             };
-        var ordinary = new JitNativeMethodMap(
-            methodHandle,
-            metadataToken,
-            0x5678,
-            [new JitNativeIlRange(0, 0, 4)]);
+        var ordinary = new JitNativeMethodMap(methodHandle, metadataToken, 0x5678, [new JitNativeIlRange(0, 0, 4)]);
         IReadOnlyDictionary<nuint, IReadOnlyList<JitNativeMethodMap>> ordinaryMaps =
             new Dictionary<nuint, IReadOnlyList<JitNativeMethodMap>>
             {
@@ -495,12 +374,7 @@ public sealed class JitInspectorTests
             };
         var results = new List<JitMethodResult> { result };
 
-        JitInspectorProgram.ApplyAssemblyStatistics(
-            results,
-            section,
-            sourcePoints,
-            ordinaryMaps,
-            richMaps);
+        JitInspectorProgram.ApplyAssemblyStatistics(results, section, sourcePoints, ordinaryMaps, richMaps);
 
         Assert.Equal([1, 3, 5], results[0].LinkedRanges.Select(static range => range.SourceRange.StartLine));
         Assert.Equal("rich", results[0].MappingSource);
@@ -510,21 +384,10 @@ public sealed class JitInspectorTests
         {
             [methodHandle] =
             [
-                new JitRichMethodMap(
-                    methodHandle,
-                    0,
-                    0,
-                    0,
-                    1,
-                    [new JitRichIlPoint(0, 5, 0, 2)])
+                new JitRichMethodMap(methodHandle, 0, 0, 0, 1, [new JitRichIlPoint(0, 5, 0, 2)])
             ]
         };
-        JitInspectorProgram.ApplyAssemblyStatistics(
-            results,
-            section,
-            sourcePoints,
-            ordinaryMaps,
-            richMaps);
+        JitInspectorProgram.ApplyAssemblyStatistics(results, section, sourcePoints, ordinaryMaps, richMaps);
 
         Assert.Equal(1, Assert.Single(results[0].LinkedRanges).SourceRange.StartLine);
         Assert.Equal("ordinary", results[0].MappingSource);
@@ -557,23 +420,12 @@ public sealed class JitInspectorTests
             {
                 [methodHandle] =
                 [
-                    new JitNativeMethodMap(
-                        methodHandle,
-                        metadataToken,
-                        0x1111,
-                        [new JitNativeIlRange(0, 0, 6)]),
-                    new JitNativeMethodMap(
-                        methodHandle,
-                        metadataToken,
-                        0x2222,
-                        [new JitNativeIlRange(9, 0, 6)])
+                    new JitNativeMethodMap(methodHandle, metadataToken, 0x1111, [new JitNativeIlRange(0, 0, 6)]),
+                    new JitNativeMethodMap(methodHandle, metadataToken, 0x2222, [new JitNativeIlRange(9, 0, 6)])
                 ]
             };
 
-        var exactResults = new List<JitMethodResult>
-        {
-            Result(nativeCodeStart: 0x2222)
-        };
+        var exactResults = new List<JitMethodResult> { Result(nativeCodeStart: 0x2222) };
         JitInspectorProgram.ApplyAssemblyStatistics(exactResults, section, sourcePoints, nativeMaps);
 
         var exactRange = Assert.Single(exactResults[0].LinkedRanges);
@@ -581,28 +433,14 @@ public sealed class JitInspectorTests
         Assert.Equal(3, exactRange.SourceRange.StartLine);
         Assert.Equal("ordinary", exactResults[0].MappingSource);
 
-        var ambiguousResults = new List<JitMethodResult>
-        {
-            Result(nativeCodeStart: 0x3333)
-        };
+        var ambiguousResults = new List<JitMethodResult> { Result(nativeCodeStart: 0x3333) };
         JitInspectorProgram.ApplyAssemblyStatistics(ambiguousResults, section, sourcePoints, nativeMaps);
 
         var fallbackRange = Assert.Single(ambiguousResults[0].LinkedRanges);
         Assert.Equal("method", fallbackRange.Precision);
         Assert.Equal("method", ambiguousResults[0].MappingSource);
 
-        JitMethodResult Result(nuint nativeCodeStart) => new(
-            "0x06000001",
-            metadataToken,
-            methodHandle,
-            nativeCodeStart,
-            "MappingFixture.Target",
-            "prepared",
-            $"0x{nativeCodeStart:x}",
-            null,
-            0,
-            0,
-            []);
+        JitMethodResult Result(nuint nativeCodeStart) => new("0x06000001", metadataToken, methodHandle, nativeCodeStart, "MappingFixture.Target", "prepared", $"0x{nativeCodeStart:x}", null, 0, 0, []);
     }
 
     [Fact]
@@ -624,29 +462,14 @@ public sealed class JitInspectorTests
             """;
         var results = new List<JitMethodResult> { Result() };
 
-        JitInspectorProgram.ApplyAssemblyStatistics(
-            results,
-            section,
-            SourcePoints(),
-            NativeMaps(new JitNativeIlRange(0, 0, 5)));
+        JitInspectorProgram.ApplyAssemblyStatistics(results, section, SourcePoints(), NativeMaps(new JitNativeIlRange(0, 0, 5)));
 
         var profilerRange = Assert.Single(results[0].LinkedRanges);
         Assert.Equal(1, profilerRange.SourceRange.StartLine);
         Assert.Equal("sequence-point", profilerRange.Precision);
         Assert.Equal("ordinary", results[0].MappingSource);
 
-        JitMethodResult Result() => new(
-            "0x06000001",
-            metadataToken,
-            methodHandle,
-            0x5678,
-            "MappingFixture.Target",
-            "prepared",
-            "0x5678",
-            null,
-            0,
-            0,
-            []);
+        JitMethodResult Result() => new("0x06000001", metadataToken, methodHandle, 0x5678, "MappingFixture.Target", "prepared", "0x5678", null, 0, 0, []);
 
         IReadOnlyDictionary<int, IReadOnlyList<JitSourcePoint>> SourcePoints() =>
             new Dictionary<int, IReadOnlyList<JitSourcePoint>>
@@ -659,8 +482,7 @@ public sealed class JitInspectorTests
                 ]
             };
 
-        IReadOnlyDictionary<nuint, IReadOnlyList<JitNativeMethodMap>> NativeMaps(
-            params JitNativeIlRange[] ranges) =>
+        IReadOnlyDictionary<nuint, IReadOnlyList<JitNativeMethodMap>> NativeMaps(params JitNativeIlRange[] ranges) =>
             new Dictionary<nuint, IReadOnlyList<JitNativeMethodMap>>
             {
                 [methodHandle] =
@@ -693,25 +515,10 @@ public sealed class JitInspectorTests
             };
         var results = new List<JitMethodResult>
         {
-            new(
-                "0x06000001",
-                metadataToken,
-                0x1234,
-                0x5678,
-                "MappingFixture.Target",
-                "prepared",
-                "0x5678",
-                null,
-                0,
-                0,
-                [])
+            new("0x06000001", metadataToken, 0x1234, 0x5678, "MappingFixture.Target", "prepared", "0x5678", null, 0, 0, [])
         };
 
-        JitInspectorProgram.ApplyAssemblyStatistics(
-            results,
-            section,
-            sourcePoints,
-            new Dictionary<nuint, IReadOnlyList<JitNativeMethodMap>>());
+        JitInspectorProgram.ApplyAssemblyStatistics(results, section, sourcePoints, new Dictionary<nuint, IReadOnlyList<JitNativeMethodMap>>());
 
         Assert.Equal([1, 3], results[0].LinkedRanges.Select(static range => range.SourceRange.StartLine));
         Assert.All(results[0].LinkedRanges, static range => Assert.Equal("sequence-point", range.Precision));
@@ -747,26 +554,11 @@ public sealed class JitInspectorTests
             new Dictionary<nuint, IReadOnlyList<JitNativeMethodMap>>
             {
                 [methodHandle] =
-                [new JitNativeMethodMap(
-                    methodHandle,
-                    metadataToken,
-                    0x5678,
-                    [new JitNativeIlRange(0, 0, 5)])]
+                [new JitNativeMethodMap(methodHandle, metadataToken, 0x5678, [new JitNativeIlRange(0, 0, 5)])]
             };
         var results = new List<JitMethodResult>
         {
-            new(
-                "0x06000001",
-                metadataToken,
-                methodHandle,
-                0x5678,
-                "MappingFixture.Target",
-                "prepared",
-                "0x5678",
-                null,
-                0,
-                0,
-                [])
+            new("0x06000001", metadataToken, methodHandle, 0x5678, "MappingFixture.Target", "prepared", "0x5678", null, 0, 0, [])
         };
 
         JitInspectorProgram.ApplyAssemblyStatistics(results, section, sourcePoints, nativeMaps);
@@ -805,26 +597,11 @@ public sealed class JitInspectorTests
             new Dictionary<nuint, IReadOnlyList<JitNativeMethodMap>>
             {
                 [methodHandle] =
-                [new JitNativeMethodMap(
-                    methodHandle,
-                    metadataToken,
-                    0x5678,
-                    [new JitNativeIlRange(0, 0, 3)])]
+                [new JitNativeMethodMap(methodHandle, metadataToken, 0x5678, [new JitNativeIlRange(0, 0, 3)])]
             };
         var results = new List<JitMethodResult>
         {
-            new(
-                "0x06000001",
-                metadataToken,
-                methodHandle,
-                0x5678,
-                "MappingFixture.Target",
-                "prepared",
-                "0x5678",
-                null,
-                0,
-                0,
-                [])
+            new("0x06000001", metadataToken, methodHandle, 0x5678, "MappingFixture.Target", "prepared", "0x5678", null, 0, 0, [])
         };
 
         JitInspectorProgram.ApplyAssemblyStatistics(results, section, sourcePoints, nativeMaps);
@@ -852,25 +629,10 @@ public sealed class JitInspectorTests
             """;
         var results = new List<JitMethodResult>
         {
-            new(
-                "0x06000001",
-                0x06000001,
-                0x1234,
-                0x5678,
-                "Program.<Main>$",
-                "prepared",
-                "0x5678",
-                null,
-                0,
-                0,
-                [])
+            new("0x06000001", 0x06000001, 0x1234, 0x5678, "Program.<Main>$", "prepared", "0x5678", null, 0, 0, [])
         };
 
-        var filtered = JitInspectorProgram.ApplyAssemblyStatistics(
-            results,
-            assemblyText,
-            new Dictionary<int, IReadOnlyList<JitSourcePoint>>(),
-            new Dictionary<nuint, IReadOnlyList<JitNativeMethodMap>>());
+        var filtered = JitInspectorProgram.ApplyAssemblyStatistics(results, assemblyText, new Dictionary<int, IReadOnlyList<JitSourcePoint>>(), new Dictionary<nuint, IReadOnlyList<JitNativeMethodMap>>());
 
         Assert.Contains("mov      eax, 42", filtered, StringComparison.Ordinal);
         Assert.DoesNotContain("call     [Program:<Main>$", filtered, StringComparison.Ordinal);
@@ -880,23 +642,8 @@ public sealed class JitInspectorTests
     public void NativeMapSelectionUsesUniqueTokenForConstructedGenericHandleMismatch()
     {
         const int metadataToken = 0x06000002;
-        var genericMap = new JitNativeMethodMap(
-            0x2222,
-            metadataToken,
-            0x3333,
-            [new JitNativeIlRange(0, 0, 3)]);
-        var result = new JitMethodResult(
-            "0x06000002[System.Int32]",
-            metadataToken,
-            0x9999,
-            0x8888,
-            "MappingFixture.ConstructedGeneric",
-            "prepared",
-            "0x8888",
-            null,
-            0,
-            0,
-            []);
+        var genericMap = new JitNativeMethodMap(0x2222, metadataToken, 0x3333, [new JitNativeIlRange(0, 0, 3)]);
+        var result = new JitMethodResult("0x06000002[System.Int32]", metadataToken, 0x9999, 0x8888, "MappingFixture.ConstructedGeneric", "prepared", "0x8888", null, 0, 0, []);
         IReadOnlyDictionary<nuint, IReadOnlyList<JitNativeMethodMap>> uniqueMaps =
             new Dictionary<nuint, IReadOnlyList<JitNativeMethodMap>>
             {
@@ -905,11 +652,7 @@ public sealed class JitInspectorTests
 
         Assert.Same(genericMap, JitInspectorProgram.SelectNativeMap(result, uniqueMaps));
 
-        var secondInstantiation = genericMap with
-        {
-            MethodHandle = 0x4444,
-            NativeCodeStart = 0x5555
-        };
+        var secondInstantiation = genericMap with { MethodHandle = 0x4444, NativeCodeStart = 0x5555 };
         IReadOnlyDictionary<nuint, IReadOnlyList<JitNativeMethodMap>> ambiguousMaps =
             new Dictionary<nuint, IReadOnlyList<JitNativeMethodMap>>
             {
@@ -973,12 +716,8 @@ public sealed class JitInspectorTests
         Assert.Equal(11, mapped.LinkedRanges[0].OutputRange.StartLine);
         Assert.Equal(12, mapped.LinkedRanges[1].OutputRange.StartLine);
         Assert.Equal(16, mapped.LinkedRanges[1].OutputRange.EndLine);
-        Assert.Equal(
-            new JitEvidenceRange(0, 0, 3, "Program.cs", 3, 9, 3, 31),
-            mapped.LinkedRanges[0].EvidenceRange);
-        Assert.Equal(
-            new JitEvidenceRange(9, 3, 17, "Program.cs", 5, 9, 8, 24),
-            mapped.LinkedRanges[1].EvidenceRange);
+        Assert.Equal(new JitEvidenceRange(0, 0, 3, "Program.cs", 3, 9, 3, 31), mapped.LinkedRanges[0].EvidenceRange);
+        Assert.Equal(new JitEvidenceRange(9, 3, 17, "Program.cs", 5, 9, 8, 24), mapped.LinkedRanges[1].EvidenceRange);
         Assert.DoesNotContain("8D4701", mapped.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("offset=", mapped.Text, StringComparison.Ordinal);
         Assert.Contains("       lea      eax, [rdi+0x01]", mapped.Text, StringComparison.Ordinal);
@@ -988,14 +727,10 @@ public sealed class JitInspectorTests
     public void NativeMappingHandlesLargeBoundedDocumentsWithoutQuadraticScanning()
     {
         const int count = 10_000;
-        var section = new StringBuilder(
-            "; Assembly listing for method MappingFixture:Large():int (FullOpts)\n" +
-            "G_M000_IG01: ;; offset=0x0000\n");
+        var section = new StringBuilder("; Assembly listing for method MappingFixture:Large():int (FullOpts)\n" + "G_M000_IG01: ;; offset=0x0000\n");
         for (var index = 0; index < count; index++)
             section.AppendLine("       c3                   nop");
-        var nativeRanges = Enumerable.Range(0, count)
-            .Select(static index => new JitNativeIlRange(index, (uint)index, (uint)index + 1))
-            .ToArray();
+        var nativeRanges = Enumerable.Range(0, count).Select(static index => new JitNativeIlRange(index, (uint)index, (uint)index + 1)).ToArray();
         var map = new JitNativeMethodMap(0x1234, 0x06000001, 0x5678, nativeRanges);
         JitSourcePoint[] points =
         [
@@ -1024,12 +759,7 @@ public sealed class JitInspectorTests
         Assert.NotNull(identity);
         var mappingType = inspectorAssembly.GetType("JitSourceMapping");
         Assert.NotNull(mappingType);
-        var mapSection = mappingType.GetMethod(
-            "MapSection",
-            BindingFlags.NonPublic | BindingFlags.Static,
-            binder: null,
-            [typeof(string), typeof(int), typeof(string)],
-            modifiers: null);
+        var mapSection = mappingType.GetMethod("MapSection", BindingFlags.NonPublic | BindingFlags.Static, binder: null, [typeof(string), typeof(int), typeof(string)], modifiers: null);
         Assert.NotNull(mapSection);
         const string section =
             """
@@ -1045,19 +775,15 @@ public sealed class JitInspectorTests
                    ret
             """;
 
-        var mapped = Assert.IsAssignableFrom<System.Collections.IEnumerable>(
-            mapSection.Invoke(null, [fixturePath, identity.MetadataToken, section]));
+        var mapped = Assert.IsAssignableFrom<System.Collections.IEnumerable>(mapSection.Invoke(null, [fixturePath, identity.MetadataToken, section]));
         var ranges = mapped.Cast<object>().ToArray();
 
         Assert.Equal(2, ranges.Length);
         Assert.All(ranges, range =>
         {
-            var sourcePath = Assert.IsType<string>(
-                range.GetType().GetProperty("SourceFilePath")?.GetValue(range));
+            var sourcePath = Assert.IsType<string>(range.GetType().GetProperty("SourceFilePath")?.GetValue(range));
             Assert.EndsWith("Program.cs", sourcePath, StringComparison.Ordinal);
-            Assert.Equal(
-                "sequence-point",
-                Assert.IsType<string>(range.GetType().GetProperty("Precision")?.GetValue(range)));
+            Assert.Equal("sequence-point", Assert.IsType<string>(range.GetType().GetProperty("Precision")?.GetValue(range)));
         });
         var firstOutput = ranges[0].GetType().GetProperty("OutputRange")?.GetValue(ranges[0]);
         var secondOutput = ranges[1].GetType().GetProperty("OutputRange")?.GetValue(ranges[1]);
@@ -1073,15 +799,11 @@ public sealed class JitInspectorTests
                    mov      eax, ecx
                    ret
             """;
-        var fallback = Assert.IsAssignableFrom<System.Collections.IEnumerable>(
-            mapSection.Invoke(null, [fixturePath, identity.MetadataToken, sectionWithoutMarkers]));
+        var fallback = Assert.IsAssignableFrom<System.Collections.IEnumerable>(mapSection.Invoke(null, [fixturePath, identity.MetadataToken, sectionWithoutMarkers]));
         var fallbackRange = Assert.Single(fallback.Cast<object>());
-        Assert.Equal(
-            "method",
-            Assert.IsType<string>(fallbackRange.GetType().GetProperty("Precision")?.GetValue(fallbackRange)));
+        Assert.Equal("method", Assert.IsType<string>(fallbackRange.GetType().GetProperty("Precision")?.GetValue(fallbackRange)));
 
-        var withoutPdb = Assert.IsAssignableFrom<System.Collections.IEnumerable>(
-            mapSection.Invoke(null, [$"{fixturePath}.without-pdb.dll", identity.MetadataToken, section]));
+        var withoutPdb = Assert.IsAssignableFrom<System.Collections.IEnumerable>(mapSection.Invoke(null, [$"{fixturePath}.without-pdb.dll", identity.MetadataToken, section]));
         Assert.Empty(withoutPdb.Cast<object>());
     }
 
@@ -1093,11 +815,8 @@ public sealed class JitInspectorTests
         var fixtureAssembly = Assembly.LoadFrom(fixturePath);
         var programType = inspectorAssembly.GetType("JitInspectorProgram");
         Assert.NotNull(programType);
-        var inspectAssembly = programType.GetMethod(
-            "InspectAssembly",
-            BindingFlags.NonPublic | BindingFlags.Static);
+        var inspectAssembly = programType.GetMethod("InspectAssembly", BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(inspectAssembly);
-        return Assert.IsAssignableFrom<System.Collections.IEnumerable>(
-            inspectAssembly.Invoke(null, [fixtureAssembly, methodFilter]));
+        return Assert.IsAssignableFrom<System.Collections.IEnumerable>(inspectAssembly.Invoke(null, [fixtureAssembly, methodFilter]));
     }
 }

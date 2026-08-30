@@ -5,8 +5,18 @@ import { createIlSourceLinks } from './ilSourceMapModel'
 function linkedRange(overrides: Partial<LinkedRange> = {}): LinkedRange {
   return {
     sourceFilePath: '/tmp/sharplabnext/build/src/Program.cs',
-    sourceRange: { startLine: 2, startCharacter: 4, endLine: 2, endCharacter: 15 },
-    outputRange: { startLine: 40, startCharacter: 0, endLine: 40, endCharacter: 1 },
+    sourceRange: {
+      startLine: 2,
+      startCharacter: 4,
+      endLine: 2,
+      endCharacter: 15,
+    },
+    outputRange: {
+      startLine: 40,
+      startCharacter: 0,
+      endLine: 40,
+      endCharacter: 1,
+    },
     ...overrides,
   }
 }
@@ -23,7 +33,12 @@ describe('IL source map model', () => {
     const links = createIlSourceLinks(
       [
         linkedRange({
-          sourceRange: { startLine: 3, startCharacter: 4, endLine: 3, endCharacter: 29 },
+          sourceRange: {
+            startLine: 3,
+            startCharacter: 4,
+            endLine: 3,
+            endCharacter: 29,
+          },
         }),
       ],
       files,
@@ -48,8 +63,18 @@ describe('IL source map model', () => {
       [
         linkedRange({
           sourceFilePath: 'C:\\work\\build\\src\\Program.cs',
-          sourceRange: { startLine: 1, startCharacter: 0, endLine: 3, endCharacter: 29 },
-          outputRange: { startLine: 8, startCharacter: 0, endLine: 10, endCharacter: 0 },
+          sourceRange: {
+            startLine: 1,
+            startCharacter: 0,
+            endLine: 3,
+            endCharacter: 29,
+          },
+          outputRange: {
+            startLine: 8,
+            startCharacter: 0,
+            endLine: 10,
+            endCharacter: 0,
+          },
         }),
       ],
       files,
@@ -66,7 +91,12 @@ describe('IL source map model', () => {
     const link = createIlSourceLinks(
       [
         linkedRange({
-          sourceRange: { startLine: 1, startCharacter: 0, endLine: 3, endCharacter: 0 },
+          sourceRange: {
+            startLine: 1,
+            startCharacter: 0,
+            endLine: 3,
+            endCharacter: 0,
+          },
         }),
       ],
       files,
@@ -86,8 +116,18 @@ describe('IL source map model', () => {
       [
         linkedRange({
           sourceFilePath: 'Program.cs',
-          sourceRange: { startLine: 1, startCharacter: 0, endLine: 4, endCharacter: 29 },
-          outputRange: { startLine: 5, startCharacter: 0, endLine: 8, endCharacter: 0 },
+          sourceRange: {
+            startLine: 1,
+            startCharacter: 0,
+            endLine: 4,
+            endCharacter: 29,
+          },
+          outputRange: {
+            startLine: 5,
+            startCharacter: 0,
+            endLine: 8,
+            endCharacter: 0,
+          },
         }),
       ],
       crlfFiles,
@@ -115,7 +155,12 @@ describe('IL source map model', () => {
         [
           linkedRange({
             sourceFilePath: '/tmp/build/src/Program.cs',
-            sourceRange: { startLine: 0, startCharacter: 0, endLine: 0, endCharacter: 1 },
+            sourceRange: {
+              startLine: 0,
+              startCharacter: 0,
+              endLine: 0,
+              endCharacter: 1,
+            },
           }),
         ],
         ambiguous,
@@ -134,10 +179,20 @@ describe('IL source map model', () => {
         },
       }),
       linkedRange({
-        sourceRange: { startLine: 3, startCharacter: 20, endLine: 2, endCharacter: 1 },
+        sourceRange: {
+          startLine: 3,
+          startCharacter: 20,
+          endLine: 2,
+          endCharacter: 1,
+        },
       }),
       linkedRange({
-        outputRange: { startLine: -1, startCharacter: 0, endLine: -1, endCharacter: 1 },
+        outputRange: {
+          startLine: -1,
+          startCharacter: 0,
+          endLine: -1,
+          endCharacter: 1,
+        },
       }),
     ]
 
@@ -145,16 +200,31 @@ describe('IL source map model', () => {
   })
 
   it('orders links by their IL line without changing same-line stability', () => {
-    const sourceRange = { startLine: 3, startCharacter: 4, endLine: 3, endCharacter: 29 }
+    const sourceRange = {
+      startLine: 3,
+      startCharacter: 4,
+      endLine: 3,
+      endCharacter: 29,
+    }
     const links = createIlSourceLinks(
       [
         linkedRange({
           sourceRange,
-          outputRange: { startLine: 50, startCharacter: 0, endLine: 50, endCharacter: 1 },
+          outputRange: {
+            startLine: 50,
+            startCharacter: 0,
+            endLine: 50,
+            endCharacter: 1,
+          },
         }),
         linkedRange({
           sourceRange,
-          outputRange: { startLine: 12, startCharacter: 0, endLine: 12, endCharacter: 1 },
+          outputRange: {
+            startLine: 12,
+            startCharacter: 0,
+            endLine: 12,
+            endCharacter: 1,
+          },
         }),
       ],
       files,
@@ -164,7 +234,12 @@ describe('IL source map model', () => {
   })
 
   it('expands a sequence point over its following IL instructions only', () => {
-    const sourceRange = { startLine: 3, startCharacter: 4, endLine: 3, endCharacter: 29 }
+    const sourceRange = {
+      startLine: 3,
+      startCharacter: 4,
+      endLine: 3,
+      endCharacter: 29,
+    }
     const il = `.method private static int32 Value() cil managed
 {
   // sequence point: source A
@@ -179,11 +254,21 @@ describe('IL source map model', () => {
       [
         linkedRange({
           sourceRange,
-          outputRange: { startLine: 3, startCharacter: 0, endLine: 3, endCharacter: 1 },
+          outputRange: {
+            startLine: 3,
+            startCharacter: 0,
+            endLine: 3,
+            endCharacter: 1,
+          },
         }),
         linkedRange({
           sourceRange,
-          outputRange: { startLine: 8, startCharacter: 0, endLine: 8, endCharacter: 1 },
+          outputRange: {
+            startLine: 8,
+            startCharacter: 0,
+            endLine: 8,
+            endCharacter: 1,
+          },
         }),
       ],
       files,

@@ -27,15 +27,7 @@ public sealed class IlLanguageSession : IDisposable
     private int _connectionAttached;
     private int _disposed;
 
-    internal IlLanguageSession(
-        string sessionId,
-        ValidatedIlWorkspace workspace,
-        IlLanguageService languageService,
-        IILMetadataCatalog metadataCatalog,
-        IlCompilationLimits compilationLimits,
-        IlLspLimits lspLimits,
-        string referenceSetId,
-        DateTimeOffset expiresAtUtc)
+    internal IlLanguageSession(string sessionId, ValidatedIlWorkspace workspace, IlLanguageService languageService, IILMetadataCatalog metadataCatalog, IlCompilationLimits compilationLimits, IlLspLimits lspLimits, string referenceSetId, DateTimeOffset expiresAtUtc)
     {
         SessionId = sessionId;
         ExpiresAtUtc = expiresAtUtc;
@@ -48,10 +40,7 @@ public sealed class IlLanguageSession : IDisposable
         _workspaceRevision = workspace.Snapshot.Revision;
         _selectionRevision = workspace.Snapshot.SelectionRevision;
         _sourceOrder = workspace.OrderedFiles.Select(static file => file.Path).ToArray();
-        _documents = workspace.OrderedFiles.ToDictionary(
-            static file => file.Path,
-            static file => new SessionDocument(file.Path, file.Version, file.Text),
-            StringComparer.OrdinalIgnoreCase);
+        _documents = workspace.OrderedFiles.ToDictionary(static file => file.Path, static file => new SessionDocument(file.Path, file.Version, file.Text), StringComparer.OrdinalIgnoreCase);
         _buildOptions = new IlSenseBuildOptions(
             workspace.Options.OutputKind switch
             {
@@ -82,9 +71,7 @@ public sealed class IlLanguageSession : IDisposable
         if (!StringComparer.Ordinal.Equals(parameters.TextDocument.LanguageId, "il"))
             throw new IlLspInvalidParamsException("This session only accepts languageId 'il'.");
         var (uri, path) = ValidateUri(parameters.TextDocument.Uri);
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            _lifetimeCancellation.Token);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeCancellation.Token);
         await _gate.WaitAsync(linked.Token).ConfigureAwait(false);
         try
         {
@@ -107,9 +94,7 @@ public sealed class IlLanguageSession : IDisposable
         if (parameters.ContentChanges.Count is 0 or > 100)
             throw new IlLspInvalidParamsException("didChange must contain between 1 and 100 changes.");
         var (uri, path) = ValidateUri(parameters.TextDocument.Uri);
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            _lifetimeCancellation.Token);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeCancellation.Token);
         await _gate.WaitAsync(linked.Token).ConfigureAwait(false);
         try
         {
@@ -143,9 +128,7 @@ public sealed class IlLanguageSession : IDisposable
     public async Task<IlLspDocumentState> DidCloseAsync(IlLspDidCloseParams parameters, CancellationToken cancellationToken)
     {
         var (uri, path) = ValidateUri(parameters.TextDocument.Uri);
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            _lifetimeCancellation.Token);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeCancellation.Token);
         await _gate.WaitAsync(linked.Token).ConfigureAwait(false);
         try
         {
@@ -161,23 +144,11 @@ public sealed class IlLanguageSession : IDisposable
     }
 
     public Task<IlLspDiagnosticsReport> GetDiagnosticsAsync(string uri, CancellationToken cancellationToken) =>
-        WithDocumentAsync(
-            uri,
-            (document, snapshot, documentId, token) => _languageService.GetDiagnosticsAsync(
-                _languageEngine,
-                snapshot,
-                documentId,
-                uri,
-                _selectionRevision,
-                token),
-            cancellationToken);
+        WithDocumentAsync(uri, (document, snapshot, documentId, token) => _languageService.GetDiagnosticsAsync(_languageEngine, snapshot, documentId, uri, _selectionRevision, token), cancellationToken);
 
-    public async Task<IReadOnlyList<IlLspDiagnosticsReport>> GetWorkspaceDiagnosticsAsync(
-        CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<IlLspDiagnosticsReport>> GetWorkspaceDiagnosticsAsync(CancellationToken cancellationToken)
     {
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            _lifetimeCancellation.Token);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeCancellation.Token);
         await _gate.WaitAsync(linked.Token).ConfigureAwait(false);
         try
         {
@@ -189,13 +160,7 @@ public sealed class IlLanguageSession : IDisposable
                 if (!_openDocuments.Contains(path))
                     continue;
                 var document = _documents[path];
-                reports.Add(await _languageService.GetDiagnosticsAsync(
-                    _languageEngine,
-                    CreateSnapshot(document),
-                    new IlSenseDocumentId(document.Path),
-                    DocumentUri(document.Path),
-                    _selectionRevision,
-                    linked.Token).ConfigureAwait(false));
+                reports.Add(await _languageService.GetDiagnosticsAsync(_languageEngine, CreateSnapshot(document), new IlSenseDocumentId(document.Path), DocumentUri(document.Path), _selectionRevision, linked.Token).ConfigureAwait(false));
             }
             return reports;
         }
@@ -205,121 +170,32 @@ public sealed class IlLanguageSession : IDisposable
         }
     }
 
-    public Task<IlLspCompletionList> GetCompletionsAsync(
-        IlLspCompletionParams parameters,
-        CancellationToken cancellationToken) =>
-        WithDocumentAsync(
-            parameters.TextDocument.Uri,
-            (_, snapshot, documentId, token) => _languageService.CompleteAsync(
-                _languageEngine,
-                snapshot,
-                documentId,
-                parameters,
-                token),
-            cancellationToken);
+    public Task<IlLspCompletionList> GetCompletionsAsync(IlLspCompletionParams parameters, CancellationToken cancellationToken) =>
+        WithDocumentAsync(parameters.TextDocument.Uri, (_, snapshot, documentId, token) => _languageService.CompleteAsync(_languageEngine, snapshot, documentId, parameters, token), cancellationToken);
 
-    public Task<IlLspHover?> GetHoverAsync(
-        IlLspTextDocumentPositionParams parameters,
-        CancellationToken cancellationToken) =>
-        WithDocumentAsync(
-            parameters.TextDocument.Uri,
-            (_, snapshot, documentId, token) => _languageService.GetHoverAsync(
-                _languageEngine,
-                snapshot,
-                documentId,
-                parameters.Position,
-                token),
-            cancellationToken);
+    public Task<IlLspHover?> GetHoverAsync(IlLspTextDocumentPositionParams parameters, CancellationToken cancellationToken) =>
+        WithDocumentAsync(parameters.TextDocument.Uri, (_, snapshot, documentId, token) => _languageService.GetHoverAsync(_languageEngine, snapshot, documentId, parameters.Position, token), cancellationToken);
 
-    public Task<IlLspLocation?> GetDefinitionAsync(
-        IlLspTextDocumentPositionParams parameters,
-        CancellationToken cancellationToken) =>
-        WithDocumentAsync(
-            parameters.TextDocument.Uri,
-            (_, snapshot, documentId, token) => _languageService.GetDefinitionAsync(
-                _languageEngine,
-                snapshot,
-                documentId,
-                parameters.Position,
-                token),
-            cancellationToken);
+    public Task<IlLspLocation?> GetDefinitionAsync(IlLspTextDocumentPositionParams parameters, CancellationToken cancellationToken) =>
+        WithDocumentAsync(parameters.TextDocument.Uri, (_, snapshot, documentId, token) => _languageService.GetDefinitionAsync(_languageEngine, snapshot, documentId, parameters.Position, token), cancellationToken);
 
-    public Task<IReadOnlyList<IlLspWorkspaceSymbol>> GetWorkspaceSymbolsAsync(
-        IlLspWorkspaceSymbolParams parameters,
-        int maximumResults,
-        CancellationToken cancellationToken) =>
-        WithWorkspaceAsync(
-            (snapshot, token) => _languageService.GetWorkspaceSymbolsAsync(
-                _languageEngine,
-                snapshot,
-                parameters,
-                maximumResults,
-                token),
-            cancellationToken);
+    public Task<IReadOnlyList<IlLspWorkspaceSymbol>> GetWorkspaceSymbolsAsync(IlLspWorkspaceSymbolParams parameters, int maximumResults, CancellationToken cancellationToken) =>
+        WithWorkspaceAsync((snapshot, token) => _languageService.GetWorkspaceSymbolsAsync(_languageEngine, snapshot, parameters, maximumResults, token), cancellationToken);
 
-    public Task<IReadOnlyList<IlLspCodeAction>> GetCodeActionsAsync(
-        IlLspCodeActionParams parameters,
-        int maximumResults,
-        CancellationToken cancellationToken) =>
-        WithDocumentAsync(
-            parameters.TextDocument.Uri,
-            (_, snapshot, documentId, token) => _languageService.GetCodeActionsAsync(
-                _languageEngine,
-                snapshot,
-                documentId,
-                parameters,
-                maximumResults,
-                token),
-            cancellationToken);
+    public Task<IReadOnlyList<IlLspCodeAction>> GetCodeActionsAsync(IlLspCodeActionParams parameters, int maximumResults, CancellationToken cancellationToken) =>
+        WithDocumentAsync(parameters.TextDocument.Uri, (_, snapshot, documentId, token) => _languageService.GetCodeActionsAsync(_languageEngine, snapshot, documentId, parameters, maximumResults, token), cancellationToken);
 
-    public Task<IlLspSignatureHelp> GetSignatureHelpAsync(
-        IlLspTextDocumentPositionParams parameters,
-        CancellationToken cancellationToken) =>
-        WithDocumentAsync(
-            parameters.TextDocument.Uri,
-            (_, snapshot, documentId, token) => _languageService.GetSignatureHelpAsync(
-                _languageEngine,
-                snapshot,
-                documentId,
-                parameters.Position,
-                token),
-            cancellationToken);
+    public Task<IlLspSignatureHelp> GetSignatureHelpAsync(IlLspTextDocumentPositionParams parameters, CancellationToken cancellationToken) =>
+        WithDocumentAsync(parameters.TextDocument.Uri, (_, snapshot, documentId, token) => _languageService.GetSignatureHelpAsync(_languageEngine, snapshot, documentId, parameters.Position, token), cancellationToken);
 
-    public Task<IlLspSemanticTokens> GetSemanticTokensAsync(
-        IlLspSemanticTokensParams parameters,
-        CancellationToken cancellationToken) =>
-        WithDocumentAsync(
-            parameters.TextDocument.Uri,
-            (_, snapshot, documentId, token) => _languageService.GetSemanticTokensAsync(
-                _languageEngine,
-                snapshot,
-                documentId,
-                token),
-            cancellationToken);
+    public Task<IlLspSemanticTokens> GetSemanticTokensAsync(IlLspSemanticTokensParams parameters, CancellationToken cancellationToken) =>
+        WithDocumentAsync(parameters.TextDocument.Uri, (_, snapshot, documentId, token) => _languageService.GetSemanticTokensAsync(_languageEngine, snapshot, documentId, token), cancellationToken);
 
-    public Task<IReadOnlyList<IlLspDocumentSymbol>> GetDocumentSymbolsAsync(
-        IlLspDocumentSymbolParams parameters,
-        CancellationToken cancellationToken) =>
-        WithDocumentAsync(
-            parameters.TextDocument.Uri,
-            (_, snapshot, documentId, token) => _languageService.GetDocumentSymbolsAsync(
-                _languageEngine,
-                snapshot,
-                documentId,
-                token),
-            cancellationToken);
+    public Task<IReadOnlyList<IlLspDocumentSymbol>> GetDocumentSymbolsAsync(IlLspDocumentSymbolParams parameters, CancellationToken cancellationToken) =>
+        WithDocumentAsync(parameters.TextDocument.Uri, (_, snapshot, documentId, token) => _languageService.GetDocumentSymbolsAsync(_languageEngine, snapshot, documentId, token), cancellationToken);
 
-    public Task<IReadOnlyList<IlLspFoldingRange>> GetFoldingRangesAsync(
-        IlLspFoldingRangeParams parameters,
-        CancellationToken cancellationToken) =>
-        WithDocumentAsync(
-            parameters.TextDocument.Uri,
-            (_, snapshot, documentId, token) => _languageService.GetFoldingRangesAsync(
-                _languageEngine,
-                snapshot,
-                documentId,
-                token),
-            cancellationToken);
+    public Task<IReadOnlyList<IlLspFoldingRange>> GetFoldingRangesAsync(IlLspFoldingRangeParams parameters, CancellationToken cancellationToken) =>
+        WithDocumentAsync(parameters.TextDocument.Uri, (_, snapshot, documentId, token) => _languageService.GetFoldingRangesAsync(_languageEngine, snapshot, documentId, token), cancellationToken);
 
     public void Dispose()
     {
@@ -327,26 +203,17 @@ public sealed class IlLanguageSession : IDisposable
             _lifetimeCancellation.Cancel();
     }
 
-    private async Task<T> WithDocumentAsync<T>(
-        string uri,
-        Func<SessionDocument, IlSenseWorkspaceSnapshot, IlSenseDocumentId, CancellationToken, Task<T>> action,
-        CancellationToken cancellationToken)
+    private async Task<T> WithDocumentAsync<T>(string uri, Func<SessionDocument, IlSenseWorkspaceSnapshot, IlSenseDocumentId, CancellationToken, Task<T>> action, CancellationToken cancellationToken)
     {
         var (_, path) = ValidateUri(uri);
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            _lifetimeCancellation.Token);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeCancellation.Token);
         await _gate.WaitAsync(linked.Token).ConfigureAwait(false);
         try
         {
             ThrowIfUnavailable();
             var document = GetDocument(path);
             var snapshot = CreateSnapshot(document);
-            return await action(
-                document,
-                snapshot,
-                new IlSenseDocumentId(document.Path),
-                linked.Token).ConfigureAwait(false);
+            return await action(document, snapshot, new IlSenseDocumentId(document.Path), linked.Token).ConfigureAwait(false);
         }
         finally
         {
@@ -354,13 +221,9 @@ public sealed class IlLanguageSession : IDisposable
         }
     }
 
-    private async Task<T> WithWorkspaceAsync<T>(
-        Func<IlSenseWorkspaceSnapshot, CancellationToken, Task<T>> action,
-        CancellationToken cancellationToken)
+    private async Task<T> WithWorkspaceAsync<T>(Func<IlSenseWorkspaceSnapshot, CancellationToken, Task<T>> action, CancellationToken cancellationToken)
     {
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            _lifetimeCancellation.Token);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeCancellation.Token);
         await _gate.WaitAsync(linked.Token).ConfigureAwait(false);
         try
         {
@@ -376,24 +239,13 @@ public sealed class IlLanguageSession : IDisposable
 
     private IlSenseWorkspaceSnapshot CreateSnapshot(SessionDocument activeDocument)
     {
-        var documents = _sourceOrder
-            .Select(path =>
+        var documents = _sourceOrder.Select(path =>
             {
                 var document = _documents[path];
                 return IlSenseDocumentSnapshot.Create(document.Path, document.Version, document.Text);
-            })
-            .ToImmutableArray();
+            }).ToImmutableArray();
         var sourceOrder = documents.Select(static document => document.Id).ToImmutableArray();
-        return new IlSenseWorkspaceSnapshot(
-            CoreSchemaVersion.Current,
-            _workspaceRevision,
-            _selectionRevision,
-            "il",
-            _referenceSetId,
-            new IlSenseDocumentId(activeDocument.Path),
-            sourceOrder,
-            documents,
-            _buildOptions);
+        return new IlSenseWorkspaceSnapshot(CoreSchemaVersion.Current, _workspaceRevision, _selectionRevision, "il", _referenceSetId, new IlSenseDocumentId(activeDocument.Path), sourceOrder, documents, _buildOptions);
     }
 
     private void ReplaceText(SessionDocument document, long version, string text)
@@ -411,17 +263,14 @@ public sealed class IlLanguageSession : IDisposable
 
     private SessionDocument GetDocument(string path) =>
         _documents.TryGetValue(path, out var document)
-            ? document
-            : throw new IlLspInvalidParamsException($"Document '{path}' is not part of this language session.");
+            ? document : throw new IlLspInvalidParamsException($"Document '{path}' is not part of this language session.");
 
     private IlLspDocumentState State(string uri, SessionDocument document) =>
         new(uri, document.Path, document.Version, _workspaceRevision, _selectionRevision);
 
     private static (string Uri, string Path) ValidateUri(string value)
     {
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
-            !StringComparer.OrdinalIgnoreCase.Equals(uri.Scheme, "sharplabnext") ||
-            !string.IsNullOrEmpty(uri.Host) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || !StringComparer.OrdinalIgnoreCase.Equals(uri.Scheme, "sharplabnext") || !string.IsNullOrEmpty(uri.Host) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
         {
             throw new IlLspInvalidParamsException("Document URI must use the sharplabnext:/// relative-workspace-path form.");
         }

@@ -27,15 +27,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-const csharpRunHelp = [
-  '/*',
-  '  SharpLab tools in Run mode:',
-  '    • value.Inspect()',
-  '    • Inspect.Heap(object)',
-  '    • Inspect.Stack(value)',
-  '    • Inspect.MemoryGraph(value1, value2, …)',
-  '*/',
-].join('\r\n')
+const csharpRunHelp = ['/*', '  SharpLab tools in Run mode:', '    • value.Inspect()', '    • Inspect.Heap(object)', '    • Inspect.Stack(value)', '    • Inspect.MemoryGraph(value1, value2, …)', '*/'].join('\r\n')
 
 export const legacyDictionaries = {
   csharp: [
@@ -92,8 +84,7 @@ const dictionaryRegexes = Object.fromEntries(
   }),
 ) as Record<DictionaryLanguage, RegExp>
 
-const getDictionary = (languageId: string): readonly string[] | undefined =>
-  languageId === 'csharp' || languageId === 'il' ? legacyDictionaries[languageId] : undefined
+const getDictionary = (languageId: string): readonly string[] | undefined => (languageId === 'csharp' || languageId === 'il' ? legacyDictionaries[languageId] : undefined)
 
 export const legacyPrecompress = (code: string, languageId: string): string => {
   const dictionary = getDictionary(languageId)

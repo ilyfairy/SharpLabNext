@@ -11,15 +11,15 @@ import {
   runWineCoreClrOperatorBuild,
   validateWineCoreClrOperatorBuildInputs,
   wineCoreClrOperatorImageTag,
-} from './build-wine-coreclr-operator.mjs'
-import { wineCoreClrOperatorExpectedLabels } from './build-runtime-candidate.mjs'
-import { resolveWineCoreClrUserspaceLock } from './runtime-wine-userspace-lock.mjs'
+} from '../build-wine-coreclr-operator.mjs'
+import { wineCoreClrOperatorExpectedLabels } from '../build-runtime-candidate.mjs'
+import { resolveWineCoreClrUserspaceLock } from '../runtime-wine-userspace-lock.mjs'
 import {
   verifyWineCoreClrOperatorReceipt,
   wineCoreClrOperatorCommittedFiles,
-} from './wine-coreclr-operator-receipt.mjs'
+} from '../release/wine-coreclr-operator-receipt.mjs'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const revision = 'f'.repeat(40)
 
 function environment() {
@@ -107,20 +107,14 @@ function contextHook(calls, directory = repositoryRoot) {
 }
 
 test('Wine CoreCLR operator removes the amd64 package i386 module before prefix initialization', () => {
-  const dockerfile = fs.readFileSync(
-    path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.operator-wine-coreclr'),
-    'utf8',
-  )
+  const dockerfile = fs.readFileSync(path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.operator-wine-coreclr'), 'utf8')
   const payloadPath = '/usr/lib/x86_64-linux-gnu/wine/i386-windows'
   const removal = `rm -rf ${payloadPath}`
   const prefixInitialization = 'xvfb-run -a /usr/bin/wineboot-stable --init'
 
   assert.ok(dockerfile.includes(removal))
   assert.ok(dockerfile.indexOf(removal) < dockerfile.indexOf(prefixInitialization))
-  assert.equal(
-    dockerfile.match(new RegExp(`test ! -e ${payloadPath}`, 'g'))?.length,
-    2,
-  )
+  assert.equal(dockerfile.match(new RegExp(`test ! -e ${payloadPath}`, 'g'))?.length, 2);
 })
 
 test('formal Wine operator build uses an exact committed source context and verifies committed labels', () => {
@@ -140,10 +134,7 @@ test('formal Wine operator build uses an exact committed source context and veri
   assert.equal(bake[2].env.OPERATOR_PROMOTION_ELIGIBLE, 'true')
   assert.equal(bake[2].env.OPERATOR_DEVELOPMENT_ONLY, 'false')
   assert.ok(bake[1].includes('--load'))
-  assert.equal(
-    bake[1].includes(`operator-wine-coreclr.context=${committedSource}`),
-    true,
-  )
+  assert.equal(bake[1].includes(`operator-wine-coreclr.context=${committedSource}`), true);
   assert.match(out.logs.join('\n'), /Verified Wine CoreCLR operator/)
 })
 

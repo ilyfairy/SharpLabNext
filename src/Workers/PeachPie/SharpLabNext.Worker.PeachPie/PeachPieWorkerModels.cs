@@ -2,12 +2,7 @@ using SharpLabNext.Contracts;
 
 namespace SharpLabNext.Worker.PeachPie;
 
-public sealed record PeachPieCompilerResponse(
-    int CompilerProcessId,
-    bool CompilationSucceeded,
-    bool EmitSucceeded,
-    byte[] PeImage,
-    IReadOnlyList<Diagnostic> Diagnostics);
+public sealed record PeachPieCompilerResponse(int CompilerProcessId, bool CompilationSucceeded, bool EmitSucceeded, byte[] PeImage, IReadOnlyList<Diagnostic> Diagnostics);
 
 public class PeachPieWorkerException : Exception
 {

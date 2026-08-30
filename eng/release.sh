@@ -57,7 +57,7 @@ if [[ "$accept_microsoft_licenses" != true ]]; then
   exit 64
 fi
 if [[ -z "$output_directory" ]]; then
-  release_id="$(dotnet run "$repository_root/eng/read-release-id.cs" -- "$repository_root/profiles/lock.json")"
+  release_id="$(dotnet run "$repository_root/eng/tools/read-release-id.cs" -- "$repository_root/profiles/lock.json")"
   output_directory="$repository_root/artifacts/sharplabnext-$release_id"
 else
   output_directory="$(realpath -m -- "$output_directory")"

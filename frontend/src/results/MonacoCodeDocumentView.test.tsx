@@ -7,43 +7,33 @@ const mocks = vi.hoisted(() => {
   let mouseUp: ((event: unknown) => void) | null = null
   let mouseMove: ((event: unknown) => void) | null = null
   let mouseLeave: (() => void) | null = null
-  let scrollChange:
-    | ((event: { scrollTopChanged: boolean; scrollLeftChanged: boolean }) => void)
-    | null = null
+  let scrollChange: ((event: { scrollTopChanged: boolean; scrollLeftChanged: boolean }) => void) | null = null
   let foldingProvider: {
     provideFoldingRanges: (model: unknown) => readonly unknown[] | null
   } | null = null
   let semanticTokensProvider: {
-    provideDocumentSemanticTokens: (
-      model: unknown,
-      lastResultId: string | null,
-      token: { isCancellationRequested: boolean },
-    ) => { data: Uint32Array } | null
+    provideDocumentSemanticTokens: (model: unknown, lastResultId: string | null, token: { isCancellationRequested: boolean }) => { data: Uint32Array } | null
   } | null = null
   let hoverProvider: {
-    provideHover: (
-      model: unknown,
-      position: { lineNumber: number; column: number },
-      token: { isCancellationRequested: boolean },
-    ) => Promise<unknown>
+    provideHover: (model: unknown, position: { lineNumber: number; column: number }, token: { isCancellationRequested: boolean }) => Promise<unknown>
   } | null = null
   const foldingProviderDispose = vi.fn()
   const registerFoldingRangeProvider = vi.fn(
     (
       _languageId: string,
-      provider: { provideFoldingRanges: (model: unknown) => readonly unknown[] | null },
+      provider: {
+        provideFoldingRanges: (model: unknown) => readonly unknown[] | null
+      },
     ) => {
       foldingProvider = provider
       return { dispose: foldingProviderDispose }
     },
   )
   const semanticProviderDispose = vi.fn()
-  const registerDocumentSemanticTokensProvider = vi.fn(
-    (_selector: unknown, provider: typeof semanticTokensProvider) => {
-      semanticTokensProvider = provider
-      return { dispose: semanticProviderDispose }
-    },
-  )
+  const registerDocumentSemanticTokensProvider = vi.fn((_selector: unknown, provider: typeof semanticTokensProvider) => {
+    semanticTokensProvider = provider
+    return { dispose: semanticProviderDispose }
+  })
   const hoverProviderDispose = vi.fn()
   const registerHoverProvider = vi.fn((_selector: unknown, provider: typeof hoverProvider) => {
     hoverProvider = provider
@@ -51,16 +41,20 @@ const mocks = vi.hoisted(() => {
   })
   const ilHover = vi.fn()
   let ilSemanticTokens = [
-    { line: 0, character: 0, length: 7, tokenType: 'typeParameter', tokenModifiers: [] },
+    {
+      line: 0,
+      character: 0,
+      length: 7,
+      tokenType: 'typeParameter',
+      tokenModifiers: [],
+    },
   ]
   const model = {
     value: '',
     languageId: 'asm',
     dispose: vi.fn(),
     getLanguageId: vi.fn(() => model.languageId),
-    getWordAtPosition: vi.fn(
-      (): { word: string; startColumn: number; endColumn: number } | null => null,
-    ),
+    getWordAtPosition: vi.fn((): { word: string; startColumn: number; endColumn: number } | null => null),
     findMatches: vi.fn((): Array<{ range: object }> => []),
     getLineContent: vi.fn((line: number) => model.value.split('\n')[line - 1] ?? ''),
     getLineCount: vi.fn(() => model.value.split('\n').length),
@@ -72,18 +66,16 @@ const mocks = vi.hoisted(() => {
     }),
   }
   const editor = {
-    deltaDecorations: vi.fn((_old: string[], decorations: unknown[]) =>
-      decorations.map((_, index) => `decoration-${index}`),
-    ),
+    deltaDecorations: vi.fn((_old: string[], decorations: unknown[]) => decorations.map((_, index) => `decoration-${index}`)),
     dispose: vi.fn(),
-    getSelection: vi.fn((): { isEmpty: () => boolean } => ({ isEmpty: () => true })),
+    getSelection: vi.fn((): { isEmpty: () => boolean } => ({
+      isEmpty: () => true,
+    })),
     layout: vi.fn(),
-    onDidScrollChange: vi.fn(
-      (handler: (event: { scrollTopChanged: boolean; scrollLeftChanged: boolean }) => void) => {
-        scrollChange = handler
-        return { dispose: vi.fn() }
-      },
-    ),
+    onDidScrollChange: vi.fn((handler: (event: { scrollTopChanged: boolean; scrollLeftChanged: boolean }) => void) => {
+      scrollChange = handler
+      return { dispose: vi.fn() }
+    }),
     onMouseLeave: vi.fn((handler: () => void) => {
       mouseLeave = handler
       return { dispose: vi.fn() }
@@ -114,12 +106,19 @@ const mocks = vi.hoisted(() => {
     editor,
     model,
     emitMouseMove: (lineNumber: number | null) =>
-      mouseMove?.({ target: { position: lineNumber ? { lineNumber, column: 1 } : null } }),
+      mouseMove?.({
+        target: { position: lineNumber ? { lineNumber, column: 1 } : null },
+      }),
     emitMouseLeave: () => mouseLeave?.(),
     emitScroll: () => scrollChange?.({ scrollTopChanged: true, scrollLeftChanged: false }),
     emitMouseUp: (lineNumber: number, detail = 1, ctrlKey = false, targetType = 6) =>
       mouseUp?.({
-        event: { leftButton: true, ctrlKey, metaKey: false, browserEvent: { detail } },
+        event: {
+          leftButton: true,
+          ctrlKey,
+          metaKey: false,
+          browserEvent: { detail },
+        },
         target: { position: { lineNumber, column: 1 }, type: targetType },
       }),
     foldingRanges: (model: unknown) => foldingProvider?.provideFoldingRanges(model) ?? null,
@@ -131,12 +130,7 @@ const mocks = vi.hoisted(() => {
       semanticTokensProvider?.provideDocumentSemanticTokens(candidate, null, {
         isCancellationRequested: false,
       }) ?? null,
-    hoverAt: (candidate: unknown, lineNumber: number, column: number) =>
-      hoverProvider?.provideHover(
-        candidate,
-        { lineNumber, column },
-        { isCancellationRequested: false },
-      ) ?? Promise.resolve(null),
+    hoverAt: (candidate: unknown, lineNumber: number, column: number) => hoverProvider?.provideHover(candidate, { lineNumber, column }, { isCancellationRequested: false }) ?? Promise.resolve(null),
     ilHover,
     get ilSemanticTokens() {
       return ilSemanticTokens
@@ -155,7 +149,13 @@ const mocks = vi.hoisted(() => {
       semanticTokensProvider = null
       hoverProvider = null
       ilSemanticTokens = [
-        { line: 0, character: 0, length: 7, tokenType: 'typeParameter', tokenModifiers: [] },
+        {
+          line: 0,
+          character: 0,
+          length: 7,
+          tokenType: 'typeParameter',
+          tokenModifiers: [],
+        },
       ]
       ilHover.mockReset()
       for (const value of [
@@ -187,12 +187,7 @@ vi.mock('../editor/monacoCore', () => ({
       return range
     }
 
-    constructor(
-      startLineNumber: number,
-      startColumn: number,
-      endLineNumber: number,
-      endColumn: number,
-    ) {
+    constructor(startLineNumber: number, startColumn: number, endLineNumber: number, endColumn: number) {
       this.startLineNumber = startLineNumber
       this.startColumn = startColumn
       this.endLineNumber = endLineNumber
@@ -250,19 +245,10 @@ describe('MonacoCodeDocumentView', () => {
 
   it('disables the output minimap on a compact mobile viewport', async () => {
     vi.stubGlobal('matchMedia', () => ({ matches: true }))
-    render(
-      <MonacoCodeDocumentView
-        text="ret"
-        languageId="asm"
-        ariaLabel="Mobile assembly"
-        fontSize={14}
-      />,
-    )
+    render(<MonacoCodeDocumentView text="ret" languageId="asm" ariaLabel="Mobile assembly" fontSize={14} />)
 
     await waitFor(() => expect(mocks.createEditor).toHaveBeenCalledOnce())
-    expect(mocks.createEditor.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({ minimap: { enabled: false } }),
-    )
+    expect(mocks.createEditor.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ minimap: { enabled: false } }))
   })
 
   it('provides generated IL semantic tokens and hover for its read-only model only', async () => {
@@ -291,9 +277,7 @@ describe('MonacoCodeDocumentView', () => {
     )
 
     await waitFor(() => expect(mocks.registerDocumentSemanticTokensProvider).toHaveBeenCalledOnce())
-    expect(mocks.registerDocumentSemanticTokensProvider.mock.calls[0]?.[0]).toEqual(
-      expect.objectContaining({ language: 'il', exclusive: true }),
-    )
+    expect(mocks.registerDocumentSemanticTokensProvider.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ language: 'il', exclusive: true }))
     expect(mocks.semanticTokens(mocks.model)?.data).toEqual(new Uint32Array([0, 0, 7, 6, 0]))
     expect(mocks.semanticTokens({})).toBeNull()
 
@@ -314,9 +298,7 @@ describe('MonacoCodeDocumentView', () => {
         }}
       />,
     )
-    await waitFor(() =>
-      expect(mocks.registerDocumentSemanticTokensProvider).toHaveBeenCalledTimes(2),
-    )
+    await waitFor(() => expect(mocks.registerDocumentSemanticTokensProvider).toHaveBeenCalledTimes(2))
     expect(mocks.semanticProviderDispose).toHaveBeenCalledOnce()
 
     await waitFor(() => expect(mocks.registerHoverProvider).toHaveBeenCalledOnce())
@@ -362,7 +344,14 @@ describe('MonacoCodeDocumentView', () => {
       ariaLabel: 'JIT assembly',
       fontSize: 14 as const,
       lineAssociations: [{ startLine: 2, endLine: 2, association }],
-      lineActions: [{ startLine: 2, endLine: 2, ariaLabel: 'Open Program.cs:3', onActivate }],
+      lineActions: [
+        {
+          startLine: 2,
+          endLine: 2,
+          ariaLabel: 'Open Program.cs:3',
+          onActivate,
+        },
+      ],
       onAssociationHover: onHover,
     }
     const view = render(<MonacoCodeDocumentView {...props} />)
@@ -379,15 +368,8 @@ describe('MonacoCodeDocumentView', () => {
         lineDecorationsWidth: 7,
       }),
     )
-    await waitFor(() =>
-      expect(mocks.registerFoldingRangeProvider).toHaveBeenCalledWith(
-        'asm',
-        expect.objectContaining({ provideFoldingRanges: expect.any(Function) }),
-      ),
-    )
-    expect(mocks.foldingRanges(mocks.model)).toEqual([
-      { start: 1, end: 3, kind: { value: 'region' } },
-    ])
+    await waitFor(() => expect(mocks.registerFoldingRangeProvider).toHaveBeenCalledWith('asm', expect.objectContaining({ provideFoldingRanges: expect.any(Function) })))
+    expect(mocks.foldingRanges(mocks.model)).toEqual([{ start: 1, end: 3, kind: { value: 'region' } }])
     expect(mocks.foldingRanges({})).toEqual([])
     await waitFor(() => expect(mocks.editor.deltaDecorations).toHaveBeenCalled())
     expect(mocks.editor.deltaDecorations.mock.calls.at(-1)?.[1]).toEqual([
@@ -397,9 +379,7 @@ describe('MonacoCodeDocumentView', () => {
         }),
       }),
     ])
-    const latestDecorations = mocks.editor.deltaDecorations.mock.calls.at(-1)?.[1] as
-      | Array<{ options?: Record<string, unknown> }>
-      | undefined
+    const latestDecorations = mocks.editor.deltaDecorations.mock.calls.at(-1)?.[1] as Array<{ options?: Record<string, unknown> }> | undefined
     expect(latestDecorations?.[0]?.options).not.toHaveProperty('hoverMessage')
 
     act(() => mocks.emitMouseMove(2))
@@ -429,13 +409,7 @@ describe('MonacoCodeDocumentView', () => {
     await new Promise((resolve) => window.setTimeout(resolve, 450))
     expect(onActivate).not.toHaveBeenCalled()
 
-    view.rerender(
-      <MonacoCodeDocumentView
-        {...props}
-        activeAssociationKey={association.key}
-        activeAssociationRevision={1}
-      />,
-    )
+    view.rerender(<MonacoCodeDocumentView {...props} activeAssociationKey={association.key} activeAssociationRevision={1} />)
     await waitFor(() => expect(mocks.editor.revealLineInCenter).toHaveBeenCalledWith(2))
     expect(mocks.editor.deltaDecorations.mock.calls.at(-1)?.[1]).toEqual([
       expect.objectContaining({
@@ -444,23 +418,10 @@ describe('MonacoCodeDocumentView', () => {
         }),
       }),
     ])
-    view.rerender(
-      <MonacoCodeDocumentView
-        {...props}
-        lineAssociations={[...props.lineAssociations]}
-        activeAssociationKey={association.key}
-        activeAssociationRevision={1}
-      />,
-    )
+    view.rerender(<MonacoCodeDocumentView {...props} lineAssociations={[...props.lineAssociations]} activeAssociationKey={association.key} activeAssociationRevision={1} />)
     await new Promise((resolve) => window.setTimeout(resolve, 0))
     expect(mocks.editor.revealLineInCenter).toHaveBeenCalledOnce()
-    view.rerender(
-      <MonacoCodeDocumentView
-        {...props}
-        activeAssociationKey={association.key}
-        activeAssociationRevision={2}
-      />,
-    )
+    view.rerender(<MonacoCodeDocumentView {...props} activeAssociationKey={association.key} activeAssociationRevision={2} />)
     await waitFor(() => expect(mocks.editor.revealLineInCenter).toHaveBeenCalledTimes(2))
 
     mocks.editor.getSelection.mockReturnValue({ isEmpty: () => false })
@@ -506,7 +467,12 @@ describe('MonacoCodeDocumentView', () => {
       fontSize: 14 as const,
       generationKey: 'workflow-1',
       lineActions: [
-        { startLine: 1, endLine: 2, ariaLabel: 'Open Program.cs:1', onActivate: firstAction },
+        {
+          startLine: 1,
+          endLine: 2,
+          ariaLabel: 'Open Program.cs:1',
+          onActivate: firstAction,
+        },
       ],
     }
     const view = render(<MonacoCodeDocumentView {...props} />)
@@ -517,7 +483,12 @@ describe('MonacoCodeDocumentView', () => {
       <MonacoCodeDocumentView
         {...props}
         lineActions={[
-          { startLine: 1, endLine: 2, ariaLabel: 'Open Program.cs:1', onActivate: latestAction },
+          {
+            startLine: 1,
+            endLine: 2,
+            ariaLabel: 'Open Program.cs:1',
+            onActivate: latestAction,
+          },
         ]}
       />,
     )
@@ -531,7 +502,12 @@ describe('MonacoCodeDocumentView', () => {
         {...props}
         generationKey="workflow-2"
         lineActions={[
-          { startLine: 1, endLine: 2, ariaLabel: 'Open Program.cs:1', onActivate: latestAction },
+          {
+            startLine: 1,
+            endLine: 2,
+            ariaLabel: 'Open Program.cs:1',
+            onActivate: latestAction,
+          },
         ]}
       />,
     )

@@ -1,11 +1,5 @@
-import type {
-  DecodedShare,
-  EncodedV3Share,
-  EncodeV3Options,
-  ShareWorkspaceState,
-  UrlCodecLimits,
-} from '../share'
-import type { ShareUrlErrorCode } from '../share/errors'
+import type { DecodedShare, EncodedV3Share, EncodeV3Options, ShareWorkspaceState, UrlCodecLimits } from '../share';
+import type { ShareUrlErrorCode } from '../share/errors';
 
 export type UrlCodecWorkerRequest =
   | {
@@ -21,7 +15,7 @@ export type UrlCodecWorkerRequest =
       limits: UrlCodecLimits
     }
 
-export type UrlCodecWorkerValue = EncodedV3Share | DecodedShare
+export type UrlCodecWorkerValue = EncodedV3Share | DecodedShare;
 
 export type UrlCodecWorkerResponse =
   | {

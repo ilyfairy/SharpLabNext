@@ -53,14 +53,17 @@ RUN curl --fail --location --retry 3 --retry-all-errors --output /tmp/dotnet-run
 FROM ${RUNTIME_DEPS_IMAGE} AS runtime-image
 ARG VERSION
 ARG SOURCE_REVISION
+ARG RUNTIME_PROFILE_ID
+ARG RUNTIME_TITLE
 ARG DOTNET_RUNTIME_VERSION
 ARG DOTNET_RUNTIME_COMMIT
 ARG DOTNET_JIT_COMMIT
-LABEL org.opencontainers.image.title="SharpLabNext .NET 10 Runtime Job" \
+ARG DOTNET_ROLL_FORWARD
+LABEL org.opencontainers.image.title="${RUNTIME_TITLE}" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
       org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
-      com.sharplabnext.runtime-profile="dotnet-10-linux-x64" \
+      com.sharplabnext.runtime-profile="${RUNTIME_PROFILE_ID}" \
       com.sharplabnext.runtime-version="${DOTNET_RUNTIME_VERSION}" \
       io.sharplabnext.runtime.commit="${DOTNET_RUNTIME_COMMIT}" \
       io.sharplabnext.jit.commit="${DOTNET_JIT_COMMIT}" \
@@ -80,6 +83,7 @@ COPY --chmod=0555 deploy/docker/jit-profiler-preflight.sh /opt/sharplabnext/jit-
 ENV DOTNET_EnableDiagnostics=0 \
     COMPlus_EnableDiagnostics=0 \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_ROLL_FORWARD=${DOTNET_ROLL_FORWARD} \
     HOME=/tmp
 WORKDIR /workspace
 USER 1654:1654

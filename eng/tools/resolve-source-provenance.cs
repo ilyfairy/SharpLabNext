@@ -1,7 +1,7 @@
 #:sdk Microsoft.NET.Sdk
 #:property TargetFramework=net10.0
 #:property NuGetLockFilePath=obj/resolve-source-provenance.packages.lock.json
-#:project ../src/Tools/SharpLabNext.BundleBuilder/SharpLabNext.BundleBuilder.csproj
+#:project ../../src/Tools/SharpLabNext.BundleBuilder/SharpLabNext.BundleBuilder.csproj
 
 using SharpLabNext.BundleBuilder;
 
@@ -33,21 +33,13 @@ for (var index = 0; index < args.Length; index++)
 
 if (string.IsNullOrWhiteSpace(repositoryRoot))
 {
-    Console.Error.WriteLine(
-        "Usage: dotnet run eng/resolve-source-provenance.cs -- --repository-root PATH " +
-        "[--source-revision REVISION] [--allow-uncommitted-source-for-development] [--verify-git]");
+    Console.Error.WriteLine("Usage: dotnet run eng/tools/resolve-source-provenance.cs -- --repository-root PATH " + "[--source-revision REVISION] [--allow-uncommitted-source-for-development] [--verify-git]");
     return 64;
 }
 
 try
 {
-    var source = await RepositorySourceProvenanceResolver.ResolveAsync(
-        repositoryRoot,
-        requestedRevision,
-        allowUncommittedSourceForDevelopment,
-        verifyGit
-            ? new GitRepositorySourceInspector(allowFallback: false)
-            : new ContentRepositorySourceInspector());
+    var source = await RepositorySourceProvenanceResolver.ResolveAsync(repositoryRoot, requestedRevision, allowUncommittedSourceForDevelopment, verifyGit ? new GitRepositorySourceInspector(allowFallback: false) : new ContentRepositorySourceInspector());
     Console.WriteLine($"SHARPLABNEXT_SOURCE_REVISION={source.Revision}");
     Console.WriteLine($"SHARPLABNEXT_SOURCE_VERIFIED={(source.IsVerified ? "true" : "false")}");
     return 0;
@@ -62,9 +54,7 @@ static string RequiredValue(string[] values, ref int index)
 {
     index++;
     if (index >= values.Length || string.IsNullOrWhiteSpace(values[index]))
-    {
         throw new BundleValidationException("An option value is missing.");
-    }
 
     return values[index];
 }

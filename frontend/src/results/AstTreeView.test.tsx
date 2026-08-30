@@ -21,13 +21,28 @@ const document: AstDocument = {
         children: [
           {
             kind: 'CompilationUnit',
-            range: { startLine: 0, startCharacter: 0, endLine: 1, endCharacter: 18 },
-            fullRange: { startLine: 0, startCharacter: 0, endLine: 2, endCharacter: 0 },
+            range: {
+              startLine: 0,
+              startCharacter: 0,
+              endLine: 1,
+              endCharacter: 18,
+            },
+            fullRange: {
+              startLine: 0,
+              startCharacter: 0,
+              endLine: 2,
+              endCharacter: 0,
+            },
             properties: { type: 'CompilationUnitSyntax', isNode: 'true' },
             children: [
               {
                 kind: 'IdentifierName',
-                range: { startLine: 1, startCharacter: 0, endLine: 1, endCharacter: 7 },
+                range: {
+                  startLine: 1,
+                  startCharacter: 0,
+                  endLine: 1,
+                  endCharacter: 7,
+                },
                 properties: {
                   type: 'IdentifierNameSyntax',
                   isNode: 'true',
@@ -36,7 +51,12 @@ const document: AstDocument = {
                 children: [
                   {
                     kind: 'IdentifierToken',
-                    range: { startLine: 1, startCharacter: 0, endLine: 1, endCharacter: 7 },
+                    range: {
+                      startLine: 1,
+                      startCharacter: 0,
+                      endLine: 1,
+                      endCharacter: 7,
+                    },
                     properties: {
                       type: 'SyntaxToken',
                       isNode: 'false',
@@ -66,13 +86,26 @@ const document: AstDocument = {
               },
               {
                 kind: 'ClassDeclaration',
-                range: { startLine: 0, startCharacter: 0, endLine: 0, endCharacter: 12 },
+                range: {
+                  startLine: 0,
+                  startCharacter: 0,
+                  endLine: 0,
+                  endCharacter: 12,
+                },
                 properties: { type: 'ClassDeclarationSyntax', isNode: 'true' },
                 children: [
                   {
                     kind: 'MethodDeclaration',
-                    range: { startLine: 0, startCharacter: 6, endLine: 0, endCharacter: 12 },
-                    properties: { type: 'MethodDeclarationSyntax', isNode: 'true' },
+                    range: {
+                      startLine: 0,
+                      startCharacter: 6,
+                      endLine: 0,
+                      endCharacter: 12,
+                    },
+                    properties: {
+                      type: 'MethodDeclarationSyntax',
+                      isNode: 'true',
+                    },
                     children: [],
                   },
                 ],
@@ -99,19 +132,15 @@ describe('AstTreeView', () => {
     expect(screen.queryByRole('button', { name: 'Expand the AST' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Collapse the AST' })).not.toBeInTheDocument()
     expect(screen.getByText('Select a syntax item to inspect it.')).toBeVisible()
-    expect(
-      screen
-        .getAllByRole('treeitem')
-        .every((item) => item.getAttribute('aria-selected') === 'false'),
-    ).toBe(true)
+    expect(screen.getAllByRole('treeitem').every((item) => item.getAttribute('aria-selected') === 'false')).toBe(true)
     expect(onNavigate).not.toHaveBeenCalled()
 
-    expect(
-      screen.getByRole('treeitem', { name: /Workspace/ }).closest('.ast-tree-row'),
-    ).toHaveClass('ast-tree-root-row')
+    expect(screen.getByRole('treeitem', { name: /Workspace/ }).closest('.ast-tree-row')).toHaveClass('ast-tree-root-row')
 
     fireEvent.click(screen.getByRole('treeitem', { name: /IdentifierName/ }))
-    const inspector = screen.getByRole('complementary', { name: 'Selected AST node' })
+    const inspector = screen.getByRole('complementary', {
+      name: 'Selected AST node',
+    })
     expect(inspector).toHaveTextContent('IdentifierNameSyntax')
     expect(inspector).toHaveTextContent('rawKind')
     expect(inspector).toHaveTextContent('Program.cs')
@@ -146,36 +175,18 @@ describe('AstTreeView', () => {
 
     const view = render(<AstTreeView document={document} sourceMap={sourceMap} />)
 
-    const unrelated = screen.getByRole('treeitem', { name: /ClassDeclaration/ })
+    const unrelated = screen.getByRole('treeitem', {
+      name: /ClassDeclaration/,
+    })
     fireEvent.doubleClick(unrelated)
     expect(unrelated).toHaveAttribute('aria-expanded', 'true')
 
-    view.rerender(
-      <AstTreeView
-        document={document}
-        sourceMap={sourceMap}
-        activeSourceAssociationKey={tokenEntry.association.key}
-        activeSourceAssociationRevision={1}
-      />,
-    )
+    view.rerender(<AstTreeView document={document} sourceMap={sourceMap} activeSourceAssociationKey={tokenEntry.association.key} activeSourceAssociationRevision={1} />)
 
-    await waitFor(() =>
-      expect(screen.getByRole('treeitem', { name: /IdentifierToken/ })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      ),
-    )
-    expect(screen.getByRole('complementary', { name: 'Selected AST node' })).toHaveTextContent(
-      'SyntaxToken',
-    )
-    expect(screen.getByRole('treeitem', { name: /IdentifierToken/ })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    )
+    await waitFor(() => expect(screen.getByRole('treeitem', { name: /IdentifierToken/ })).toHaveAttribute('aria-selected', 'true'))
+    expect(screen.getByRole('complementary', { name: 'Selected AST node' })).toHaveTextContent('SyntaxToken')
+    expect(screen.getByRole('treeitem', { name: /IdentifierToken/ })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('treeitem', { name: /WhitespaceTrivia/ })).toBeVisible()
-    expect(screen.getByRole('treeitem', { name: /ClassDeclaration/ })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    )
+    expect(screen.getByRole('treeitem', { name: /ClassDeclaration/ })).toHaveAttribute('aria-expanded', 'false')
   })
 })

@@ -21,9 +21,7 @@ namespace SharpLabNext.TargetRuntimeRunner
                     if (args.Length == 1 && string.Equals(args[0], "self-test", StringComparison.Ordinal))
                     {
                         UserAssemblyRunner.RunSelfTest();
-                        writer.Write(
-                            RuntimeFrameKind.Exit,
-                            JsonPayloadWriter.WriteExit("completed", 0, started.Elapsed.TotalMilliseconds));
+                        writer.Write(RuntimeFrameKind.Exit, JsonPayloadWriter.WriteExit("completed", 0, started.Elapsed.TotalMilliseconds));
                         return 0;
                     }
 
@@ -32,33 +30,20 @@ namespace SharpLabNext.TargetRuntimeRunner
                     ConfigureStandardInput();
                     int exitCode = UserAssemblyRunner.Run(options.AssemblyPath, options.UserArguments);
                     capture.Emit();
-                    writer.Write(
-                        RuntimeFrameKind.Exit,
-                        JsonPayloadWriter.WriteExit(
-                            exitCode == 0 ? "completed" : "non-zero-exit",
-                            exitCode,
-                            started.Elapsed.TotalMilliseconds));
+                    writer.Write(RuntimeFrameKind.Exit, JsonPayloadWriter.WriteExit(exitCode == 0 ? "completed" : "non-zero-exit", exitCode, started.Elapsed.TotalMilliseconds));
                     return exitCode;
                 }
                 catch (OutOfMemoryException)
                 {
                     TryEmit(capture);
-                    writer.Write(
-                        RuntimeFrameKind.Exit,
-                        JsonPayloadWriter.WriteExit("out-of-memory", 137, started.Elapsed.TotalMilliseconds));
+                    writer.Write(RuntimeFrameKind.Exit, JsonPayloadWriter.WriteExit("out-of-memory", 137, started.Elapsed.TotalMilliseconds));
                     return 137;
                 }
                 catch (Exception exception)
                 {
                     TryEmit(capture);
-                    writer.Write(
-                        RuntimeFrameKind.Exception,
-                        JsonPayloadWriter.WriteException(
-                            ExceptionUnwrapper.Unwrap(exception),
-                            started.Elapsed.TotalMilliseconds));
-                    writer.Write(
-                        RuntimeFrameKind.Exit,
-                        JsonPayloadWriter.WriteExit("user-exception", 1, started.Elapsed.TotalMilliseconds));
+                    writer.Write(RuntimeFrameKind.Exception, JsonPayloadWriter.WriteException(ExceptionUnwrapper.Unwrap(exception), started.Elapsed.TotalMilliseconds));
+                    writer.Write(RuntimeFrameKind.Exit, JsonPayloadWriter.WriteExit("user-exception", 1, started.Elapsed.TotalMilliseconds));
                     return 1;
                 }
                 finally

@@ -1,40 +1,12 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { BuildConfiguration, ResolveSelectionResponse } from '../api/types'
 import { createLanguageWorkspaceUri } from '../lsp/languageDocumentUri'
-import {
-  editorLanguageId,
-  registerSourceLanguages,
-  sourceEditorTheme,
-} from '../lsp/languageRegistration'
-import {
-  createLanguageSessionKey,
-  LanguageSessionLifecycle,
-  type LanguageSessionStatusChange,
-} from '../lsp/languageSessionLifecycle'
-import {
-  createMonacoLanguageSessionDependencies,
-  MonacoLanguageBridge,
-} from '../lsp/monacoLanguageClient'
-import {
-  type ExecutionFlowNavigationRequest,
-  type ExecutionFlowSourceHit,
-  type ExecutionFlowSourceModel,
-  toEditorRange,
-  validateSourceRange,
-} from '../results/executionFlowModel'
-import {
-  isLinkedLineSourceAssociation,
-  type SourceAssociation,
-  sourceAssociationClass,
-  sourceAssociationForSelection,
-  sourceAssociationLines,
-} from '../results/sourceAssociationModel'
-import {
-  buildOutputKindForResolvedPipeline,
-  createWorkbenchBuildOptions,
-  type RememberedWorkbenchOutputKind,
-  retainResolvedWorkbenchOutputKind,
-} from '../workbench/buildOptions'
+import { editorLanguageId, registerSourceLanguages, sourceEditorTheme } from '../lsp/languageRegistration'
+import { createLanguageSessionKey, LanguageSessionLifecycle, type LanguageSessionStatusChange } from '../lsp/languageSessionLifecycle'
+import { createMonacoLanguageSessionDependencies, MonacoLanguageBridge } from '../lsp/monacoLanguageClient'
+import { type ExecutionFlowNavigationRequest, type ExecutionFlowSourceHit, type ExecutionFlowSourceModel, toEditorRange, validateSourceRange } from '../results/executionFlowModel'
+import { isLinkedLineSourceAssociation, type SourceAssociation, sourceAssociationClass, sourceAssociationForSelection, sourceAssociationLines } from '../results/sourceAssociationModel'
+import { buildOutputKindForResolvedPipeline, createWorkbenchBuildOptions, type RememberedWorkbenchOutputKind, retainResolvedWorkbenchOutputKind } from '../workbench/buildOptions'
 import { type EditorFontSize, mobileEditorMediaQuery } from './editorPreference'
 import { type LspDocumentSymbol, sourceMethodFromDocumentSymbols } from './lspDocumentSymbols'
 import * as monaco from './monacoCore'
@@ -81,9 +53,7 @@ interface LatestEditorState extends MonacoEditorProps {
   modelLanguageId: string
 }
 
-type DocumentSymbolCacheEntry =
-  | { version: number; status: 'unsupported' }
-  | { version: number; status: 'ready'; symbols: readonly LspDocumentSymbol[] }
+type DocumentSymbolCacheEntry = { version: number; status: 'unsupported' } | { version: number; status: 'ready'; symbols: readonly LspDocumentSymbol[] }
 
 export function MonacoEditor(props: MonacoEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -111,9 +81,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
   const onChangeRef = useRef(props.onChange)
   const onStatusRef = useRef(props.onLanguageSessionStatus)
   const onCursorMethodChangeRef = useRef(props.onCursorMethodChange)
-  const emitCursorMethodRef = useRef<
-    (model: monaco.editor.ITextModel | null, position: monaco.Position) => void
-  >(() => {})
+  const emitCursorMethodRef = useRef<(model: monaco.editor.ITextModel | null, position: monaco.Position) => void>(() => {})
   const workspaceIdRef = useRef(createWorkspaceId())
   const latestRef = useRef<LatestEditorState>({
     ...props,
@@ -145,8 +113,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
     const container = containerRef.current
     if (!container) return
 
-    const mobileViewport =
-      typeof matchMedia === 'function' ? matchMedia(mobileEditorMediaQuery) : null
+    const mobileViewport = typeof matchMedia === 'function' ? matchMedia(mobileEditorMediaQuery) : null
     const editor = monaco.editor.create(container, {
       model: null,
       theme: sourceEditorTheme,
@@ -173,8 +140,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
       lightbulb: { enabled: monaco.editor.ShowLightbulbIconMode.On },
       ariaLabel: 'Source editor',
     })
-    const jumpToNextSnippetPlaceholder = () =>
-      editor.trigger('keyboard', 'jumpToNextSnippetPlaceholder', null)
+    const jumpToNextSnippetPlaceholder = () => editor.trigger('keyboard', 'jumpToNextSnippetPlaceholder', null)
     const hasNextSnippetPlaceholder = 'inSnippetMode && hasNextTabstop'
     editor.addCommand(monaco.KeyCode.Enter, jumpToNextSnippetPlaceholder, hasNextSnippetPlaceholder)
     editor.addCommand(monaco.KeyCode.Tab, jumpToNextSnippetPlaceholder, hasNextSnippetPlaceholder)
@@ -259,15 +225,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
       const pointerDown = sourceAssociationPointerDown
       sourceAssociationPointerDown = null
       const currentSelection = editor.getSelection()
-      if (
-        detail <= 1 &&
-        position &&
-        pointerDown &&
-        positionsEqual(position, pointerDown.position) &&
-        currentSelection &&
-        !currentSelection.isEmpty() &&
-        selectionsEqual(currentSelection, pointerDown.selection)
-      ) {
+      if (detail <= 1 && position && pointerDown && positionsEqual(position, pointerDown.position) && currentSelection && !currentSelection.isEmpty() && selectionsEqual(currentSelection, pointerDown.selection)) {
         editor.setPosition(position)
       }
       const eventPath = latestRef.current.activeFile
@@ -280,9 +238,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
         if (!selection) return
 
         const associations = state.sourceAssociations ?? []
-        const hasActiveRangeAssociations = associations.some(
-          (association) => association.presentation === 'active-range',
-        )
+        const hasActiveRangeAssociations = associations.some((association) => association.presentation === 'active-range')
         if (hasActiveRangeAssociations) {
           // Selection changes already preview the matching AST node while the
           // pointer is moving. Activating the same non-empty selection again
@@ -312,11 +268,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
         if (!selection.isEmpty() || detail > 1) return
         const finalPosition = editor.getPosition() ?? position
         if (!finalPosition) return
-        const association = associations.find(
-          (candidate) =>
-            candidate.documentPath === eventPath &&
-            sourcePositionInRange(finalPosition, candidate.range),
-        )
+        const association = associations.find((candidate) => candidate.documentPath === eventPath && sourcePositionInRange(finalPosition, candidate.range))
         if (!association) return
         clearSourceAssociationActivation()
         sourceAssociationActivationTimerRef.current = window.setTimeout(() => {
@@ -328,10 +280,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
     const symbolsSubscription = bridge.onDidChangeDocumentSymbols(({ path, version, symbols }) => {
       const model = modelsRef.current.get(path)
       if (!model || model.getVersionId() !== version) return
-      documentSymbolsRef.current.set(
-        model.uri.toString(),
-        symbols ? { version, status: 'ready', symbols } : { version, status: 'unsupported' },
-      )
+      documentSymbolsRef.current.set(model.uri.toString(), symbols ? { version, status: 'ready', symbols } : { version, status: 'unsupported' })
       const position = editor.getPosition()
       if (editor.getModel() === model && position) emitCursorMethodRef.current(model, position)
     })
@@ -342,8 +291,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
 
     const resizeObserver = new ResizeObserver(() => editor.layout())
     resizeObserver.observe(container)
-    const updateGutter = () =>
-      editor.updateOptions(monacoGutterOptions(mobileViewport?.matches ?? false))
+    const updateGutter = () => editor.updateOptions(monacoGutterOptions(mobileViewport?.matches ?? false))
     mobileViewport?.addEventListener('change', updateGutter)
     return () => {
       resizeObserver.disconnect()
@@ -390,10 +338,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
   useEffect(() => {
     const editor = editorRef.current
     if (!editor) return
-    const modelLanguageId = editorLanguageId(
-      props.languageSession.languageId,
-      props.monacoLanguageId,
-    )
+    const modelLanguageId = editorLanguageId(props.languageSession.languageId, props.monacoLanguageId)
     const bridge = bridgeRef.current
     if (!bridge) return
     bridge.setLanguage(modelLanguageId)
@@ -414,11 +359,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
     for (const file of props.files) {
       let model = modelsRef.current.get(file.path)
       if (!model) {
-        model = monaco.editor.createModel(
-          file.text,
-          modelLanguageId,
-          createDocumentUri(workspaceIdRef.current, file.path),
-        )
+        model = monaco.editor.createModel(file.text, modelLanguageId, createDocumentUri(workspaceIdRef.current, file.path))
         modelsRef.current.set(file.path, model)
         bridge.registerDocument(file.path, model)
         subscriptionsRef.current.set(
@@ -432,12 +373,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
               clearSourceAssociationMouseUp()
               clearSourceAssociationActivation()
               onChangeRef.current(file.path, text)
-              retryCompletion =
-                bridge.consumeEmptyCompletionRetry?.(
-                  file.path,
-                  model?.getVersionId() ?? 1,
-                  event.changes,
-                ) ?? false
+              retryCompletion = bridge.consumeEmptyCompletionRetry?.(file.path, model?.getVersionId() ?? 1, event.changes) ?? false
             } else {
               // A controlled/external replacement is unrelated to the prefix
               // that produced the empty completion result.
@@ -446,8 +382,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
             bridge.changeDocument(file.path, text, model?.getVersionId() ?? 1)
             const editor = editorRef.current
             const position = editor?.getPosition()
-            if (editor?.getModel() === model && position)
-              emitCursorMethodRef.current(model ?? null, position)
+            if (editor?.getModel() === model && position) emitCursorMethodRef.current(model ?? null, position)
 
             // Monaco does not requery an empty provider even when its result
             // is marked incomplete. Once the local edit has been delivered,
@@ -456,11 +391,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
               const retryVersion = model?.getVersionId() ?? 1
               Promise.resolve().then(() => {
                 const currentEditor = editorRef.current
-                if (
-                  !currentEditor ||
-                  currentEditor.getModel() !== model ||
-                  model?.getVersionId() !== retryVersion
-                ) {
+                if (!currentEditor || currentEditor.getModel() !== model || model?.getVersionId() !== retryVersion) {
                   return
                 }
                 currentEditor.trigger('keyboard', 'editor.action.triggerSuggest', null)
@@ -512,14 +443,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
     const position = editor.getPosition()
     if (position) emitCursorMethodRef.current(activeModel, position)
     else onCursorMethodChangeRef.current?.(null)
-  }, [
-    clearSourceAssociationActivation,
-    clearSourceAssociationMouseUp,
-    props.activeFile,
-    props.files,
-    props.languageSession.languageId,
-    props.monacoLanguageId,
-  ])
+  }, [clearSourceAssociationActivation, clearSourceAssociationMouseUp, props.activeFile, props.files, props.languageSession.languageId, props.monacoLanguageId])
 
   useEffect(() => {
     const editor = editorRef.current
@@ -542,7 +466,10 @@ export function MonacoEditor(props: MonacoEditorProps) {
             options: {
               className: 'execution-flow-range',
               afterContentClassName: `execution-flow-count execution-flow-count-${hit.count}`,
-              hoverMessage: { value: escapeMarkdown(message), isTrusted: false },
+              hoverMessage: {
+                value: escapeMarkdown(message),
+                isTrusted: false,
+              },
               linesDecorationsTooltip: message,
               overviewRuler: {
                 color: 'rgba(0, 122, 112, 0.72)',
@@ -553,23 +480,20 @@ export function MonacoEditor(props: MonacoEditorProps) {
           } satisfies monaco.editor.IModelDeltaDecoration,
         ]
       })
-      const nextIds = model.deltaDecorations(
-        executionFlowDecorationsRef.current.get(path) ?? [],
-        decorations,
-      )
+      const nextIds = model.deltaDecorations(executionFlowDecorationsRef.current.get(path) ?? [], decorations)
       if (nextIds.length > 0) executionFlowDecorationsRef.current.set(path, nextIds)
       else executionFlowDecorationsRef.current.delete(path)
     }
 
     const style = executionFlowStyleRef.current
     if (style) style.textContent = executionFlowCountStyles(hits)
-    editor.updateOptions({ ariaLabel: executionFlowAriaLabel(props.executionFlow) })
+    editor.updateOptions({
+      ariaLabel: executionFlowAriaLabel(props.executionFlow),
+    })
   }, [props.executionFlow])
 
   useEffect(() => {
-    const linkedAssociations = (props.sourceAssociations ?? []).filter(
-      isLinkedLineSourceAssociation,
-    )
+    const linkedAssociations = (props.sourceAssociations ?? []).filter(isLinkedLineSourceAssociation)
     if (linkedAssociations.length === 0 && sourceAssociationDecorationsRef.current.size === 0) {
       return
     }
@@ -582,25 +506,14 @@ export function MonacoEditor(props: MonacoEditorProps) {
     }
 
     for (const [path, model] of modelsRef.current) {
-      const associations = (associationsByPath.get(path) ?? []).filter(
-        (association) => !validateSourceRange(model.getValue(), association.range),
-      )
-      const lineDecorations = sourceAssociationLines(
-        associations,
-        props.activeSourceAssociationKey,
-      ).map(
+      const associations = (associationsByPath.get(path) ?? []).filter((association) => !validateSourceRange(model.getValue(), association.range))
+      const lineDecorations = sourceAssociationLines(associations, props.activeSourceAssociationKey).map(
         ({ lineNumber, association, active }) =>
           ({
             range: new monaco.Range(lineNumber, 1, lineNumber, 1),
             options: {
               isWholeLine: true,
-              className: [
-                'monaco-source-association-line',
-                active ? 'monaco-source-association-line-active' : '',
-                sourceAssociationClass(association.colorIndex),
-              ]
-                .filter(Boolean)
-                .join(' '),
+              className: ['monaco-source-association-line', active ? 'monaco-source-association-line-active' : '', sourceAssociationClass(association.colorIndex)].filter(Boolean).join(' '),
             },
           }) satisfies monaco.editor.IModelDeltaDecoration,
       )
@@ -609,22 +522,13 @@ export function MonacoEditor(props: MonacoEditorProps) {
         return {
           range: toEditorRange(association.range),
           options: {
-            inlineClassName: [
-              'monaco-source-association-range',
-              active ? 'monaco-source-association-exact-active' : '',
-              active ? sourceAssociationClass(association.colorIndex) : '',
-            ]
-              .filter(Boolean)
-              .join(' '),
+            inlineClassName: ['monaco-source-association-range', active ? 'monaco-source-association-exact-active' : '', active ? sourceAssociationClass(association.colorIndex) : ''].filter(Boolean).join(' '),
             stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
           },
         } satisfies monaco.editor.IModelDeltaDecoration
       })
       const decorations = [...lineDecorations, ...exactRangeTooltips]
-      const nextIds = model.deltaDecorations(
-        sourceAssociationDecorationsRef.current.get(path) ?? [],
-        decorations,
-      )
+      const nextIds = model.deltaDecorations(sourceAssociationDecorationsRef.current.get(path) ?? [], decorations)
       if (nextIds.length > 0) sourceAssociationDecorationsRef.current.set(path, nextIds)
       else sourceAssociationDecorationsRef.current.delete(path)
     }
@@ -640,11 +544,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
     const navigation = props.sourceNavigation
     if (!editor || !navigation || props.activeFile !== navigation.documentPath) return
     const model = modelsRef.current.get(navigation.documentPath)
-    if (
-      !model ||
-      editor.getModel() !== model ||
-      validateSourceRange(model.getValue(), navigation.range)
-    ) {
+    if (!model || editor.getModel() !== model || validateSourceRange(model.getValue(), navigation.range)) {
       return
     }
     const range = toEditorRange(navigation.range)
@@ -668,14 +568,8 @@ export function MonacoEditor(props: MonacoEditorProps) {
     }
 
     const resolution = session.resolution
-    const resolutionMatches =
-      resolution?.effectiveSelection.languageId === session.languageId &&
-      resolution.effectiveSelection.toolchainId === session.toolchainId &&
-      resolution.effectiveSelection.referenceSetId === session.referenceSetId
-    const resolvedOutputKind =
-      resolution && resolutionMatches
-        ? buildOutputKindForResolvedPipeline(session.languageId, resolution.pipelinePlan.stages)
-        : null
+    const resolutionMatches = resolution?.effectiveSelection.languageId === session.languageId && resolution.effectiveSelection.toolchainId === session.toolchainId && resolution.effectiveSelection.referenceSetId === session.referenceSetId
+    const resolvedOutputKind = resolution && resolutionMatches ? buildOutputKindForResolvedPipeline(session.languageId, resolution.pipelinePlan.stages) : null
     const retainedOutputKind = retainResolvedWorkbenchOutputKind(
       {
         languageId: session.languageId,
@@ -713,29 +607,20 @@ export function MonacoEditor(props: MonacoEditorProps) {
               modelLanguageId,
               workspaceUri: createLanguageWorkspaceUri(session.languageId, workspaceIdRef.current),
               selectionRevision: session.selectionRevision,
-              createRequest: () =>
-                createLanguageSessionRequest(latestRef.current, modelsRef.current),
+              createRequest: () => createLanguageSessionRequest(latestRef.current, modelsRef.current),
             }
           : null,
     })
   }, [props.files, props.languageSession, props.monacoLanguageId])
 
-  emitCursorMethodRef.current = (
-    model: monaco.editor.ITextModel | null,
-    position: monaco.Position,
-  ): void => {
+  emitCursorMethodRef.current = (model: monaco.editor.ITextModel | null, position: monaco.Position): void => {
     if (!model) {
       onCursorMethodChangeRef.current?.(null)
       return
     }
 
     const state = latestRef.current
-    const syntaxSelection = findSourceMethodAtLine(
-      model.getValue(),
-      state.languageSession.languageId,
-      position.lineNumber,
-      state.activeFile,
-    )
+    const syntaxSelection = findSourceMethodAtLine(model.getValue(), state.languageSession.languageId, position.lineNumber, state.activeFile)
     if (languageStatusRef.current !== 'ready') {
       onCursorMethodChangeRef.current?.(syntaxSelection)
       return
@@ -749,13 +634,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
       if (cached.status === 'unsupported') {
         onCursorMethodChangeRef.current?.(syntaxSelection)
       } else if (cached.status === 'ready') {
-        onCursorMethodChangeRef.current?.(
-          sourceMethodFromDocumentSymbols(
-            cached.symbols,
-            { line: position.lineNumber - 1, character: position.column - 1 },
-            state.languageSession.languageId,
-          ) ?? topLevelSelection,
-        )
+        onCursorMethodChangeRef.current?.(sourceMethodFromDocumentSymbols(cached.symbols, { line: position.lineNumber - 1, character: position.column - 1 }, state.languageSession.languageId) ?? topLevelSelection)
       }
       return
     }
@@ -763,15 +642,7 @@ export function MonacoEditor(props: MonacoEditorProps) {
     onCursorMethodChangeRef.current?.(topLevelSelection)
   }
 
-  return (
-    <section
-      ref={containerRef}
-      className="monaco-host"
-      data-editor="monaco"
-      data-language-service-status="disabled"
-      aria-label={executionFlowAriaLabel(props.executionFlow)}
-    />
-  )
+  return <section ref={containerRef} className="monaco-host" data-editor="monaco" data-language-service-status="disabled" aria-label={executionFlowAriaLabel(props.executionFlow)} />
 }
 
 export function editorLineHeight(fontSize: EditorFontSize): number {
@@ -791,10 +662,7 @@ export function monacoGutterOptions(isMobileViewport: boolean) {
 }
 
 export function createDocumentUri(workspaceId: string, path: string): monaco.Uri {
-  const encodedPath = path
-    .split('/')
-    .map((segment) => encodeURIComponent(segment))
-    .join('/')
+  const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/')
   return monaco.Uri.parse(`sharplabnext://${workspaceId}/${encodedPath}`)
 }
 
@@ -826,34 +694,18 @@ function executionFlowCountStyles(hits: readonly ExecutionFlowSourceHit[]): stri
 
 function escapeMarkdown(value: string): string {
   const punctuation = '\\`*_{}[]()#+-.!'
-  return [...value]
-    .map((character) => (punctuation.includes(character) ? `\\${character}` : character))
-    .join('')
+  return [...value].map((character) => (punctuation.includes(character) ? `\\${character}` : character)).join('')
 }
 
-function sourcePositionInRange(
-  position: monaco.Position,
-  range: SourceAssociation['range'],
-): boolean {
-  const afterStart =
-    position.lineNumber > range.startLine ||
-    (position.lineNumber === range.startLine && position.column >= range.startColumn)
-  const beforeEnd =
-    position.lineNumber < range.endLine ||
-    (position.lineNumber === range.endLine && position.column < range.endColumn)
+function sourcePositionInRange(position: monaco.Position, range: SourceAssociation['range']): boolean {
+  const afterStart = position.lineNumber > range.startLine || (position.lineNumber === range.startLine && position.column >= range.startColumn)
+  const beforeEnd = position.lineNumber < range.endLine || (position.lineNumber === range.endLine && position.column < range.endColumn)
   return afterStart && beforeEnd
 }
 
-function sourcePositionInSelection(
-  position: monaco.Position,
-  selection: monaco.Selection,
-): boolean {
-  const afterStart =
-    position.lineNumber > selection.startLineNumber ||
-    (position.lineNumber === selection.startLineNumber && position.column >= selection.startColumn)
-  const beforeEnd =
-    position.lineNumber < selection.endLineNumber ||
-    (position.lineNumber === selection.endLineNumber && position.column <= selection.endColumn)
+function sourcePositionInSelection(position: monaco.Position, selection: monaco.Selection): boolean {
+  const afterStart = position.lineNumber > selection.startLineNumber || (position.lineNumber === selection.startLineNumber && position.column >= selection.startColumn)
+  const beforeEnd = position.lineNumber < selection.endLineNumber || (position.lineNumber === selection.endLineNumber && position.column <= selection.endColumn)
   return afterStart && beforeEnd
 }
 
@@ -862,18 +714,10 @@ function positionsEqual(left: monaco.Position, right: monaco.Position): boolean 
 }
 
 function selectionsEqual(left: monaco.Selection, right: monaco.Selection): boolean {
-  return (
-    left.startLineNumber === right.startLineNumber &&
-    left.startColumn === right.startColumn &&
-    left.endLineNumber === right.endLineNumber &&
-    left.endColumn === right.endColumn
-  )
+  return left.startLineNumber === right.startLineNumber && left.startColumn === right.startColumn && left.endLineNumber === right.endLineNumber && left.endColumn === right.endColumn
 }
 
-function createLanguageSessionRequest(
-  state: LatestEditorState,
-  models: ReadonlyMap<string, monaco.editor.ITextModel>,
-) {
+function createLanguageSessionRequest(state: LatestEditorState, models: ReadonlyMap<string, monaco.editor.ITextModel>) {
   const resolution = state.languageSession.resolution
   const toolchainId = state.languageSession.toolchainId
   const referenceSetId = state.languageSession.referenceSetId
@@ -882,11 +726,7 @@ function createLanguageSessionRequest(
   }
 
   const requestId = `lsp_${globalThis.crypto?.randomUUID?.() ?? Date.now().toString(36)}`
-  const buildOptions = createWorkbenchBuildOptions(
-    state.languageSession.languageId,
-    state.languageSession.buildMode,
-    resolution.pipelinePlan.stages,
-  )
+  const buildOptions = createWorkbenchBuildOptions(state.languageSession.languageId, state.languageSession.buildMode, resolution.pipelinePlan.stages)
   return {
     requestId,
     pipelineResolutionId: resolution.pipelineResolutionId,

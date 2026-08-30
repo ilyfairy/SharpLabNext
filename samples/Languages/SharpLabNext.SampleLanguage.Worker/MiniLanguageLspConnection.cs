@@ -4,10 +4,7 @@ using SharpLabNext.Contracts;
 
 namespace SharpLabNext.SampleLanguage.Worker;
 
-internal sealed class MiniLanguageLspConnection(
-    WebSocket socket,
-    MiniLanguageSessionState session,
-    int maximumMessageBytes)
+internal sealed class MiniLanguageLspConnection(WebSocket socket, MiniLanguageSessionState session, int maximumMessageBytes)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly Dictionary<string, MiniLanguageDocument> _documents = CreateInitialDocuments(session.Workspace);
@@ -28,9 +25,7 @@ internal sealed class MiniLanguageLspConnection(
                     break;
             }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         finally
         {
             if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
@@ -39,9 +34,7 @@ internal sealed class MiniLanguageLspConnection(
                 {
                     await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "LSP connection closed.", CancellationToken.None).ConfigureAwait(false);
                 }
-                catch (WebSocketException)
-                {
-                }
+                catch (WebSocketException) { }
             }
         }
     }
@@ -58,15 +51,7 @@ internal sealed class MiniLanguageLspConnection(
         switch (method)
         {
             case "initialize":
-                await SendResultAsync(root, new
-                {
-                    capabilities = new
-                    {
-                        textDocumentSync = new { openClose = true, change = 1 },
-                        completionProvider = new { resolveProvider = false, triggerCharacters = Array.Empty<string>() }
-                    },
-                    serverInfo = new { name = "SharpLabNext MiniLang", version = MiniLanguageCompiler.Version }
-                }, cancellationToken).ConfigureAwait(false);
+                await SendResultAsync(root, new { capabilities = new { textDocumentSync = new { openClose = true, change = 1 }, completionProvider = new { resolveProvider = false, triggerCharacters = Array.Empty<string>() } }, serverInfo = new { name = "SharpLabNext MiniLang", version = MiniLanguageCompiler.Version } }, cancellationToken).ConfigureAwait(false);
                 break;
             case "initialized":
                 break;
@@ -82,14 +67,7 @@ internal sealed class MiniLanguageLspConnection(
                     isIncomplete = false,
                     items = new[]
                     {
-                        new
-                        {
-                            label = "print",
-                            kind = 14,
-                            detail = "Write a line to standard output",
-                            insertText = "print \"$1\"",
-                            insertTextFormat = 2
-                        }
+                        new { label = "print", kind = 14, detail = "Write a line to standard output", insertText = "print \"$1\"", insertTextFormat = 2 }
                     }
                 }, cancellationToken).ConfigureAwait(false);
                 break;
@@ -108,12 +86,7 @@ internal sealed class MiniLanguageLspConnection(
 
     private async Task HandleDidOpenAsync(JsonElement root, CancellationToken cancellationToken)
     {
-        if (!TryGetParameters(root, out var parameters) ||
-            !parameters.TryGetProperty("textDocument", out var textDocument) ||
-            !TryGetString(textDocument, "uri", out var uri) ||
-            !TryGetString(textDocument, "text", out var text) ||
-            !textDocument.TryGetProperty("version", out var versionElement) ||
-            !versionElement.TryGetInt64(out var version))
+        if (!TryGetParameters(root, out var parameters) || !parameters.TryGetProperty("textDocument", out var textDocument) || !TryGetString(textDocument, "uri", out var uri) || !TryGetString(textDocument, "text", out var text) || !textDocument.TryGetProperty("version", out var versionElement) || !versionElement.TryGetInt64(out var version))
         {
             await SendErrorAsync(root, -32602, "didOpen requires uri, version, and text.", cancellationToken).ConfigureAwait(false);
             return;
@@ -124,15 +97,7 @@ internal sealed class MiniLanguageLspConnection(
 
     private async Task HandleDidChangeAsync(JsonElement root, CancellationToken cancellationToken)
     {
-        if (!TryGetParameters(root, out var parameters) ||
-            !parameters.TryGetProperty("textDocument", out var textDocument) ||
-            !TryGetString(textDocument, "uri", out var uri) ||
-            !textDocument.TryGetProperty("version", out var versionElement) ||
-            !versionElement.TryGetInt64(out var version) ||
-            !parameters.TryGetProperty("contentChanges", out var changes) ||
-            changes.ValueKind != JsonValueKind.Array ||
-            changes.GetArrayLength() == 0 ||
-            !TryGetString(changes[changes.GetArrayLength() - 1], "text", out var text))
+        if (!TryGetParameters(root, out var parameters) || !parameters.TryGetProperty("textDocument", out var textDocument) || !TryGetString(textDocument, "uri", out var uri) || !textDocument.TryGetProperty("version", out var versionElement) || !versionElement.TryGetInt64(out var version) || !parameters.TryGetProperty("contentChanges", out var changes) || changes.ValueKind != JsonValueKind.Array || changes.GetArrayLength() == 0 || !TryGetString(changes[changes.GetArrayLength() - 1], "text", out var text))
         {
             await SendErrorAsync(root, -32602, "didChange requires a full-document content change.", cancellationToken).ConfigureAwait(false);
             return;
@@ -141,53 +106,22 @@ internal sealed class MiniLanguageLspConnection(
         await PublishDiagnosticsAsync(uri, _documents[uri], cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task PublishDiagnosticsAsync(
-        string uri,
-        MiniLanguageDocument document,
-        CancellationToken cancellationToken)
+    private async Task PublishDiagnosticsAsync(string uri, MiniLanguageDocument document, CancellationToken cancellationToken)
     {
-        var diagnostics = MiniLanguageCompiler.GetDiagnostics(
-            document.Path,
-            document.Text,
-            document.Version,
-            session.Session.SelectionRevision)
-            .Select(static diagnostic => new
+        var diagnostics = MiniLanguageCompiler.GetDiagnostics(document.Path, document.Text, document.Version, session.Session.SelectionRevision).Select(static diagnostic => new
             {
-                range = new
-                {
-                    start = new
-                    {
-                        line = diagnostic.Range?.StartLine ?? 0,
-                        character = diagnostic.Range?.StartCharacter ?? 0
-                    },
-                    end = new
-                    {
-                        line = diagnostic.Range?.EndLine ?? 0,
-                        character = diagnostic.Range?.EndCharacter ?? 0
-                    }
-                },
+                range = new { start = new { line = diagnostic.Range?.StartLine ?? 0, character = diagnostic.Range?.StartCharacter ?? 0 }, end = new { line = diagnostic.Range?.EndLine ?? 0, character = diagnostic.Range?.EndCharacter ?? 0 } },
                 severity = diagnostic.Severity == DiagnosticSeverity.Error ? 1 : 2,
                 code = diagnostic.Code,
                 source = diagnostic.Source,
                 message = diagnostic.Message,
-                data = new
-                {
-                    workspaceRevision = diagnostic.WorkspaceRevision,
-                    selectionRevision = diagnostic.SelectionRevision
-                }
+                data = new { workspaceRevision = diagnostic.WorkspaceRevision, selectionRevision = diagnostic.SelectionRevision }
             })
-            .ToArray();
-        await SendAsync(new
-        {
-            jsonrpc = "2.0",
-            method = "textDocument/publishDiagnostics",
-            @params = new { uri, version = document.Version, diagnostics }
-        }, cancellationToken).ConfigureAwait(false);
+.ToArray();
+        await SendAsync(new { jsonrpc = "2.0", method = "textDocument/publishDiagnostics", @params = new { uri, version = document.Version, diagnostics } }, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<JsonDocument?> ParseMessageAsync(
-        byte[] message,
-        CancellationToken cancellationToken)
+    private async Task<JsonDocument?> ParseMessageAsync(byte[] message, CancellationToken cancellationToken)
     {
         try
         {
@@ -195,12 +129,7 @@ internal sealed class MiniLanguageLspConnection(
         }
         catch (JsonException)
         {
-            await SendAsync(new
-            {
-                jsonrpc = "2.0",
-                id = (object?)null,
-                error = new { code = -32700, message = "Parse error." }
-            }, cancellationToken).ConfigureAwait(false);
+            await SendAsync(new { jsonrpc = "2.0", id = (object?)null, error = new { code = -32700, message = "Parse error." } }, cancellationToken).ConfigureAwait(false);
             return null;
         }
     }
@@ -243,20 +172,11 @@ internal sealed class MiniLanguageLspConnection(
         }, cancellationToken);
     }
 
-    private Task SendErrorAsync(
-        JsonElement root,
-        int code,
-        string message,
-        CancellationToken cancellationToken)
+    private Task SendErrorAsync(JsonElement root, int code, string message, CancellationToken cancellationToken)
     {
         if (!root.TryGetProperty("id", out var id))
             return Task.CompletedTask;
-        return SendAsync(new
-        {
-            jsonrpc = "2.0",
-            id = id.Clone(),
-            error = new { code, message }
-        }, cancellationToken);
+        return SendAsync(new { jsonrpc = "2.0", id = id.Clone(), error = new { code, message } }, cancellationToken);
     }
 
     private async Task SendAsync(object message, CancellationToken cancellationToken)

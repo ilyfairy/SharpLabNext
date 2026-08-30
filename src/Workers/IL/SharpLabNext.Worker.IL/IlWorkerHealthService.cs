@@ -8,11 +8,7 @@ public sealed record IlWorkerProcessIdentity(string InstanceId, DateTimeOffset S
     public static IlWorkerProcessIdentity Create() => new($"mobius-ilasm-stable-{Guid.NewGuid():N}", DateTimeOffset.UtcNow);
 }
 
-public sealed class IlWorkerHealthService(
-    IlReferenceSetProvider referenceSets,
-    IlAssemblerProcess assembler,
-    IlWorkerSettings settings,
-    IlWorkerProcessIdentity processIdentity)
+public sealed class IlWorkerHealthService(IlReferenceSetProvider referenceSets, IlAssemblerProcess assembler, IlWorkerSettings settings, IlWorkerProcessIdentity processIdentity)
 {
     private static readonly string[] Capabilities =
     [
@@ -25,37 +21,18 @@ public sealed class IlWorkerHealthService(
         var checks = new List<HealthCheckResult>();
         var assemblerTimer = Stopwatch.StartNew();
         var assemblerHealth = await assembler.CheckHealthAsync(cancellationToken).ConfigureAwait(false);
-        checks.Add(new HealthCheckResult(
-            "mobius-ilasm",
-            assemblerHealth.IsHealthy ? HealthStatus.Healthy : HealthStatus.Unhealthy,
-            assemblerHealth.Message,
-            assemblerTimer.Elapsed));
+        checks.Add(new HealthCheckResult("mobius-ilasm", assemblerHealth.IsHealthy ? HealthStatus.Healthy : HealthStatus.Unhealthy, assemblerHealth.Message, assemblerTimer.Elapsed));
 
         var referenceTimer = Stopwatch.StartNew();
         var referenceHealth = referenceSets.CheckHealth();
-        checks.Add(new HealthCheckResult(
-            "reference-sets",
-            referenceHealth.IsHealthy ? HealthStatus.Healthy : HealthStatus.Unhealthy,
-            referenceHealth.Message,
-            referenceTimer.Elapsed));
+        checks.Add(new HealthCheckResult("reference-sets", referenceHealth.IsHealthy ? HealthStatus.Healthy : HealthStatus.Unhealthy, referenceHealth.Message, referenceTimer.Elapsed));
 
         var storageTimer = Stopwatch.StartNew();
         var storage = CheckStorage();
-        checks.Add(new HealthCheckResult(
-            "temporary-storage",
-            storage.IsHealthy ? HealthStatus.Healthy : HealthStatus.Unhealthy,
-            storage.Message,
-            storageTimer.Elapsed));
+        checks.Add(new HealthCheckResult("temporary-storage", storage.IsHealthy ? HealthStatus.Healthy : HealthStatus.Unhealthy, storage.Message, storageTimer.Elapsed));
         var status = checks.All(static check => check.Status == HealthStatus.Healthy)
-            ? HealthStatus.Healthy
-            : HealthStatus.Unhealthy;
-        return new HealthResponse(
-            status,
-            settings.Identity.ToolchainId,
-            processIdentity.InstanceId,
-            ProtocolVersion.WorkerV1,
-            DateTimeOffset.UtcNow,
-            checks);
+            ? HealthStatus.Healthy : HealthStatus.Unhealthy;
+        return new HealthResponse(status, settings.Identity.ToolchainId, processIdentity.InstanceId, ProtocolVersion.WorkerV1, DateTimeOffset.UtcNow, checks);
     }
 
     public async Task<WorkerDescriptor> DescribeAsync(CancellationToken cancellationToken)
@@ -64,24 +41,13 @@ public sealed class IlWorkerHealthService(
         var available = health.Status == HealthStatus.Healthy;
         string[] profiles = [settings.Identity.ToolchainId];
         return new WorkerDescriptor(
-            new ServiceIdentity(
-                settings.Identity.ToolchainId,
-                ServiceKind.ToolchainWorker,
-                settings.Identity.ReleaseId,
-                ProtocolVersion.WorkerV1,
-                Capabilities,
-                available ? "ready" : "unhealthy"),
+            new ServiceIdentity(settings.Identity.ToolchainId, ServiceKind.ToolchainWorker, settings.Identity.ReleaseId, ProtocolVersion.WorkerV1, Capabilities, available ? "ready" : "unhealthy"),
             processIdentity.InstanceId,
             WorkerKind.Toolchain,
             settings.Identity.WorkerImageId,
             ProtocolVersion.WorkerV1,
             [ProtocolVersion.WorkerV1],
-            Capabilities.Select(capability => new WorkerCapabilityDescriptor(
-                capability,
-                1,
-                available,
-                profiles,
-                available ? null : "Worker preflight failed.")).ToArray(),
+            Capabilities.Select(capability => new WorkerCapabilityDescriptor(capability, 1, available, profiles, available ? null : "Worker preflight failed.")).ToArray(),
             profiles,
             processIdentity.StartedAtUtc,
             new Dictionary<string, string>(StringComparer.Ordinal)

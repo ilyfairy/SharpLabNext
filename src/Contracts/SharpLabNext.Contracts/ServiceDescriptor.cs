@@ -47,13 +47,7 @@ public sealed record ProtocolVersion : IComparable<ProtocolVersion>
     public override string ToString() => $"{Major}.{Minor}";
 }
 
-public sealed record ServiceIdentity(
-    string Id,
-    ServiceKind Kind,
-    string ReleaseId,
-    ProtocolVersion Protocol,
-    IReadOnlyList<string> Capabilities,
-    string Status);
+public sealed record ServiceIdentity(string Id, ServiceKind Kind, string ReleaseId, ProtocolVersion Protocol, IReadOnlyList<string> Capabilities, string Status);
 
 public static class ContractSchemaVersions
 {

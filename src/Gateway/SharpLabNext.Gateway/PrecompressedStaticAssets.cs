@@ -6,8 +6,7 @@ namespace SharpLabNext.Gateway;
 internal sealed class PrecompressedStaticAssetServer
 {
     private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
-        ? StringComparison.OrdinalIgnoreCase
-        : StringComparison.Ordinal;
+        ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
     private static readonly Representation[] Representations =
     [
         new("br", ".br"),
@@ -21,11 +20,7 @@ internal sealed class PrecompressedStaticAssetServer
 
     public PrecompressedStaticAssetServer(IEnumerable<string> roots)
     {
-        _roots = roots
-            .Where(static root => !string.IsNullOrWhiteSpace(root))
-            .Select(static root => Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)))
-            .Distinct(PathComparer())
-            .ToArray();
+        _roots = roots.Where(static root => !string.IsNullOrWhiteSpace(root)).Select(static root => Path.TrimEndingDirectorySeparator(Path.GetFullPath(root))).Distinct(PathComparer()).ToArray();
     }
 
     public async Task<bool> TryServeRequestAsync(HttpContext context)
@@ -35,8 +30,7 @@ internal sealed class PrecompressedStaticAssetServer
 
         var requestedPath = context.Request.Path.Value;
         var relativePath = string.IsNullOrEmpty(requestedPath) || requestedPath == "/"
-            ? "index.html"
-            : requestedPath.TrimStart('/');
+            ? "index.html" : requestedPath.TrimStart('/');
         if (relativePath.EndsWith('/'))
             relativePath += "index.html";
 
@@ -45,8 +39,7 @@ internal sealed class PrecompressedStaticAssetServer
 
     public Task<bool> TryServeIndexAsync(HttpContext context) =>
         CanServe(context.Request) && !IsApplicationRequest(context.Request.Path)
-            ? TryServeFileAsync(context, "index.html")
-            : Task.FromResult(false);
+            ? TryServeFileAsync(context, "index.html") : Task.FromResult(false);
 
     private async Task<bool> TryServeFileAsync(HttpContext context, string relativePath)
     {
@@ -64,22 +57,15 @@ internal sealed class PrecompressedStaticAssetServer
         }
 
         var contentType = _contentTypes.TryGetContentType(sourcePath, out var resolvedContentType)
-            ? resolvedContentType
-            : "application/octet-stream";
+            ? resolvedContentType : "application/octet-stream";
         context.Response.Headers.CacheControl = CacheControlFor(relativePath);
         if (selection.Encoding != "identity")
             context.Response.Headers.ContentEncoding = selection.Encoding;
 
         var selectedFile = new FileInfo(selection.Path);
         var lastModified = new DateTimeOffset(selectedFile.LastWriteTimeUtc);
-        var entityTag = new EntityTagHeaderValue(
-            $"\"{lastModified.UtcTicks:x}-{selectedFile.Length:x}\"");
-        await TypedResults.PhysicalFile(
-            selection.Path,
-            contentType,
-            lastModified: lastModified,
-            entityTag: entityTag,
-            enableRangeProcessing: true).ExecuteAsync(context);
+        var entityTag = new EntityTagHeaderValue($"\"{lastModified.UtcTicks:x}-{selectedFile.Length:x}\"");
+        await TypedResults.PhysicalFile(selection.Path, contentType, lastModified: lastModified, entityTag: entityTag, enableRangeProcessing: true).ExecuteAsync(context);
         return true;
     }
 
@@ -151,8 +137,7 @@ internal sealed class PrecompressedStaticAssetServer
         if (string.Equals(relativePath, "index.html", StringComparison.OrdinalIgnoreCase))
             return "no-cache";
         return IsHashedAsset(relativePath)
-            ? "public,max-age=31536000,immutable"
-            : "public,max-age=3600";
+            ? "public,max-age=31536000,immutable" : "public,max-age=3600";
     }
 
     private static bool IsHashedAsset(string relativePath)
@@ -172,8 +157,7 @@ internal sealed class PrecompressedStaticAssetServer
     }
 
     private static StringComparer PathComparer() => OperatingSystem.IsWindows()
-        ? StringComparer.OrdinalIgnoreCase
-        : StringComparer.Ordinal;
+        ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
     private sealed record Representation(string Encoding, string Suffix);
     private sealed record SelectedRepresentation(string Encoding, string Path);
@@ -184,10 +168,7 @@ internal sealed class PrecompressedStaticAssetServer
         private readonly double? _wildcardQuality;
         private readonly bool _headerPresent;
 
-        private AcceptedEncodings(
-            IReadOnlyDictionary<string, double> explicitQualities,
-            double? wildcardQuality,
-            bool headerPresent)
+        private AcceptedEncodings(IReadOnlyDictionary<string, double> explicitQualities, double? wildcardQuality, bool headerPresent)
         {
             _explicitQualities = explicitQualities;
             _wildcardQuality = wildcardQuality;
@@ -216,8 +197,7 @@ internal sealed class PrecompressedStaticAssetServer
                         continue;
                     }
                     qualities[encoding] = qualities.TryGetValue(encoding, out var existing)
-                        ? Math.Max(existing, quality)
-                        : quality;
+                        ? Math.Max(existing, quality) : quality;
                 }
             }
             catch (FormatException)

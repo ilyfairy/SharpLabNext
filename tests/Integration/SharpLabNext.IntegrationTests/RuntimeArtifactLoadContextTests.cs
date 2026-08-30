@@ -16,16 +16,12 @@ public sealed class RuntimeArtifactLoadContextTests
             File.WriteAllBytes(ridLibrary, [1]);
             File.WriteAllBytes(Path.Combine(root, "libMono.Unix.so"), [2]);
 
-            Assert.Equal(
-                ridLibrary,
-                RuntimeArtifactLoadContext.ProbeUnmanagedLibrary(root, "linux-x64", "Mono.Unix"));
+            Assert.Equal(ridLibrary, RuntimeArtifactLoadContext.ProbeUnmanagedLibrary(root, "linux-x64", "Mono.Unix"));
             Assert.Null(RuntimeArtifactLoadContext.ProbeUnmanagedLibrary(root, "../linux-x64", "Mono.Unix"));
             Assert.Null(RuntimeArtifactLoadContext.ProbeUnmanagedLibrary(root, "linux-x64", "../Mono.Unix"));
 
             File.Delete(ridLibrary);
-            Assert.Equal(
-                Path.Combine(root, "libMono.Unix.so"),
-                RuntimeArtifactLoadContext.ProbeUnmanagedLibrary(root, "linux-x64", "Mono.Unix"));
+            Assert.Equal(Path.Combine(root, "libMono.Unix.so"), RuntimeArtifactLoadContext.ProbeUnmanagedLibrary(root, "linux-x64", "Mono.Unix"));
         }
         finally
         {

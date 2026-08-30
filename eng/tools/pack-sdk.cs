@@ -1,5 +1,6 @@
 #:sdk Microsoft.NET.Sdk
 #:property TargetFramework=net10.0
+#:property RestorePackagesWithLockFile=false
 #:property LangVersion=14.0
 #:property EnableTrimAnalyzer=false
 #:property EnableAotAnalyzer=false
@@ -16,10 +17,7 @@ using System.Xml.Linq;
 var options = PackOptions.Parse(args);
 var root = FindRepositoryRoot();
 var manifestPath = Path.Combine(root, "eng", "sdk-packages.json");
-var manifest = JsonSerializer.Deserialize(
-    File.ReadAllText(manifestPath),
-    PackJsonContext.Default.SdkPackageManifest)
-    ?? throw new InvalidOperationException("eng/sdk-packages.json is empty.");
+var manifest = JsonSerializer.Deserialize(File.ReadAllText(manifestPath), PackJsonContext.Default.SdkPackageManifest) ?? throw new InvalidOperationException("eng/sdk-packages.json is empty.");
 if (manifest.SchemaVersion != 1 || manifest.Packages.Count == 0)
     throw new InvalidOperationException("Unsupported or empty SDK package manifest.");
 
@@ -58,7 +56,7 @@ WriteChecksums(output);
 
 Run(root, "dotnet", [
     "run",
-    "eng/verify-packages.cs",
+    "eng/tools/verify-packages.cs",
     "--",
     "--packages", output,
     "--version", version
@@ -67,11 +65,7 @@ Run(root, "dotnet", [
 Directory.Delete(work, recursive: true);
 Console.WriteLine($"Packed {manifest.Packages.Count} reproducible SDK packages at {output}.");
 
-static void PackPass(
-    string root,
-    SdkPackageManifest manifest,
-    string version,
-    string output)
+static void PackPass(string root, SdkPackageManifest manifest, string version, string output)
 {
     PrepareDirectory(output, root);
     foreach (var package in manifest.Packages)
@@ -91,8 +85,7 @@ static void PackPass(
     var actualPackages = Directory.GetFiles(output, "*.nupkg", SearchOption.TopDirectoryOnly);
     if (actualPackages.Length != manifest.Packages.Count)
     {
-        throw new InvalidOperationException(
-            $"Expected {manifest.Packages.Count} packages, but pack produced {actualPackages.Length}.");
+        throw new InvalidOperationException($"Expected {manifest.Packages.Count} packages, but pack produced {actualPackages.Length}.");
     }
 
     foreach (var package in manifest.Packages)
@@ -120,10 +113,8 @@ static void NormalizePackage(string packagePath, string version)
             using var stream = entry.Open();
             using var buffer = new MemoryStream();
             stream.CopyTo(buffer);
-            var path = entry.FullName.StartsWith(corePropertiesDirectory, StringComparison.Ordinal)
-                && entry.FullName.EndsWith(".psmdcp", StringComparison.Ordinal)
-                    ? canonicalCorePropertiesPath
-                    : entry.FullName;
+            var path = entry.FullName.StartsWith(corePropertiesDirectory, StringComparison.Ordinal) && entry.FullName.EndsWith(".psmdcp", StringComparison.Ordinal)
+                    ? canonicalCorePropertiesPath : entry.FullName;
             if (!files.TryAdd(path, buffer.ToArray()))
                 throw new InvalidDataException($"Package contains duplicate normalized entry '{path}'.");
         }
@@ -133,8 +124,7 @@ static void NormalizePackage(string packagePath, string version)
         throw new InvalidDataException("Package does not contain _rels/.rels.");
     files[relationshipsPath] = NormalizeRelationships(relationships, canonicalCorePropertiesPath);
 
-    var nuspec = files.Keys.SingleOrDefault(static path =>
-        !path.Contains('/') && path.EndsWith(".nuspec", StringComparison.Ordinal));
+    var nuspec = files.Keys.SingleOrDefault(static path => !path.Contains('/') && path.EndsWith(".nuspec", StringComparison.Ordinal));
     if (nuspec is null)
         throw new InvalidDataException("Package must contain exactly one root nuspec.");
     files[nuspec] = NormalizeNuspec(files[nuspec], version);
@@ -159,8 +149,7 @@ static byte[] NormalizeRelationships(byte[] content, string corePropertiesPath)
 {
     var document = ParseXml(content);
     XNamespace ns = "http://schemas.openxmlformats.org/package/2006/relationships";
-    foreach (var relationship in document.Root?.Elements(ns + "Relationship")
-        ?? throw new InvalidDataException("Invalid package relationships document."))
+    foreach (var relationship in document.Root?.Elements(ns + "Relationship") ?? throw new InvalidDataException("Invalid package relationships document."))
     {
         var type = (string?)relationship.Attribute("Type") ?? string.Empty;
         if (type.EndsWith("/manifest", StringComparison.Ordinal))
@@ -179,8 +168,7 @@ static byte[] NormalizeNuspec(byte[] content, string version)
     var document = ParseXml(content);
     var root = document.Root ?? throw new InvalidDataException("Invalid nuspec document.");
     var ns = root.Name.Namespace;
-    var metadata = root.Element(ns + "metadata")
-        ?? throw new InvalidDataException("Nuspec does not contain metadata.");
+    var metadata = root.Element(ns + "metadata") ?? throw new InvalidDataException("Nuspec does not contain metadata.");
     metadata.Element(ns + "version")!.Value = version;
     foreach (var dependency in metadata.Descendants(ns + "dependency"))
     {
@@ -194,13 +182,7 @@ static byte[] NormalizeNuspec(byte[] content, string version)
 static byte[] SerializeXml(XDocument document)
 {
     using var buffer = new MemoryStream();
-    using (var writer = XmlWriter.Create(buffer, new XmlWriterSettings
-    {
-        Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-        Indent = false,
-        NewLineHandling = NewLineHandling.None,
-        OmitXmlDeclaration = false
-    }))
+    using (var writer = XmlWriter.Create(buffer, new XmlWriterSettings { Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), Indent = false, NewLineHandling = NewLineHandling.None, OmitXmlDeclaration = false }))
     {
         document.Save(writer);
     }
@@ -213,11 +195,7 @@ static XDocument ParseXml(byte[] content)
     return XDocument.Load(stream);
 }
 
-static void VerifyReproducible(
-    SdkPackageManifest manifest,
-    string version,
-    string firstPass,
-    string secondPass)
+static void VerifyReproducible(SdkPackageManifest manifest, string version, string firstPass, string secondPass)
 {
     foreach (var package in manifest.Packages)
     {
@@ -226,18 +204,14 @@ static void VerifyReproducible(
         var secondHash = HashFile(Path.Combine(secondPass, fileName));
         if (!StringComparer.Ordinal.Equals(firstHash, secondHash))
         {
-            throw new InvalidOperationException(
-                $"Package {fileName} is not reproducible: {firstHash} != {secondHash}.");
+            throw new InvalidOperationException($"Package {fileName} is not reproducible: {firstHash} != {secondHash}.");
         }
     }
 }
 
 static void WriteChecksums(string output)
 {
-    var lines = Directory.GetFiles(output, "*.nupkg", SearchOption.TopDirectoryOnly)
-        .OrderBy(Path.GetFileName, StringComparer.Ordinal)
-        .Select(path => $"{HashFile(path).ToLowerInvariant()}  {Path.GetFileName(path)}")
-        .ToArray();
+    var lines = Directory.GetFiles(output, "*.nupkg", SearchOption.TopDirectoryOnly).OrderBy(Path.GetFileName, StringComparer.Ordinal).Select(path => $"{HashFile(path).ToLowerInvariant()}  {Path.GetFileName(path)}").ToArray();
     File.WriteAllLines(Path.Combine(output, "packages.sha256"), lines, new UTF8Encoding(false));
 }
 
@@ -252,11 +226,8 @@ static string PackageFileName(string id, string version) => $"{id}.{version}.nup
 static string ReadDefaultVersion(string propsPath)
 {
     var document = XDocument.Load(propsPath);
-    var value = document.Descendants("SharpLabNextPackageVersion")
-        .Select(static element => element.Value.Trim())
-        .FirstOrDefault(static value => value.Length > 0);
-    return value ?? throw new InvalidOperationException(
-        "Directory.Build.props does not define SharpLabNextPackageVersion.");
+    var value = document.Descendants("SharpLabNextPackageVersion").Select(static element => element.Value.Trim()).FirstOrDefault(static value => value.Length > 0);
+    return value ?? throw new InvalidOperationException("Directory.Build.props does not define SharpLabNextPackageVersion.");
 }
 
 static void Run(string workingDirectory, string fileName, IReadOnlyList<string> arguments)
@@ -269,8 +240,7 @@ static void Run(string workingDirectory, string fileName, IReadOnlyList<string> 
     };
     foreach (var argument in arguments)
         startInfo.ArgumentList.Add(argument);
-    using var process = Process.Start(startInfo)
-        ?? throw new InvalidOperationException($"Could not start {fileName}.");
+    using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Could not start {fileName}.");
     process.WaitForExit();
     if (process.ExitCode != 0)
         throw new InvalidOperationException($"{fileName} exited with code {process.ExitCode}.");
@@ -340,9 +310,7 @@ internal sealed record PackOptions(string? Version, string? Output, bool SkipRes
     }
 }
 
-internal sealed record SdkPackageManifest(
-    [property: JsonPropertyName("schemaVersion")] int SchemaVersion,
-    [property: JsonPropertyName("packages")] IReadOnlyList<SdkPackageDefinition> Packages);
+internal sealed record SdkPackageManifest([property: JsonPropertyName("schemaVersion")] int SchemaVersion, [property: JsonPropertyName("packages")] IReadOnlyList<SdkPackageDefinition> Packages);
 
 internal sealed record SdkPackageDefinition(
     [property: JsonPropertyName("id")] string Id,

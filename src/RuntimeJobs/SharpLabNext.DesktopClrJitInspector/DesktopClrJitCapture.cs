@@ -8,10 +8,7 @@ namespace SharpLabNext.DesktopClrJitInspector
 {
     internal sealed class DesktopClrJitCaptureDocument
     {
-        public DesktopClrJitCaptureDocument(
-            string runtimeVersion,
-            Guid moduleVersionId,
-            IList<DesktopClrJitCaptureMethod> methods)
+        public DesktopClrJitCaptureDocument(string runtimeVersion, Guid moduleVersionId, IList<DesktopClrJitCaptureMethod> methods)
         {
             if (runtimeVersion == null)
                 throw new ArgumentNullException(nameof(runtimeVersion));
@@ -155,8 +152,7 @@ namespace SharpLabNext.DesktopClrJitInspector
                 ulong nativeAddress = ReadUInt64(source, "method native address");
                 int codeLength = ReadInt32(source, "method native code length");
                 int identityLength = ReadUInt16(source, "method display identity length");
-                if (identityLength <= 0 || identityLength > MaximumIdentityBytes ||
-                    codeLength <= 0 || codeLength > MaximumMethodBytes)
+                if (identityLength <= 0 || identityLength > MaximumIdentityBytes || codeLength <= 0 || codeLength > MaximumMethodBytes)
                 {
                     throw new InvalidDataException("A capture method exceeds a limit.");
                 }
@@ -181,12 +177,7 @@ namespace SharpLabNext.DesktopClrJitInspector
             return new DesktopClrJitCaptureDocument(runtimeVersion, new Guid(mvidBytes), methods);
         }
 
-        private static void ValidateMethod(
-            DesktopClrJitCaptureMethod method,
-            Dictionary<int, bool> tokens,
-            Dictionary<string, bool> ranges,
-            ref int totalBytes,
-            out byte[] identityBytes)
+        private static void ValidateMethod(DesktopClrJitCaptureMethod method, Dictionary<int, bool> tokens, Dictionary<string, bool> ranges, ref int totalBytes, out byte[] identityBytes)
         {
             if ((method.MetadataToken & unchecked((int)0xff000000)) != 0x06000000)
                 throw new InvalidDataException("A capture method metadata token is not a MethodDef token.");

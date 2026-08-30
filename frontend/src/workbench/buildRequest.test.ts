@@ -49,7 +49,11 @@ describe('createBuildRequest', () => {
         'decompiled-csharp',
         [
           { id: 'build', kind: 'build', providerId: 'mobius-ilasm-stable' },
-          { id: 'decompiled-csharp', kind: 'render', providerId: 'artifacts-default' },
+          {
+            id: 'decompiled-csharp',
+            kind: 'render',
+            providerId: 'artifacts-default',
+          },
         ],
         'il',
       ),
@@ -81,7 +85,11 @@ describe('createBuildRequest', () => {
         'decompiled-csharp',
         [
           { id: 'build', kind: 'build', providerId: 'gsharp-stable' },
-          { id: 'decompiled-csharp', kind: 'render', providerId: 'artifacts-default' },
+          {
+            id: 'decompiled-csharp',
+            kind: 'render',
+            providerId: 'artifacts-default',
+          },
         ],
         'gsharp',
       ),
@@ -138,20 +146,9 @@ describe('createBuildRequest', () => {
   })
 })
 
-function resolution(
-  outputId: string,
-  stages: PipelineStageDescriptor[],
-  languageId = 'csharp',
-): ResolveSelectionResponse {
-  const runtimeId = stages.some((stage) => stage.kind === 'run' || stage.kind === 'jit')
-    ? 'dotnet-10-linux-x64'
-    : null
-  const toolchainId =
-    languageId === 'il'
-      ? 'mobius-ilasm-stable'
-      : languageId === 'gsharp'
-        ? 'gsharp-stable'
-        : 'roslyn-stable'
+function resolution(outputId: string, stages: PipelineStageDescriptor[], languageId = 'csharp'): ResolveSelectionResponse {
+  const runtimeId = stages.some((stage) => stage.kind === 'run' || stage.kind === 'jit') ? 'dotnet-10-linux-x64' : null
+  const toolchainId = languageId === 'il' ? 'mobius-ilasm-stable' : languageId === 'gsharp' ? 'gsharp-stable' : 'roslyn-stable'
   return {
     effectiveSelection: {
       languageId,

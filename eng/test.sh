@@ -70,7 +70,7 @@ if [[ ! -f "$runtime_assembly" ]]; then
     echo "The test reference-set materializer requires '$runtime_assembly'." >&2
     exit 1
 fi
-dotnet run eng/materialize-coreclr-reference-sets.cs -- \
+dotnet run eng/tools/materialize-coreclr-reference-sets.cs -- \
     --matrix profiles/runtime-matrix.json \
     --lock profiles/lock.json \
     --output "$test_reference_set_root" \
@@ -89,7 +89,7 @@ dotnet test SharpLabNext.slnx \
 
 dotnet run eng/performance/runtime-performance-preflight.cs -- --self-test
 
-dotnet run eng/runtime-capability-preflight.cs -- --self-test
+dotnet run eng/tools/runtime-capability-preflight.cs -- --self-test
 
 dotnet run --project src/Tools/SharpLabNext.CompatibilityCli \
     --configuration "$configuration" \
@@ -110,40 +110,8 @@ elif [[ "$compose_e2e" == true ]]; then
 fi
 
 if [[ "$skip_build" == true && "$skip_schemas" == false ]]; then
-    node --test \
-        eng/runtime-profile-channel-validation.test.mjs \
-        eng/runtime-wine-packages.test.mjs \
-        eng/runtime-functional-matrix.test.mjs \
-        eng/runtime-functional-smoke.test.mjs \
-        eng/runtime-jit-smoke.test.mjs \
-        eng/runtime-mono-smoke.test.mjs \
-        eng/runtime-wine-coreclr-smoke.test.mjs \
-        eng/runtime-wine-framework-smoke.test.mjs \
-        eng/runtime-artifact-smoke.test.mjs \
-        eng/runtime-framework-artifact-smoke.test.mjs \
-        eng/runtime-framework-supervisor-smoke.test.mjs \
-        eng/runtime-framework-deployment-bridge.test.mjs \
-        eng/runtime-matrix-deployment-bridge.test.mjs \
-        eng/runtime-framework-gateway-smoke.test.mjs \
-        eng/prerequisite-cache.test.mjs \
-        eng/image-build-inputs.test.mjs \
-        eng/cppcli-netfx-sdk-extraction.test.mjs \
-        eng/build-images.test.mjs \
-        eng/build-wine-coreclr-operator.test.mjs \
-        eng/runtime-candidate-input-validation.test.mjs \
-        eng/runtime-candidate-environment.test.mjs \
-        eng/runtime-framework-installers.test.mjs \
-        eng/build-framework-matrix-context.test.mjs \
-        eng/build-framework-matrix-parent.test.mjs \
-        eng/committed-source-context.test.mjs \
-        eng/rebuild-runtime-candidate.test.mjs \
-        eng/create-runtime-framework-candidate-input.test.mjs \
-        eng/framework-prefix-matrix.test.mjs \
-        eng/runtime-promotion-image-binding.test.mjs \
-        eng/runtime-matrix-generator.test.mjs \
-        eng/runtime-promotion-receipt-validation.test.mjs \
-        eng/wine-netfx-framework-preflight.test.mjs \
-        eng/wine-prefix-layout.test.mjs
-    node eng/validate-bake-inputs.mjs
-    node eng/validate-schemas.mjs
+    mapfile -t test_files < <(find eng/tests -type f -name '*.test.mjs' -print | sort)
+    node --test "${test_files[@]}"
+    node eng/validation/validate-bake-inputs.mjs
+    node eng/validation/validate-schemas.mjs
 fi

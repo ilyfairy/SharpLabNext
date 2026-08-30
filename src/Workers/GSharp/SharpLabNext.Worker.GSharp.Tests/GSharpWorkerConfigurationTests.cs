@@ -28,9 +28,7 @@ public sealed class GSharpWorkerConfigurationTests
         Assert.Equal(2, settings.Toolchains.Count);
         Assert.Equal("0.3.33", settings.GetToolchain(GSharpToolchain.ToolchainId).CompilerVersion);
         Assert.Equal("0.3.8", settings.GetToolchain(GSharpToolchain.LegacyToolchainId).CompilerVersion);
-        Assert.NotEqual(
-            settings.GetToolchain(GSharpToolchain.ToolchainId).CompilerAssemblyPath,
-            settings.GetToolchain(GSharpToolchain.LegacyToolchainId).CompilerAssemblyPath);
+        Assert.NotEqual(settings.GetToolchain(GSharpToolchain.ToolchainId).CompilerAssemblyPath, settings.GetToolchain(GSharpToolchain.LegacyToolchainId).CompilerAssemblyPath);
     }
 
     [Theory]
@@ -49,13 +47,9 @@ public sealed class GSharpWorkerConfigurationTests
     {
         var configuration = CreateConfiguration(compilerVersion, GSharpTestSettings.CompilerCommit);
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            GSharpWorkerSettings.FromConfiguration(configuration));
+        var exception = Assert.Throws<InvalidOperationException>(() => GSharpWorkerSettings.FromConfiguration(configuration));
 
-        Assert.Contains(
-            $"GSharp:Toolchains:{GSharpToolchain.ToolchainId}:CompilerVersion",
-            exception.Message,
-            StringComparison.Ordinal);
+        Assert.Contains($"GSharp:Toolchains:{GSharpToolchain.ToolchainId}:CompilerVersion", exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -65,18 +59,13 @@ public sealed class GSharpWorkerConfigurationTests
     {
         var configuration = CreateConfiguration(GSharpTestSettings.CompilerVersion, compilerCommit);
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            GSharpWorkerSettings.FromConfiguration(configuration));
+        var exception = Assert.Throws<InvalidOperationException>(() => GSharpWorkerSettings.FromConfiguration(configuration));
 
-        Assert.Contains(
-            $"GSharp:Toolchains:{GSharpToolchain.ToolchainId}:CompilerCommit",
-            exception.Message,
-            StringComparison.Ordinal);
+        Assert.Contains($"GSharp:Toolchains:{GSharpToolchain.ToolchainId}:CompilerCommit", exception.Message, StringComparison.Ordinal);
     }
 
     private static IConfiguration CreateConfiguration(string compilerVersion, string compilerCommit) =>
-        new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+        new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
                 [$"GSharp:Toolchains:{GSharpToolchain.ToolchainId}:CompilerVersion"] = compilerVersion,
                 [$"GSharp:Toolchains:{GSharpToolchain.ToolchainId}:CompilerCommit"] = compilerCommit,
@@ -86,5 +75,5 @@ public sealed class GSharpWorkerConfigurationTests
                 ["ReferenceSets:net10-ref:TargetFramework"] = "net10.0",
                 ["ReferenceSets:net10-ref:FrameworkVersion"] = "10.0.9"
             })
-            .Build();
+.Build();
 }

@@ -12,16 +12,12 @@ namespace SharpLabNext.LanguageWorker.Sdk;
 
 public interface ILanguageWorkerBuildService
 {
-    Task<LanguageWorkerBuildExecution> BuildAsync(
-        BuildRequest request,
-        CancellationToken cancellationToken);
+    Task<LanguageWorkerBuildExecution> BuildAsync(BuildRequest request, CancellationToken cancellationToken);
 }
 
 public interface ILanguageWorkerSessionService
 {
-    Task<LanguageSession> OpenAsync(
-        OpenLanguageSessionRequest request,
-        CancellationToken cancellationToken);
+    Task<LanguageSession> OpenAsync(OpenLanguageSessionRequest request, CancellationToken cancellationToken);
 
     Task<bool> CloseAsync(string sessionId, CancellationToken cancellationToken);
 
@@ -30,11 +26,7 @@ public interface ILanguageWorkerSessionService
 
 public static class LanguageWorkerEndpointExtensions
 {
-    public static IServiceCollection AddSharpLabNextLanguageWorker<TBuildService>(
-        this IServiceCollection services,
-        ServiceIdentity descriptor,
-        LanguageWorkerCapabilityManifest capabilityManifest,
-        LanguageWorkerHostMetadata hostMetadata)
+    public static IServiceCollection AddSharpLabNextLanguageWorker<TBuildService>(this IServiceCollection services, ServiceIdentity descriptor, LanguageWorkerCapabilityManifest capabilityManifest, LanguageWorkerHostMetadata hostMetadata)
         where TBuildService : class, ILanguageWorkerBuildService
     {
         LanguageWorkerCapabilityManifestSerializer.Validate(capabilityManifest, descriptor);
@@ -48,11 +40,7 @@ public static class LanguageWorkerEndpointExtensions
         return services;
     }
 
-    public static IServiceCollection AddSharpLabNextLanguageWorker<TBuildService, TSessionService>(
-        this IServiceCollection services,
-        ServiceIdentity descriptor,
-        LanguageWorkerCapabilityManifest capabilityManifest,
-        LanguageWorkerHostMetadata hostMetadata)
+    public static IServiceCollection AddSharpLabNextLanguageWorker<TBuildService, TSessionService>(this IServiceCollection services, ServiceIdentity descriptor, LanguageWorkerCapabilityManifest capabilityManifest, LanguageWorkerHostMetadata hostMetadata)
         where TBuildService : class, ILanguageWorkerBuildService
         where TSessionService : class, ILanguageWorkerSessionService
     {
@@ -61,26 +49,12 @@ public static class LanguageWorkerEndpointExtensions
         return services;
     }
 
-    public static WebApplication MapSharpLabNextLanguageWorker(
-        this WebApplication app,
-        bool mapLanguageSessions = true)
+    public static WebApplication MapSharpLabNextLanguageWorker(this WebApplication app, bool mapLanguageSessions = true)
     {
-        app.UseSharpLabNextInternalServiceAuthentication(
-            InternalServiceAuthenticationOptions.FromConfiguration(app.Configuration, app.Environment));
+        app.UseSharpLabNextInternalServiceAuthentication(InternalServiceAuthenticationOptions.FromConfiguration(app.Configuration, app.Environment));
         app.MapGet("/health/live", () => Results.Ok(new { Status = "live" }));
-        app.MapGet("/health/ready", (
-            ServiceIdentity identity,
-            LanguageWorkerHostMetadata hostMetadata) => Results.Ok(new HealthResponse(
-                HealthStatus.Healthy,
-                identity.Id,
-                hostMetadata.InstanceId,
-                identity.Protocol,
-                DateTimeOffset.UtcNow,
-                [new HealthCheckResult("language-worker", HealthStatus.Healthy, "Language worker is ready.", TimeSpan.Zero)])));
-        app.MapGet("/api/v1/worker/describe", (
-            ServiceIdentity identity,
-            LanguageWorkerCapabilityManifest manifest,
-            LanguageWorkerHostMetadata hostMetadata) => CreateWorkerDescriptor(identity, manifest, hostMetadata));
+        app.MapGet("/health/ready", (ServiceIdentity identity, LanguageWorkerHostMetadata hostMetadata) => Results.Ok(new HealthResponse(HealthStatus.Healthy, identity.Id, hostMetadata.InstanceId, identity.Protocol, DateTimeOffset.UtcNow, [new HealthCheckResult("language-worker", HealthStatus.Healthy, "Language worker is ready.", TimeSpan.Zero)])));
+        app.MapGet("/api/v1/worker/describe", (ServiceIdentity identity, LanguageWorkerCapabilityManifest manifest, LanguageWorkerHostMetadata hostMetadata) => CreateWorkerDescriptor(identity, manifest, hostMetadata));
         app.MapGet("/api/v1/worker/capabilities", (LanguageWorkerCapabilityManifest manifest) => manifest);
         app.MapPost("/api/v1/build", HandleBuildAsync);
         if (mapLanguageSessions)
@@ -93,66 +67,31 @@ public static class LanguageWorkerEndpointExtensions
         return app;
     }
 
-    private static WorkerDescriptor CreateWorkerDescriptor(
-        ServiceIdentity identity,
-        LanguageWorkerCapabilityManifest manifest,
-        LanguageWorkerHostMetadata hostMetadata)
+    private static WorkerDescriptor CreateWorkerDescriptor(ServiceIdentity identity, LanguageWorkerCapabilityManifest manifest, LanguageWorkerHostMetadata hostMetadata)
     {
         var profiles = manifest.ToolchainIds.ToArray();
-        return new WorkerDescriptor(
-            identity,
-            hostMetadata.InstanceId,
-            WorkerKind.Toolchain,
-            hostMetadata.WorkerImageId,
-            identity.Protocol,
-            [identity.Protocol],
-            manifest.Capabilities.Select(capability => new WorkerCapabilityDescriptor(
-                capability,
-                1,
-                Available: true,
-                profiles)).ToArray(),
-            profiles,
-            hostMetadata.StartedAtUtc,
-            ReferenceSets: hostMetadata.ReferenceSets);
+        return new WorkerDescriptor(identity, hostMetadata.InstanceId, WorkerKind.Toolchain, hostMetadata.WorkerImageId, identity.Protocol, [identity.Protocol], manifest.Capabilities.Select(capability => new WorkerCapabilityDescriptor(capability, 1, Available: true, profiles)).ToArray(), profiles, hostMetadata.StartedAtUtc, ReferenceSets: hostMetadata.ReferenceSets);
     }
 
-    private static void ValidateReferenceSetAttestations(
-        LanguageWorkerCapabilityManifest manifest,
-        IReadOnlyList<ReferenceSetAttestation>? attestations)
+    private static void ValidateReferenceSetAttestations(LanguageWorkerCapabilityManifest manifest, IReadOnlyList<ReferenceSetAttestation>? attestations)
     {
         if (attestations is null)
             return;
         var byId = new Dictionary<string, ReferenceSetAttestation>(StringComparer.Ordinal);
         foreach (var attestation in attestations)
         {
-            if (string.IsNullOrWhiteSpace(attestation.Id) ||
-                !byId.TryAdd(attestation.Id, attestation) ||
-                string.IsNullOrWhiteSpace(attestation.TargetFramework) ||
-                string.IsNullOrWhiteSpace(attestation.Digest) ||
-                string.IsNullOrWhiteSpace(attestation.ContentDigest) ||
-                attestation.Provenance is null ||
-                string.IsNullOrWhiteSpace(attestation.Provenance.Kind) ||
-                string.IsNullOrWhiteSpace(attestation.Provenance.ResolvedVersion))
+            if (string.IsNullOrWhiteSpace(attestation.Id) || !byId.TryAdd(attestation.Id, attestation) || string.IsNullOrWhiteSpace(attestation.TargetFramework) || string.IsNullOrWhiteSpace(attestation.Digest) || string.IsNullOrWhiteSpace(attestation.ContentDigest) || attestation.Provenance is null || string.IsNullOrWhiteSpace(attestation.Provenance.Kind) || string.IsNullOrWhiteSpace(attestation.Provenance.ResolvedVersion))
             {
-                throw new ArgumentException(
-                    "Language worker reference-set attestations are invalid.",
-                    nameof(attestations));
+                throw new ArgumentException("Language worker reference-set attestations are invalid.", nameof(attestations));
             }
         }
         if (manifest.SupportedReferenceSetIds.Any(id => !byId.ContainsKey(id)))
         {
-            throw new ArgumentException(
-                "Language worker host metadata must attest every supported reference set.",
-                nameof(attestations));
+            throw new ArgumentException("Language worker host metadata must attest every supported reference set.", nameof(attestations));
         }
     }
 
-    private static async Task<IResult> HandleBuildAsync(
-        BuildRequest request,
-        ILanguageWorkerBuildService buildService,
-        ServiceIdentity identity,
-        LanguageWorkerCapabilityManifest manifest,
-        HttpContext context)
+    private static async Task<IResult> HandleBuildAsync(BuildRequest request, ILanguageWorkerBuildService buildService, ServiceIdentity identity, LanguageWorkerCapabilityManifest manifest, HttpContext context)
     {
         try
         {
@@ -180,12 +119,7 @@ public static class LanguageWorkerEndpointExtensions
         }
     }
 
-    private static async Task<IResult> HandleOpenSessionAsync(
-        OpenLanguageSessionRequest request,
-        ILanguageWorkerSessionService sessions,
-        ServiceIdentity identity,
-        LanguageWorkerCapabilityManifest manifest,
-        HttpContext context)
+    private static async Task<IResult> HandleOpenSessionAsync(OpenLanguageSessionRequest request, ILanguageWorkerSessionService sessions, ServiceIdentity identity, LanguageWorkerCapabilityManifest manifest, HttpContext context)
     {
         try
         {
@@ -198,18 +132,9 @@ public static class LanguageWorkerEndpointExtensions
         }
     }
 
-    private static async Task<IResult> HandleCloseSessionAsync(
-        string sessionId,
-        ILanguageWorkerSessionService sessions,
-        HttpContext context) =>
-        await sessions.CloseAsync(sessionId, context.RequestAborted).ConfigureAwait(false)
-            ? Results.NoContent()
-            : Results.NotFound();
+    private static async Task<IResult> HandleCloseSessionAsync(string sessionId, ILanguageWorkerSessionService sessions, HttpContext context) => await sessions.CloseAsync(sessionId, context.RequestAborted).ConfigureAwait(false) ? Results.NoContent() : Results.NotFound();
 
-    private static async Task HandleLanguageChannelAsync(
-        string sessionId,
-        ILanguageWorkerSessionService sessions,
-        HttpContext context)
+    private static async Task HandleLanguageChannelAsync(string sessionId, ILanguageWorkerSessionService sessions, HttpContext context)
     {
         if (!context.WebSockets.IsWebSocketRequest)
         {
@@ -225,18 +150,12 @@ public static class LanguageWorkerEndpointExtensions
         {
             if (socket.State == WebSocketState.Open)
             {
-                await socket.CloseAsync(
-                    WebSocketCloseStatus.PolicyViolation,
-                    exception.PublicMessage,
-                    CancellationToken.None).ConfigureAwait(false);
+                await socket.CloseAsync(WebSocketCloseStatus.PolicyViolation, exception.PublicMessage, CancellationToken.None).ConfigureAwait(false);
             }
         }
     }
 
-    private static void ValidateBuildRequest(
-        BuildRequest request,
-        ServiceIdentity identity,
-        LanguageWorkerCapabilityManifest manifest)
+    private static void ValidateBuildRequest(BuildRequest request, ServiceIdentity identity, LanguageWorkerCapabilityManifest manifest)
     {
         if (string.IsNullOrWhiteSpace(request.RequestId) || string.IsNullOrWhiteSpace(request.IdempotencyKey))
             throw new LanguageWorkerRequestException("invalid-request", "Request identity is required.");
@@ -263,18 +182,13 @@ public static class LanguageWorkerEndpointExtensions
             throw new LanguageWorkerRequestException("unsupported-target", "The selected build target is not declared by this worker.");
     }
 
-    private static void ValidateLanguageSessionRequest(
-        OpenLanguageSessionRequest request,
-        ServiceIdentity identity,
-        LanguageWorkerCapabilityManifest manifest)
+    private static void ValidateLanguageSessionRequest(OpenLanguageSessionRequest request, ServiceIdentity identity, LanguageWorkerCapabilityManifest manifest)
     {
         if (!manifest.Capabilities.Contains("lsp", StringComparer.Ordinal))
             throw new LanguageWorkerRequestException("unsupported-capability", "This worker does not provide language sessions.");
         if (string.IsNullOrWhiteSpace(request.RequestId) || string.IsNullOrWhiteSpace(request.PipelineResolutionId))
             throw new LanguageWorkerRequestException("invalid-request", "Request identity is required.");
-        if (!manifest.ToolchainIds.Contains(request.ToolchainId, StringComparer.Ordinal) ||
-            !string.Equals(request.LanguageId, manifest.LanguageId, StringComparison.Ordinal) ||
-            !string.Equals(request.Workspace.LanguageId, manifest.LanguageId, StringComparison.Ordinal))
+        if (!manifest.ToolchainIds.Contains(request.ToolchainId, StringComparer.Ordinal) || !string.Equals(request.LanguageId, manifest.LanguageId, StringComparison.Ordinal) || !string.Equals(request.Workspace.LanguageId, manifest.LanguageId, StringComparison.Ordinal))
         {
             throw new LanguageWorkerRequestException("wrong-toolchain", "The language session targets another worker.");
         }
@@ -287,9 +201,7 @@ public static class LanguageWorkerEndpointExtensions
         ValidateWorkspace(request.Workspace, manifest);
     }
 
-    private static void ValidateWorkspace(
-        WorkspaceSnapshot workspace,
-        LanguageWorkerCapabilityManifest manifest)
+    private static void ValidateWorkspace(WorkspaceSnapshot workspace, LanguageWorkerCapabilityManifest manifest)
     {
         if (workspace.SchemaVersion != ContractSchemaVersions.WorkspaceSnapshot)
             throw new LanguageWorkerRequestException("unsupported-workspace", "The workspace schema version is unsupported.");
@@ -310,12 +222,7 @@ public static class LanguageWorkerEndpointExtensions
             throw new LanguageWorkerRequestException("invalid-workspace", "The active file must exist in the workspace.");
     }
 
-    private static IResult Problem(
-        HttpContext context,
-        ServiceIdentity identity,
-        string code,
-        string message,
-        int statusCode) => Results.Problem(
+    private static IResult Problem(HttpContext context, ServiceIdentity identity, string code, string message, int statusCode) => Results.Problem(
             statusCode: statusCode,
             title: code,
             detail: message,

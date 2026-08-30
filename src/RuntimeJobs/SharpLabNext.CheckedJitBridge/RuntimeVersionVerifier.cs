@@ -8,10 +8,7 @@ internal static class RuntimeVersionVerifier
 {
     public const string Switch = "--verify-runtime-version";
 
-    public static int Run(
-        string[] args,
-        TextWriter error,
-        Func<string>? getRuntimeVersion = null)
+    public static int Run(string[] args, TextWriter error, Func<string>? getRuntimeVersion = null)
     {
         if (args.Length != 2 || !string.Equals(args[0], Switch, StringComparison.Ordinal))
         {
@@ -23,8 +20,7 @@ internal static class RuntimeVersionVerifier
         var actual = (getRuntimeVersion ?? ReadRuntimeVersion)();
         if (!string.Equals(actual, expected, StringComparison.Ordinal))
         {
-            error.WriteLine(
-                $"Checked JIT runtime identity '{actual}' does not match '{expected}'.");
+            error.WriteLine($"Checked JIT runtime identity '{actual}' does not match '{expected}'.");
             return 1;
         }
 

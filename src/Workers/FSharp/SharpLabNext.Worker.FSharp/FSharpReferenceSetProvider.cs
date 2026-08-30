@@ -16,10 +16,7 @@ public sealed record LoadedFSharpReferenceSet(
     string FSharpCoreProductVersion,
     ReferenceSetAttestation Attestation);
 
-public sealed record FSharpReferenceSetHealth(
-    bool IsHealthy,
-    string Message,
-    IReadOnlyList<string> LoadedReferenceSetIds);
+public sealed record FSharpReferenceSetHealth(bool IsHealthy, string Message, IReadOnlyList<string> LoadedReferenceSetIds);
 
 public sealed class FSharpReferenceSetProvider : IDisposable
 {
@@ -36,19 +33,14 @@ public sealed class FSharpReferenceSetProvider : IDisposable
     private readonly SemaphoreSlim _loadLock = new(1, 1);
     private readonly bool _requireAttestation;
 
-    public FSharpReferenceSetProvider(
-        IEnumerable<FSharpReferenceSetDefinition> definitions,
-        bool requireAttestation = false)
+    public FSharpReferenceSetProvider(IEnumerable<FSharpReferenceSetDefinition> definitions, bool requireAttestation = false)
     {
         ArgumentNullException.ThrowIfNull(definitions);
         _definitions = definitions.ToDictionary(static item => item.Id, StringComparer.Ordinal);
         _requireAttestation = requireAttestation;
     }
 
-    public IReadOnlyList<ReferenceSetAttestation> Attestations => _loaded.Values
-        .OrderBy(static item => item.Definition.Id, StringComparer.Ordinal)
-        .Select(static item => item.Attestation)
-        .ToArray();
+    public IReadOnlyList<ReferenceSetAttestation> Attestations => _loaded.Values.OrderBy(static item => item.Definition.Id, StringComparer.Ordinal).Select(static item => item.Attestation).ToArray();
 
     public async Task<LoadedFSharpReferenceSet> GetAsync(string id, CancellationToken cancellationToken)
     {
@@ -94,10 +86,7 @@ public sealed class FSharpReferenceSetProvider : IDisposable
 
     public void Dispose() => _loadLock.Dispose();
 
-    private static LoadedFSharpReferenceSet Load(
-        FSharpReferenceSetDefinition definition,
-        bool requireAttestation,
-        CancellationToken cancellationToken)
+    private static LoadedFSharpReferenceSet Load(FSharpReferenceSetDefinition definition, bool requireAttestation, CancellationToken cancellationToken)
     {
         var path = Path.GetFullPath(Environment.ExpandEnvironmentVariables(definition.Path));
         if (!Directory.Exists(path))
@@ -114,42 +103,23 @@ public sealed class FSharpReferenceSetProvider : IDisposable
         var attestedRuntimeApiPath = Path.Combine(path, Path.GetFileName(processRuntimeApiPath));
         if (requireAttestation && !File.Exists(attestedRuntimeApiPath))
         {
-            throw new FSharpReferenceSetUnavailableException(
-                $"Reference set '{definition.Id}' is missing its attested SharpLab.Runtime assembly.");
+            throw new FSharpReferenceSetUnavailableException($"Reference set '{definition.Id}' is missing its attested SharpLab.Runtime assembly.");
         }
 
         ReferenceSetAttestation attestation;
         try
         {
-            attestation = ReferenceSetAttestationReader.LoadAndVerify(
-                path,
-                definition.Id,
-                definition.TargetFramework,
-                definition.FrameworkVersion,
-                definition.Digest,
-                requireAttestation,
-                definition.AttestationPath);
+            attestation = ReferenceSetAttestationReader.LoadAndVerify(path, definition.Id, definition.TargetFramework, definition.FrameworkVersion, definition.Digest, requireAttestation, definition.AttestationPath);
         }
         catch (InvalidDataException exception)
         {
-            throw new FSharpReferenceSetUnavailableException(
-                $"Reference set '{definition.Id}' attestation validation failed.",
-                exception);
+            throw new FSharpReferenceSetUnavailableException($"Reference set '{definition.Id}' attestation validation failed.", exception);
         }
-        var effectiveDefinition = definition with
-        {
-            TargetFramework = attestation.TargetFramework,
-            FrameworkVersion = attestation.Provenance.ResolvedVersion
-        };
+        var effectiveDefinition = definition with { TargetFramework = attestation.TargetFramework, FrameworkVersion = attestation.Provenance.ResolvedVersion };
 
         var runtimeApiPath = File.Exists(attestedRuntimeApiPath)
-            ? attestedRuntimeApiPath
-            : processRuntimeApiPath;
-        var references = Directory.EnumerateFiles(path, "*.dll", SearchOption.TopDirectoryOnly)
-            .Append(runtimeApiPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
+            ? attestedRuntimeApiPath : processRuntimeApiPath;
+        var references = Directory.EnumerateFiles(path, "*.dll", SearchOption.TopDirectoryOnly).Append(runtimeApiPath).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.Ordinal).ToArray();
         foreach (var reference in references)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -164,13 +134,7 @@ public sealed class FSharpReferenceSetProvider : IDisposable
         if (!productVersion.StartsWith(FSharpCompilerFacade.FSharpCorePackageVersion, StringComparison.Ordinal))
             throw new FSharpReferenceSetUnavailableException("The loaded FSharp.Core package identity is not the pinned version.");
 
-        return new LoadedFSharpReferenceSet(
-            effectiveDefinition,
-            path,
-            references,
-            fsharpCore,
-            productVersion,
-            attestation);
+        return new LoadedFSharpReferenceSet(effectiveDefinition, path, references, fsharpCore, productVersion, attestation);
     }
 
     private static void ValidateReferenceAssembly(string assemblyPath, string referenceSetId)
@@ -181,9 +145,7 @@ public sealed class FSharpReferenceSetProvider : IDisposable
             using var peReader = new PEReader(stream, PEStreamOptions.LeaveOpen);
             var reader = peReader.GetMetadataReader();
             var definition = reader.GetAssemblyDefinition();
-            var isReference = definition.GetCustomAttributes()
-                .Select(handle => GetAttributeTypeName(reader, reader.GetCustomAttribute(handle).Constructor))
-                .Any(static name => name == "System.Runtime.CompilerServices.ReferenceAssemblyAttribute");
+            var isReference = definition.GetCustomAttributes().Select(handle => GetAttributeTypeName(reader, reader.GetCustomAttribute(handle).Constructor)).Any(static name => name == "System.Runtime.CompilerServices.ReferenceAssemblyAttribute");
             if (!isReference)
                 throw new FSharpReferenceSetUnavailableException($"Reference set '{referenceSetId}' does not contain reference assemblies.");
         }
@@ -213,9 +175,7 @@ public sealed class FSharpReferenceSetProvider : IDisposable
         };
     }
 
-    private static string Format(MetadataReader reader, TypeReference type) =>
-        $"{reader.GetString(type.Namespace)}.{reader.GetString(type.Name)}";
+    private static string Format(MetadataReader reader, TypeReference type) => $"{reader.GetString(type.Namespace)}.{reader.GetString(type.Name)}";
 
-    private static string Format(MetadataReader reader, TypeDefinition type) =>
-        $"{reader.GetString(type.Namespace)}.{reader.GetString(type.Name)}";
+    private static string Format(MetadataReader reader, TypeDefinition type) => $"{reader.GetString(type.Namespace)}.{reader.GetString(type.Name)}";
 }

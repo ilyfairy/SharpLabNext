@@ -4,13 +4,10 @@ using System.Runtime.Loader;
 
 namespace SharpLabNext.RuntimeProtocol;
 
-internal sealed class RuntimeArtifactLoadContext(
-    string entryAssemblyPath,
-    Assembly sharedAssembly) : AssemblyLoadContext(isCollectible: false)
+internal sealed class RuntimeArtifactLoadContext(string entryAssemblyPath, Assembly sharedAssembly) : AssemblyLoadContext(isCollectible: false)
 {
     private readonly AssemblyDependencyResolver _resolver = new(entryAssemblyPath);
-    private readonly string _artifactDirectory = Path.GetDirectoryName(entryAssemblyPath)
-        ?? throw new ArgumentException("The entry assembly has no parent directory.", nameof(entryAssemblyPath));
+    private readonly string _artifactDirectory = Path.GetDirectoryName(entryAssemblyPath) ?? throw new ArgumentException("The entry assembly has no parent directory.", nameof(entryAssemblyPath));
 
     protected override Assembly? Load(AssemblyName assemblyName)
     {
@@ -37,10 +34,7 @@ internal sealed class RuntimeArtifactLoadContext(
         return File.Exists(candidate) ? candidate : null;
     }
 
-    internal static string? ProbeUnmanagedLibrary(
-        string artifactDirectory,
-        string runtimeIdentifier,
-        string unmanagedDllName)
+    internal static string? ProbeUnmanagedLibrary(string artifactDirectory, string runtimeIdentifier, string unmanagedDllName)
     {
         if (!IsSimplePathSegment(runtimeIdentifier) || !IsSimplePathSegment(unmanagedDllName))
             return null;
@@ -67,16 +61,13 @@ internal sealed class RuntimeArtifactLoadContext(
 
     private static IReadOnlyList<string> CandidateLibraryNames(string name)
     {
-        if (name.EndsWith(".so", StringComparison.OrdinalIgnoreCase) ||
-            name.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase) ||
-            name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+        if (name.EndsWith(".so", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
         {
             return [name];
         }
 
         return name.StartsWith("lib", StringComparison.Ordinal)
-            ? [name, $"{name}.so"]
-            : [name, $"lib{name}.so", $"{name}.so"];
+            ? [name, $"{name}.so"] : [name, $"lib{name}.so", $"{name}.so"];
     }
 
     private static bool IsSimplePathSegment(string value) =>

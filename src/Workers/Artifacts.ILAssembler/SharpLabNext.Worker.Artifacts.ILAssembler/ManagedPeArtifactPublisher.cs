@@ -12,27 +12,16 @@ namespace SharpLabNext.Worker.Artifacts.ILAssembler;
 
 internal sealed record PublishedManagedPe(ArtifactRef ArtifactRef, ArtifactManifest Manifest);
 
-internal sealed class ManagedPeArtifactPublisher(
-    IArtifactStoreClient storeClient,
-    IlAssemblerWorkerSettings settings)
+internal sealed class ManagedPeArtifactPublisher(IArtifactStoreClient storeClient, IlAssemblerWorkerSettings settings)
 {
-    public async Task<PublishedManagedPe> PublishAsync(
-        ValidatedCilArtifact source,
-        byte[] peImage,
-        TransformArtifactOptions options,
-        CancellationToken cancellationToken)
+    public async Task<PublishedManagedPe> PublishAsync(ValidatedCilArtifact source, byte[] peImage, TransformArtifactOptions options, CancellationToken cancellationToken)
     {
         var inspection = Inspect(peImage);
         var outputPath = OutputPath(source.EntryPath);
         var contentRef = ContentIdentity.Compute(peImage);
-        var file = new ArtifactFileDescriptor(
-            "primary-assembly",
-            outputPath,
-            peImage.LongLength,
-            contentRef.Value);
+        var file = new ArtifactFileDescriptor("primary-assembly", outputPath, peImage.LongLength, contentRef.Value);
         var metadata = source.Manifest.Metadata is null
-            ? new Dictionary<string, string>(StringComparer.Ordinal)
-            : new Dictionary<string, string>(source.Manifest.Metadata, StringComparer.Ordinal);
+            ? new Dictionary<string, string>(StringComparer.Ordinal) : new Dictionary<string, string>(source.Manifest.Metadata, StringComparer.Ordinal);
         metadata["sharplabnext.transform"] = "assemble-il";
         metadata["sharplabnext.assembler"] = "Mobius.ILasm";
         metadata["sharplabnext.assembler.version"] = settings.CompilerVersion;
@@ -42,22 +31,12 @@ internal sealed class ManagedPeArtifactPublisher(
         var manifest = ArtifactIdentity.WithComputedId(source.Manifest with
         {
             ArtifactFormat = "dotnet-managed-pe-v1",
-            RuntimeRequirement = new ArtifactRuntimeRequirement(
-                source.ReferenceSet.RuntimeFamily,
-                [new FrameworkRequirement(
-                    source.ReferenceSet.FrameworkName,
-                    source.ReferenceSet.FrameworkVersion)],
-                source.ReferenceSet.Architecture,
-                source.Manifest.RuntimeRequirement.RequiredRuntimeFeatureTags),
+            RuntimeRequirement = new ArtifactRuntimeRequirement(source.ReferenceSet.RuntimeFamily, [new FrameworkRequirement(source.ReferenceSet.FrameworkName, source.ReferenceSet.FrameworkVersion)], source.ReferenceSet.Architecture, source.Manifest.RuntimeRequirement.RequiredRuntimeFeatureTags),
             MetadataFeatureTags = [],
             EntryAssembly = outputPath,
             EntryPoint = inspection.EntryPoint,
             Files = [file],
-            Derivation = new ArtifactDerivation(
-                source.ArtifactRef,
-                "il-assembler",
-                settings.CompilerVersion,
-                ComputeOptionsDigest(options)),
+            Derivation = new ArtifactDerivation(source.ArtifactRef, "il-assembler", settings.CompilerVersion, ComputeOptionsDigest(options)),
             Metadata = metadata
         });
 
@@ -65,11 +44,7 @@ internal sealed class ManagedPeArtifactPublisher(
         PutArtifactResponse stored;
         try
         {
-            stored = await storeClient.PutArtifactAsync(
-                manifest,
-                [new ArtifactFileUpload(file.Path, content, peImage.LongLength)],
-                settings.ArtifactTimeToLive,
-                cancellationToken).ConfigureAwait(false);
+            stored = await storeClient.PutArtifactAsync(manifest, [new ArtifactFileUpload(file.Path, content, peImage.LongLength)], settings.ArtifactTimeToLive, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -77,14 +52,11 @@ internal sealed class ManagedPeArtifactPublisher(
         }
         catch (Exception exception) when (exception is ArtifactStoreHttpException or HttpRequestException or TaskCanceledException)
         {
-            throw new ArtifactWorkerDependencyUnavailableException(
-                "The assembled artifact could not be published to the Artifact Store.",
-                exception);
+            throw new ArtifactWorkerDependencyUnavailableException("The assembled artifact could not be published to the Artifact Store.", exception);
         }
         if (stored.ArtifactRef != manifest.ArtifactId)
         {
-            throw new ArtifactWorkerDependencyUnavailableException(
-                "Artifact Store returned an unexpected assembled artifact identity.");
+            throw new ArtifactWorkerDependencyUnavailableException("Artifact Store returned an unexpected assembled artifact identity.");
         }
         return new PublishedManagedPe(stored.ArtifactRef, manifest);
     }
@@ -114,16 +86,13 @@ internal sealed class ManagedPeArtifactPublisher(
                 var typeNamespace = metadata.GetString(type.Namespace);
                 var methodName = metadata.GetString(method.Name);
                 entryPoint = string.IsNullOrEmpty(typeNamespace)
-                    ? $"{typeName}::{methodName}"
-                    : $"{typeNamespace}.{typeName}::{methodName}";
+                    ? $"{typeName}::{methodName}" : $"{typeNamespace}.{typeName}::{methodName}";
             }
             return new PeInspection(Limit(assemblyName, 256), LimitNullable(entryPoint, 512));
         }
         catch (BadImageFormatException exception)
         {
-            throw new ArtifactWorkerProcessorException(
-                "The isolated IL compiler produced an invalid managed PE.",
-                exception);
+            throw new ArtifactWorkerProcessorException("The isolated IL compiler produced an invalid managed PE.", exception);
         }
     }
 
@@ -143,11 +112,9 @@ internal sealed class ManagedPeArtifactPublisher(
         return ContentIdentity.Compute(bytes).Value;
     }
 
-    private static string Limit(string value, int maximum) =>
-        value.Length <= maximum ? value : value[..maximum];
+    private static string Limit(string value, int maximum) => value.Length <= maximum ? value : value[..maximum];
 
-    private static string? LimitNullable(string? value, int maximum) =>
-        value is null || value.Length <= maximum ? value : value[..maximum];
+    private static string? LimitNullable(string? value, int maximum) => value is null || value.Length <= maximum ? value : value[..maximum];
 
     private sealed record PeInspection(string AssemblyName, string? EntryPoint);
 }

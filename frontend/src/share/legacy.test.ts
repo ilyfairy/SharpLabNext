@@ -4,8 +4,7 @@ import { importSharpLabLegacy } from './legacy'
 import { legacyDictionaries, legacyPrecompress, legacyPredecompress } from './legacyPrecompressor'
 import { defaultUrlCodecLimits } from './limits'
 
-const createV2 = (options: string, code: string, languageId: string): string =>
-  `#v2:${LZString.compressToBase64(`${options}|${legacyPrecompress(code, languageId)}`)}`
+const createV2 = (options: string, code: string, languageId: string): string => `#v2:${LZString.compressToBase64(`${options}|${legacyPrecompress(code, languageId)}`)}`
 
 describe('SharpLab legacy URL import', () => {
   it('imports the fixed host-swap sample', async () => {
@@ -38,9 +37,7 @@ describe('SharpLab legacy URL import', () => {
     ] as const
 
     for (const [languageKey, languageId, targetKey, outputId] of cases) {
-      const result = await importSharpLabLegacy(
-        createV2(`l:${languageKey},t:${targetKey},d:+`, 'source @ @', languageId),
-      )
+      const result = await importSharpLabLegacy(createV2(`l:${languageKey},t:${targetKey},d:+`, 'source @ @', languageId))
       expect(result.workspace.files[0]?.text).toBe('source @ @')
       expect(result.requestedLegacyOptions).toMatchObject({
         languageKey,
@@ -151,6 +148,8 @@ describe('SharpLab legacy URL import', () => {
       code: 'invalid-base64',
     })
     const badToken = `#v2:${LZString.compressToBase64('l:cs|@999')}`
-    await expect(importSharpLabLegacy(badToken)).rejects.toMatchObject({ code: 'legacy-invalid' })
+    await expect(importSharpLabLegacy(badToken)).rejects.toMatchObject({
+      code: 'legacy-invalid',
+    })
   })
 })

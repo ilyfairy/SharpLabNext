@@ -14,9 +14,7 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
     private readonly HttpClient _httpClient;
     private readonly RuntimeSupervisorClientSettings _settings;
 
-    public RuntimeSupervisorClient(
-        HttpClient httpClient,
-        RuntimeSupervisorClientSettings settings)
+    public RuntimeSupervisorClient(HttpClient httpClient, RuntimeSupervisorClientSettings settings)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(settings);
@@ -25,52 +23,28 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
         _settings = settings;
     }
 
-    public Task<OperationHandle> StartRunAsync(
-        RunRequest request,
-        CancellationToken cancellationToken = default) =>
+    public Task<OperationHandle> StartRunAsync(RunRequest request, CancellationToken cancellationToken = default) =>
         StartRunAsync(request, runtimeSessionId: null, cancellationToken);
 
-    public Task<OperationHandle> StartRunAsync(
-        RunRequest request,
-        string? runtimeSessionId,
-        CancellationToken cancellationToken = default)
+    public Task<OperationHandle> StartRunAsync(RunRequest request, string? runtimeSessionId, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return StartAsync(
-            "/internal/v1/jobs/run",
-            request,
-            request.RequestId,
-            runtimeSessionId,
-            cancellationToken);
+        return StartAsync("/internal/v1/jobs/run", request, request.RequestId, runtimeSessionId, cancellationToken);
     }
 
-    public Task<OperationHandle> StartJitAsync(
-        JitRequest request,
-        CancellationToken cancellationToken = default) =>
+    public Task<OperationHandle> StartJitAsync(JitRequest request, CancellationToken cancellationToken = default) =>
         StartJitAsync(request, runtimeSessionId: null, cancellationToken);
 
-    public Task<OperationHandle> StartJitAsync(
-        JitRequest request,
-        string? runtimeSessionId,
-        CancellationToken cancellationToken = default)
+    public Task<OperationHandle> StartJitAsync(JitRequest request, string? runtimeSessionId, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return StartAsync(
-            "/internal/v1/jobs/jit",
-            request,
-            request.RequestId,
-            runtimeSessionId,
-            cancellationToken);
+        return StartAsync("/internal/v1/jobs/jit", request, request.RequestId, runtimeSessionId, cancellationToken);
     }
 
-    public async Task<OperationState?> GetOperationAsync(
-        string operationId,
-        CancellationToken cancellationToken = default)
+    public async Task<OperationState?> GetOperationAsync(string operationId, CancellationToken cancellationToken = default)
     {
         ValidateOperationId(operationId);
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/internal/v1/operations/{Uri.EscapeDataString(operationId)}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/internal/v1/operations/{Uri.EscapeDataString(operationId)}");
         using var response = await SendControlAsync(request, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -87,25 +61,15 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
         return state;
     }
 
-    public async IAsyncEnumerable<OperationEvent> WatchEventsAsync(
-        string operationId,
-        long fromSequence = 0,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<OperationEvent> WatchEventsAsync(string operationId, long fromSequence = 0, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ValidateOperationId(operationId);
         ArgumentOutOfRangeException.ThrowIfNegative(fromSequence);
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"/internal/v1/operations/{Uri.EscapeDataString(operationId)}/events?FromSequence={fromSequence}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/internal/v1/operations/{Uri.EscapeDataString(operationId)}/events?FromSequence={fromSequence}");
         using var response = await SendStreamingAsync(request, cancellationToken).ConfigureAwait(false);
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var reader = new StreamReader(
-            stream,
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true),
-            detectEncodingFromByteOrderMarks: false,
-            bufferSize: 4096,
-            leaveOpen: false);
+        using var reader = new StreamReader(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true), detectEncodingFromByteOrderMarks: false, bufferSize: 4096, leaveOpen: false);
 
         var data = new StringBuilder();
         var previousSequence = fromSequence;
@@ -122,13 +86,7 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
 
                 var operationEvent = ParseEvent(data.ToString());
                 data.Clear();
-                ValidateEvent(
-                    operationId,
-                    fromSequence,
-                    operationEvent,
-                    ref previousSequence,
-                    ref acceptedSeen,
-                    ref terminalSeen);
+                ValidateEvent(operationId, fromSequence, operationEvent, ref previousSequence, ref acceptedSeen, ref terminalSeen);
                 yield return operationEvent;
                 continue;
             }
@@ -161,13 +119,7 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
         if (data.Length != 0)
         {
             var operationEvent = ParseEvent(data.ToString());
-            ValidateEvent(
-                operationId,
-                fromSequence,
-                operationEvent,
-                ref previousSequence,
-                ref acceptedSeen,
-                ref terminalSeen);
+            ValidateEvent(operationId, fromSequence, operationEvent, ref previousSequence, ref acceptedSeen, ref terminalSeen);
             yield return operationEvent;
         }
 
@@ -186,19 +138,12 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
         }
     }
 
-    public async Task<CancelResult> CancelAsync(
-        string operationId,
-        string? reason = null,
-        CancellationToken cancellationToken = default)
+    public async Task<CancelResult> CancelAsync(string operationId, string? reason = null, CancellationToken cancellationToken = default)
     {
         ValidateOperationId(operationId);
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/internal/v1/operations/{Uri.EscapeDataString(operationId)}/cancel")
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/internal/v1/operations/{Uri.EscapeDataString(operationId)}/cancel")
         {
-            Content = JsonContent.Create(
-                new CancelOperationRequest(operationId, reason),
-                options: JsonOptions)
+            Content = JsonContent.Create(new CancelOperationRequest(operationId, reason), options: JsonOptions)
         };
         using var response = await SendControlAsync(request, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.NotFound)
@@ -216,26 +161,17 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
         return result;
     }
 
-    public async Task ReleaseSessionAsync(
-        string runtimeSessionId,
-        CancellationToken cancellationToken = default)
+    public async Task ReleaseSessionAsync(string runtimeSessionId, CancellationToken cancellationToken = default)
     {
         ValidateRuntimeSessionId(runtimeSessionId);
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/internal/v1/sessions/{Uri.EscapeDataString(runtimeSessionId)}/release");
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/internal/v1/sessions/{Uri.EscapeDataString(runtimeSessionId)}/release");
         using var response = await SendControlAsync(request, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.NotFound)
             return;
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<OperationHandle> StartAsync<TRequest>(
-        string path,
-        TRequest job,
-        string requestId,
-        string? runtimeSessionId,
-        CancellationToken cancellationToken)
+    private async Task<OperationHandle> StartAsync<TRequest>(string path, TRequest job, string requestId, string? runtimeSessionId, CancellationToken cancellationToken)
     {
         if (runtimeSessionId is not null)
             ValidateRuntimeSessionId(runtimeSessionId);
@@ -249,8 +185,7 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
         var handle = await ReadRequiredJsonAsync<OperationHandle>(response, cancellationToken).ConfigureAwait(false);
         ValidateOperationId(handle.OperationId);
-        if (string.IsNullOrWhiteSpace(handle.RequestId) ||
-            (!handle.IsExisting && !string.Equals(handle.RequestId, requestId, StringComparison.Ordinal)))
+        if (string.IsNullOrWhiteSpace(handle.RequestId) || (!handle.IsExisting && !string.Equals(handle.RequestId, requestId, StringComparison.Ordinal)))
         {
             throw ProtocolFailure("Runtime supervisor operation handle used a different request ID.");
         }
@@ -258,28 +193,17 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
         return handle;
     }
 
-    private async Task<HttpResponseMessage> SendControlAsync(
-        HttpRequestMessage request,
-        CancellationToken cancellationToken)
+    private async Task<HttpResponseMessage> SendControlAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_settings.ControlRequestTimeout);
         try
         {
-            return await _httpClient.SendAsync(
-                request,
-                HttpCompletionOption.ResponseContentRead,
-                timeout.Token).ConfigureAwait(false);
+            return await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, timeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {
-            throw Failure(
-                "runtime-supervisor-control-timeout",
-                WorkerErrorCategory.DeadlineExceeded,
-                "The runtime supervisor did not respond in time.",
-                retryable: true,
-                statusCode: null,
-                exception);
+            throw Failure("runtime-supervisor-control-timeout", WorkerErrorCategory.DeadlineExceeded, "The runtime supervisor did not respond in time.", retryable: true, statusCode: null, exception);
         }
         catch (HttpRequestException exception)
         {
@@ -287,16 +211,11 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
         }
     }
 
-    private async Task<HttpResponseMessage> SendStreamingAsync(
-        HttpRequestMessage request,
-        CancellationToken cancellationToken)
+    private async Task<HttpResponseMessage> SendStreamingAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         try
         {
-            return await _httpClient.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken).ConfigureAwait(false);
+            return await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -308,9 +227,7 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
         }
     }
 
-    private static async Task EnsureSuccessAsync(
-        HttpResponseMessage response,
-        CancellationToken cancellationToken)
+    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)
         {
@@ -332,9 +249,7 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
             publicMessage = GetString(root, "Message") ?? GetString(root, "Detail");
             traceId = GetString(root, "TraceId");
         }
-        catch (Exception exception) when (exception is JsonException or InvalidOperationException)
-        {
-        }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException) { }
 
         var statusCode = (int)response.StatusCode;
         var category = statusCode switch
@@ -352,23 +267,10 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
         var retryable = category is WorkerErrorCategory.DeadlineExceeded
             or WorkerErrorCategory.Unavailable
             or WorkerErrorCategory.Internal;
-        throw Failure(
-            code ?? $"runtime-supervisor-http-{statusCode}",
-            category,
-            publicMessage ?? PublicMessage(category),
-            retryable,
-            statusCode,
-            innerException: null,
-            traceId);
+        throw Failure(code ?? $"runtime-supervisor-http-{statusCode}", category, publicMessage ?? PublicMessage(category), retryable, statusCode, innerException: null, traceId);
     }
 
-    private static void ValidateEvent(
-        string operationId,
-        long fromSequence,
-        OperationEvent operationEvent,
-        ref long previousSequence,
-        ref bool acceptedSeen,
-        ref bool terminalSeen)
+    private static void ValidateEvent(string operationId, long fromSequence, OperationEvent operationEvent, ref long previousSequence, ref bool acceptedSeen, ref bool terminalSeen)
     {
         if (terminalSeen)
         {
@@ -407,8 +309,7 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
     {
         try
         {
-            return JsonSerializer.Deserialize<OperationEvent>(json, JsonOptions)
-                ?? throw ProtocolFailure("Runtime supervisor event was empty.");
+            return JsonSerializer.Deserialize<OperationEvent>(json, JsonOptions) ?? throw ProtocolFailure("Runtime supervisor event was empty.");
         }
         catch (JsonException exception)
         {
@@ -416,14 +317,11 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
         }
     }
 
-    private static async Task<T> ReadRequiredJsonAsync<T>(
-        HttpResponseMessage response,
-        CancellationToken cancellationToken)
+    private static async Task<T> ReadRequiredJsonAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         try
         {
-            return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken).ConfigureAwait(false)
-                ?? throw ProtocolFailure("Runtime supervisor returned an empty JSON response.");
+            return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken).ConfigureAwait(false) ?? throw ProtocolFailure("Runtime supervisor returned an empty JSON response.");
         }
         catch (Exception exception) when (exception is JsonException or NotSupportedException)
         {
@@ -434,8 +332,7 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
     private static void ValidateOperationId(string operationId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
-        if (operationId.Length > 128 || operationId.Any(static character =>
-                !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.')))
+        if (operationId.Length > 128 || operationId.Any(static character => !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.')))
         {
             throw new ArgumentException("The runtime supervisor operation ID is malformed.", nameof(operationId));
         }
@@ -444,55 +341,20 @@ public sealed class RuntimeSupervisorClient : IRuntimeSupervisorClient
     private static void ValidateRuntimeSessionId(string runtimeSessionId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runtimeSessionId);
-        if (runtimeSessionId.Length > 128 || runtimeSessionId.Any(static character =>
-                !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.')))
+        if (runtimeSessionId.Length > 128 || runtimeSessionId.Any(static character => !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_' or '.')))
         {
-            throw new ArgumentException(
-                "The runtime supervisor session ID is malformed.",
-                nameof(runtimeSessionId));
+            throw new ArgumentException("The runtime supervisor session ID is malformed.", nameof(runtimeSessionId));
         }
     }
 
-    private static RuntimeSupervisorClientException ProtocolFailure(
-        string message,
-        Exception? innerException = null) =>
-        Failure(
-            "runtime-supervisor-protocol-invalid",
-            WorkerErrorCategory.Internal,
-            message,
-            retryable: false,
-            statusCode: null,
-            innerException);
+    private static RuntimeSupervisorClientException ProtocolFailure(string message, Exception? innerException = null) =>
+        Failure("runtime-supervisor-protocol-invalid", WorkerErrorCategory.Internal, message, retryable: false, statusCode: null, innerException);
 
     private static RuntimeSupervisorClientException Unavailable(Exception innerException) =>
-        Failure(
-            "runtime-supervisor-unavailable",
-            WorkerErrorCategory.Unavailable,
-            "The runtime supervisor is unavailable.",
-            retryable: true,
-            statusCode: null,
-            innerException);
+        Failure("runtime-supervisor-unavailable", WorkerErrorCategory.Unavailable, "The runtime supervisor is unavailable.", retryable: true, statusCode: null, innerException);
 
-    private static RuntimeSupervisorClientException Failure(
-        string code,
-        WorkerErrorCategory category,
-        string publicMessage,
-        bool retryable,
-        int? statusCode,
-        Exception? innerException,
-        string? traceId = null) =>
-        new(
-            new WorkerError(
-                code,
-                category,
-                publicMessage,
-                retryable,
-                false,
-                traceId ?? "runtime-supervisor-client",
-                "runtime-supervisor",
-                "unknown"),
-            statusCode,
-            innerException);
+    private static RuntimeSupervisorClientException Failure(string code, WorkerErrorCategory category, string publicMessage, bool retryable, int? statusCode, Exception? innerException, string? traceId = null) =>
+        new(new WorkerError(code, category, publicMessage, retryable, false, traceId ?? "runtime-supervisor-client", "runtime-supervisor", "unknown"), statusCode, innerException);
 
     private static string? GetString(JsonElement root, string propertyName) =>
         ContractJson.GetString(root, propertyName);

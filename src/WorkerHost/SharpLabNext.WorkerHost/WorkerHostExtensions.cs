@@ -9,14 +9,10 @@ namespace SharpLabNext.WorkerHost;
 
 public static class WorkerHostExtensions
 {
-    public static IServiceCollection AddSharpLabNextWorker(
-        this IServiceCollection services,
-        ServiceIdentity descriptor)
+    public static IServiceCollection AddSharpLabNextWorker(this IServiceCollection services, ServiceIdentity descriptor)
     {
         if (descriptor.Kind is not (ServiceKind.ToolchainWorker or ServiceKind.ArtifactWorker))
-        {
             throw new ArgumentException("Worker descriptor must use a worker service kind.", nameof(descriptor));
-        }
 
         services.ConfigureHttpJsonOptions(options =>
         {
@@ -29,18 +25,10 @@ public static class WorkerHostExtensions
 
     public static WebApplication MapSharpLabNextWorkerEndpoints(this WebApplication app)
     {
-        app.UseSharpLabNextInternalServiceAuthentication(
-            InternalServiceAuthenticationOptions.FromConfiguration(app.Configuration, app.Environment));
+        app.UseSharpLabNextInternalServiceAuthentication(InternalServiceAuthenticationOptions.FromConfiguration(app.Configuration, app.Environment));
         app.MapGet("/health/live", () => Results.Ok(new { Status = "live" }));
         app.MapGet("/health/ready", (ServiceIdentity descriptor) =>
-            Results.Ok(new
-            {
-                Status = "ready",
-                descriptor.Id,
-                Kind = descriptor.Kind.ToString(),
-                descriptor.ReleaseId,
-                Protocol = descriptor.Protocol.ToString()
-            }));
+            Results.Ok(new { Status = "ready", descriptor.Id, Kind = descriptor.Kind.ToString(), descriptor.ReleaseId, Protocol = descriptor.Protocol.ToString() }));
         app.MapGet("/api/v1/worker/describe", (ServiceIdentity descriptor) => descriptor);
         return app;
     }

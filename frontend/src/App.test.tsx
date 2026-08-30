@@ -4,16 +4,7 @@ import { type ReactNode, StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App, { isSourceAssociationInteractionTarget } from './App'
 import { resetOperationCommandConnectionForTests } from './api/client'
-import type {
-  BuildRequest,
-  JitRequest,
-  OperationEvent,
-  OperationState,
-  RenderArtifactRequest,
-  ResolveSelectionRequest,
-  ResolveSelectionResponse,
-  RunRequest,
-} from './api/types'
+import type { BuildRequest, JitRequest, OperationEvent, OperationState, RenderArtifactRequest, ResolveSelectionRequest, ResolveSelectionResponse, RunRequest } from './api/types'
 import { decodeWire, stringifyWire } from './api/wire'
 import * as shareCodec from './share'
 import { createCatalogFixture } from './test/catalogFixture'
@@ -21,27 +12,13 @@ import { paneSplitPreferenceStorageKey } from './workbench/paneSplitPreference'
 import { resetWorkbenchStore, useWorkbenchStore } from './workbench/store'
 
 vi.mock('./editor/MonacoEditor', () => ({
-  MonacoEditor: ({
-    files,
-    activeFile,
-    onChange,
-  }: {
-    files: ReadonlyArray<{ path: string; text: string }>
-    activeFile: string
-    onChange: (path: string, source: string) => void
-  }) => (
-    <textarea
-      aria-label="Source editor"
-      value={files.find((file) => file.path === activeFile)?.text ?? ''}
-      onChange={(event) => onChange(activeFile, event.target.value)}
-    />
+  MonacoEditor: ({ files, activeFile, onChange }: { files: ReadonlyArray<{ path: string; text: string }>; activeFile: string; onChange: (path: string, source: string) => void }) => (
+    <textarea aria-label="Source editor" value={files.find((file) => file.path === activeFile)?.text ?? ''} onChange={(event) => onChange(activeFile, event.target.value)} />
   ),
 }))
 
 vi.mock('./results/MonacoCodeDocumentView', () => ({
-  MonacoCodeDocumentView: ({ text, ariaLabel }: { text: string; ariaLabel: string }) => (
-    <textarea readOnly aria-label={ariaLabel} value={text} />
-  ),
+  MonacoCodeDocumentView: ({ text, ariaLabel }: { text: string; ariaLabel: string }) => <textarea readOnly aria-label={ariaLabel} value={text} />,
 }))
 
 class MockWebSocket {
@@ -89,7 +66,11 @@ class MockWebSocket {
   emitOperation(event: OperationEvent): void {
     this.onmessage?.(
       new MessageEvent('message', {
-        data: stringifyWire({ type: 'event', operationId: event.operationId, event }),
+        data: stringifyWire({
+          type: 'event',
+          operationId: event.operationId,
+          event,
+        }),
       }),
     )
   }
@@ -128,19 +109,12 @@ class MockWebSocket {
       run: '/api/v1/runs',
       jit: '/api/v1/jit',
     }
-    const path =
-      command.type === 'start'
-        ? startPaths[command.operation ?? '']
-        : command.type === 'state'
-          ? `/api/v1/operations/${command.operationId}`
-          : `/api/v1/operations/${command.operationId}/cancel`
-    const init: RequestInit = { method: command.type === 'state' ? 'GET' : 'POST' }
+    const path = command.type === 'start' ? startPaths[command.operation ?? ''] : command.type === 'state' ? `/api/v1/operations/${command.operationId}` : `/api/v1/operations/${command.operationId}/cancel`
+    const init: RequestInit = {
+      method: command.type === 'state' ? 'GET' : 'POST',
+    }
     if (command.type !== 'state') {
-      init.body = stringifyWire(
-        command.type === 'start'
-          ? command.request
-          : { operationId: command.operationId, reason: command.reason },
-      )
+      init.body = stringifyWire(command.type === 'start' ? command.request : { operationId: command.operationId, reason: command.reason })
     }
     const response = await fetch(path ?? '/invalid-operation-command', init)
     const payload = (await response.json()) as unknown
@@ -231,9 +205,7 @@ function mockLiveCompilationGateway(): LiveCompilationGateway {
   const catalog = createCatalogFixture()
   const runtime = catalog.runtimes.find((candidate) => candidate.id === 'dotnet-10-linux-x64')
   const compiler = catalog.toolchains.find((candidate) => candidate.id === 'roslyn-stable')
-  const processor = catalog.artifactProcessors.find(
-    (candidate) => candidate.id === 'artifacts-default',
-  )
+  const processor = catalog.artifactProcessors.find((candidate) => candidate.id === 'artifacts-default')
   if (!runtime || !compiler || !processor) {
     throw new Error('Expected the live-compilation catalog fixtures.')
   }
@@ -328,17 +300,13 @@ function mockLiveCompilationGateway(): LiveCompilationGateway {
     vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString()
       if (url === '/api/v1/catalog') {
-        return catalogStatus === 200
-          ? jsonResponse(catalog)
-          : jsonResponse({ message: 'Gateway upstream is unavailable.' }, catalogStatus)
+        return catalogStatus === 200 ? jsonResponse(catalog) : jsonResponse({ message: 'Gateway upstream is unavailable.' }, catalogStatus)
       }
       if (url === '/api/v1/selections/resolve') {
         const request = decodeWire<ResolveSelectionRequest>(JSON.parse(String(init?.body)))
         resolveRequests.push(request)
         const output = catalog.outputs.find((candidate) => candidate.id === request.outputId)
-        const effectiveRuntimeId = output?.requiresRuntime
-          ? (request.runtimeId ?? 'dotnet-10-linux-x64')
-          : null
+        const effectiveRuntimeId = output?.requiresRuntime ? (request.runtimeId ?? 'dotnet-10-linux-x64') : null
         const stages: ResolveSelectionResponse['pipelinePlan']['stages'] = [
           {
             id: 'build',
@@ -348,9 +316,17 @@ function mockLiveCompilationGateway(): LiveCompilationGateway {
           },
         ]
         if (request.outputId === 'jit-asm') {
-          stages.push({ id: 'jit-asm', kind: 'jit', providerId: effectiveRuntimeId ?? '' })
+          stages.push({
+            id: 'jit-asm',
+            kind: 'jit',
+            providerId: effectiveRuntimeId ?? '',
+          })
         } else if (request.outputId === 'run') {
-          stages.push({ id: 'run', kind: 'run', providerId: effectiveRuntimeId ?? '' })
+          stages.push({
+            id: 'run',
+            kind: 'run',
+            providerId: effectiveRuntimeId ?? '',
+          })
         } else if (request.outputId === 'execution-flow') {
           stages.push(
             {
@@ -401,9 +377,7 @@ function mockLiveCompilationGateway(): LiveCompilationGateway {
             languageServerCapabilities: [],
             buildCapabilities: ['compile-check', 'ast', 'generated-source', 'managed-pe'],
             outputCapabilities: catalog.outputs.map((candidate) => candidate.id),
-            runtimeCapabilities: output?.requiresRuntime
-              ? ['run', 'jit-asm', 'execution-flow']
-              : [],
+            runtimeCapabilities: output?.requiresRuntime ? ['run', 'jit-asm', 'execution-flow'] : [],
           },
           pipelineResolutionId: `pipeline-${request.outputId}-${request.workspaceRevision}`,
           pipelinePlan: {
@@ -474,7 +448,11 @@ function mockLiveCompilationGateway(): LiveCompilationGateway {
       if (/^\/api\/v1\/operations\/op_[0-9a-f]{32}\/cancel$/.test(url)) {
         const operationId = url.slice('/api/v1/operations/'.length, -'/cancel'.length)
         cancelledOperationIds.push(operationId)
-        return jsonResponse({ operationId, disposition: 'accepted', lastSequence: 0 })
+        return jsonResponse({
+          operationId,
+          disposition: 'accepted',
+          lastSequence: 0,
+        })
       }
       if (/^\/api\/v1\/operations\/op_[0-9a-f]{32}$/.test(url)) {
         const operationId = url.slice('/api/v1/operations/'.length)
@@ -554,12 +532,7 @@ async function renderResolvedApp(gateway: LiveCompilationGateway): Promise<void>
   const buildOperationId = gateway.operationIds[0]
   const buildRequest = gateway.buildRequests[0]
   if (!buildOperationId || !buildRequest) throw new Error('Expected the initial JIT Build.')
-  await completeArtifactBuild(
-    operationSocket(buildOperationId),
-    buildOperationId,
-    buildRequest,
-    `sha256:${'f'.repeat(64)}`,
-  )
+  await completeArtifactBuild(operationSocket(buildOperationId), buildOperationId, buildRequest, `sha256:${'f'.repeat(64)}`)
   const jitOperationId = gateway.operationIds[1]
   if (!jitOperationId) throw new Error('Expected the initial JIT inspection.')
   await completeJitOperation(operationSocket(jitOperationId), jitOperationId)
@@ -567,7 +540,9 @@ async function renderResolvedApp(gateway: LiveCompilationGateway): Promise<void>
 
   await flushReact()
   expect(screen.getByLabelText('Output')).toHaveValue('jit-asm')
-  fireEvent.change(screen.getByLabelText('Output'), { target: { value: 'ast' } })
+  fireEvent.change(screen.getByLabelText('Output'), {
+    target: { value: 'ast' },
+  })
   await advanceTime(250)
   await flushReact()
   expect(screen.getByLabelText('Output')).toHaveValue('ast')
@@ -575,21 +550,12 @@ async function renderResolvedApp(gateway: LiveCompilationGateway): Promise<void>
 }
 
 function operationSocket(operationId: string): MockWebSocket {
-  const socket = MockWebSocket.instances.findLast(
-    (candidate) =>
-      candidate.url.endsWith('/api/v1/operations/ws') &&
-      candidate.readyState !== MockWebSocket.CLOSED,
-  )
+  const socket = MockWebSocket.instances.findLast((candidate) => candidate.url.endsWith('/api/v1/operations/ws') && candidate.readyState !== MockWebSocket.CLOSED)
   if (!socket) throw new Error(`Expected a WebSocket for ${operationId}.`)
   return socket
 }
 
-async function completeAstOperation(
-  socket: MockWebSocket,
-  operationId: string,
-  workspaceRevision: number,
-  rootKind: string,
-): Promise<void> {
+async function completeAstOperation(socket: MockWebSocket, operationId: string, workspaceRevision: number, rootKind: string): Promise<void> {
   await act(async () => {
     socket.emitOperation({
       operationId,
@@ -625,18 +591,17 @@ async function completeAstOperation(
       sequence: 2,
       timestampUtc: new Date().toISOString(),
       traceId: `trace-${operationId}`,
-      payload: { kind: 'completed', status: 'completed', elapsed: '00:00:00.0100000' },
+      payload: {
+        kind: 'completed',
+        status: 'completed',
+        elapsed: '00:00:00.0100000',
+      },
     })
   })
   await flushReact()
 }
 
-async function completeArtifactBuild(
-  socket: MockWebSocket,
-  operationId: string,
-  request: BuildRequest,
-  artifactRef: string,
-): Promise<void> {
+async function completeArtifactBuild(socket: MockWebSocket, operationId: string, request: BuildRequest, artifactRef: string): Promise<void> {
   await act(async () => {
     socket.emitOperation({
       operationId,
@@ -669,17 +634,17 @@ async function completeArtifactBuild(
       sequence: 2,
       timestampUtc: new Date().toISOString(),
       traceId: `trace-${operationId}`,
-      payload: { kind: 'completed', status: 'completed', elapsed: '00:00:00.0100000' },
+      payload: {
+        kind: 'completed',
+        status: 'completed',
+        elapsed: '00:00:00.0100000',
+      },
     })
   })
   await flushReact()
 }
 
-async function completeRunOperation(
-  socket: MockWebSocket,
-  operationId: string,
-  output: string,
-): Promise<void> {
+async function completeRunOperation(socket: MockWebSocket, operationId: string, output: string): Promise<void> {
   await act(async () => {
     socket.emitOperation({
       operationId,
@@ -725,7 +690,11 @@ async function completeRunOperation(
       sequence: 3,
       timestampUtc: new Date().toISOString(),
       traceId: `trace-${operationId}`,
-      payload: { kind: 'completed', status: 'completed', elapsed: '00:00:00.0200000' },
+      payload: {
+        kind: 'completed',
+        status: 'completed',
+        elapsed: '00:00:00.0200000',
+      },
     })
   })
   await flushReact()
@@ -782,20 +751,17 @@ async function completeJitOperation(socket: MockWebSocket, operationId: string):
       sequence: 3,
       timestampUtc: new Date().toISOString(),
       traceId: `trace-${operationId}`,
-      payload: { kind: 'completed', status: 'completed', elapsed: '00:00:00.0100000' },
+      payload: {
+        kind: 'completed',
+        status: 'completed',
+        elapsed: '00:00:00.0100000',
+      },
     })
   })
   await flushReact()
 }
 
-async function completeGeneratedSourceOperation(
-  socket: MockWebSocket,
-  operationId: string,
-  workspaceRevision: number,
-  selectionRevision: number,
-  contentRef: string,
-  path: string,
-): Promise<void> {
+async function completeGeneratedSourceOperation(socket: MockWebSocket, operationId: string, workspaceRevision: number, selectionRevision: number, contentRef: string, path: string): Promise<void> {
   await act(async () => {
     socket.emitOperation({
       operationId,
@@ -833,7 +799,11 @@ async function completeGeneratedSourceOperation(
       sequence: 2,
       timestampUtc: new Date().toISOString(),
       traceId: `trace-${operationId}`,
-      payload: { kind: 'completed', status: 'completed', elapsed: '00:00:00.0100000' },
+      payload: {
+        kind: 'completed',
+        status: 'completed',
+        elapsed: '00:00:00.0100000',
+      },
     })
   })
   await flushReact()
@@ -843,9 +813,7 @@ function renderApp(options: { strict?: boolean } = {}): void {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
-  const Wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  )
+  const Wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   render(
     options.strict ? (
       <StrictMode>
@@ -885,16 +853,11 @@ describe('SharpLabNext workbench', () => {
       const select = screen.getByLabelText(label)
       expect(select).toBeVisible()
       expect(select.nextElementSibling).toHaveClass('select-field__chevron')
-      expect(screen.getByText(label, { selector: '.select-field > span' })).toHaveClass(
-        'visually-hidden',
-      )
+      expect(screen.getByText(label, { selector: '.select-field > span' })).toHaveClass('visually-hidden')
     }
     expect(screen.getByLabelText('Language')).toHaveAttribute('title', 'Source language')
     expect(screen.getByLabelText('Toolchain')).toHaveAttribute('title', 'Compiler toolchain')
-    expect(screen.getByLabelText('Reference set')).toHaveAttribute(
-      'title',
-      'Reference set used for compilation',
-    )
+    expect(screen.getByLabelText('Reference set')).toHaveAttribute('title', 'Reference set used for compilation')
     expect(screen.getByLabelText('Reference set')).toHaveTextContent('.NET 10')
     expect(screen.getByLabelText('Output')).toHaveAttribute('title', 'Output view')
     expect(document.querySelector('.identity-strip')).toHaveClass('identity-strip--hidden')
@@ -916,11 +879,7 @@ describe('SharpLabNext workbench', () => {
     expect(codeMirrorToggle).toHaveTextContent('Editor:CodeMirror')
     expect(window.localStorage.getItem('sharplabnext.editor')).toBe('codemirror')
     fireEvent.click(codeMirrorToggle)
-    expect(
-      screen.getByRole('button', {
-        name: 'Editor: Monaco. Click to switch to CodeMirror',
-      }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Editor: Monaco. Click to switch to CodeMirror' })).toBeInTheDocument()
 
     const releaseMode = screen.getByRole('button', {
       name: 'Build mode: Release. Click to switch to Debug',
@@ -933,24 +892,17 @@ describe('SharpLabNext workbench', () => {
     expect(debugMode).toHaveTextContent('Debug')
     expect(useWorkbenchStore.getState().buildMode).toBe('debug')
     fireEvent.click(debugMode)
-    expect(
-      screen.getByRole('button', {
-        name: 'Build mode: Release. Click to switch to Debug',
-      }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Build mode: Release. Click to switch to Debug' })).toBeInTheDocument()
     expect(useWorkbenchStore.getState().buildMode).toBe('release')
 
-    fireEvent.change(screen.getByLabelText('Output'), { target: { value: 'run' } })
+    fireEvent.change(screen.getByLabelText('Output'), {
+      target: { value: 'run' },
+    })
 
     await waitFor(() => expect(screen.getByLabelText('Runtime')).toHaveValue('dotnet-10-linux-x64'))
     expect(screen.getByLabelText('Runtime')).toHaveTextContent('.NET 10')
-    expect(screen.getByLabelText('Runtime')).toHaveAttribute(
-      'title',
-      'Runtime used for Run and JIT',
-    )
-    const runtimeOptions = Array.from(
-      (screen.getByLabelText('Runtime') as HTMLSelectElement).options,
-    )
+    expect(screen.getByLabelText('Runtime')).toHaveAttribute('title', 'Runtime used for Run and JIT')
+    const runtimeOptions = Array.from((screen.getByLabelText('Runtime') as HTMLSelectElement).options)
     expect(runtimeOptions.every((option) => option.text.endsWith('\u00a0\u00a0'))).toBe(true)
 
     fireEvent.change(screen.getByLabelText('Reference set'), {
@@ -968,7 +920,9 @@ describe('SharpLabNext workbench', () => {
     renderApp()
     await waitFor(() => expect(screen.getByLabelText('Output')).toHaveValue('decompiled-csharp'))
 
-    fireEvent.change(screen.getByLabelText('Output'), { target: { value: 'jit-asm' } })
+    fireEvent.change(screen.getByLabelText('Output'), {
+      target: { value: 'jit-asm' },
+    })
 
     await waitFor(() => expect(screen.getByLabelText('Output')).toHaveValue('jit-asm'))
     expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument()
@@ -982,7 +936,9 @@ describe('SharpLabNext workbench', () => {
     const initial = useWorkbenchStore.getState()
     const initialWorkspaceRevision = initial.workspaceRevision
     const initialSelectionRevision = initial.selectionRevision
-    const separator = screen.getByRole('separator', { name: 'Resize source and result panes' })
+    const separator = screen.getByRole('separator', {
+      name: 'Resize source and result panes',
+    })
     const grid = document.querySelector<HTMLElement>('.pane-grid')
     if (!grid) throw new Error('The workbench pane grid was not rendered.')
 
@@ -1016,16 +972,11 @@ describe('SharpLabNext workbench', () => {
 
     renderApp()
 
-    await waitFor(() =>
-      expect(screen.getByRole('status', { name: 'Gateway unavailable' })).toBeVisible(),
-    )
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Gateway unavailable' })).toBeVisible())
     expect(document.querySelector('.app-bar')).toHaveAttribute('data-health-state', 'error')
     expect(screen.queryByText('Selection temporarily unavailable.')).not.toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Diagnostics' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Decompiled C#' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    expect(screen.getByRole('tab', { name: 'Decompiled C#' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.queryByText('Selection could not be resolved')).not.toBeInTheDocument()
   })
 
@@ -1053,13 +1004,13 @@ describe('SharpLabNext workbench', () => {
     renderApp()
     await waitFor(() => expect(screen.getByLabelText('Language')).not.toBeDisabled())
 
-    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'fsharp' } })
+    fireEvent.change(screen.getByLabelText('Language'), {
+      target: { value: 'fsharp' },
+    })
 
     await waitFor(() => expect(screen.getByLabelText('Toolchain')).toHaveValue('fsharp-stable'))
     expect(screen.getByRole('tab', { name: /Program\.fs/ })).toBeInTheDocument()
-    expect((screen.getByLabelText('Source editor') as HTMLTextAreaElement).value).toContain(
-      'printfn',
-    )
+    expect((screen.getByLabelText('Source editor') as HTMLTextAreaElement).value).toContain('printfn')
   })
 
   it('keeps the mobile source file row at zero height until the app-bar file entry is opened', async () => {
@@ -1100,10 +1051,7 @@ describe('SharpLabNext workbench', () => {
     expect(fileEntry).toHaveAttribute('aria-label', 'Workspace files, current File2.cs')
     expect(fileEntry).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('tablist', { name: 'Workspace files' })).not.toBeInTheDocument()
-    expect(useWorkbenchStore.getState().files.map((file) => file.path)).toEqual([
-      'Program.cs',
-      'File2.cs',
-    ])
+    expect(useWorkbenchStore.getState().files.map((file) => file.path)).toEqual(['Program.cs', 'File2.cs'])
 
     fireEvent.click(fileEntry)
     expect(screen.getByRole('tab', { name: /Program\.cs/ })).toBeInTheDocument()
@@ -1162,7 +1110,9 @@ describe('SharpLabNext workbench', () => {
     await waitFor(() => expect(screen.getByLabelText('Language')).not.toBeDisabled())
     expect(screen.queryByRole('group', { name: 'Source order' })).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'fsharp' } })
+    fireEvent.change(screen.getByLabelText('Language'), {
+      target: { value: 'fsharp' },
+    })
     await waitFor(() => expect(screen.getByRole('tab', { name: /Program\.fs/ })).toBeVisible())
     expect(screen.queryByRole('group', { name: 'Source order' })).not.toBeInTheDocument()
 
@@ -1180,11 +1130,7 @@ describe('SharpLabNext workbench', () => {
 
     expect(moveEarlier).toBeDisabled()
     expect(moveLater).toBeEnabled()
-    expect(
-      Array.from(
-        screen.getByRole('tablist', { name: 'Workspace files' }).querySelectorAll('[role="tab"]'),
-      ).map((tab) => tab.textContent),
-    ).toEqual(['File2.fs', 'Program.fs'])
+    expect(Array.from(screen.getByRole('tablist', { name: 'Workspace files' }).querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)).toEqual(['File2.fs', 'Program.fs'])
     expect(screen.getByRole('tab', { name: /File2\.fs/ })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByLabelText('Source editor')).toHaveValue('')
     expect(useWorkbenchStore.getState().sourceOrder).toEqual(['File2.fs', 'Program.fs'])
@@ -1201,10 +1147,10 @@ describe('SharpLabNext workbench', () => {
       { timeout: 2_000 },
     )
 
-    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'csharp' } })
-    await waitFor(() =>
-      expect(screen.queryByRole('group', { name: 'Source order' })).not.toBeInTheDocument(),
-    )
+    fireEvent.change(screen.getByLabelText('Language'), {
+      target: { value: 'csharp' },
+    })
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Source order' })).not.toBeInTheDocument())
   })
 
   it('closes the final file by restoring the language sample workspace', async () => {
@@ -1224,10 +1170,7 @@ describe('SharpLabNext workbench', () => {
     fireEvent.click(close)
 
     expect(screen.getByLabelText('Source editor')).toHaveValue(csharp.defaultSource)
-    expect(screen.getByRole('tab', { name: /Program\.cs/ })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    expect(screen.getByRole('tab', { name: /Program\.cs/ })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('button', { name: 'Close Program.cs' })).toBeVisible()
     expect(useWorkbenchStore.getState()).toMatchObject({
       files: [{ path: 'Program.cs', text: csharp.defaultSource }],
@@ -1258,7 +1201,9 @@ describe('SharpLabNext workbench', () => {
     await waitFor(() => expect(screen.getByLabelText('Language')).toHaveValue('fsharp'))
     expect(screen.getByRole('tab', { name: /Program\.fs/ })).toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'csharp' } })
+    fireEvent.change(screen.getByLabelText('Language'), {
+      target: { value: 'csharp' },
+    })
 
     await waitFor(() => expect(screen.getByLabelText('Toolchain')).toHaveValue('roslyn-stable'))
     expect(screen.getByRole('tab', { name: /Program\.cs/ })).toBeInTheDocument()
@@ -1266,10 +1211,7 @@ describe('SharpLabNext workbench', () => {
   })
 
   it('uses the command bar for an offline state without replacing the result surface', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => Promise.reject(new TypeError('offline'))),
-    )
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('offline'))))
     renderApp()
 
     expect(await screen.findByRole('status', { name: 'Gateway unavailable' })).toBeVisible()
@@ -1306,7 +1248,9 @@ describe('SharpLabNext workbench', () => {
     fireEvent.change(screen.getByLabelText('Source editor'), {
       target: { value: 'public static class Edited { }' },
     })
-    await waitFor(() => expect(selectionRequestCount).toBe(2), { timeout: 2_000 })
+    await waitFor(() => expect(selectionRequestCount).toBe(2), {
+      timeout: 2_000,
+    })
 
     expect(decompile).toBeDisabled()
     expect(screen.queryByRole('status', { name: 'Resolving' })).not.toBeInTheDocument()
@@ -1330,19 +1274,13 @@ describe('SharpLabNext workbench', () => {
     renderApp()
 
     const runButton = await screen.findByRole('button', { name: 'Decompile' })
-    await waitFor(() =>
-      expect(
-        screen.getByRole('status', { name: 'The selected compiler worker is unavailable.' }),
-      ).toBeVisible(),
-    )
+    await waitFor(() => expect(screen.getByRole('status', { name: 'The selected compiler worker is unavailable.' })).toBeVisible())
     expect(runButton).toBeDisabled()
   })
 
   it('keeps an initial share decode failure on the restoration error surface', async () => {
     window.history.replaceState(null, '', '/#v3:invalid-test-fragment')
-    const decodeSpy = vi
-      .spyOn(shareCodec, 'decodeShareFragment')
-      .mockRejectedValue(new Error('The initial URL decode timed out.'))
+    const decodeSpy = vi.spyOn(shareCodec, 'decodeShareFragment').mockRejectedValue(new Error('The initial URL decode timed out.'))
 
     try {
       renderApp()
@@ -1368,9 +1306,7 @@ describe('SharpLabNext workbench', () => {
     try {
       renderApp()
 
-      expect(
-        await screen.findByRole('status', { name: 'Restoring shared workspace' }),
-      ).toBeVisible()
+      expect(await screen.findByRole('status', { name: 'Restoring shared workspace' })).toBeVisible()
       expect(screen.queryByLabelText('Source editor')).not.toBeInTheDocument()
       expect(screen.queryByDisplayValue('class LocallyStoredWorkspace {}')).not.toBeInTheDocument()
 
@@ -1393,12 +1329,8 @@ describe('SharpLabNext workbench', () => {
         })
       })
 
-      await waitFor(() =>
-        expect(screen.getByLabelText('Source editor')).toHaveValue('class SharedWorkspace {}'),
-      )
-      expect(
-        screen.queryByRole('status', { name: 'Restoring shared workspace' }),
-      ).not.toBeInTheDocument()
+      await waitFor(() => expect(screen.getByLabelText('Source editor')).toHaveValue('class SharedWorkspace {}'))
+      expect(screen.queryByRole('status', { name: 'Restoring shared workspace' })).not.toBeInTheDocument()
       expect(screen.queryByDisplayValue('class LocallyStoredWorkspace {}')).not.toBeInTheDocument()
     } finally {
       decodeSpy.mockRestore()
@@ -1406,14 +1338,14 @@ describe('SharpLabNext workbench', () => {
   })
 
   it('keeps a background URL synchronization failure out of the restoration error surface', async () => {
-    const encodeSpy = vi
-      .spyOn(shareCodec, 'encodeV3')
-      .mockRejectedValue(new Error('The background URL encode timed out.'))
+    const encodeSpy = vi.spyOn(shareCodec, 'encodeV3').mockRejectedValue(new Error('The background URL encode timed out.'))
 
     try {
       renderApp()
 
-      await waitFor(() => expect(encodeSpy).toHaveBeenCalled(), { timeout: 2_000 })
+      await waitFor(() => expect(encodeSpy).toHaveBeenCalled(), {
+        timeout: 2_000,
+      })
       expect(screen.queryByText('Share URL could not be restored')).not.toBeInTheDocument()
       expect(screen.queryByText('The background URL encode timed out.')).not.toBeInTheDocument()
       expect(document.querySelector('.result-error')).not.toBeInTheDocument()
@@ -1459,18 +1391,13 @@ describe('SharpLabNext workbench', () => {
 
     renderApp()
 
-    await waitFor(() =>
-      expect(screen.getByLabelText('Source editor')).toHaveValue('class ImportedFromGist {}'),
-    )
+    await waitFor(() => expect(screen.getByLabelText('Source editor')).toHaveValue('class ImportedFromGist {}'))
     expect(screen.getByLabelText('Output')).toHaveValue('il')
     await new Promise((resolve) => window.setTimeout(resolve, 500))
     expect(window.location.hash).toBe('#gist:abcdef')
   })
 
-  it.each([
-    'resolve',
-    'reject',
-  ] as const)('keeps a saved Gist fragment when an older URL encode finishes with %s', async (outcome) => {
+  it.each(['resolve', 'reject'] as const)('keeps a saved Gist fragment when an older URL encode finishes with %s', async (outcome) => {
     const gatewayFetch = vi.mocked(fetch)
     vi.stubGlobal(
       'fetch',
@@ -1542,12 +1469,10 @@ describe('SharpLabNext workbench', () => {
     await waitFor(() => expect(encodeSpy).toHaveBeenCalled())
 
     const nativeReplaceState = window.history.replaceState.bind(window.history)
-    const replaceStateSpy = vi
-      .spyOn(window.history, 'replaceState')
-      .mockImplementation((data, unused, url) => {
-        nativeReplaceState(data, unused, url)
-        if (url === '#gist:c0ffee') completeStaleEncode()
-      })
+    const replaceStateSpy = vi.spyOn(window.history, 'replaceState').mockImplementation((data, unused, url) => {
+      nativeReplaceState(data, unused, url)
+      if (url === '#gist:c0ffee') completeStaleEncode()
+    })
 
     try {
       fireEvent.click(screen.getByLabelText('Save to GitHub Gist'))
@@ -1571,9 +1496,7 @@ describe('SharpLabNext workbench', () => {
     const compilerImage = `sha256:${'c'.repeat(64)}`
     const processorImage = `sha256:${'e'.repeat(64)}`
     const writeClipboard = vi.fn(async (_value: string) => {})
-    const net10ReferenceSet = catalog.referenceSets.find(
-      (candidate) => candidate.id === 'net10-ref',
-    )
+    const net10ReferenceSet = catalog.referenceSets.find((candidate) => candidate.id === 'net10-ref')
     if (!net10ReferenceSet) throw new Error('Expected the .NET 10 reference-set fixture.')
     net10ReferenceSet.digest = referenceSetDigest
     const requests: Array<BuildRequest | RenderArtifactRequest> = []
@@ -1659,16 +1582,10 @@ describe('SharpLabNext workbench', () => {
             202,
           )
         }
-        if (
-          url.startsWith('/api/v1/operations/') &&
-          url.endsWith(`/contents/sha256/${'b'.repeat(64)}`)
-        ) {
+        if (url.startsWith('/api/v1/operations/') && url.endsWith(`/contents/sha256/${'b'.repeat(64)}`)) {
           return new Response('.method public static void Main() cil managed')
         }
-        if (
-          url === `/api/v1/operations/${buildOperationId}` ||
-          url === `/api/v1/operations/${renderOperationId}`
-        ) {
+        if (url === `/api/v1/operations/${buildOperationId}` || url === `/api/v1/operations/${renderOperationId}`) {
           const isBuild = url.endsWith(buildOperationId)
           return jsonResponse({
             operationId: isBuild ? buildOperationId : renderOperationId,
@@ -1687,7 +1604,9 @@ describe('SharpLabNext workbench', () => {
 
     renderApp()
     await waitFor(() => expect(screen.getByLabelText('Output')).toHaveValue('decompiled-csharp'))
-    fireEvent.change(screen.getByLabelText('Output'), { target: { value: 'il' } })
+    fireEvent.change(screen.getByLabelText('Output'), {
+      target: { value: 'il' },
+    })
     const runButton = await screen.findByRole('button', { name: 'Render IL' })
     await waitFor(() => expect(runButton).not.toBeDisabled())
     fireEvent.click(runButton)
@@ -1726,7 +1645,11 @@ describe('SharpLabNext workbench', () => {
       sequence: 2,
       timestampUtc: new Date().toISOString(),
       traceId: 'trace-build',
-      payload: { kind: 'completed', status: 'completed', elapsed: '00:00:00.0100000' },
+      payload: {
+        kind: 'completed',
+        status: 'completed',
+        elapsed: '00:00:00.0100000',
+      },
     })
 
     await waitFor(() => expect(requests).toHaveLength(2))
@@ -1741,7 +1664,12 @@ describe('SharpLabNext workbench', () => {
       sequence: 1,
       timestampUtc: new Date().toISOString(),
       traceId: 'trace-render',
-      payload: { kind: 'content-produced', contentRef, mediaType: 'text/plain', size: 45 },
+      payload: {
+        kind: 'content-produced',
+        contentRef,
+        mediaType: 'text/plain',
+        size: 45,
+      },
     })
     renderSource.emitOperation({
       operationId: renderOperationId,
@@ -1771,12 +1699,14 @@ describe('SharpLabNext workbench', () => {
       sequence: 3,
       timestampUtc: new Date().toISOString(),
       traceId: 'trace-render',
-      payload: { kind: 'completed', status: 'completed', elapsed: '00:00:00.0100000' },
+      payload: {
+        kind: 'completed',
+        status: 'completed',
+        elapsed: '00:00:00.0100000',
+      },
     })
 
-    expect(await screen.findByRole('textbox', { name: 'Intermediate language' })).toHaveTextContent(
-      '.method public static void Main() cil managed',
-    )
+    expect(await screen.findByRole('textbox', { name: 'Intermediate language' })).toHaveTextContent('.method public static void Main() cil managed')
     expect(screen.getByRole('tab', { name: 'IL' })).toHaveAttribute('aria-selected', 'true')
 
     const compiler = document.querySelector<HTMLElement>('[data-identity="compiler"] dd')
@@ -1793,8 +1723,12 @@ describe('SharpLabNext workbench', () => {
     expect(document.querySelector('[data-identity="runtime"] dd')).toHaveTextContent('Not required')
     expect(document.querySelector('[data-identity="images"] dd')).toHaveTextContent('2 images')
 
-    const copyOutputButton = screen.getByRole('button', { name: 'Copy output' })
-    const resultControls = screen.getByRole('toolbar', { name: 'Result controls' })
+    const copyOutputButton = screen.getByRole('button', {
+      name: 'Copy output',
+    })
+    const resultControls = screen.getByRole('toolbar', {
+      name: 'Result controls',
+    })
     expect(resultControls).toContainElement(copyOutputButton)
     expect(resultControls.querySelector('.result-state-slot')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Cancel operation' })).not.toBeInTheDocument()
@@ -1828,12 +1762,7 @@ describe('SharpLabNext workbench', () => {
       if (!operationId || workspaceRevision === undefined) {
         throw new Error('Expected the initial live AST operation.')
       }
-      await completeAstOperation(
-        operationSocket(operationId),
-        operationId,
-        workspaceRevision,
-        'RetainedRoot',
-      )
+      await completeAstOperation(operationSocket(operationId), operationId, workspaceRevision, 'RetainedRoot')
       const astTab = screen.getByRole('tab', { name: 'AST' })
       expect(astTab).toHaveAttribute('aria-selected', 'true')
 
@@ -1869,12 +1798,7 @@ describe('SharpLabNext workbench', () => {
       if (!retainedOperationId || retainedRevision === undefined) {
         throw new Error('Expected the retained live AST operation.')
       }
-      await completeAstOperation(
-        operationSocket(retainedOperationId),
-        retainedOperationId,
-        retainedRevision,
-        'BeforeDisconnectRoot',
-      )
+      await completeAstOperation(operationSocket(retainedOperationId), retainedOperationId, retainedRevision, 'BeforeDisconnectRoot')
       const astTab = screen.getByRole('tab', { name: 'AST' })
 
       fireEvent.change(screen.getByLabelText('Source editor'), {
@@ -1897,21 +1821,14 @@ describe('SharpLabNext workbench', () => {
       expect(screen.getByRole('status', { name: 'Gateway unavailable' })).toBeVisible()
       expect(screen.getAllByText('BeforeDisconnectRoot').length).toBeGreaterThan(0)
       expect(astTab).toHaveAttribute('aria-selected', 'true')
-      expect(
-        screen.queryByText(/WebSocket disconnected|Gateway unavailable/),
-      ).not.toBeInTheDocument()
+      expect(screen.queryByText(/WebSocket disconnected|Gateway unavailable/)).not.toBeInTheDocument()
 
       await advanceTime(250)
       await flushReact()
 
       expect(document.querySelector('.app-bar')).toHaveAttribute('data-health-state', 'ready')
       expect(gateway.buildRequests).toHaveLength(2)
-      await completeAstOperation(
-        operationSocket(activeOperationId),
-        activeOperationId,
-        activeRevision,
-        'AfterReconnectRoot',
-      )
+      await completeAstOperation(operationSocket(activeOperationId), activeOperationId, activeRevision, 'AfterReconnectRoot')
 
       expect(screen.getAllByText('AfterReconnectRoot').length).toBeGreaterThan(0)
       expect(screen.queryAllByText('BeforeDisconnectRoot')).toHaveLength(0)
@@ -1929,15 +1846,12 @@ describe('SharpLabNext workbench', () => {
       if (!operationId || workspaceRevision === undefined) {
         throw new Error('Expected the initial live AST operation.')
       }
-      await completeAstOperation(
-        operationSocket(operationId),
-        operationId,
-        workspaceRevision,
-        'CSharpSelectionRoot',
-      )
+      await completeAstOperation(operationSocket(operationId), operationId, workspaceRevision, 'CSharpSelectionRoot')
       expect(screen.getAllByText('CSharpSelectionRoot').length).toBeGreaterThan(0)
 
-      fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'fsharp' } })
+      fireEvent.change(screen.getByLabelText('Language'), {
+        target: { value: 'fsharp' },
+      })
       await flushReact()
 
       expect(screen.getByLabelText('Language')).toHaveValue('fsharp')
@@ -2053,12 +1967,7 @@ describe('SharpLabNext workbench', () => {
       const buildRequest = gateway.buildRequests[0]
       if (!buildOperationId || !buildRequest) throw new Error('Expected the restored JIT Build.')
       const artifactRef = `sha256:${'b'.repeat(64)}`
-      await completeArtifactBuild(
-        operationSocket(buildOperationId),
-        buildOperationId,
-        buildRequest,
-        artifactRef,
-      )
+      await completeArtifactBuild(operationSocket(buildOperationId), buildOperationId, buildRequest, artifactRef)
 
       expect(gateway.jitRequests).toHaveLength(1)
       expect(gateway.jitRequests[0]).toMatchObject({
@@ -2085,7 +1994,9 @@ describe('SharpLabNext workbench', () => {
       expect(gateway.buildRequests).toHaveLength(2)
       expect(gateway.jitRequests).toHaveLength(1)
       expect(gateway.buildRequests[1]?.workspace.files).toEqual([
-        expect.objectContaining({ text: `${restoredSource}\n// ordinary edit` }),
+        expect.objectContaining({
+          text: `${restoredSource}\n// ordinary edit`,
+        }),
       ])
     })
 
@@ -2098,14 +2009,11 @@ describe('SharpLabNext workbench', () => {
       const astOperationId = gateway.operationIds[0]
       const astRevision = gateway.buildRequests[0]?.workspace.revision
       if (!astOperationId || astRevision === undefined) throw new Error('Expected live AST.')
-      await completeAstOperation(
-        operationSocket(astOperationId),
-        astOperationId,
-        astRevision,
-        'BeforeJitRoot',
-      )
+      await completeAstOperation(operationSocket(astOperationId), astOperationId, astRevision, 'BeforeJitRoot')
 
-      fireEvent.change(screen.getByLabelText('Output'), { target: { value: 'jit-asm' } })
+      fireEvent.change(screen.getByLabelText('Output'), {
+        target: { value: 'jit-asm' },
+      })
       await advanceTime(250)
       await flushReact()
       await advanceTime(450)
@@ -2125,14 +2033,11 @@ describe('SharpLabNext workbench', () => {
       const astOperationId = gateway.operationIds[0]
       const astRevision = gateway.buildRequests[0]?.workspace.revision
       if (!astOperationId || astRevision === undefined) throw new Error('Expected live AST.')
-      await completeAstOperation(
-        operationSocket(astOperationId),
-        astOperationId,
-        astRevision,
-        'BeforeJsilRoot',
-      )
+      await completeAstOperation(operationSocket(astOperationId), astOperationId, astRevision, 'BeforeJsilRoot')
 
-      fireEvent.change(screen.getByLabelText('Output'), { target: { value: 'javascript' } })
+      fireEvent.change(screen.getByLabelText('Output'), {
+        target: { value: 'javascript' },
+      })
       await advanceTime(250)
       await flushReact()
       await advanceTime(450)
@@ -2140,10 +2045,7 @@ describe('SharpLabNext workbench', () => {
 
       expect(gateway.buildRequests).toHaveLength(2)
       expect(gateway.buildRequests[1]).toMatchObject({ target: 'artifact' })
-      expect(screen.getByRole('tab', { name: 'JavaScript (JSIL)' })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      )
+      expect(screen.getByRole('tab', { name: 'JavaScript (JSIL)' })).toHaveAttribute('aria-selected', 'true')
     })
 
     it('cancels the initial zero-delay callback when its workspace revision changes', async () => {
@@ -2177,9 +2079,7 @@ describe('SharpLabNext workbench', () => {
       await advanceTime(1)
       await flushReact()
       expect(gateway.buildRequests).toHaveLength(1)
-      expect(gateway.buildRequests[0]?.workspace.files).toEqual([
-        expect.objectContaining({ text: 'class LatestBeforeBootstrap {}' }),
-      ])
+      expect(gateway.buildRequests[0]?.workspace.files).toEqual([expect.objectContaining({ text: 'class LatestBeforeBootstrap {}' })])
     })
 
     it('resolves only the workspace restored from an older share URL', async () => {
@@ -2203,9 +2103,7 @@ describe('SharpLabNext workbench', () => {
       await flushReact()
       await flushMicrotasks()
 
-      expect(screen.getByLabelText('Source editor')).toHaveValue(
-        'printfn "Restored before selection"\n',
-      )
+      expect(screen.getByLabelText('Source editor')).toHaveValue('printfn "Restored before selection"\n')
       expect(gateway.resolveRequests).toHaveLength(1)
       expect(gateway.resolveRequests[0]).toMatchObject({
         languageId: 'fsharp',
@@ -2214,7 +2112,10 @@ describe('SharpLabNext workbench', () => {
         workspaceRevision: useWorkbenchStore.getState().workspaceRevision,
       })
       expect(gateway.resolveRequests).not.toContainEqual(
-        expect.objectContaining({ languageId: 'csharp', outputId: 'decompiled-csharp' }),
+        expect.objectContaining({
+          languageId: 'csharp',
+          outputId: 'decompiled-csharp',
+        }),
       )
       expect(gateway.buildRequests).toHaveLength(0)
       await advanceTime(1)
@@ -2269,14 +2170,7 @@ describe('SharpLabNext workbench', () => {
       const oldRequest = gateway.buildRequests[0]
       const oldOperationId = gateway.operationIds[0]
       if (!oldRequest || !oldOperationId) throw new Error('Expected generated-source Build.')
-      await completeGeneratedSourceOperation(
-        operationSocket(oldOperationId),
-        oldOperationId,
-        oldRequest.workspace.revision,
-        oldRequest.workspace.selectionRevision,
-        oldContentRef,
-        'Generated/Old.g.cs',
-      )
+      await completeGeneratedSourceOperation(operationSocket(oldOperationId), oldOperationId, oldRequest.workspace.revision, oldRequest.workspace.selectionRevision, oldContentRef, 'Generated/Old.g.cs')
       expect(oldContentRequested).toBe(true)
 
       fireEvent.change(screen.getByLabelText('Source editor'), {
@@ -2289,27 +2183,15 @@ describe('SharpLabNext workbench', () => {
 
       const newRequest = gateway.buildRequests[1]
       const newOperationId = gateway.operationIds[1]
-      if (!newRequest || !newOperationId)
-        throw new Error('Expected the latest generated-source Build.')
-      await completeGeneratedSourceOperation(
-        operationSocket(newOperationId),
-        newOperationId,
-        newRequest.workspace.revision,
-        newRequest.workspace.selectionRevision,
-        newContentRef,
-        'Generated/Latest.g.cs',
-      )
+      if (!newRequest || !newOperationId) throw new Error('Expected the latest generated-source Build.')
+      await completeGeneratedSourceOperation(operationSocket(newOperationId), newOperationId, newRequest.workspace.revision, newRequest.workspace.selectionRevision, newContentRef, 'Generated/Latest.g.cs')
 
-      expect(
-        screen.getByRole('textbox', { name: 'Generated source Generated/Latest.g.cs' }),
-      ).toHaveTextContent('LatestGenerated')
+      expect(screen.getByRole('textbox', { name: 'Generated source Generated/Latest.g.cs' })).toHaveTextContent('LatestGenerated')
       resolveOldContent(new Response('public static class StaleGenerated {}'))
       await flushReact()
 
       expect(screen.queryByText('StaleGenerated')).not.toBeInTheDocument()
-      expect(
-        screen.getByRole('textbox', { name: 'Generated source Generated/Latest.g.cs' }),
-      ).toHaveTextContent('LatestGenerated')
+      expect(screen.getByRole('textbox', { name: 'Generated source Generated/Latest.g.cs' })).toHaveTextContent('LatestGenerated')
     })
 
     it('coalesces rapid edits and builds only the latest immutable snapshot', async () => {
@@ -2335,11 +2217,15 @@ describe('SharpLabNext workbench', () => {
       expect(gateway.buildRequests).toHaveLength(1)
       expect(gateway.buildRequests[0]?.workspace).toMatchObject({
         revision: initialRevision + 3,
-        files: [{ path: 'Program.cs', version: initialRevision + 3, text: 'class Latest {}' }],
+        files: [
+          {
+            path: 'Program.cs',
+            version: initialRevision + 3,
+            text: 'class Latest {}',
+          },
+        ],
       })
-      expect(gateway.buildRequests[0]?.workspace.revision).toBe(
-        useWorkbenchStore.getState().workspaceRevision,
-      )
+      expect(gateway.buildRequests[0]?.workspace.revision).toBe(useWorkbenchStore.getState().workspaceRevision)
 
       await advanceTime(1_000)
       expect(gateway.buildRequests).toHaveLength(1)
@@ -2348,7 +2234,9 @@ describe('SharpLabNext workbench', () => {
     it('debounces Run, completes its pipeline over operation WebSockets, and shows stdout', async () => {
       const gateway = mockLiveCompilationGateway()
       await renderResolvedApp(gateway)
-      fireEvent.change(screen.getByLabelText('Output'), { target: { value: 'run' } })
+      fireEvent.change(screen.getByLabelText('Output'), {
+        target: { value: 'run' },
+      })
       await advanceTime(250)
       await flushReact()
 
@@ -2365,19 +2253,12 @@ describe('SharpLabNext workbench', () => {
       await flushReact()
 
       expect(gateway.buildRequests).toHaveLength(1)
-      expect(gateway.buildRequests[0]?.workspace.files).toEqual([
-        expect.objectContaining({ path: 'Program.cs', text: latestSource }),
-      ])
+      expect(gateway.buildRequests[0]?.workspace.files).toEqual([expect.objectContaining({ path: 'Program.cs', text: latestSource })])
       const buildOperationId = gateway.operationIds[0]
       const buildRequest = gateway.buildRequests[0]
       if (!buildOperationId || !buildRequest) throw new Error('Expected a live Run Build.')
       const artifactRef = `sha256:${'a'.repeat(64)}`
-      await completeArtifactBuild(
-        operationSocket(buildOperationId),
-        buildOperationId,
-        buildRequest,
-        artifactRef,
-      )
+      await completeArtifactBuild(operationSocket(buildOperationId), buildOperationId, buildRequest, artifactRef)
 
       expect(gateway.runRequests).toHaveLength(1)
       expect(gateway.runRequests[0]).toMatchObject({
@@ -2386,11 +2267,7 @@ describe('SharpLabNext workbench', () => {
       })
       const runOperationId = gateway.operationIds[1]
       if (!runOperationId) throw new Error('Expected the live Run operation.')
-      await completeRunOperation(
-        operationSocket(runOperationId),
-        runOperationId,
-        'live run output\n',
-      )
+      await completeRunOperation(operationSocket(runOperationId), runOperationId, 'live run output\n')
 
       expect(screen.getByText('live run output')).toBeVisible()
       const statusBar = document.querySelector('.status-bar')
@@ -2403,7 +2280,9 @@ describe('SharpLabNext workbench', () => {
     it('cancels one superseded live operation and recovers when its terminal WebSocket event is lost', async () => {
       const gateway = mockLiveCompilationGateway()
       await renderResolvedApp(gateway)
-      fireEvent.change(screen.getByLabelText('Output'), { target: { value: 'run' } })
+      fireEvent.change(screen.getByLabelText('Output'), {
+        target: { value: 'run' },
+      })
       await advanceTime(250)
       await flushReact()
       await advanceTime(900)
@@ -2414,9 +2293,15 @@ describe('SharpLabNext workbench', () => {
       if (!oldOperationId) throw new Error('Expected the superseded live Build.')
 
       const editor = screen.getByLabelText('Source editor')
-      fireEvent.change(editor, { target: { value: 'class FirstReplacement {}' } })
-      fireEvent.change(editor, { target: { value: 'class SecondReplacement {}' } })
-      fireEvent.change(editor, { target: { value: 'class LatestReplacement {}' } })
+      fireEvent.change(editor, {
+        target: { value: 'class FirstReplacement {}' },
+      })
+      fireEvent.change(editor, {
+        target: { value: 'class SecondReplacement {}' },
+      })
+      fireEvent.change(editor, {
+        target: { value: 'class LatestReplacement {}' },
+      })
       await advanceTime(250)
       await flushReact()
 
@@ -2432,7 +2317,11 @@ describe('SharpLabNext workbench', () => {
         sequence: 1,
         timestampUtc: new Date().toISOString(),
         traceId: `trace-${oldOperationId}`,
-        payload: { kind: 'completed', status: 'cancelled', elapsed: '00:00:00.0100000' },
+        payload: {
+          kind: 'completed',
+          status: 'cancelled',
+          elapsed: '00:00:00.0100000',
+        },
       })
       await flushReact()
       await advanceTime(899)
@@ -2442,9 +2331,7 @@ describe('SharpLabNext workbench', () => {
       await flushReact()
 
       expect(gateway.buildRequests).toHaveLength(2)
-      expect(gateway.buildRequests[1]?.workspace.files).toEqual([
-        expect.objectContaining({ text: 'class LatestReplacement {}' }),
-      ])
+      expect(gateway.buildRequests[1]?.workspace.files).toEqual([expect.objectContaining({ text: 'class LatestReplacement {}' })])
       expect(gateway.cancelledOperationIds).toEqual([oldOperationId])
     })
 
@@ -2481,12 +2368,7 @@ describe('SharpLabNext workbench', () => {
       })
       const latestOperationId = gateway.operationIds[1]
       if (!latestOperationId) throw new Error('Expected the latest live Build operation.')
-      await completeAstOperation(
-        operationSocket(latestOperationId),
-        latestOperationId,
-        latestRevision,
-        'LatestRevisionRoot',
-      )
+      await completeAstOperation(operationSocket(latestOperationId), latestOperationId, latestRevision, 'LatestRevisionRoot')
 
       expect(screen.getAllByText('LatestRevisionRoot').length).toBeGreaterThan(0)
       expect(screen.queryAllByText('OldRevisionRoot')).toHaveLength(0)
@@ -2523,19 +2405,10 @@ describe('SharpLabNext workbench', () => {
       if (!stableOperationId || stableRevision === undefined) {
         throw new Error('Expected the first live AST operation.')
       }
-      await completeAstOperation(
-        operationSocket(stableOperationId),
-        stableOperationId,
-        stableRevision,
-        'StableRoot',
-      )
+      await completeAstOperation(operationSocket(stableOperationId), stableOperationId, stableRevision, 'StableRoot')
       expect(screen.getAllByText('StableRoot').length).toBeGreaterThan(0)
       const resultTabs = screen.getByRole('tablist', { name: 'Result views' })
-      expect(
-        Array.from(resultTabs.querySelectorAll('[role="tab"]')).map((tab) =>
-          tab.textContent?.replace(/ \(\d+\)$/, ''),
-        ),
-      ).toEqual(['Diagnostics', 'AST'])
+      expect(Array.from(resultTabs.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent?.replace(/ \(\d+\)$/, ''))).toEqual(['Diagnostics', 'AST'])
 
       fireEvent.change(screen.getByLabelText('Source editor'), {
         target: { value: 'public class Broken { this is invalid }' },
@@ -2605,37 +2478,33 @@ describe('SharpLabNext workbench', () => {
           sequence: 2,
           timestampUtc: new Date().toISOString(),
           traceId: `trace-${failedOperationId}`,
-          payload: { kind: 'completed', status: 'completed', elapsed: '00:00:00.0100000' },
+          payload: {
+            kind: 'completed',
+            status: 'completed',
+            elapsed: '00:00:00.0100000',
+          },
         })
       })
       await flushReact()
 
-      expect(screen.getByRole('tab', { name: 'Diagnostics (1)' })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      )
+      expect(screen.getByRole('tab', { name: 'Diagnostics (1)' })).toHaveAttribute('aria-selected', 'true')
       expect(screen.getByText('; expected')).toBeVisible()
       expect(screen.getByText(/Compilation failed/)).toBeVisible()
       fireEvent.click(screen.getByRole('tab', { name: 'AST' }))
       expect(screen.getAllByText('StableRoot').length).toBeGreaterThan(0)
-      expect(
-        Array.from(resultTabs.querySelectorAll('[role="tab"]')).map((tab) =>
-          tab.textContent?.replace(/ \(\d+\)$/, ''),
-        ),
-      ).toEqual(['Diagnostics', 'AST'])
+      expect(Array.from(resultTabs.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent?.replace(/ \(\d+\)$/, ''))).toEqual(['Diagnostics', 'AST'])
     })
 
     it.each([
       { outputId: 'execution-flow', action: 'Run' },
       { outputId: 'run-il', action: 'Render IL' },
-    ])('keeps $outputId explicit while allowing a manual operation with the latest source', async ({
-      outputId,
-      action,
-    }) => {
+    ])('keeps $outputId explicit while allowing a manual operation with the latest source', async ({ outputId, action }) => {
       const gateway = mockLiveCompilationGateway()
       await renderResolvedApp(gateway)
 
-      fireEvent.change(screen.getByLabelText('Output'), { target: { value: outputId } })
+      fireEvent.change(screen.getByLabelText('Output'), {
+        target: { value: outputId },
+      })
       await advanceTime(250)
       await flushReact()
       expect(screen.getByLabelText('Output')).toHaveValue(outputId)
@@ -2649,9 +2518,7 @@ describe('SharpLabNext workbench', () => {
       await advanceTime(1_000)
 
       expect(gateway.buildRequests).toHaveLength(0)
-      const manualButton = screen
-        .getAllByRole('button', { name: action })
-        .find((candidate) => !candidate.hasAttribute('disabled'))
+      const manualButton = screen.getAllByRole('button', { name: action }).find((candidate) => !candidate.hasAttribute('disabled'))
       expect(manualButton).toBeDefined()
       fireEvent.click(manualButton as HTMLButtonElement)
       await flushReact()
@@ -2671,14 +2538,8 @@ describe('SharpLabNext workbench', () => {
       '<div class="cm-line cm-source-navigable source-association"><i data-target="output"></i></div>',
       '<span data-target="other"></span>',
     ].join('')
-    expect(isSourceAssociationInteractionTarget(root.querySelector('[data-target="source"]'))).toBe(
-      true,
-    )
-    expect(isSourceAssociationInteractionTarget(root.querySelector('[data-target="output"]'))).toBe(
-      true,
-    )
-    expect(isSourceAssociationInteractionTarget(root.querySelector('[data-target="other"]'))).toBe(
-      false,
-    )
+    expect(isSourceAssociationInteractionTarget(root.querySelector('[data-target="source"]'))).toBe(true)
+    expect(isSourceAssociationInteractionTarget(root.querySelector('[data-target="output"]'))).toBe(true)
+    expect(isSourceAssociationInteractionTarget(root.querySelector('[data-target="other"]'))).toBe(false)
   })
 })

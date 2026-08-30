@@ -14,9 +14,7 @@ internal sealed class ProfileUpdateStatusReader(ProfileUpdateStatusOptions optio
     private const int MaximumStatusBytes = 64 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = ContractJson.CreateCanonicalSerializerOptions();
 
-    public async Task<ProfileUpdateStatusDocument> ReadAsync(
-        string activeReleaseId,
-        CancellationToken cancellationToken = default)
+    public async Task<ProfileUpdateStatusDocument> ReadAsync(string activeReleaseId, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -24,20 +22,10 @@ internal sealed class ProfileUpdateStatusReader(ProfileUpdateStatusOptions optio
             if (!file.Exists || file.Length is <= 0 or > MaximumStatusBytes)
                 return CreateUnknown(activeReleaseId);
 
-            await using var stream = new FileStream(
-                file.FullName,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete,
-                16 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            var document = await JsonSerializer.DeserializeAsync<ProfileUpdateStatusDocument>(
-                stream,
-                JsonOptions,
-                cancellationToken);
+            await using var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 16 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var document = await JsonSerializer.DeserializeAsync<ProfileUpdateStatusDocument>(stream, JsonOptions, cancellationToken);
             return document is not null && IsValid(document, activeReleaseId)
-                ? CreatePublicProjection(document)
-                : CreateUnknown(activeReleaseId);
+                ? CreatePublicProjection(document) : CreateUnknown(activeReleaseId);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -57,11 +45,7 @@ internal sealed class ProfileUpdateStatusReader(ProfileUpdateStatusOptions optio
         Active = new ProfileUpdateReleaseStatus { ReleaseId = activeReleaseId },
         UpdateAvailable = null,
         UpdatedAt = DateTimeOffset.UtcNow,
-        LastStage = new ProfileUpdatePublicStageStatus
-        {
-            Stage = ProfileUpdatePublicStage.None,
-            Outcome = ProfileUpdatePublicStageOutcome.NotChecked
-        }
+        LastStage = new ProfileUpdatePublicStageStatus { Stage = ProfileUpdatePublicStage.None, Outcome = ProfileUpdatePublicStageOutcome.NotChecked }
     };
 
     private static bool IsValid(ProfileUpdateStatusDocument document, string activeReleaseId) =>
@@ -81,8 +65,7 @@ internal sealed class ProfileUpdateStatusReader(ProfileUpdateStatusOptions optio
     private static bool IsSafeId(string? value) =>
         value is { Length: > 0 and <= 128 } &&
         char.IsAsciiLetterOrDigit(value[0]) &&
-        value.All(static character =>
-            char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-');
+        value.All(static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-');
 
     private static bool IsValidDigest(string? value)
     {
@@ -109,51 +92,23 @@ internal sealed class ProfileUpdateStatusReader(ProfileUpdateStatusOptions optio
         UpdateAvailable = source.UpdateAvailable,
         CheckedAt = source.CheckedAt,
         UpdatedAt = source.UpdatedAt,
-        LastStage = new ProfileUpdatePublicStageStatus
-        {
-            Stage = source.LastStage.Stage,
-            Outcome = source.LastStage.Outcome,
-            StartedAt = source.LastStage.StartedAt,
-            CompletedAt = source.LastStage.CompletedAt,
-            Error = source.LastStage.Outcome == ProfileUpdatePublicStageOutcome.Failed
-                ? CreatePublicError(source.LastStage.Error)
-                : null
-        }
+        LastStage = new ProfileUpdatePublicStageStatus { Stage = source.LastStage.Stage, Outcome = source.LastStage.Outcome, StartedAt = source.LastStage.StartedAt, CompletedAt = source.LastStage.CompletedAt, Error = source.LastStage.Outcome == ProfileUpdatePublicStageOutcome.Failed ? CreatePublicError(source.LastStage.Error) : null }
     };
 
     private static ProfileUpdateReleaseStatus? CopyRelease(ProfileUpdateReleaseStatus? source) =>
         source is null
-            ? null
-            : new ProfileUpdateReleaseStatus
-            {
-                ReleaseId = source.ReleaseId,
-                LockDigest = source.LockDigest
-            };
+            ? null : new ProfileUpdateReleaseStatus { ReleaseId = source.ReleaseId, LockDigest = source.LockDigest };
 
     private static ProfileUpdatePublicError CreatePublicError(ProfileUpdatePublicError? source) =>
         source?.Code switch
         {
-            "profile-update.check-failed" => PublicError(
-                source.Code,
-                "Profile update check failed; update availability is unknown."),
-            "profile-update.resolve-failed" => PublicError(
-                source.Code,
-                "Profile candidate resolution failed; the approved release remains active."),
-            "profile-update.build-failed" => PublicError(
-                source.Code,
-                "Profile candidate build failed; the approved release remains active."),
-            "profile-update.test-failed" => PublicError(
-                source.Code,
-                "Profile candidate validation failed; the approved release remains active."),
-            "profile-update.promote-failed" => PublicError(
-                source.Code,
-                "Profile candidate promotion failed; the previous approved release remains active."),
-            "profile-update.failed" => PublicError(
-                source.Code,
-                "Profile update failed; the approved release remains active."),
-            _ => PublicError(
-                "profile-update.failed",
-                "The profile update check did not complete successfully.")
+            "profile-update.check-failed" => PublicError(source.Code, "Profile update check failed; update availability is unknown."),
+            "profile-update.resolve-failed" => PublicError(source.Code, "Profile candidate resolution failed; the approved release remains active."),
+            "profile-update.build-failed" => PublicError(source.Code, "Profile candidate build failed; the approved release remains active."),
+            "profile-update.test-failed" => PublicError(source.Code, "Profile candidate validation failed; the approved release remains active."),
+            "profile-update.promote-failed" => PublicError(source.Code, "Profile candidate promotion failed; the previous approved release remains active."),
+            "profile-update.failed" => PublicError(source.Code, "Profile update failed; the approved release remains active."),
+            _ => PublicError("profile-update.failed", "The profile update check did not complete successfully.")
         };
 
     private static ProfileUpdatePublicError PublicError(string code, string message) => new()

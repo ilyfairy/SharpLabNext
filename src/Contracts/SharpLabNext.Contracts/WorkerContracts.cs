@@ -2,19 +2,11 @@ using System.Text.Json.Serialization;
 
 namespace SharpLabNext.Contracts;
 
-public sealed record NegotiateRequest(
-    string CallerServiceId,
-    string ExpectedReleaseId,
-    string? ExpectedWorkerImageId,
-    IReadOnlyList<ProtocolVersion> SupportedProtocolVersions,
-    IReadOnlyList<string> RequiredCapabilities);
+public sealed record NegotiateRequest(string CallerServiceId, string ExpectedReleaseId, string? ExpectedWorkerImageId, IReadOnlyList<ProtocolVersion> SupportedProtocolVersions, IReadOnlyList<string> RequiredCapabilities);
 
-public sealed record DescribeRequest(
-    string CallerServiceId,
-    string? ExpectedReleaseId = null);
+public sealed record DescribeRequest(string CallerServiceId, string? ExpectedReleaseId = null);
 
-public sealed record HealthRequest(
-    bool IncludeChecks = true);
+public sealed record HealthRequest(bool IncludeChecks = true);
 
 public sealed record WorkerDescriptor(
     ServiceIdentity Service,
@@ -29,12 +21,7 @@ public sealed record WorkerDescriptor(
     IReadOnlyDictionary<string, string>? Identity = null,
     IReadOnlyList<ReferenceSetAttestation>? ReferenceSets = null);
 
-public sealed record ReferenceSetAttestation(
-    string Id,
-    string TargetFramework,
-    string Digest,
-    string ContentDigest,
-    ReferenceSetProvenance Provenance);
+public sealed record ReferenceSetAttestation(string Id, string TargetFramework, string Digest, string ContentDigest, ReferenceSetProvenance Provenance);
 
 public sealed record ReferenceSetProvenance(
     string Kind,
@@ -45,35 +32,13 @@ public sealed record ReferenceSetProvenance(
     string? SourceArchiveDigest = null,
     IReadOnlyList<ReferenceSetProvenanceSource>? Sources = null);
 
-public sealed record ReferenceSetProvenanceSource(
-    string Role,
-    string Selection,
-    string Package,
-    string ResolvedVersion,
-    string SourceUri,
-    string SourceArchiveDigest,
-    string PackageContentHash);
+public sealed record ReferenceSetProvenanceSource(string Role, string Selection, string Package, string ResolvedVersion, string SourceUri, string SourceArchiveDigest, string PackageContentHash);
 
-public sealed record WorkerCapabilityDescriptor(
-    string Id,
-    int ContractVersion,
-    bool Available,
-    IReadOnlyList<string> ProfileIds,
-    string? UnavailableReason = null);
+public sealed record WorkerCapabilityDescriptor(string Id, int ContractVersion, bool Available, IReadOnlyList<string> ProfileIds, string? UnavailableReason = null);
 
-public sealed record HealthResponse(
-    HealthStatus Status,
-    string ServiceId,
-    string InstanceId,
-    ProtocolVersion Protocol,
-    DateTimeOffset TimestampUtc,
-    IReadOnlyList<HealthCheckResult> Checks);
+public sealed record HealthResponse(HealthStatus Status, string ServiceId, string InstanceId, ProtocolVersion Protocol, DateTimeOffset TimestampUtc, IReadOnlyList<HealthCheckResult> Checks);
 
-public sealed record HealthCheckResult(
-    string Name,
-    HealthStatus Status,
-    string? PublicMessage,
-    TimeSpan? Duration);
+public sealed record HealthCheckResult(string Name, HealthStatus Status, string? PublicMessage, TimeSpan? Duration);
 
 [JsonConverter(typeof(KebabCaseJsonStringEnumConverter<WorkerKind>))]
 public enum WorkerKind

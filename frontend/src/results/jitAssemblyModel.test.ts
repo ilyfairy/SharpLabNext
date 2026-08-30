@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  composeJitAssembly,
-  jitAssemblySourceTooltips,
-  parseJitAssembly,
-  preferredJitSectionId,
-  remapJitLineRange,
-} from './jitAssemblyModel'
+import { composeJitAssembly, jitAssemblySourceTooltips, parseJitAssembly, preferredJitSectionId, remapJitLineRange } from './jitAssemblyModel'
 
 const text = `; Assembly listing for method Program:<Main>$(System.String[]):int (FullOpts)
 G_M000_IG01:
@@ -78,7 +72,10 @@ G_M000_IG03:
     expect(section?.rawLineToCompactLine[12]).toBe(2)
     expect(section?.rawLineToCompactLine[13]).toBe(3)
     expect(section?.rawLineToCompactLine[16]).toBe(4)
-    expect(section && remapJitLineRange(section, 8, 13)).toEqual({ startLine: 1, endLine: 3 })
+    expect(section && remapJitLineRange(section, 8, 13)).toEqual({
+      startLine: 1,
+      endLine: 3,
+    })
     expect(section && remapJitLineRange(section, 1, 7)).toBeNull()
   })
 
@@ -113,7 +110,10 @@ G_M000_IG04:
     expect(section?.rawLineToCompactLine[5]).toBeNull()
     expect(section?.rawLineToCompactLine[9]).toBe(5)
     expect(section?.rawLineToCompactLine[12]).toBe(7)
-    expect(section && remapJitLineRange(section, 1, 6)).toEqual({ startLine: 1, endLine: 3 })
+    expect(section && remapJitLineRange(section, 1, 6)).toEqual({
+      startLine: 1,
+      endLine: 3,
+    })
   })
 
   it('preserves meaningful full-line and instruction comments', () => {
@@ -152,7 +152,10 @@ G_M000_IG01:
     expect(section?.rawLineToCompactLine[1]).toBeNull()
     expect(section?.rawLineToCompactLine[2]).toBeNull()
     expect(section?.rawLineToCompactLine[5]).toBeNull()
-    expect(section && remapJitLineRange(section, 1, 6)).toEqual({ startLine: 1, endLine: 2 })
+    expect(section && remapJitLineRange(section, 1, 6)).toEqual({
+      startLine: 1,
+      endLine: 2,
+    })
   })
 
   it('ignores helper output instead of assigning summaries by raw section position', () => {
@@ -209,11 +212,7 @@ G_M000_IG01:
       },
     ])
 
-    expect(sections.map((section) => section.displayName)).toEqual([
-      'Program.Other',
-      'Program.CurrentTarget',
-      'Program.Main',
-    ])
+    expect(sections.map((section) => section.displayName)).toEqual(['Program.Other', 'Program.CurrentTarget', 'Program.Main'])
     const current = sections.find((section) => section.id === 'current')
     expect(current?.text).toContain('Program:CurrentTarget')
     expect(current?.text).not.toContain('(dynamicClass)')

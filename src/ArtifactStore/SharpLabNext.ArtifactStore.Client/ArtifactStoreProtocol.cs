@@ -150,9 +150,7 @@ public static class ArtifactIdentity
         ValidateRequiredValues(manifest);
 
         var normalizedEntryAssembly = ArtifactPath.Normalize(manifest.EntryAssembly);
-        var normalizedFiles = manifest.Files
-            .Select(CanonicalizeFile)
-            .ToArray();
+        var normalizedFiles = manifest.Files.Select(CanonicalizeFile).ToArray();
         _ = ArtifactPath.NormalizeDistinct(normalizedFiles.Select(file => file.Path));
 
         if (normalizedFiles.Any(file => file.Size < 0))
@@ -167,38 +165,20 @@ public static class ArtifactIdentity
 
         var canonical = new CanonicalManifest(
             manifest.ManifestVersion,
-            new CanonicalProducer(
-                Required(manifest.Producer.ReleaseId, nameof(manifest.Producer.ReleaseId)),
-                Required(manifest.Producer.LanguageId, nameof(manifest.Producer.LanguageId)),
-                Required(manifest.Producer.ToolchainId, nameof(manifest.Producer.ToolchainId)),
-                Required(manifest.Producer.CompilerVersion, nameof(manifest.Producer.CompilerVersion)),
-                manifest.Producer.CompilerCommit,
-                Required(manifest.Producer.WorkerImageId, nameof(manifest.Producer.WorkerImageId))),
+            new CanonicalProducer(Required(manifest.Producer.ReleaseId, nameof(manifest.Producer.ReleaseId)), Required(manifest.Producer.LanguageId, nameof(manifest.Producer.LanguageId)), Required(manifest.Producer.ToolchainId, nameof(manifest.Producer.ToolchainId)), Required(manifest.Producer.CompilerVersion, nameof(manifest.Producer.CompilerVersion)), manifest.Producer.CompilerCommit, Required(manifest.Producer.WorkerImageId, nameof(manifest.Producer.WorkerImageId))),
             Required(manifest.ReferenceSetId, nameof(manifest.ReferenceSetId)),
             Required(manifest.TargetFramework, nameof(manifest.TargetFramework)),
             Required(manifest.ArtifactFormat, nameof(manifest.ArtifactFormat)),
-            new CanonicalRuntimeRequirement(
-                Required(manifest.RuntimeRequirement.Family, nameof(manifest.RuntimeRequirement.Family)),
-                manifest.RuntimeRequirement.Frameworks
-                    .Select(CanonicalizeFramework)
-                    .ToArray(),
-                Required(manifest.RuntimeRequirement.Architecture, nameof(manifest.RuntimeRequirement.Architecture)),
-                RequiredValues(manifest.RuntimeRequirement.RequiredRuntimeFeatureTags, "runtime feature tag")),
+            new CanonicalRuntimeRequirement(Required(manifest.RuntimeRequirement.Family, nameof(manifest.RuntimeRequirement.Family)), manifest.RuntimeRequirement.Frameworks.Select(CanonicalizeFramework).ToArray(), Required(manifest.RuntimeRequirement.Architecture, nameof(manifest.RuntimeRequirement.Architecture)), RequiredValues(manifest.RuntimeRequirement.RequiredRuntimeFeatureTags, "runtime feature tag")),
             RequiredValues(manifest.MetadataFeatureTags, "metadata feature tag"),
             manifest.OutputKind,
             normalizedEntryAssembly,
             manifest.EntryPoint,
             normalizedFiles,
             manifest.Derivation is null
-                ? null
-                : new CanonicalDerivation(
-                    ArtifactStoreProtocol.GetDigest(manifest.Derivation.ParentArtifactId),
-                    Required(manifest.Derivation.ProcessorId, nameof(manifest.Derivation.ProcessorId)),
-                    Required(manifest.Derivation.ProcessorVersion, nameof(manifest.Derivation.ProcessorVersion)),
-                    Required(manifest.Derivation.OptionsDigest, nameof(manifest.Derivation.OptionsDigest))),
+                ? null : new CanonicalDerivation(ArtifactStoreProtocol.GetDigest(manifest.Derivation.ParentArtifactId), Required(manifest.Derivation.ProcessorId, nameof(manifest.Derivation.ProcessorId)), Required(manifest.Derivation.ProcessorVersion, nameof(manifest.Derivation.ProcessorVersion)), Required(manifest.Derivation.OptionsDigest, nameof(manifest.Derivation.OptionsDigest))),
             manifest.Metadata is null
-                ? null
-                : SortMetadata(manifest.Metadata));
+                ? null : SortMetadata(manifest.Metadata));
 
         var bytes = JsonSerializer.SerializeToUtf8Bytes(canonical, JsonOptions);
         return ArtifactStoreProtocol.ArtifactRefFromDigest(Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
@@ -222,14 +202,9 @@ public static class ArtifactIdentity
             throw new ArgumentException("ManifestVersion must be positive.", nameof(manifest));
         }
 
-        if (manifest.OutputKind is not (
-            BuildOutputKind.Console or
-            BuildOutputKind.Library or
-            BuildOutputKind.WindowsApplication))
+        if (manifest.OutputKind is not (BuildOutputKind.Console or BuildOutputKind.Library or BuildOutputKind.WindowsApplication))
         {
-            throw new ArgumentException(
-                "Artifact manifests must use a concrete output kind.",
-                nameof(manifest));
+            throw new ArgumentException("Artifact manifests must use a concrete output kind.", nameof(manifest));
         }
 
         ArgumentNullException.ThrowIfNull(manifest.Producer);
@@ -253,19 +228,13 @@ public static class ArtifactIdentity
     private static CanonicalFile CanonicalizeFile(ArtifactFileDescriptor? file)
     {
         ArgumentNullException.ThrowIfNull(file);
-        return new CanonicalFile(
-            Required(file.Role, nameof(file.Role)),
-            ArtifactPath.Normalize(file.Path),
-            file.Size,
-            ArtifactStoreProtocol.GetDigest(ArtifactStoreProtocol.ParseContentRef(file.Digest)));
+        return new CanonicalFile(Required(file.Role, nameof(file.Role)), ArtifactPath.Normalize(file.Path), file.Size, ArtifactStoreProtocol.GetDigest(ArtifactStoreProtocol.ParseContentRef(file.Digest)));
     }
 
     private static CanonicalFramework CanonicalizeFramework(FrameworkRequirement? framework)
     {
         ArgumentNullException.ThrowIfNull(framework);
-        return new CanonicalFramework(
-            Required(framework.Name, nameof(framework.Name)),
-            Required(framework.MinimumVersion, nameof(framework.MinimumVersion)));
+        return new CanonicalFramework(Required(framework.Name, nameof(framework.Name)), Required(framework.MinimumVersion, nameof(framework.MinimumVersion)));
     }
 
     private static string[] RequiredValues(IEnumerable<string> values, string description) =>
@@ -275,9 +244,7 @@ public static class ArtifactIdentity
     {
         var sorted = new SortedDictionary<string, string>(StringComparer.Ordinal);
         foreach (var (key, value) in metadata)
-        {
             sorted.Add(Required(key, "metadata key"), Required(value, "metadata value"));
-        }
 
         return sorted;
     }
@@ -297,57 +264,27 @@ public static class ArtifactIdentity
         CanonicalDerivation? Derivation,
         IReadOnlyDictionary<string, string>? Metadata);
 
-    private sealed record CanonicalProducer(
-        string ReleaseId,
-        string LanguageId,
-        string ToolchainId,
-        string CompilerVersion,
-        string? CompilerCommit,
-        string WorkerImageId);
+    private sealed record CanonicalProducer(string ReleaseId, string LanguageId, string ToolchainId, string CompilerVersion, string? CompilerCommit, string WorkerImageId);
 
-    private sealed record CanonicalRuntimeRequirement(
-        string Family,
-        IReadOnlyList<CanonicalFramework> Frameworks,
-        string Architecture,
-        IReadOnlyList<string> RequiredRuntimeFeatureTags);
+    private sealed record CanonicalRuntimeRequirement(string Family, IReadOnlyList<CanonicalFramework> Frameworks, string Architecture, IReadOnlyList<string> RequiredRuntimeFeatureTags);
 
     private sealed record CanonicalFramework(string Name, string MinimumVersion);
 
     private sealed record CanonicalFile(string Role, string Path, long Size, string Digest);
 
-    private sealed record CanonicalDerivation(
-        string ParentArtifactDigest,
-        string ProcessorId,
-        string ProcessorVersion,
-        string OptionsDigest);
+    private sealed record CanonicalDerivation(string ParentArtifactDigest, string ProcessorId, string ProcessorVersion, string OptionsDigest);
 }
 
-public sealed record PutContentResponse(
-    ContentRef ContentRef,
-    long Size,
-    DateTimeOffset ExpiresAt,
-    bool AlreadyExisted);
+public sealed record PutContentResponse(ContentRef ContentRef, long Size, DateTimeOffset ExpiresAt, bool AlreadyExisted);
 
-public sealed record PutArtifactResponse(
-    ArtifactRef ArtifactRef,
-    long TotalSize,
-    DateTimeOffset ExpiresAt,
-    bool AlreadyExisted);
+public sealed record PutArtifactResponse(ArtifactRef ArtifactRef, long TotalSize, DateTimeOffset ExpiresAt, bool AlreadyExisted);
 
 public sealed record ArtifactLeaseRequest(string Owner, int DurationSeconds);
 
 public sealed record ArtifactLeaseRenewalRequest(int DurationSeconds);
 
-public sealed record ArtifactLeaseResponse(
-    string LeaseToken,
-    ArtifactRef ArtifactRef,
-    string Owner,
-    DateTimeOffset ExpiresAt);
+public sealed record ArtifactLeaseResponse(string LeaseToken, ArtifactRef ArtifactRef, string Owner, DateTimeOffset ExpiresAt);
 
 public sealed record GarbageCollectionRequest(int MaxArtifacts = 1000, int MaxContents = 5000);
 
-public sealed record GarbageCollectionResponse(
-    int ExpiredLeasesDeleted,
-    int ArtifactsDeleted,
-    int ContentsDeleted,
-    long ContentBytesReclaimed);
+public sealed record GarbageCollectionResponse(int ExpiredLeasesDeleted, int ArtifactsDeleted, int ContentsDeleted, long ContentBytesReclaimed);

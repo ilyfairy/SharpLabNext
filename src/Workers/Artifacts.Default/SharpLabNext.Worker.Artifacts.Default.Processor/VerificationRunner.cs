@@ -8,24 +8,16 @@ namespace SharpLabNext.ArtifactProcessing;
 
 internal static class VerificationRunner
 {
-    public static Task<ProcessorResponse> VerifyAsync(
-        ProcessorRequest request,
-        CancellationToken cancellationToken)
+    public static Task<ProcessorResponse> VerifyAsync(ProcessorRequest request, CancellationToken cancellationToken)
     {
-        using var assemblyResolver = new BoundedAssemblyResolver(
-            Path.GetDirectoryName(request.AssemblyPath)!,
-            request.ReferenceRoots);
+        using var assemblyResolver = new BoundedAssemblyResolver(Path.GetDirectoryName(request.AssemblyPath)!, request.ReferenceRoots);
         using var resolver = new VerificationResolver(assemblyResolver.Paths);
         using var stream = File.OpenRead(request.AssemblyPath);
         using var peReader = new PEReader(stream, PEStreamOptions.PrefetchEntireImage);
         if (!peReader.HasMetadata)
             throw new BadImageFormatException();
         var metadata = peReader.GetMetadataReader();
-        var verifier = new Verifier(resolver, new VerifierOptions
-        {
-            IncludeMetadataTokensInErrorMessages = request.IncludeMetadataTokens,
-            SanityChecks = true
-        });
+        var verifier = new Verifier(resolver, new VerifierOptions { IncludeMetadataTokensInErrorMessages = request.IncludeMetadataTokens, SanityChecks = true });
         if (!string.IsNullOrWhiteSpace(request.SystemModuleName))
             verifier.SetSystemModuleName(AssemblyNameInfo.Parse(request.SystemModuleName));
 
@@ -43,19 +35,8 @@ internal static class VerificationRunner
         }
 
         var outcome = truncated
-            ? ProcessorOutcome.LimitExceeded
-            : findings.Count == 0 ? ProcessorOutcome.Succeeded : ProcessorOutcome.Findings;
-        return Task.FromResult(new ProcessorResponse(
-            ProcessorProtocol.Version,
-            outcome,
-            "microsoft-ilverification",
-            ProcessorProtocol.IlVerificationVersion,
-            "application/vnd.sharplabnext.il-verification+json",
-            0,
-            [],
-            findings,
-            truncated,
-            truncated ? "Verification findings exceeded the configured limit." : null));
+            ? ProcessorOutcome.LimitExceeded : findings.Count == 0 ? ProcessorOutcome.Succeeded : ProcessorOutcome.Findings;
+        return Task.FromResult(new ProcessorResponse(ProcessorProtocol.Version, outcome, "microsoft-ilverification", ProcessorProtocol.IlVerificationVersion, "application/vnd.sharplabnext.il-verification+json", 0, [], findings, truncated, truncated ? "Verification findings exceeded the configured limit." : null));
     }
 
     private static ProcessorFinding ToFinding(VerificationResult result, MetadataReader metadata)
@@ -81,14 +62,7 @@ internal static class VerificationRunner
             }
             token = MetadataTokens.GetToken(result.Method);
         }
-        return new ProcessorFinding(
-            result.Code.ToString(),
-            SanitizeMessage(result.Message),
-            typeName,
-            methodName,
-            token,
-            null,
-            null);
+        return new ProcessorFinding(result.Code.ToString(), SanitizeMessage(result.Message), typeName, methodName, token, null, null);
     }
 
     private static string JoinTypeName(string ns, string name) =>

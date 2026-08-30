@@ -33,9 +33,7 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
             """);
         var methodItem = Assert.Single(methodDirective.Result.Items, static item => item.Label == ".method");
         Assert.Equal(2, methodItem.InsertTextFormat);
-        Assert.Equal(
-            ".method public static void ${1:Method}() cil managed\n{\n\t$0\n}",
-            methodItem.TextEdit.NewText);
+        Assert.Equal(".method public static void ${1:Method}() cil managed\n{\n\t$0\n}", methodItem.TextEdit.NewText);
 
         var opcode = await CompleteAsync(engine, MethodBody("cal|"));
         var call = Assert.Single(opcode.Result.Items, static item => item.Label == "call");
@@ -69,9 +67,7 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
             """);
         var nestedClass = Assert.Single(nestedType.Result.Items, static item => item.Label == ".class");
         Assert.Equal(2, nestedClass.InsertTextFormat);
-        Assert.Equal(
-            ".class nested public ${1:Name}\n{\n\t$0\n}",
-            nestedClass.TextEdit.NewText);
+        Assert.Equal(".class nested public ${1:Name}\n{\n\t$0\n}", nestedClass.TextEdit.NewText);
 
         var typeParameter = await CompleteAsync(engine, """
             .class public Container`1<T>
@@ -84,8 +80,7 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
               }
             }
             """);
-        Assert.Contains(typeParameter.Result.Items, static item =>
-            item.Kind == 25 && item.Label == "T" && item.TextEdit.NewText == "T");
+        Assert.Contains(typeParameter.Result.Items, static item => item.Kind == 25 && item.Label == "T" && item.TextEdit.NewText == "T");
         Assert.DoesNotContain(typeParameter.Result.Items, static item => item.Label == "M");
 
         var methodParameter = await CompleteAsync(engine, """
@@ -99,8 +94,7 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
               }
             }
             """);
-        Assert.Contains(methodParameter.Result.Items, static item =>
-            item.Kind == 25 && item.Label == "M" && item.TextEdit.NewText == "M");
+        Assert.Contains(methodParameter.Result.Items, static item => item.Kind == 25 && item.Label == "M" && item.TextEdit.NewText == "M");
         Assert.DoesNotContain(methodParameter.Result.Items, static item => item.Label == "T");
 
         var assemblyHash = await CompleteAsync(engine, """
@@ -123,9 +117,7 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
 
         Assert.Contains(completion.Result.Items, static item => item.Label == "nop");
         Assert.Contains(completion.Result.Items, static item => item.Label == ".maxstack");
-        Assert.All(
-            completion.Result.Items,
-            static item => Assert.NotEqual("No suggestions.", item.Label));
+        Assert.All(completion.Result.Items, static item => Assert.NotEqual("No suggestions.", item.Label));
     }
 
     [Fact]
@@ -191,33 +183,25 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
         var engine = await CreateEngineAsync();
 
         var constructor = await CompleteAsync(engine, MemberWorkspace("newobj instance void C::.c|"));
-        Assert.Contains(constructor.Result.Items, static item =>
-            item.Kind == 4 && item.Label.Contains(".ctor(int32)", StringComparison.Ordinal));
+        Assert.Contains(constructor.Result.Items, static item => item.Kind == 4 && item.Label.Contains(".ctor(int32)", StringComparison.Ordinal));
 
         var staticMethod = await CompleteAsync(engine, MemberWorkspace("call void C::Sta|"));
-        Assert.Contains(staticMethod.Result.Items, static item =>
-            item.Kind == 2 && item.Label == "Static(string)" && item.TextEdit.NewText == "void C::Static(string)");
+        Assert.Contains(staticMethod.Result.Items, static item => item.Kind == 2 && item.Label == "Static(string)" && item.TextEdit.NewText == "void C::Static(string)");
 
         var instanceMethod = await CompleteAsync(engine, MemberWorkspace("callvirt instance void C::Ins|"));
-        Assert.Contains(instanceMethod.Result.Items, static item =>
-            item.Kind == 2 && item.Label == "Instance(int32)" &&
-            item.TextEdit.NewText == "instance void C::Instance(int32)");
+        Assert.Contains(instanceMethod.Result.Items, static item => item.Kind == 2 && item.Label == "Instance(int32)" && item.TextEdit.NewText == "instance void C::Instance(int32)");
 
         var instanceField = await CompleteAsync(engine, MemberWorkspace("ldfld int32 C::Val|"));
-        Assert.Contains(instanceField.Result.Items, static item =>
-            item.Kind == 5 && item.Label == "Value" && item.TextEdit.NewText == "int32 C::Value");
+        Assert.Contains(instanceField.Result.Items, static item => item.Kind == 5 && item.Label == "Value" && item.TextEdit.NewText == "int32 C::Value");
 
         var staticField = await CompleteAsync(engine, MemberWorkspace("ldsfld int32 C::Sha|"));
-        Assert.Contains(staticField.Result.Items, static item =>
-            item.Kind == 5 && item.Label == "Shared" && item.TextEdit.NewText == "int32 C::Shared");
+        Assert.Contains(staticField.Result.Items, static item => item.Kind == 5 && item.Label == "Shared" && item.TextEdit.NewText == "int32 C::Shared");
 
         var nested = await CompleteAsync(engine, MemberWorkspace("C::In|"));
         Assert.Contains(nested.Result.Items, static item => item.Kind == 7 && item.Label == "Inner");
 
         var sameLabel = await CompleteAsync(engine, MemberWorkspace("call C::Conv|"));
-        var overloads = sameLabel.Result.Items
-            .Where(static item => item.Kind == 2 && item.Label == "Convert(int32)")
-            .ToArray();
+        var overloads = sameLabel.Result.Items.Where(static item => item.Kind == 2 && item.Label == "Convert(int32)").ToArray();
         Assert.Equal(2, overloads.Length);
         Assert.Equal(2, overloads.Select(static item => item.Data.Id).Distinct(StringComparer.Ordinal).Count());
         Assert.Contains(overloads, static item => item.TextEdit.NewText == "void C::Convert(int32)");
@@ -236,29 +220,17 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
         Assert.Equal("System.Console]", systemConsole.TextEdit.NewText);
 
         var type = await CompleteAsync(engine, MethodBody("box [System.Console]System.Con|"));
-        var consoleType = Assert.Single(type.Result.Items, static item =>
-            item.Kind == 7 && item.Label == "System.Console");
+        var consoleType = Assert.Single(type.Result.Items, static item => item.Kind == 7 && item.Label == "System.Console");
         Assert.Equal("ImportedAssembly", consoleType.Data.Origin);
         Assert.Equal("System.Console", consoleType.Data.Properties["metadataName"]);
 
-        var generic = await CompleteAsync(
-            engine,
-            MethodBody("box [System.Collections]System.Collections.Generic.Lis|"));
-        Assert.Contains(generic.Result.Items, static item =>
-            item.Kind == 7 &&
-            item.Data.Properties.TryGetValue("metadataName", out var metadataName) &&
-            metadataName == "System.Collections.Generic.List`1");
+        var generic = await CompleteAsync(engine, MethodBody("box [System.Collections]System.Collections.Generic.Lis|"));
+        Assert.Contains(generic.Result.Items, static item => item.Kind == 7 && item.Data.Properties.TryGetValue("metadataName", out var metadataName) && metadataName == "System.Collections.Generic.List`1");
 
-        var methods = await CompleteAsync(
-            engine,
-            MethodBody("call void [System.Console]System.Console::WriteL|"));
-        var writeLineOverloads = methods.Result.Items
-            .Where(static item => item.Kind == 2 && item.Label.StartsWith("WriteLine(", StringComparison.Ordinal))
-            .ToArray();
+        var methods = await CompleteAsync(engine, MethodBody("call void [System.Console]System.Console::WriteL|"));
+        var writeLineOverloads = methods.Result.Items.Where(static item => item.Kind == 2 && item.Label.StartsWith("WriteLine(", StringComparison.Ordinal)).ToArray();
         Assert.True(writeLineOverloads.Length > 3);
-        Assert.Equal(
-            writeLineOverloads.Length,
-            writeLineOverloads.Select(static item => item.Data.Id).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(writeLineOverloads.Length, writeLineOverloads.Select(static item => item.Data.Id).Distinct(StringComparer.Ordinal).Count());
         Assert.All(writeLineOverloads, static item =>
         {
             Assert.Equal("ImportedAssembly", item.Data.Origin);
@@ -266,39 +238,27 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
             Assert.StartsWith("void [System.Console]System.Console::WriteLine(", item.TextEdit.NewText, StringComparison.Ordinal);
         });
 
-        var field = await CompleteAsync(
-            engine,
-            MethodBody("ldsfld int32 [SharpLab.Runtime]SharpLab.Runtime.Internal.Flow::Unk|"));
-        Assert.Contains(field.Result.Items, static item =>
-            item.Kind == 5 && item.Label == "UnknownLineNumber" && item.Data.Origin == "ImportedAssembly");
+        var field = await CompleteAsync(engine, MethodBody("ldsfld int32 [SharpLab.Runtime]SharpLab.Runtime.Internal.Flow::Unk|"));
+        Assert.Contains(field.Result.Items, static item => item.Kind == 5 && item.Label == "UnknownLineNumber" && item.Data.Origin == "ImportedAssembly");
     }
 
     [Fact]
     public async Task ReferenceMethodParameterCompletionOnlyOffersTypesAndPrimitives()
     {
         var engine = await CreateEngineAsync();
-        var completion = await CompleteAsync(
-            engine,
-            MethodBody("call void [System.Console]System.Console::WriteLine(|)"));
+        var completion = await CompleteAsync(engine, MethodBody("call void [System.Console]System.Console::WriteLine(|)"));
 
         Assert.Contains(completion.Result.Items, static item => item.Kind == 14 && item.Label == "string");
-        Assert.All(completion.Result.Items, static item =>
-            Assert.True(item.Kind is 7 or 8 or 14, $"Unexpected completion kind {item.Kind}: {item.Label}"));
+        Assert.All(completion.Result.Items, static item => Assert.True(item.Kind is 7 or 8 or 14, $"Unexpected completion kind {item.Kind}: {item.Label}"));
         Assert.DoesNotContain(completion.Result.Items, static item => item.Kind is 2 or 5);
 
-        var secondParameter = await CompleteAsync(
-            engine,
-            MethodBody("call void [System.Console]System.Console::WriteLine(int32, |)"));
+        var secondParameter = await CompleteAsync(engine, MethodBody("call void [System.Console]System.Console::WriteLine(int32, |)"));
         Assert.Contains(secondParameter.Result.Items, static item => item.Kind == 14 && item.Label == "string");
-        Assert.All(secondParameter.Result.Items, static item =>
-            Assert.True(item.Kind is 7 or 8 or 14, $"Unexpected completion kind {item.Kind}: {item.Label}"));
+        Assert.All(secondParameter.Result.Items, static item => Assert.True(item.Kind is 7 or 8 or 14, $"Unexpected completion kind {item.Kind}: {item.Label}"));
         Assert.DoesNotContain(secondParameter.Result.Items, static item => item.Kind is 2 or 5);
 
-        var assembly = await CompleteAsync(
-            engine,
-            MethodBody("call void [System.Console]System.Console::WriteLine([System.Con|)"));
-        var systemConsole = Assert.Single(assembly.Result.Items, static item =>
-            item.Kind == 9 && item.Label == "System.Console");
+        var assembly = await CompleteAsync(engine, MethodBody("call void [System.Console]System.Console::WriteLine([System.Con|)"));
+        var systemConsole = Assert.Single(assembly.Result.Items, static item => item.Kind == 9 && item.Label == "System.Console");
         Assert.Equal("ImportedAssembly", systemConsole.Data.Origin);
         Assert.Equal("System.Con", TextAt(assembly.Source, systemConsole.TextEdit.Range));
         Assert.Equal("System.Console]", systemConsole.TextEdit.NewText);
@@ -309,16 +269,11 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
     {
         var engine = await CreateEngineAsync();
 
-        var incomplete = await CompleteAsync(
-            engine,
-            MethodBody("call void [System.Console]System.Console:|"));
+        var incomplete = await CompleteAsync(engine, MethodBody("call void [System.Console]System.Console:|"));
         Assert.Empty(incomplete.Result.Items);
 
-        var complete = await CompleteAsync(
-            engine,
-            MethodBody("call void [System.Console]System.Console::|"));
-        Assert.Contains(complete.Result.Items, static item =>
-            item.Kind == 2 && item.Label.StartsWith("WriteLine(", StringComparison.Ordinal));
+        var complete = await CompleteAsync(engine, MethodBody("call void [System.Console]System.Console::|"));
+        Assert.Contains(complete.Result.Items, static item => item.Kind == 2 && item.Label.StartsWith("WriteLine(", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -366,9 +321,7 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
                 call void C::Wri|
             """);
 
-        var recovered = completion.Result.Items
-            .Where(static item => item.Kind == 2 && item.Label.StartsWith("WriteLine(", StringComparison.Ordinal))
-            .ToArray();
+        var recovered = completion.Result.Items.Where(static item => item.Kind == 2 && item.Label.StartsWith("WriteLine(", StringComparison.Ordinal)).ToArray();
         Assert.Equal(2, recovered.Length);
         Assert.All(recovered, item => Assert.Equal("void C::Wri", TextAt(completion.Source, item.TextEdit.Range)));
     }
@@ -396,13 +349,7 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
             """);
         var cancellationToken = TestContext.Current.CancellationToken;
 
-        var diagnostics = await _service.GetDiagnosticsAsync(
-            engine,
-            marked.Snapshot,
-            marked.Document,
-            DocumentUri,
-            selectionRevision: 43,
-            cancellationToken);
+        var diagnostics = await _service.GetDiagnosticsAsync(engine, marked.Snapshot, marked.Document, DocumentUri, selectionRevision: 43, cancellationToken);
         var invalidOpcode = Assert.Single(diagnostics.Diagnostics, static item => item.Code == "ILPAR202");
         Assert.Equal("Parse", invalidOpcode.Source);
         Assert.Equal(7, invalidOpcode.Data.DocumentVersion);
@@ -411,51 +358,28 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
         Assert.Equal("Parse", invalidOpcode.Data.DiagnosticKind);
 
         var hoverPosition = PositionAt(marked.Source, marked.Source.IndexOf("ldarg.0", StringComparison.Ordinal) + 2);
-        var hover = await _service.GetHoverAsync(
-            engine,
-            marked.Snapshot,
-            marked.Document,
-            hoverPosition,
-            cancellationToken);
+        var hover = await _service.GetHoverAsync(engine, marked.Snapshot, marked.Document, hoverPosition, cancellationToken);
         Assert.NotNull(hover);
         Assert.Contains("ldarg.0", hover.Contents.Value, StringComparison.Ordinal);
         Assert.Equal("ldarg.0", TextAt(marked.Source, hover.Range));
 
-        var signature = await _service.GetSignatureHelpAsync(
-            engine,
-            marked.Snapshot,
-            marked.Document,
-            marked.Position,
-            cancellationToken);
-        Assert.Contains(signature.Signatures, static item =>
-            item.Label.Contains("C::Target(int32)", StringComparison.Ordinal));
+        var signature = await _service.GetSignatureHelpAsync(engine, marked.Snapshot, marked.Document, marked.Position, cancellationToken);
+        Assert.Contains(signature.Signatures, static item => item.Label.Contains("C::Target(int32)", StringComparison.Ordinal));
         Assert.Equal(0, signature.ActiveParameter);
 
-        var semanticTokens = await _service.GetSemanticTokensAsync(
-            engine,
-            marked.Snapshot,
-            marked.Document,
-            cancellationToken);
+        var semanticTokens = await _service.GetSemanticTokensAsync(engine, marked.Snapshot, marked.Document, cancellationToken);
         Assert.NotEmpty(semanticTokens.Data);
         Assert.Equal(0, semanticTokens.Data.Count % 5);
         var tokenTypes = semanticTokens.Data.Where(static (_, index) => index % 5 == 3).ToArray();
         Assert.Contains(5, tokenTypes);
         Assert.Contains(10, tokenTypes);
 
-        var symbols = await _service.GetDocumentSymbolsAsync(
-            engine,
-            marked.Snapshot,
-            marked.Document,
-            cancellationToken);
+        var symbols = await _service.GetDocumentSymbolsAsync(engine, marked.Snapshot, marked.Document, cancellationToken);
         var type = Assert.Single(symbols, static item => item.Kind == 5 && item.Name == "C");
         var method = Assert.Single(type.Children, static item => item.Kind == 6 && item.Name == "M");
         Assert.Contains(method.Children, static item => item.Kind == 13 && item.Name == "start");
 
-        var folding = await _service.GetFoldingRangesAsync(
-            engine,
-            marked.Snapshot,
-            marked.Document,
-            cancellationToken);
+        var folding = await _service.GetFoldingRangesAsync(engine, marked.Snapshot, marked.Document, cancellationToken);
         Assert.True(folding.Count >= 3);
         Assert.All(folding, static range => Assert.True(range.StartLine < range.EndLine));
     }
@@ -477,11 +401,7 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
             """);
         var cancellationToken = TestContext.Current.CancellationToken;
 
-        var semanticTokens = await _service.GetSemanticTokensAsync(
-            engine,
-            generic.Snapshot,
-            generic.Document,
-            cancellationToken);
+        var semanticTokens = await _service.GetSemanticTokensAsync(engine, generic.Snapshot, generic.Document, cancellationToken);
         var decodedTokens = DecodeSemanticTokens(generic.Source, semanticTokens);
         var genericParameters = decodedTokens.Where(static token => token.Type == 14).ToArray();
         Assert.NotEmpty(genericParameters);
@@ -491,12 +411,7 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
         Assert.Contains(genericParameters, static token => token.Text == "T" && token.Modifiers == 0);
         Assert.All(genericParameters, static token => Assert.DoesNotContain('!', token.Text));
 
-        var genericHover = await _service.GetHoverAsync(
-            engine,
-            generic.Snapshot,
-            generic.Document,
-            generic.Position,
-            cancellationToken);
+        var genericHover = await _service.GetHoverAsync(engine, generic.Snapshot, generic.Document, generic.Position, cancellationToken);
         Assert.NotNull(genericHover);
         Assert.Equal("markdown", genericHover.Contents.Kind);
         Assert.Equal("T", TextAt(generic.Source, genericHover.Range));
@@ -509,12 +424,7 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
               01 00 03 71 7|7 71 00 00
             )
             """);
-        var attributeHover = await _service.GetHoverAsync(
-            engine,
-            attribute.Snapshot,
-            attribute.Document,
-            attribute.Position,
-            cancellationToken);
+        var attributeHover = await _service.GetHoverAsync(engine, attribute.Snapshot, attribute.Document, attribute.Position, cancellationToken);
         Assert.NotNull(attributeHover);
         Assert.Equal("77", TextAt(attribute.Source, attributeHover.Range));
         Assert.Contains("Fixed arguments:", attributeHover.Contents.Value, StringComparison.Ordinal);
@@ -527,13 +437,7 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
               .hash alg|orithm 0x00008004
             }
             """);
-        var hashTokens = DecodeSemanticTokens(
-            assemblyHash.Source,
-            await _service.GetSemanticTokensAsync(
-                engine,
-                assemblyHash.Snapshot,
-                assemblyHash.Document,
-                cancellationToken));
+        var hashTokens = DecodeSemanticTokens(assemblyHash.Source, await _service.GetSemanticTokensAsync(engine, assemblyHash.Snapshot, assemblyHash.Document, cancellationToken));
         Assert.Contains(hashTokens, static token => token.Type == 5 && token.Text == "algorithm");
         Assert.Contains(hashTokens, static token => token.Type == 6 && token.Text == "0x00008004");
     }
@@ -557,38 +461,19 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
             [new TestSource("Helper.il", ".class public Helper { }")]);
         var cancellationToken = TestContext.Current.CancellationToken;
 
-        var definition = await _service.GetDefinitionAsync(
-            engine,
-            navigation.Snapshot,
-            navigation.Document,
-            navigation.Position,
-            cancellationToken);
+        var definition = await _service.GetDefinitionAsync(engine, navigation.Snapshot, navigation.Document, navigation.Position, cancellationToken);
         Assert.NotNull(definition);
         Assert.Equal(DocumentUri, definition.Uri);
         Assert.Equal("Target", TextAt(navigation.Source, definition.Range));
 
-        var metadata = CreateMarkedWorkspace(MethodBody(
-            "call void [System.Console]System.Console::Write|Line(string)"));
-        var metadataResolution = engine.ResolveSymbolAt(
-            metadata.Snapshot,
-            metadata.Document,
-            new SourcePosition(metadata.Position.Line, metadata.Position.Character));
+        var metadata = CreateMarkedWorkspace(MethodBody("call void [System.Console]System.Console::Write|Line(string)"));
+        var metadataResolution = engine.ResolveSymbolAt(metadata.Snapshot, metadata.Document, new SourcePosition(metadata.Position.Line, metadata.Position.Character));
         Assert.NotNull(metadataResolution);
         Assert.NotNull(metadataResolution.MetadataTarget);
         Assert.Null(metadataResolution.Location);
-        Assert.Null(await _service.GetDefinitionAsync(
-            engine,
-            metadata.Snapshot,
-            metadata.Document,
-            metadata.Position,
-            cancellationToken));
+        Assert.Null(await _service.GetDefinitionAsync(engine, metadata.Snapshot, metadata.Document, metadata.Position, cancellationToken));
 
-        var workspaceSymbols = await _service.GetWorkspaceSymbolsAsync(
-            engine,
-            navigation.Snapshot,
-            new IlLspWorkspaceSymbolParams("Helper"),
-            maximumResults: 20,
-            cancellationToken);
+        var workspaceSymbols = await _service.GetWorkspaceSymbolsAsync(engine, navigation.Snapshot, new IlLspWorkspaceSymbolParams("Helper"), maximumResults: 20, cancellationToken);
         var helper = Assert.Single(workspaceSymbols, static symbol => symbol.Name == "Helper");
         Assert.Equal(5, helper.Kind);
         Assert.Equal("sharplabnext:///Helper.il", helper.Location.Uri);
@@ -607,23 +492,8 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
               }
             }
             """);
-        var diagnostics = await _service.GetDiagnosticsAsync(
-            engine,
-            actionWorkspace.Snapshot,
-            actionWorkspace.Document,
-            DocumentUri,
-            selectionRevision: 42,
-            cancellationToken);
-        var actions = await _service.GetCodeActionsAsync(
-            engine,
-            actionWorkspace.Snapshot,
-            actionWorkspace.Document,
-            new IlLspCodeActionParams(
-                new IlLspTextDocumentIdentifier(DocumentUri),
-                new IlLspRange(new IlLspPosition(0, 0), PositionAt(actionWorkspace.Source, actionWorkspace.Source.Length)),
-                new IlLspCodeActionContext(diagnostics.Diagnostics, Only: null)),
-            maximumResults: 20,
-            cancellationToken);
+        var diagnostics = await _service.GetDiagnosticsAsync(engine, actionWorkspace.Snapshot, actionWorkspace.Document, DocumentUri, selectionRevision: 42, cancellationToken);
+        var actions = await _service.GetCodeActionsAsync(engine, actionWorkspace.Snapshot, actionWorkspace.Document, new IlLspCodeActionParams(new IlLspTextDocumentIdentifier(DocumentUri), new IlLspRange(new IlLspPosition(0, 0), PositionAt(actionWorkspace.Source, actionWorkspace.Source.Length)), new IlLspCodeActionContext(diagnostics.Diagnostics, Only: null)), maximumResults: 20, cancellationToken);
         var quickFix = Assert.Single(actions, static action => action.Data.Diagnostic == "ILBIND201");
         Assert.Equal("quickfix", quickFix.Kind);
         Assert.Contains(quickFix.Diagnostics!, static diagnostic => diagnostic.Code == "ILBIND201");
@@ -633,31 +503,12 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
         var rewrite = Assert.Single(actions, static action => action.Kind == "refactor.rewrite");
         Assert.Equal("br", Assert.Single(rewrite.Edit.Changes[DocumentUri]).NewText);
 
-        await Assert.ThrowsAsync<IlLspInvalidParamsException>(() => _service.GetCodeActionsAsync(
-            engine,
-            actionWorkspace.Snapshot,
-            actionWorkspace.Document,
-            new IlLspCodeActionParams(
-                new IlLspTextDocumentIdentifier(DocumentUri),
-                new IlLspRange(new IlLspPosition(3, 1), new IlLspPosition(2, 1)),
-                new IlLspCodeActionContext([], Only: null)),
-            maximumResults: 20,
-            cancellationToken));
-        await Assert.ThrowsAsync<IlLspLimitExceededException>(() => _service.GetWorkspaceSymbolsAsync(
-            engine,
-            navigation.Snapshot,
-            new IlLspWorkspaceSymbolParams(string.Empty),
-            maximumResults: 0,
-            cancellationToken));
+        await Assert.ThrowsAsync<IlLspInvalidParamsException>(() => _service.GetCodeActionsAsync(engine, actionWorkspace.Snapshot, actionWorkspace.Document, new IlLspCodeActionParams(new IlLspTextDocumentIdentifier(DocumentUri), new IlLspRange(new IlLspPosition(3, 1), new IlLspPosition(2, 1)), new IlLspCodeActionContext([], Only: null)), maximumResults: 20, cancellationToken));
+        await Assert.ThrowsAsync<IlLspLimitExceededException>(() => _service.GetWorkspaceSymbolsAsync(engine, navigation.Snapshot, new IlLspWorkspaceSymbolParams(string.Empty), maximumResults: 0, cancellationToken));
 
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _service.GetWorkspaceSymbolsAsync(
-            engine,
-            navigation.Snapshot,
-            new IlLspWorkspaceSymbolParams(string.Empty),
-            maximumResults: 20,
-            cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _service.GetWorkspaceSymbolsAsync(engine, navigation.Snapshot, new IlLspWorkspaceSymbolParams(string.Empty), maximumResults: 20, cancellation.Token));
     }
 
     [Fact]
@@ -672,15 +523,7 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
         var marked = CreateMarkedWorkspace(MethodBody("l|"));
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _service.CompleteAsync(
-            engine,
-            marked.Snapshot,
-            marked.Document,
-            new IlLspCompletionParams(
-                new IlLspTextDocumentIdentifier(DocumentUri),
-                marked.Position,
-                new IlLspCompletionContext(1, null)),
-            cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _service.CompleteAsync(engine, marked.Snapshot, marked.Document, new IlLspCompletionParams(new IlLspTextDocumentIdentifier(DocumentUri), marked.Position, new IlLspCompletionContext(1, null)), cancellation.Token));
     }
 
     private async Task<IILLanguageEngine> CreateEngineAsync(int maximumItems = 300)
@@ -692,27 +535,14 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
             IlLspLimits.Default with { MaxCompletionItems = maximumItems });
     }
 
-    private async Task<CompletionFixture> CompleteAsync(
-        IILLanguageEngine engine,
-        string markedSource,
-        IReadOnlyList<TestSource>? additionalSources = null)
+    private async Task<CompletionFixture> CompleteAsync(IILLanguageEngine engine, string markedSource, IReadOnlyList<TestSource>? additionalSources = null)
     {
         var marked = CreateMarkedWorkspace(markedSource, additionalSources);
-        var result = await _service.CompleteAsync(
-            engine,
-            marked.Snapshot,
-            marked.Document,
-            new IlLspCompletionParams(
-                new IlLspTextDocumentIdentifier(DocumentUri),
-                marked.Position,
-                new IlLspCompletionContext(1, null)),
-            TestContext.Current.CancellationToken);
+        var result = await _service.CompleteAsync(engine, marked.Snapshot, marked.Document, new IlLspCompletionParams(new IlLspTextDocumentIdentifier(DocumentUri), marked.Position, new IlLspCompletionContext(1, null)), TestContext.Current.CancellationToken);
         return new CompletionFixture(marked.Source, result);
     }
 
-    private static MarkedWorkspace CreateMarkedWorkspace(
-        string markedSource,
-        IReadOnlyList<TestSource>? additionalSources = null)
+    private static MarkedWorkspace CreateMarkedWorkspace(string markedSource, IReadOnlyList<TestSource>? additionalSources = null)
     {
         var marker = markedSource.IndexOf('|');
         Assert.True(marker >= 0, "Completion source must contain a cursor marker.");
@@ -721,22 +551,10 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
         var active = DocumentSnapshot.Create("Program.il", 7, source);
         var documents = new List<DocumentSnapshot> { active };
         if (additionalSources is not null)
-        {
-            documents.AddRange(additionalSources.Select(static item =>
-                DocumentSnapshot.Create(item.Path, 3, item.Text)));
-        }
+            documents.AddRange(additionalSources.Select(static item => DocumentSnapshot.Create(item.Path, 3, item.Text)));
         var immutableDocuments = documents.ToImmutableArray();
         var sourceOrder = immutableDocuments.Select(static document => document.Id).ToImmutableArray();
-        var snapshot = new WorkspaceSnapshot(
-            CoreSchemaVersion.Current,
-            revision: 41,
-            selectionRevision: 42,
-            languageId: "il",
-            referenceSetId: "net10-ref",
-            activeFile: active.Id,
-            sourceOrder,
-            files: immutableDocuments,
-            BuildOptions.Default);
+        var snapshot = new WorkspaceSnapshot(CoreSchemaVersion.Current, revision: 41, selectionRevision: 42, languageId: "il", referenceSetId: "net10-ref", activeFile: active.Id, sourceOrder, files: immutableDocuments, BuildOptions.Default);
         return new MarkedWorkspace(source, snapshot, active.Id, PositionAt(source, marker));
     }
 
@@ -748,12 +566,9 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
         return new IlLspPosition(line, lastNewLine < 0 ? before.Length : before.Length - lastNewLine - 1);
     }
 
-    private static string TextAt(string text, IlLspRange range) =>
-        text[OffsetAt(text, range.Start)..OffsetAt(text, range.End)];
+    private static string TextAt(string text, IlLspRange range) => text[OffsetAt(text, range.Start)..OffsetAt(text, range.End)];
 
-    private static List<DecodedSemanticToken> DecodeSemanticTokens(
-        string source,
-        IlLspSemanticTokens semanticTokens)
+    private static List<DecodedSemanticToken> DecodeSemanticTokens(string source, IlLspSemanticTokens semanticTokens)
     {
         var result = new List<DecodedSemanticToken>();
         var line = 0;
@@ -763,16 +578,10 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
             var deltaLine = semanticTokens.Data[index];
             line += deltaLine;
             character = deltaLine == 0
-                ? character + semanticTokens.Data[index + 1]
-                : semanticTokens.Data[index + 1];
+                ? character + semanticTokens.Data[index + 1] : semanticTokens.Data[index + 1];
             var length = semanticTokens.Data[index + 2];
-            var range = new IlLspRange(
-                new IlLspPosition(line, character),
-                new IlLspPosition(line, character + length));
-            result.Add(new DecodedSemanticToken(
-                TextAt(source, range),
-                semanticTokens.Data[index + 3],
-                semanticTokens.Data[index + 4]));
+            var range = new IlLspRange(new IlLspPosition(line, character), new IlLspPosition(line, character + length));
+            result.Add(new DecodedSemanticToken(TextAt(source, range), semanticTokens.Data[index + 3], semanticTokens.Data[index + 4]));
         }
         return result;
     }
@@ -815,11 +624,7 @@ public sealed class IlLanguageServiceTests : IClassFixture<IlLanguageServiceFixt
     private sealed record TestSource(string Path, string Text);
     private sealed record CompletionFixture(string Source, IlLspCompletionList Result);
     private sealed record DecodedSemanticToken(string Text, int Type, int Modifiers);
-    private sealed record MarkedWorkspace(
-        string Source,
-        WorkspaceSnapshot Snapshot,
-        DocumentId Document,
-        IlLspPosition Position);
+    private sealed record MarkedWorkspace(string Source, WorkspaceSnapshot Snapshot, DocumentId Document, IlLspPosition Position);
 }
 
 public sealed class IlLanguageServiceFixture : IDisposable

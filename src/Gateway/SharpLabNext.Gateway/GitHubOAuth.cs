@@ -9,23 +9,14 @@ using SharpLabNext.Contracts;
 
 namespace SharpLabNext.Gateway;
 
-public sealed record GitHubOAuthOptions(
-    string? ClientId,
-    string? ClientSecret,
-    Uri AuthorizationEndpoint,
-    Uri TokenEndpoint,
-    Uri? CallbackUri,
-    TimeSpan PendingStateLifetime,
-    TimeSpan SessionLifetime)
+public sealed record GitHubOAuthOptions(string? ClientId, string? ClientSecret, Uri AuthorizationEndpoint, Uri TokenEndpoint, Uri? CallbackUri, TimeSpan PendingStateLifetime, TimeSpan SessionLifetime)
 {
     public bool Available =>
         !string.IsNullOrWhiteSpace(ClientId) &&
         !string.IsNullOrWhiteSpace(ClientSecret) &&
         CallbackUri is not null;
 
-    public static GitHubOAuthOptions FromConfiguration(
-        IConfiguration configuration,
-        IHostEnvironment environment)
+    public static GitHubOAuthOptions FromConfiguration(IConfiguration configuration, IHostEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(environment);
@@ -39,13 +30,11 @@ public sealed record GitHubOAuthOptions(
         var secretFile = NullIfWhiteSpace(section["ClientSecretFile"]);
         if (secret is not null && secretFile is not null)
         {
-            throw new InvalidOperationException(
-                "GitHub:OAuth:ClientSecret and GitHub:OAuth:ClientSecretFile cannot both be configured.");
+            throw new InvalidOperationException("GitHub:OAuth:ClientSecret and GitHub:OAuth:ClientSecretFile cannot both be configured.");
         }
         if (environment.IsProduction() && secret is not null)
         {
-            throw new InvalidOperationException(
-                "GitHub:OAuth:ClientSecret is not allowed in Production; use ClientSecretFile.");
+            throw new InvalidOperationException("GitHub:OAuth:ClientSecret is not allowed in Production; use ClientSecretFile.");
         }
         if (secretFile is not null)
         {
@@ -61,13 +50,11 @@ public sealed record GitHubOAuthOptions(
         var complete = clientId is not null && callbackUri is not null && secret is not null;
         if ((anyCredential || explicitlyEnabled == true) && !complete)
         {
-            throw new InvalidOperationException(
-                "GitHub OAuth requires ClientId, CallbackUri, and ClientSecretFile/ClientSecret together.");
+            throw new InvalidOperationException("GitHub OAuth requires ClientId, CallbackUri, and ClientSecretFile/ClientSecret together.");
         }
         if (explicitlyEnabled == false && anyCredential)
         {
-            throw new InvalidOperationException(
-                "GitHub OAuth credentials cannot be configured while GitHub:OAuth:Enabled is false.");
+            throw new InvalidOperationException("GitHub OAuth credentials cannot be configured while GitHub:OAuth:Enabled is false.");
         }
         if (complete)
             ValidateCallbackUri(callbackUri!, environment);
@@ -103,15 +90,13 @@ public sealed record GitHubOAuthOptions(
             throw new InvalidOperationException("GitHub:OAuth:CallbackUri must use HTTPS in Production.");
         if (callbackUri.Scheme == Uri.UriSchemeHttp && !callbackUri.IsLoopback)
         {
-            throw new InvalidOperationException(
-                "GitHub:OAuth:CallbackUri may use HTTP only for localhost development or tests.");
+            throw new InvalidOperationException("GitHub:OAuth:CallbackUri may use HTTP only for localhost development or tests.");
         }
     }
 
     private static Uri AbsoluteUri(string? value, string fallback)
     {
-        if (!Uri.TryCreate(NullIfWhiteSpace(value) ?? fallback, UriKind.Absolute, out var uri)
-            || uri.Scheme is not ("http" or "https"))
+        if (!Uri.TryCreate(NullIfWhiteSpace(value) ?? fallback, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
         {
             throw new InvalidOperationException("GitHub OAuth endpoints must be absolute HTTP(S) URIs.");
         }
@@ -139,24 +124,18 @@ public sealed record GitHubOAuthOptions(
 
 internal static class GitHubExternalEndpoint
 {
-    public static Uri Parse(
-        string? value,
-        string configurationKey,
-        IHostEnvironment environment)
+    public static Uri Parse(string? value, string configurationKey, IHostEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(environment);
-        if (!Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri)
-            || uri.Scheme is not ("http" or "https"))
+        if (!Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
         {
-            throw new InvalidOperationException(
-                $"{configurationKey} must be an absolute HTTP(S) URI.");
+            throw new InvalidOperationException($"{configurationKey} must be an absolute HTTP(S) URI.");
         }
         if (environment.IsProduction() && uri.Scheme != Uri.UriSchemeHttps)
             throw new InvalidOperationException($"{configurationKey} must use HTTPS in Production.");
         if (uri.Scheme == Uri.UriSchemeHttp && !uri.IsLoopback)
         {
-            throw new InvalidOperationException(
-                $"{configurationKey} may use HTTP only for loopback development or tests.");
+            throw new InvalidOperationException($"{configurationKey} may use HTTP only for loopback development or tests.");
         }
         return uri;
     }
@@ -164,12 +143,7 @@ internal static class GitHubExternalEndpoint
 
 public sealed record GitHubOAuthPendingState(string State, string ReturnPath, DateTimeOffset ExpiresAtUtc);
 
-public sealed record GitHubOAuthSession(
-    string SessionId,
-    string AccessToken,
-    string Login,
-    string CsrfToken,
-    DateTimeOffset ExpiresAtUtc);
+public sealed record GitHubOAuthSession(string SessionId, string AccessToken, string Login, string CsrfToken, DateTimeOffset ExpiresAtUtc);
 
 public sealed class GitHubOAuthSessionStore(GitHubOAuthOptions options)
 {
@@ -207,12 +181,7 @@ public sealed class GitHubOAuthSessionStore(GitHubOAuthOptions options)
         Cleanup(now);
         if (_sessions.Count >= MaximumSessions)
             throw new GitHubOAuthException("Too many GitHub OAuth sessions are active.");
-        var session = new GitHubOAuthSession(
-            RandomToken(),
-            accessToken,
-            login,
-            RandomToken(),
-            now + options.SessionLifetime);
+        var session = new GitHubOAuthSession(RandomToken(), accessToken, login, RandomToken(), now + options.SessionLifetime);
         _sessions[session.SessionId] = session;
         return session;
     }
@@ -268,10 +237,7 @@ public sealed class GitHubOAuthSessionStore(GitHubOAuthOptions options)
     }
 
     private static string RandomToken() =>
-        Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
-            .TrimEnd('=')
-            .Replace('+', '-')
-            .Replace('/', '_');
+        Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     private static bool FixedTimeEquals(string left, string right)
     {
@@ -297,15 +263,11 @@ public sealed class GitHubOAuthClient(HttpClient httpClient, GitHubOAuthOptions 
         };
         return new UriBuilder(options.AuthorizationEndpoint)
         {
-            Query = string.Join('&', query.Select(pair =>
-                $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value ?? string.Empty)}"))
+            Query = string.Join('&', query.Select(pair => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value ?? string.Empty)}"))
         }.Uri;
     }
 
-    public async Task<string> ExchangeCodeAsync(
-        string code,
-        Uri redirectUri,
-        CancellationToken cancellationToken)
+    public async Task<string> ExchangeCodeAsync(string code, Uri redirectUri, CancellationToken cancellationToken)
     {
         if (!options.Available)
             throw new GitHubOAuthException("GitHub OAuth is not configured.");
@@ -321,8 +283,7 @@ public sealed class GitHubOAuthClient(HttpClient httpClient, GitHubOAuthOptions 
         };
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        var body = await response.Content.ReadFromJsonAsync<OAuthTokenResponse>(cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+        var body = await response.Content.ReadFromJsonAsync<OAuthTokenResponse>(cancellationToken: cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode || body is null || string.IsNullOrWhiteSpace(body.AccessToken))
             throw new GitHubOAuthException("GitHub rejected the OAuth authorization code.");
         return body.AccessToken;

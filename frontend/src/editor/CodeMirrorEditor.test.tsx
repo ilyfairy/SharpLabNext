@@ -1,22 +1,11 @@
-import {
-  autocompletion,
-  CompletionContext,
-  completionStatus,
-  pickedCompletion,
-} from '@codemirror/autocomplete'
+import { autocompletion, CompletionContext, completionStatus, pickedCompletion } from '@codemirror/autocomplete'
 import { indentUnit, syntaxHighlighting } from '@codemirror/language'
 import { EditorState, Text, type Transaction } from '@codemirror/state'
 import { EditorView, keymap, runScopeHandlers } from '@codemirror/view'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { OpenLanguageSessionRequest, ResolveSelectionResponse } from '../api/types'
-import {
-  CodeMirrorLanguageBridge,
-  type CodeMirrorLspCodeAction,
-  type CodeMirrorLspCompletionItem,
-  type CodeMirrorLspDiagnostic,
-  type CodeMirrorSemanticToken,
-} from '../lsp/codeMirrorLanguageClient'
+import { CodeMirrorLanguageBridge, type CodeMirrorLspCodeAction, type CodeMirrorLspCompletionItem, type CodeMirrorLspDiagnostic, type CodeMirrorSemanticToken } from '../lsp/codeMirrorLanguageClient'
 import { createSourceAssociation } from '../results/sourceAssociationModel'
 import {
   appendCodeMirrorHoverSections,
@@ -82,9 +71,7 @@ describe('CodeMirror editor LSP projections', () => {
     props.languageSession = initialSession
     const view = render(<CodeMirrorEditor {...props} />)
 
-    await waitFor(() =>
-      expect(languageSessionMocks.sessionUpdates.some((update) => update?.plan)).toBe(true),
-    )
+    await waitFor(() => expect(languageSessionMocks.sessionUpdates.some((update) => update?.plan)).toBe(true))
     const initialUpdate = languageSessionMocks.sessionUpdates.findLast((update) => update?.plan)
     if (!initialUpdate?.plan) throw new Error('CodeMirror language session plan was not captured.')
     expect(initialUpdate.plan.createRequest().workspace.buildOptions.outputKind).toBe(outputKind)
@@ -93,15 +80,15 @@ describe('CodeMirror editor LSP projections', () => {
     view.rerender(
       <CodeMirrorEditor
         {...props}
-        files={props.files.map((file) =>
-          file.path === 'Program.cs' ? { ...file, text: 'class Utility { int Value; }' } : file,
-        )}
-        languageSession={{ ...initialSession, resolution: null, workspaceRevision: 2 }}
+        files={props.files.map((file) => (file.path === 'Program.cs' ? { ...file, text: 'class Utility { int Value; }' } : file))}
+        languageSession={{
+          ...initialSession,
+          resolution: null,
+          workspaceRevision: 2,
+        }}
       />,
     )
-    await waitFor(() =>
-      expect(languageSessionMocks.sessionUpdates.length).toBeGreaterThan(updateCount),
-    )
+    await waitFor(() => expect(languageSessionMocks.sessionUpdates.length).toBeGreaterThan(updateCount))
     const unresolvedUpdate = languageSessionMocks.sessionUpdates.at(-1)
     expect(unresolvedUpdate?.key).toBe(initialUpdate.key)
     expect(unresolvedUpdate?.plan).toBeNull()
@@ -110,9 +97,7 @@ describe('CodeMirror editor LSP projections', () => {
     view.rerender(
       <CodeMirrorEditor
         {...props}
-        files={props.files.map((file) =>
-          file.path === 'Program.cs' ? { ...file, text: 'class Utility { int Value; }' } : file,
-        )}
+        files={props.files.map((file) => (file.path === 'Program.cs' ? { ...file, text: 'class Utility { int Value; }' } : file))}
         languageSession={{
           ...initialSession,
           resolution: null,
@@ -121,14 +106,10 @@ describe('CodeMirror editor LSP projections', () => {
         }}
       />,
     )
-    await waitFor(() =>
-      expect(languageSessionMocks.sessionUpdates.length).toBeGreaterThan(unresolvedCount),
-    )
+    await waitFor(() => expect(languageSessionMocks.sessionUpdates.length).toBeGreaterThan(unresolvedCount))
     const revisedUpdate = languageSessionMocks.sessionUpdates.at(-1)
     expect(revisedUpdate?.key).not.toBe(initialUpdate.key)
-    expect(JSON.parse(revisedUpdate?.key ?? '{}')).toEqual(
-      expect.objectContaining({ outputKind: 'console', selectionRevision: 2 }),
-    )
+    expect(JSON.parse(revisedUpdate?.key ?? '{}')).toEqual(expect.objectContaining({ outputKind: 'console', selectionRevision: 2 }))
     view.unmount()
   })
 
@@ -139,9 +120,7 @@ describe('CodeMirror editor LSP projections', () => {
     props.languageSession = resolvedLanguageSession('render', 'il')
     const view = render(<CodeMirrorEditor {...props} />)
 
-    await waitFor(() =>
-      expect(languageSessionMocks.sessionUpdates.some((update) => update?.plan)).toBe(true),
-    )
+    await waitFor(() => expect(languageSessionMocks.sessionUpdates.some((update) => update?.plan)).toBe(true))
     const update = languageSessionMocks.sessionUpdates.findLast((candidate) => candidate?.plan)
     if (!update?.plan) throw new Error('CodeMirror IL language session plan was not captured.')
     expect(update.plan.createRequest().workspace.buildOptions.outputKind).toBe('library')
@@ -156,9 +135,7 @@ describe('CodeMirror editor LSP projections', () => {
 
   it('uses ILSense completion triggers except ordinary spaces only for IL', () => {
     const triggers = ['.', '[', ']', ':', "'", '(', ',', '<', '!']
-    expect(triggers.map((trigger) => codeMirrorCompletionTriggerCharacter('il', trigger))).toEqual(
-      triggers,
-    )
+    expect(triggers.map((trigger) => codeMirrorCompletionTriggerCharacter('il', trigger))).toEqual(triggers)
     expect(codeMirrorCompletionTriggerCharacter('il', ' ')).toBeUndefined()
     expect(codeMirrorCompletionTriggerCharacter('il', ';')).toBeUndefined()
 
@@ -185,19 +162,13 @@ describe('CodeMirror editor LSP projections', () => {
 
     await source(new CompletionContext(state, state.doc.length, true))
     expect(completion).toHaveBeenCalledOnce()
-    expect(completion).toHaveBeenCalledWith(
-      'Program.il',
-      expect.objectContaining({ triggerKind: 1 }),
-    )
+    expect(completion).toHaveBeenCalledWith('Program.il', expect.objectContaining({ triggerKind: 1 }))
     expect(completion.mock.calls[0]?.[1]).not.toHaveProperty('triggerCharacter')
   })
 
   it('reads the current language when a mounted CodeMirror source changes language', async () => {
     const bridge = new CodeMirrorLanguageBridge()
-    const completion = vi
-      .spyOn(bridge, 'completion')
-      .mockResolvedValueOnce({ isIncomplete: true, items: [] })
-      .mockResolvedValue({ isIncomplete: false, items: [] })
+    const completion = vi.spyOn(bridge, 'completion').mockResolvedValueOnce({ isIncomplete: true, items: [] }).mockResolvedValue({ isIncomplete: false, items: [] })
     let languageId = 'csharp'
     const source = completionSource(
       'Program.il',
@@ -211,16 +182,8 @@ describe('CodeMirror editor LSP projections', () => {
     await source(new CompletionContext(EditorState.create({ doc: 'x' }), 1, false))
     await source(new CompletionContext(EditorState.create({ doc: '[' }), 1, false))
 
-    expect(completion).toHaveBeenNthCalledWith(
-      2,
-      'Program.il',
-      expect.objectContaining({ triggerKind: 1 }),
-    )
-    expect(completion).toHaveBeenNthCalledWith(
-      3,
-      'Program.il',
-      expect.objectContaining({ triggerKind: 2, triggerCharacter: '[' }),
-    )
+    expect(completion).toHaveBeenNthCalledWith(2, 'Program.il', expect.objectContaining({ triggerKind: 1 }))
+    expect(completion).toHaveBeenNthCalledWith(3, 'Program.il', expect.objectContaining({ triggerKind: 2, triggerCharacter: '[' }))
   })
 
   it('uses the LSP incomplete-list trigger for CodeMirror follow-up queries', () => {
@@ -339,11 +302,7 @@ describe('CodeMirror editor LSP projections', () => {
       parent,
       state: EditorState.create({
         doc: 'class SemanticWidget {}',
-        extensions: [
-          syntaxHighlighting(visualStudioLightHighlightStyle),
-          codeMirrorLanguageExtension('csharp'),
-          semanticDecorationExtension,
-        ],
+        extensions: [syntaxHighlighting(visualStudioLightHighlightStyle), codeMirrorLanguageExtension('csharp'), semanticDecorationExtension],
       }),
     })
 
@@ -374,8 +333,7 @@ describe('CodeMirror editor LSP projections', () => {
       codeMirrorHoverSections({
         contents: {
           kind: 'markdown',
-          value:
-            '```csharp\r\nvoid System.Console.WriteLine() (+ 19 overloads)\r\n```\r\n\r\nWrites **text** with [`Console`](https://learn.microsoft.com/dotnet/api/system.console).',
+          value: '```csharp\r\nvoid System.Console.WriteLine() (+ 19 overloads)\r\n```\r\n\r\nWrites **text** with [`Console`](https://learn.microsoft.com/dotnet/api/system.console).',
         },
       }),
     ).toEqual([
@@ -405,9 +363,7 @@ describe('CodeMirror editor LSP projections', () => {
 
     const assembly = hover.querySelector<HTMLElement>('.cm-lsp-hover-assembly')
     expect(assembly?.textContent).toBe('System.Console')
-    expect(assembly?.parentElement?.textContent).toBe(
-      '[System.Console, Version=11.0.0.0, Culture=neutral]',
-    )
+    expect(assembly?.parentElement?.textContent).toBe('[System.Console, Version=11.0.0.0, Culture=neutral]')
     expect(assembly?.nextSibling?.textContent).toBe(', Version=11.0.0.0, Culture=neutral]')
     expect(hover.querySelectorAll('.cm-lsp-hover-assembly')).toHaveLength(1)
     expect(hover.querySelectorAll('.cm-lsp-hover-code')[1]?.textContent).toBe('int32[0...]')
@@ -441,13 +397,14 @@ describe('CodeMirror editor LSP projections', () => {
 
   it('converts folding ranges and rejects stale or overlapping text edits', () => {
     const document = Text.of(['class C {', '  void Run() {', '  }', '}'])
-    expect(codeMirrorFoldingRanges(document, [{ startLine: 0, endLine: 3 }])).toEqual([
-      { from: 9, to: 30 },
-    ])
+    expect(codeMirrorFoldingRanges(document, [{ startLine: 0, endLine: 3 }])).toEqual([{ from: 9, to: 30 }])
     expect(
       codeMirrorTextChanges(document, [
         {
-          range: { start: { line: 1, character: 2 }, end: { line: 1, character: 6 } },
+          range: {
+            start: { line: 1, character: 2 },
+            end: { line: 1, character: 6 },
+          },
           newText: 'int',
         },
       ]),
@@ -455,11 +412,17 @@ describe('CodeMirror editor LSP projections', () => {
     expect(
       codeMirrorTextChanges(document, [
         {
-          range: { start: { line: 1, character: 2 }, end: { line: 1, character: 7 } },
+          range: {
+            start: { line: 1, character: 2 },
+            end: { line: 1, character: 7 },
+          },
           newText: 'one',
         },
         {
-          range: { start: { line: 1, character: 5 }, end: { line: 1, character: 8 } },
+          range: {
+            start: { line: 1, character: 5 },
+            end: { line: 1, character: 8 },
+          },
           newText: 'two',
         },
       ]),
@@ -479,7 +442,10 @@ describe('CodeMirror editor LSP projections', () => {
       Text.of(['value']),
       [
         {
-          range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } },
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 5 },
+          },
           message: 'Missing semicolon.',
           actions: [action],
         },
@@ -525,7 +491,12 @@ describe('CodeMirror editor LSP projections', () => {
 
   it('keeps long source lines unwrapped for editor-local horizontal scrolling', () => {
     const props = editorProps('Program.cs', vi.fn())
-    props.files = [{ path: 'Program.cs', text: `class C { string Value = "${'x'.repeat(240)}"; }` }]
+    props.files = [
+      {
+        path: 'Program.cs',
+        text: `class C { string Value = "${'x'.repeat(240)}"; }`,
+      },
+    ]
     const { container } = render(<CodeMirrorEditor {...props} />)
 
     expect(container.querySelector('.cm-editor')).not.toHaveClass('cm-lineWrapping')
@@ -569,24 +540,14 @@ describe('CodeMirror editor LSP projections', () => {
     if (!line) throw new Error('The source association line decoration was not rendered.')
     expect(line.textContent).toBe('a + b')
     expect(container.querySelector('.cm-source-association')).not.toBeInTheDocument()
-    expect(
-      Array.from(container.querySelectorAll<HTMLElement>('.cm-source-association-range'))
-        .map((candidate) => candidate.textContent)
-        .join(''),
-    ).toBe('a + b')
+      expect(Array.from(container.querySelectorAll<HTMLElement>('.cm-source-association-range')).map((candidate) => candidate.textContent).join('')).toBe('a + b')
 
     fireEvent.mouseUp(line, { button: 0, detail: 1 })
     await waitFor(() => expect(onActivate).toHaveBeenCalledWith(association.key))
 
     rerender(<CodeMirrorEditor {...props} activeSourceAssociationKey={association.key} />)
-    await waitFor(() =>
-      expect(container.querySelector('.cm-source-association-line')).toHaveClass(
-        'cm-source-association-line-active',
-      ),
-    )
-    const exactActive = container.querySelector<HTMLElement>(
-      '.cm-source-association-range.cm-source-association-exact-active',
-    )
+    await waitFor(() => expect(container.querySelector('.cm-source-association-line')).toHaveClass('cm-source-association-line-active'))
+    const exactActive = container.querySelector<HTMLElement>('.cm-source-association-range.cm-source-association-exact-active')
     expect(exactActive).not.toBeNull()
     expect(exactActive).toHaveClass('source-association-0')
     expect(exactActive?.textContent).toBe('a + b')
@@ -653,9 +614,15 @@ describe('CodeMirror editor LSP projections', () => {
     if (!editor) throw new Error('CodeMirror editor was not rendered.')
     const editorView = EditorView.findFromDOM(editor)
     if (!editorView) throw new Error('CodeMirror view was not available.')
-    editorView.dispatch({ selection: { anchor: 0, head: 5 }, userEvent: 'select.pointer' })
+    editorView.dispatch({
+      selection: { anchor: 0, head: 5 },
+      userEvent: 'select.pointer',
+    })
     await waitFor(() => expect(onPreview).toHaveBeenCalledWith(wholeExpression.key))
-    editorView.dispatch({ selection: { anchor: 0, head: 5 }, userEvent: 'select.pointer' })
+    editorView.dispatch({
+      selection: { anchor: 0, head: 5 },
+      userEvent: 'select.pointer',
+    })
     expect(onPreview).toHaveBeenCalledOnce()
     fireEvent.mouseUp(line, { button: 0, detail: 1 })
     await waitFor(() => expect(onActivate).toHaveBeenCalledWith(wholeExpression.key))
@@ -671,7 +638,12 @@ describe('CodeMirror editor LSP projections', () => {
 
     const posAtCoords = vi.spyOn(editorView, 'posAtCoords').mockReturnValue(2)
     editorView.dispatch({ selection: { anchor: 0, head: 5 } })
-    fireEvent.mouseDown(line, { button: 0, detail: 1, clientX: 20, clientY: 20 })
+    fireEvent.mouseDown(line, {
+      button: 0,
+      detail: 1,
+      clientX: 20,
+      clientY: 20,
+    })
     editorView.dispatch({ selection: { anchor: 0, head: 5 } })
     fireEvent.mouseUp(line, { button: 0, detail: 1, clientX: 20, clientY: 20 })
     editorView.dispatch({ selection: { anchor: 0, head: 5 } })
@@ -904,13 +876,7 @@ describe('CodeMirror editor LSP projections', () => {
     expect(view.state.selection.main.to).toBe(classNameStart + 'MyClass'.length)
 
     view.dispatch(view.state.replaceSelection('Widget'))
-    expect(
-      runScopeHandlers(
-        view,
-        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
-        'editor',
-      ),
-    ).toBe(true)
+    expect(runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }), 'editor')).toBe(true)
 
     const renamed = 'class Widget\n{\n    \n}'
     const bodyPosition = renamed.indexOf('    \n') + 4
@@ -946,10 +912,7 @@ describe('CodeMirror editor LSP projections', () => {
       state: EditorState.create({
         doc: source,
         selection: { anchor: source.length },
-        extensions: [
-          EditorState.allowMultipleSelections.of(true),
-          keymap.of(codeMirrorEditorKeymap),
-        ],
+        extensions: [EditorState.allowMultipleSelections.of(true), keymap.of(codeMirrorEditorKeymap)],
       }),
     })
     const completion = codeMirrorCompletion(item, 'Program.cs', bridge, () => 1)
@@ -961,30 +924,20 @@ describe('CodeMirror editor LSP projections', () => {
     const iteratorOffsets = [...expanded.matchAll(/\bi\b/g)].map((match) => match.index)
     expect(view.state.doc.toString()).toBe(expanded)
     expect(view.state.selection.ranges).toHaveLength(3)
-    expect(view.state.selection.ranges.map(({ from, to }) => ({ from, to }))).toEqual(
-      iteratorOffsets.map((from) => ({ from, to: from + 1 })),
-    )
+    expect(view.state.selection.ranges.map(({ from, to }) => ({ from, to }))).toEqual(iteratorOffsets.map((from) => ({ from, to: from + 1 })))
 
     view.dispatch(view.state.replaceSelection('index'))
 
     const renamed = 'for (int index = 0; index < length; index++)\n{\n    \n}'
     expect(view.state.doc.toString()).toBe(renamed)
     expect(view.state.selection.ranges).toHaveLength(3)
-    expect(
-      runScopeHandlers(
-        view,
-        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
-        'editor',
-      ),
-    ).toBe(true)
+    expect(runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }), 'editor')).toBe(true)
 
     const lengthStart = renamed.indexOf('length')
     expect(view.state.selection.ranges).toHaveLength(1)
     expect(view.state.selection.main.from).toBe(lengthStart)
     expect(view.state.selection.main.to).toBe(lengthStart + 'length'.length)
-    expect(
-      runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }), 'editor'),
-    ).toBe(true)
+    expect(runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }), 'editor')).toBe(true)
 
     const bodyPosition = renamed.indexOf('    \n') + 4
     expect(view.state.selection.main.from).toBe(bodyPosition)
@@ -1191,10 +1144,7 @@ describe('CodeMirror editor LSP projections', () => {
   })
 })
 
-function editorProps(
-  activeFile: string,
-  onChange: CodeMirrorEditorProps['onChange'],
-): CodeMirrorEditorProps {
+function editorProps(activeFile: string, onChange: CodeMirrorEditorProps['onChange']): CodeMirrorEditorProps {
   return {
     files: [
       { path: 'Program.cs', text: 'first' },
@@ -1219,10 +1169,7 @@ function editorProps(
   }
 }
 
-function resolvedLanguageSession(
-  kind: 'render' | 'run',
-  languageId: 'csharp' | 'il' = 'csharp',
-): CodeMirrorEditorProps['languageSession'] {
+function resolvedLanguageSession(kind: 'render' | 'run', languageId: 'csharp' | 'il' = 'csharp'): CodeMirrorEditorProps['languageSession'] {
   const runtimeId = kind === 'run' ? 'dotnet-10-linux-x64' : null
   const outputId = kind === 'run' ? 'run' : 'il'
   const toolchainId = languageId === 'il' ? 'mobius-ilasm-stable' : 'roslyn-stable'

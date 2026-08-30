@@ -1,7 +1,7 @@
-import test from 'node:test'
-import assert from 'node:assert/strict'
+import test from 'node:test';
+import assert from 'node:assert/strict';
 
-import { validateRuntimeProfileChannels } from './runtime-profile-channel-validation.mjs'
+import { validateRuntimeProfileChannels } from '../release/runtime-profile-channel-validation.mjs';
 
 const catalog = {
   runtimes: [
@@ -18,7 +18,7 @@ const catalog = {
       availability: { installed: false, health: 'blocked' },
     },
   ],
-}
+};
 
 const profiles = new Map([
   ['profiles/runtimes/active-runtime.json', {
@@ -41,33 +41,33 @@ const profiles = new Map([
     runtimeVersion: '10.0.10',
     runtimeImageId: 'sha256:candidate',
   }],
-])
+]);
 
 const readProfile = path => profiles.get(path) ?? (() => {
   throw new Error('fixture profile is missing')
-})()
+})();
 
 test('review-only candidates do not require Catalog identity closure', () => {
   const failures = validateRuntimeProfileChannels(
     ['profiles/runtimes/candidates/new-runtime.json', 'profiles/runtimes/candidates/active-runtime.json'],
     catalog,
     readProfile,
-  )
+  );
 
-  assert.deepEqual(failures, [])
-})
+  assert.deepEqual(failures, []);
+});
 
 test('active profiles require a selectable Catalog runtime and matching identity', () => {
   const failures = validateRuntimeProfileChannels(
     ['profiles/runtimes/active-runtime.json', 'profiles/runtimes/active-missing.json'],
     catalog,
     readProfile,
-  )
+  );
 
   assert.deepEqual(failures, [
     "profiles/runtimes/active-missing.json: runtime profile ID 'missing-runtime' is absent from the Catalog",
-  ])
-})
+  ]);
+});
 
 test('active profiles cannot stage a different version or image identity', () => {
   const profilesWithMismatch = new Map(profiles)
@@ -75,19 +75,19 @@ test('active profiles cannot stage a different version or image identity', () =>
     id: 'active-runtime',
     runtimeVersion: '10.0.10',
     runtimeImageId: 'sha256:candidate',
-  })
+  });
 
   const failures = validateRuntimeProfileChannels(
     ['profiles/runtimes/active-mismatch.json'],
     catalog,
     path => profilesWithMismatch.get(path),
-  )
+  );
 
   assert.deepEqual(failures, [
     "profiles/runtimes/active-mismatch.json: runtimeVersion '10.0.10' does not match Catalog '10.0.9'",
     'profiles/runtimes/active-mismatch.json: runtimeImageId does not match the selectable Catalog identity',
-  ])
-})
+  ]);
+});
 
 test('active profiles mapped to blocked Catalog entries fail closed', () => {
   const profilesWithBlocked = new Map(profiles)
@@ -95,15 +95,15 @@ test('active profiles mapped to blocked Catalog entries fail closed', () => {
     id: 'blocked-runtime',
     runtimeVersion: '10.0.8',
     runtimeImageId: 'sha256:blocked',
-  })
+  });
 
   const failures = validateRuntimeProfileChannels(
     ['profiles/runtimes/blocked-runtime.json'],
     catalog,
     path => profilesWithBlocked.get(path),
-  )
+  );
 
   assert.deepEqual(failures, [
     "profiles/runtimes/blocked-runtime.json: active profile 'blocked-runtime' maps to a non-selectable Catalog runtime",
-  ])
-})
+  ]);
+});

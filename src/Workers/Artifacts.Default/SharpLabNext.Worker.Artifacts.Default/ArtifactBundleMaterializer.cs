@@ -33,15 +33,10 @@ internal static class ArtifactFormatContract
         StringComparer.Ordinal.Equals(manifest.Producer.LanguageId, JSharpLanguage) ||
         StringComparer.Ordinal.Equals(manifest.Producer.ToolchainId, JSharpToolchain) ||
         StringComparer.Ordinal.Equals(manifest.ReferenceSetId, JSharpReferenceSet) ||
-        manifest.RuntimeRequirement.RequiredRuntimeFeatureTags.Contains(
-            JSharpRuntimeFeature,
-            StringComparer.Ordinal);
+        manifest.RuntimeRequirement.RequiredRuntimeFeatureTags.Contains(JSharpRuntimeFeature, StringComparer.Ordinal);
 }
 
-internal sealed record NetFxManagedReferenceSetContract(
-    string ReferenceSetId,
-    string TargetFramework,
-    string FrameworkVersion);
+internal sealed record NetFxManagedReferenceSetContract(string ReferenceSetId, string TargetFramework, string FrameworkVersion);
 
 internal static class NetFxManagedReferenceSets
 {
@@ -80,9 +75,7 @@ internal sealed record MaterializedArtifact(
         {
             await StoreClient.ReleaseLeaseAsync(LeaseToken);
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
-        {
-        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException) { }
         finally
         {
             TemporaryArtifactDirectory.Delete(RootPath);
@@ -90,27 +83,17 @@ internal sealed record MaterializedArtifact(
     }
 }
 
-internal sealed class ArtifactBundleMaterializer(
-    IArtifactStoreClient storeClient,
-    ArtifactWorkerSettings settings)
+internal sealed class ArtifactBundleMaterializer(IArtifactStoreClient storeClient, ArtifactWorkerSettings settings)
 {
-    public async Task<MaterializedArtifact> MaterializeAsync(
-        ArtifactRef artifactRef,
-        string operationId,
-        CancellationToken cancellationToken)
+    public async Task<MaterializedArtifact> MaterializeAsync(ArtifactRef artifactRef, string operationId, CancellationToken cancellationToken)
     {
         var root = TemporaryArtifactDirectory.Create(settings.WorkRoot, operationId);
         string? leaseToken = null;
         try
         {
-            var lease = await storeClient.AcquireLeaseAsync(
-                artifactRef,
-                $"artifacts-default:{operationId}",
-                TimeSpan.FromMilliseconds(settings.Limits.MaxProcessorMilliseconds + 30_000),
-                cancellationToken);
+            var lease = await storeClient.AcquireLeaseAsync(artifactRef, $"artifacts-default:{operationId}", TimeSpan.FromMilliseconds(settings.Limits.MaxProcessorMilliseconds + 30_000), cancellationToken);
             leaseToken = lease.LeaseToken;
-            var bundle = await storeClient.GetArtifactAsync(artifactRef, cancellationToken)
-                ?? throw new ArtifactNotFoundException("The requested artifact was not found.");
+            var bundle = await storeClient.GetArtifactAsync(artifactRef, cancellationToken) ?? throw new ArtifactNotFoundException("The requested artifact was not found.");
             ValidateBundle(artifactRef, bundle, settings.Limits);
 
             var manifestEntries = bundle.Manifest.Files.ToDictionary(static file => file.Path, StringComparer.Ordinal);
@@ -123,16 +106,10 @@ internal sealed class ArtifactBundleMaterializer(
                     continue;
                 var destination = TemporaryArtifactDirectory.ResolvePath(root, entry.Path);
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                await DownloadAndVerifyAsync(
-                    artifactRef,
-                    entry,
-                    destination,
-                    manifestEntries[entry.Path],
-                    cancellationToken);
+                await DownloadAndVerifyAsync(artifactRef, entry, destination, manifestEntries[entry.Path], cancellationToken);
                 if (StringComparer.Ordinal.Equals(entry.Path, bundle.Manifest.EntryAssembly))
                     assemblyPath = destination;
-                if (entry.Role == "portable-pdb" ||
-                    Path.GetExtension(entry.Path).Equals(".pdb", StringComparison.OrdinalIgnoreCase))
+                if (entry.Role == "portable-pdb" || Path.GetExtension(entry.Path).Equals(".pdb", StringComparison.OrdinalIgnoreCase))
                 {
                     pdbPath ??= destination;
                 }
@@ -143,14 +120,7 @@ internal sealed class ArtifactBundleMaterializer(
             if (ArtifactFormatContract.IsJSharp(bundle.Manifest))
                 ValidateMaterializedJSharpPe(bundle.Manifest, assemblyPath);
             settings.ReferenceSets.TryGetValue(bundle.Manifest.ReferenceSetId, out var referenceSet);
-            return new MaterializedArtifact(
-                root,
-                assemblyPath,
-                pdbPath,
-                bundle.Manifest,
-                referenceSet,
-                leaseToken,
-                storeClient);
+            return new MaterializedArtifact(root, assemblyPath, pdbPath, bundle.Manifest, referenceSet, leaseToken, storeClient);
         }
         catch
         {
@@ -160,33 +130,17 @@ internal sealed class ArtifactBundleMaterializer(
                 {
                     await storeClient.ReleaseLeaseAsync(leaseToken, CancellationToken.None);
                 }
-                catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
-                {
-                }
+                catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException) { }
             }
             TemporaryArtifactDirectory.Delete(root);
             throw;
         }
     }
 
-    private async Task DownloadAndVerifyAsync(
-        ArtifactRef artifactRef,
-        ArtifactBundleEntry entry,
-        string destination,
-        ArtifactFileDescriptor manifestFile,
-        CancellationToken cancellationToken)
+    private async Task DownloadAndVerifyAsync(ArtifactRef artifactRef, ArtifactBundleEntry entry, string destination, ArtifactFileDescriptor manifestFile, CancellationToken cancellationToken)
     {
-        await using var response = await storeClient.OpenArtifactFileReadAsync(
-            artifactRef,
-            entry.Path,
-            cancellationToken);
-        await using var output = new FileStream(
-            destination,
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None,
-            bufferSize: 64 * 1024,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var response = await storeClient.OpenArtifactFileReadAsync(artifactRef, entry.Path, cancellationToken);
+        await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize: 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
         long total = 0;
@@ -212,9 +166,7 @@ internal sealed class ArtifactBundleMaterializer(
 
         var actualDigest = Convert.ToHexStringLower(hash.GetHashAndReset());
         var expectedDigest = ArtifactStoreProtocol.GetDigest(entry.ContentRef);
-        if (total != entry.Size || total != manifestFile.Size ||
-            !StringComparer.Ordinal.Equals(actualDigest, expectedDigest) ||
-            !StringComparer.Ordinal.Equals(entry.Digest, manifestFile.Digest))
+        if (total != entry.Size || total != manifestFile.Size || !StringComparer.Ordinal.Equals(actualDigest, expectedDigest) || !StringComparer.Ordinal.Equals(entry.Digest, manifestFile.Digest))
         {
             throw new ArtifactRequestValidationException("Artifact content failed integrity validation.");
         }
@@ -223,10 +175,7 @@ internal sealed class ArtifactBundleMaterializer(
     private static bool ShouldMaterialize(string path) =>
         Path.GetExtension(path).ToLowerInvariant() is ".dll" or ".exe" or ".winmd" or ".pdb";
 
-    private static void ValidateBundle(
-        ArtifactRef requestedRef,
-        ArtifactBundleDescriptor bundle,
-        ArtifactProcessorLimits limits)
+    private static void ValidateBundle(ArtifactRef requestedRef, ArtifactBundleDescriptor bundle, ArtifactProcessorLimits limits)
     {
         try
         {
@@ -253,11 +202,7 @@ internal sealed class ArtifactBundleMaterializer(
         long totalSize = 0;
         foreach (var entry in bundle.Entries)
         {
-            if (!manifestByPath.TryGetValue(entry.Path, out var manifestFile) ||
-                manifestFile.Size != entry.Size ||
-                !StringComparer.Ordinal.Equals(manifestFile.Digest, entry.Digest) ||
-                !StringComparer.Ordinal.Equals(entry.Digest, entry.ContentRef.Value) ||
-                !StringComparer.Ordinal.Equals(manifestFile.Role, entry.Role))
+            if (!manifestByPath.TryGetValue(entry.Path, out var manifestFile) || manifestFile.Size != entry.Size || !StringComparer.Ordinal.Equals(manifestFile.Digest, entry.Digest) || !StringComparer.Ordinal.Equals(entry.Digest, entry.ContentRef.Value) || !StringComparer.Ordinal.Equals(manifestFile.Role, entry.Role))
             {
                 throw new ArtifactRequestValidationException("The artifact bundle does not match its manifest.");
             }
@@ -268,16 +213,12 @@ internal sealed class ArtifactBundleMaterializer(
         if (totalSize > limits.MaxArtifactBytes)
             throw new ArtifactRequestValidationException("The artifact exceeds the configured size limit.");
 
-        var assembly = bundle.Manifest.Files.FirstOrDefault(file =>
-            StringComparer.Ordinal.Equals(file.Path, bundle.Manifest.EntryAssembly));
-        if (assembly is null || assembly.Size > limits.MaxAssemblyBytes ||
-            Path.GetExtension(assembly.Path).ToLowerInvariant() is not (".dll" or ".exe"))
+        var assembly = bundle.Manifest.Files.FirstOrDefault(file => StringComparer.Ordinal.Equals(file.Path, bundle.Manifest.EntryAssembly));
+        if (assembly is null || assembly.Size > limits.MaxAssemblyBytes || Path.GetExtension(assembly.Path).ToLowerInvariant() is not (".dll" or ".exe"))
         {
             throw new ArtifactRequestValidationException("The artifact entry assembly is invalid or too large.");
         }
-        if (bundle.Manifest.Files.Any(file =>
-                Path.GetExtension(file.Path).Equals(".pdb", StringComparison.OrdinalIgnoreCase) &&
-                file.Size > limits.MaxPortablePdbBytes))
+        if (bundle.Manifest.Files.Any(file => Path.GetExtension(file.Path).Equals(".pdb", StringComparison.OrdinalIgnoreCase) && file.Size > limits.MaxPortablePdbBytes))
         {
             throw new ArtifactRequestValidationException("The portable PDB exceeds the configured size limit.");
         }
@@ -293,45 +234,30 @@ internal sealed class ArtifactBundleMaterializer(
         }
 
         var contract = mixedPe
-            ? new NetFxManagedReferenceSetContract("netfx48-ref", "net48", "4.8")
-            : NetFxManagedReferenceSets.ById.GetValueOrDefault(manifest.ReferenceSetId);
+            ? new NetFxManagedReferenceSetContract("netfx48-ref", "net48", "4.8") : NetFxManagedReferenceSets.ById.GetValueOrDefault(manifest.ReferenceSetId);
         if (contract is null ||
             !StringComparer.Ordinal.Equals(manifest.ReferenceSetId, contract.ReferenceSetId) ||
             !StringComparer.Ordinal.Equals(manifest.TargetFramework, contract.TargetFramework) ||
             !StringComparer.Ordinal.Equals(manifest.RuntimeRequirement.Family, "netfx-clr-wine") ||
             manifest.RuntimeRequirement.Frameworks.Count != 1 ||
             !StringComparer.Ordinal.Equals(manifest.RuntimeRequirement.Frameworks[0].Name, ".NETFramework") ||
-            !StringComparer.Ordinal.Equals(
-                manifest.RuntimeRequirement.Frameworks[0].MinimumVersion,
-                contract.FrameworkVersion) ||
+            !StringComparer.Ordinal.Equals(manifest.RuntimeRequirement.Frameworks[0].MinimumVersion, contract.FrameworkVersion) ||
             !mixedPe && manifest.RuntimeRequirement.RequiredRuntimeFeatureTags.Count != 0)
         {
-            throw new ArtifactRequestValidationException(
-                "The artifact does not match an approved exact .NET Framework contract.");
+            throw new ArtifactRequestValidationException("The artifact does not match an approved exact .NET Framework contract.");
         }
-        if (mixedPe &&
-            (!StringComparer.Ordinal.Equals(manifest.RuntimeRequirement.Architecture, "x64") ||
-             !Path.GetExtension(manifest.EntryAssembly).Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
-             manifest.EntryPoint is not null ||
-             manifest.Metadata is null ||
-             !manifest.Metadata.TryGetValue("mixedMode", out var mixedMode) ||
-             !StringComparer.Ordinal.Equals(mixedMode, "true")))
+        if (mixedPe && (!StringComparer.Ordinal.Equals(manifest.RuntimeRequirement.Architecture, "x64") || !Path.GetExtension(manifest.EntryAssembly).Equals(".exe", StringComparison.OrdinalIgnoreCase) || manifest.EntryPoint is not null || manifest.Metadata is null || !manifest.Metadata.TryGetValue("mixedMode", out var mixedMode) || !StringComparer.Ordinal.Equals(mixedMode, "true")))
         {
-            throw new ArtifactRequestValidationException(
-                "The C++/CLI artifact does not match the approved x64 mixed-PE contract.");
+            throw new ArtifactRequestValidationException("The C++/CLI artifact does not match the approved x64 mixed-PE contract.");
         }
         if (!mixedPe)
         {
             var expectedExtension = manifest.OutputKind == BuildOutputKind.Library ? ".dll" : ".exe";
             var hasExpectedEntryPoint = manifest.OutputKind == BuildOutputKind.Library
-                ? manifest.EntryPoint is null
-                : !string.IsNullOrWhiteSpace(manifest.EntryPoint);
-            if (manifest.RuntimeRequirement.Architecture is not ("anycpu" or "x64") ||
-                !Path.GetExtension(manifest.EntryAssembly).Equals(expectedExtension, StringComparison.OrdinalIgnoreCase) ||
-                !hasExpectedEntryPoint)
+                ? manifest.EntryPoint is null : !string.IsNullOrWhiteSpace(manifest.EntryPoint);
+            if (manifest.RuntimeRequirement.Architecture is not ("anycpu" or "x64") || !Path.GetExtension(manifest.EntryAssembly).Equals(expectedExtension, StringComparison.OrdinalIgnoreCase) || !hasExpectedEntryPoint)
             {
-                throw new ArtifactRequestValidationException(
-                    "The managed .NET Framework artifact does not match the approved application contract.");
+                throw new ArtifactRequestValidationException("The managed .NET Framework artifact does not match the approved application contract.");
             }
         }
     }
@@ -348,15 +274,12 @@ internal sealed class ArtifactBundleMaterializer(
             !StringComparer.Ordinal.Equals(manifest.RuntimeRequirement.Frameworks[0].Name, ".NETFramework") ||
             !StringComparer.Ordinal.Equals(manifest.RuntimeRequirement.Frameworks[0].MinimumVersion, "2.0") ||
             !StringComparer.Ordinal.Equals(manifest.RuntimeRequirement.Architecture, "x64") ||
-            !manifest.RuntimeRequirement.RequiredRuntimeFeatureTags.SequenceEqual(
-                [ArtifactFormatContract.JSharpRuntimeFeature],
-                StringComparer.Ordinal) ||
+            !manifest.RuntimeRequirement.RequiredRuntimeFeatureTags.SequenceEqual([ArtifactFormatContract.JSharpRuntimeFeature], StringComparer.Ordinal) ||
             manifest.OutputKind != BuildOutputKind.Console ||
             !Path.GetExtension(manifest.EntryAssembly).Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
             string.IsNullOrWhiteSpace(manifest.EntryPoint))
         {
-            throw new ArtifactRequestValidationException(
-                "The J# artifact does not match the approved x64 CLR 2.0 managed-PE contract.");
+            throw new ArtifactRequestValidationException("The J# artifact does not match the approved x64 CLR 2.0 managed-PE contract.");
         }
     }
 
@@ -367,21 +290,13 @@ internal sealed class ArtifactBundleMaterializer(
             using var stream = File.OpenRead(assemblyPath);
             using var peReader = new PEReader(stream);
             var headers = peReader.PEHeaders;
-            if (headers.CoffHeader.Machine != Machine.Amd64 ||
-                headers.PEHeader?.Magic != PEMagic.PE32Plus ||
-                headers.CorHeader is null ||
-                (headers.CorHeader.Flags & CorFlags.ILOnly) == 0 ||
-                (headers.CorHeader.Flags & CorFlags.NativeEntryPoint) != 0 ||
-                (headers.CorHeader.Flags & CorFlags.Requires32Bit) != 0 ||
-                (headers.CorHeader.Flags & CorFlags.Prefers32Bit) != 0 ||
-                !peReader.HasMetadata)
+            if (headers.CoffHeader.Machine != Machine.Amd64 || headers.PEHeader?.Magic != PEMagic.PE32Plus || headers.CorHeader is null || (headers.CorHeader.Flags & CorFlags.ILOnly) == 0 || (headers.CorHeader.Flags & CorFlags.NativeEntryPoint) != 0 || (headers.CorHeader.Flags & CorFlags.Requires32Bit) != 0 || (headers.CorHeader.Flags & CorFlags.Prefers32Bit) != 0 || !peReader.HasMetadata)
             {
                 throw new BadImageFormatException();
             }
 
             var metadata = peReader.GetMetadataReader();
-            if (!metadata.IsAssembly ||
-                !StringComparer.Ordinal.Equals(metadata.MetadataVersion, "v2.0.50727"))
+            if (!metadata.IsAssembly || !StringComparer.Ordinal.Equals(metadata.MetadataVersion, "v2.0.50727"))
             {
                 throw new BadImageFormatException();
             }
@@ -398,16 +313,13 @@ internal sealed class ArtifactBundleMaterializer(
             var typeNamespace = metadata.GetString(declaringType.Namespace);
             var methodName = metadata.GetString(method.Name);
             var actualEntryPoint = string.IsNullOrEmpty(typeNamespace)
-                ? $"{typeName}::{methodName}"
-                : $"{typeNamespace}.{typeName}::{methodName}";
+                ? $"{typeName}::{methodName}" : $"{typeNamespace}.{typeName}::{methodName}";
             if (!StringComparer.Ordinal.Equals(manifest.EntryPoint, actualEntryPoint))
                 throw new BadImageFormatException();
         }
-        catch (Exception exception) when (
-            exception is BadImageFormatException or IOException or InvalidOperationException or ArgumentException)
+        catch (Exception exception) when (exception is BadImageFormatException or IOException or InvalidOperationException or ArgumentException)
         {
-            throw new ArtifactRequestValidationException(
-                "The J# entry assembly is not an AMD64 PE32+ IL-only CLR 2.0 executable with the declared managed entry point.");
+            throw new ArtifactRequestValidationException("The J# entry assembly is not an AMD64 PE32+ IL-only CLR 2.0 executable with the declared managed entry point.");
         }
     }
 }
@@ -421,8 +333,7 @@ internal static class TemporaryArtifactDirectory
         var root = Path.GetFullPath(configuredRoot);
         Directory.CreateDirectory(root);
         var safeOperation = operationId.All(static value => char.IsAsciiLetterOrDigit(value) || value is '_' or '-')
-            ? operationId
-            : throw new ArtifactRequestValidationException("The operation ID is invalid.");
+            ? operationId : throw new ArtifactRequestValidationException("The operation ID is invalid.");
         var path = ResolvePath(root, $"job-{safeOperation}-{Guid.NewGuid():N}");
         Directory.CreateDirectory(path);
         return path;
@@ -450,9 +361,7 @@ internal static class TemporaryArtifactDirectory
                 Directory.Delete(path, recursive: true);
                 return;
             }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException &&
-                attempt < MaximumDeleteAttempts)
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException && attempt < MaximumDeleteAttempts)
             {
                 Thread.Sleep(TimeSpan.FromMilliseconds(25 * attempt));
             }

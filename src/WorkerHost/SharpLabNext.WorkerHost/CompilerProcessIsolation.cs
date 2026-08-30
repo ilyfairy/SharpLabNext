@@ -42,19 +42,11 @@ public sealed record CompilerProcessIsolationOptions(
     }
 }
 
-public sealed record CompilerProcessCommand(
-    string FileName,
-    IReadOnlyList<string> Arguments,
-    string? WorkingDirectory = null,
-    IReadOnlyDictionary<string, string?>? Environment = null);
+public sealed record CompilerProcessCommand(string FileName, IReadOnlyList<string> Arguments, string? WorkingDirectory = null, IReadOnlyDictionary<string, string?>? Environment = null);
 
 public interface ICompilerProcessRunner
 {
-    Task<TResponse> RunAsync<TRequest, TResponse>(
-        string childArgument,
-        TRequest request,
-        TimeSpan timeout,
-        CancellationToken cancellationToken)
+    Task<TResponse> RunAsync<TRequest, TResponse>(string childArgument, TRequest request, TimeSpan timeout, CancellationToken cancellationToken)
         where TRequest : class
         where TResponse : class;
 }
@@ -65,9 +57,7 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
     private readonly CompilerProcessCommand? _commandOverride;
     private readonly SemaphoreSlim _processSlots;
 
-    public CompilerProcessRunner(
-        CompilerProcessIsolationOptions options,
-        CompilerProcessCommand? commandOverride = null)
+    public CompilerProcessRunner(CompilerProcessIsolationOptions options, CompilerProcessCommand? commandOverride = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
@@ -76,11 +66,7 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
         _processSlots = new SemaphoreSlim(options.MaximumConcurrentProcesses, options.MaximumConcurrentProcesses);
     }
 
-    public async Task<TResponse> RunAsync<TRequest, TResponse>(
-        string childArgument,
-        TRequest request,
-        TimeSpan timeout,
-        CancellationToken cancellationToken)
+    public async Task<TResponse> RunAsync<TRequest, TResponse>(string childArgument, TRequest request, TimeSpan timeout, CancellationToken cancellationToken)
         where TRequest : class
         where TResponse : class
     {
@@ -94,11 +80,7 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
 
         try
         {
-            return await RunCoreAsync<TRequest, TResponse>(
-                childArgument,
-                request,
-                timeout,
-                cancellationToken).ConfigureAwait(false);
+            return await RunCoreAsync<TRequest, TResponse>(childArgument, request, timeout, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -108,21 +90,13 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
 
     public void Dispose() => _processSlots.Dispose();
 
-    private async Task<TResponse> RunCoreAsync<TRequest, TResponse>(
-        string childArgument,
-        TRequest request,
-        TimeSpan timeout,
-        CancellationToken cancellationToken)
+    private async Task<TResponse> RunCoreAsync<TRequest, TResponse>(string childArgument, TRequest request, TimeSpan timeout, CancellationToken cancellationToken)
         where TRequest : class
         where TResponse : class
     {
         using var deadline = new CancellationTokenSource(timeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
-        using var process = new Process
-        {
-            StartInfo = CreateStartInfo(childArgument),
-            EnableRaisingEvents = true
-        };
+        using var process = new Process { StartInfo = CreateStartInfo(childArgument), EnableRaisingEvents = true };
         try
         {
             if (!process.Start())
@@ -137,14 +111,8 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
             throw new CompilerProcessCrashedException(null, "The compiler process could not be started.", exception);
         }
 
-        var stdoutTask = ReadBoundedAsync(
-            process.StandardOutput.BaseStream,
-            _options.MaximumResponseBytes,
-            CancellationToken.None);
-        var stderrTask = ReadBoundedTextAsync(
-            process.StandardError.BaseStream,
-            _options.MaximumStandardErrorBytes,
-            CancellationToken.None);
+        var stdoutTask = ReadBoundedAsync(process.StandardOutput.BaseStream, _options.MaximumResponseBytes, CancellationToken.None);
+        var stderrTask = ReadBoundedTextAsync(process.StandardError.BaseStream, _options.MaximumStandardErrorBytes, CancellationToken.None);
 
         Exception? inputFailure = null;
         try
@@ -152,8 +120,7 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
             var requestBytes = CompilerChildProtocol.SerializeRequest(request);
             if (requestBytes.Length > _options.MaximumRequestBytes)
             {
-                throw new CompilerProcessProtocolException(
-                    "The compiler process request exceeded its configured byte limit.");
+                throw new CompilerProcessProtocolException("The compiler process request exceeded its configured byte limit.");
             }
 
             await process.StandardInput.BaseStream.WriteAsync(requestBytes, linked.Token).ConfigureAwait(false);
@@ -204,17 +171,12 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
         if (process.ExitCode != 0)
         {
             await ObserveAsync(stdoutTask).ConfigureAwait(false);
-            throw new CompilerProcessCrashedException(
-                process.ExitCode,
-                "The compiler process exited unexpectedly.",
-                inputFailure);
+            throw new CompilerProcessCrashedException(process.ExitCode, "The compiler process exited unexpectedly.", inputFailure);
         }
         if (inputFailure is not null)
         {
             await ObserveAsync(stdoutTask).ConfigureAwait(false);
-            throw new CompilerProcessProtocolException(
-                "The compiler process stopped before accepting its request.",
-                inputFailure);
+            throw new CompilerProcessProtocolException("The compiler process stopped before accepting its request.", inputFailure);
         }
 
         byte[] responseBytes;
@@ -228,9 +190,7 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
         }
         catch (Exception exception)
         {
-            throw new CompilerProcessProtocolException(
-                "The compiler process response could not be read.",
-                exception);
+            throw new CompilerProcessProtocolException("The compiler process response could not be read.", exception);
         }
 
         CompilerChildResponse<TResponse> response;
@@ -240,16 +200,12 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
         }
         catch (Exception exception) when (exception is JsonException or InvalidDataException)
         {
-            throw new CompilerProcessProtocolException(
-                "The compiler process returned an invalid response.",
-                exception);
+            throw new CompilerProcessProtocolException("The compiler process returned an invalid response.", exception);
         }
 
         if (response.Failure is { } failure)
             throw new CompilerChildReportedException(failure.Kind, failure.PublicMessage);
-        return response.Result
-            ?? throw new CompilerProcessProtocolException(
-                $"The compiler process returned an empty response. stderr bytes: {Encoding.UTF8.GetByteCount(standardError)}.");
+        return response.Result ?? throw new CompilerProcessProtocolException($"The compiler process returned an empty response. stderr bytes: {Encoding.UTF8.GetByteCount(standardError)}.");
     }
 
     private ProcessStartInfo CreateStartInfo(string childArgument)
@@ -280,8 +236,7 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
 
     private static CompilerProcessCommand CreateCurrentProcessCommand(string childArgument)
     {
-        var processPath = Environment.ProcessPath
-            ?? throw new CompilerProcessCrashedException(null, "The current worker executable path is unavailable.");
+        var processPath = Environment.ProcessPath ?? throw new CompilerProcessCrashedException(null, "The current worker executable path is unavailable.");
         var arguments = new List<string>();
         if (string.Equals(Path.GetFileNameWithoutExtension(processPath), "dotnet", StringComparison.OrdinalIgnoreCase))
         {
@@ -294,10 +249,7 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
         return new CompilerProcessCommand(processPath, arguments, AppContext.BaseDirectory);
     }
 
-    private async Task WaitForExitAsync(
-        Process process,
-        Task<byte[]> stdoutTask,
-        CancellationToken cancellationToken)
+    private async Task WaitForExitAsync(Process process, Task<byte[]> stdoutTask, CancellationToken cancellationToken)
     {
         var exitTask = process.WaitForExitAsync(CancellationToken.None);
         while (!exitTask.IsCompleted)
@@ -316,14 +268,10 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
                 var workingSet = process.WorkingSet64;
                 if (workingSet > _options.MaximumWorkingSetBytes)
                 {
-                    throw new CompilerProcessMemoryLimitExceededException(
-                        _options.MaximumWorkingSetBytes,
-                        workingSet);
+                    throw new CompilerProcessMemoryLimitExceededException(_options.MaximumWorkingSetBytes, workingSet);
                 }
             }
-            catch (InvalidOperationException)
-            {
-            }
+            catch (InvalidOperationException) { }
         }
         await exitTask.ConfigureAwait(false);
     }
@@ -335,25 +283,16 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
             if (!process.HasExited)
                 process.Kill(entireProcessTree: true);
         }
-        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception) { }
 
         try
         {
-            await process.WaitForExitAsync(CancellationToken.None)
-                .WaitAsync(TimeSpan.FromSeconds(5))
-                .ConfigureAwait(false);
+            await process.WaitForExitAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         }
-        catch (Exception exception) when (exception is InvalidOperationException or TimeoutException)
-        {
-        }
+        catch (Exception exception) when (exception is InvalidOperationException or TimeoutException) { }
     }
 
-    private static async Task KillAndDrainAsync(
-        Process process,
-        Task<byte[]> stdoutTask,
-        Task<string> stderrTask)
+    private static async Task KillAndDrainAsync(Process process, Task<byte[]> stdoutTask, Task<string> stderrTask)
     {
         await KillAsync(process).ConfigureAwait(false);
         await ObserveAsync(stdoutTask).ConfigureAwait(false);
@@ -366,15 +305,10 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
         {
             await task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         }
-        catch (Exception)
-        {
-        }
+        catch (Exception) { }
     }
 
-    private static async Task<byte[]> ReadBoundedAsync(
-        Stream stream,
-        int maximumBytes,
-        CancellationToken cancellationToken)
+    private static async Task<byte[]> ReadBoundedAsync(Stream stream, int maximumBytes, CancellationToken cancellationToken)
     {
         using var output = new MemoryStream(Math.Min(maximumBytes, 64 * 1024));
         var buffer = new byte[64 * 1024];
@@ -384,16 +318,12 @@ public sealed class CompilerProcessRunner : ICompilerProcessRunner, IDisposable
             if (read == 0)
                 return output.ToArray();
             if (output.Length + read > maximumBytes)
-                throw new CompilerProcessProtocolException(
-                    "The compiler process response exceeded its configured byte limit.");
+                throw new CompilerProcessProtocolException("The compiler process response exceeded its configured byte limit.");
             output.Write(buffer, 0, read);
         }
     }
 
-    private static async Task<string> ReadBoundedTextAsync(
-        Stream stream,
-        int maximumBytes,
-        CancellationToken cancellationToken)
+    private static async Task<string> ReadBoundedTextAsync(Stream stream, int maximumBytes, CancellationToken cancellationToken)
     {
         using var output = new MemoryStream(Math.Min(maximumBytes, 16 * 1024));
         var buffer = new byte[4096];
@@ -418,58 +348,30 @@ public static class CompilerChildProtocol
     private static readonly JsonSerializerOptions JsonOptions = ContractJson.CreateSerializerOptions();
 
     public static byte[] SerializeRequest<TRequest>(TRequest request) where TRequest : class =>
-        JsonSerializer.SerializeToUtf8Bytes(
-            new CompilerChildRequest<TRequest>(SchemaVersion, request),
-            JsonOptions);
+        JsonSerializer.SerializeToUtf8Bytes(new CompilerChildRequest<TRequest>(SchemaVersion, request), JsonOptions);
 
-    public static async Task<TRequest> ReadRequestAsync<TRequest>(
-        Stream input,
-        int maximumBytes,
-        CancellationToken cancellationToken)
+    public static async Task<TRequest> ReadRequestAsync<TRequest>(Stream input, int maximumBytes, CancellationToken cancellationToken)
         where TRequest : class
     {
         var bytes = await ReadAllBoundedAsync(input, maximumBytes, cancellationToken).ConfigureAwait(false);
-        var envelope = JsonSerializer.Deserialize<CompilerChildRequest<TRequest>>(bytes, JsonOptions)
-            ?? throw new InvalidDataException("The compiler child request was empty.");
+        var envelope = JsonSerializer.Deserialize<CompilerChildRequest<TRequest>>(bytes, JsonOptions) ?? throw new InvalidDataException("The compiler child request was empty.");
         if (envelope.SchemaVersion != SchemaVersion)
             throw new InvalidDataException("The compiler child request schema is unsupported.");
-        return envelope.Request
-            ?? throw new InvalidDataException("The compiler child request payload was empty.");
+        return envelope.Request ?? throw new InvalidDataException("The compiler child request payload was empty.");
     }
 
-    public static async Task WriteSuccessAsync<TResponse>(
-        Stream output,
-        TResponse response,
-        int maximumBytes,
-        CancellationToken cancellationToken)
+    public static async Task WriteSuccessAsync<TResponse>(Stream output, TResponse response, int maximumBytes, CancellationToken cancellationToken)
         where TResponse : class =>
-        await WriteResponseAsync(
-            output,
-            new CompilerChildResponse<TResponse>(SchemaVersion, response, null),
-            maximumBytes,
-            cancellationToken).ConfigureAwait(false);
+        await WriteResponseAsync(output, new CompilerChildResponse<TResponse>(SchemaVersion, response, null), maximumBytes, cancellationToken).ConfigureAwait(false);
 
-    public static async Task WriteFailureAsync<TResponse>(
-        Stream output,
-        CompilerChildFailureKind kind,
-        string publicMessage,
-        int maximumBytes,
-        CancellationToken cancellationToken)
+    public static async Task WriteFailureAsync<TResponse>(Stream output, CompilerChildFailureKind kind, string publicMessage, int maximumBytes, CancellationToken cancellationToken)
         where TResponse : class =>
-        await WriteResponseAsync(
-            output,
-            new CompilerChildResponse<TResponse>(
-                SchemaVersion,
-                null,
-                new CompilerChildFailure(kind, publicMessage)),
-            maximumBytes,
-            cancellationToken).ConfigureAwait(false);
+        await WriteResponseAsync(output, new CompilerChildResponse<TResponse>(SchemaVersion, null, new CompilerChildFailure(kind, publicMessage)), maximumBytes, cancellationToken).ConfigureAwait(false);
 
     public static CompilerChildResponse<TResponse> DeserializeResponse<TResponse>(byte[] bytes)
         where TResponse : class
     {
-        var response = JsonSerializer.Deserialize<CompilerChildResponse<TResponse>>(bytes, JsonOptions)
-            ?? throw new InvalidDataException("The compiler child response was empty.");
+        var response = JsonSerializer.Deserialize<CompilerChildResponse<TResponse>>(bytes, JsonOptions) ?? throw new InvalidDataException("The compiler child response was empty.");
         if (response.SchemaVersion != SchemaVersion)
             throw new InvalidDataException("The compiler child response schema is unsupported.");
         if ((response.Result is null) == (response.Failure is null))
@@ -477,11 +379,7 @@ public static class CompilerChildProtocol
         return response;
     }
 
-    private static async Task WriteResponseAsync<TResponse>(
-        Stream output,
-        CompilerChildResponse<TResponse> response,
-        int maximumBytes,
-        CancellationToken cancellationToken)
+    private static async Task WriteResponseAsync<TResponse>(Stream output, CompilerChildResponse<TResponse> response, int maximumBytes, CancellationToken cancellationToken)
         where TResponse : class
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(response, JsonOptions);
@@ -491,10 +389,7 @@ public static class CompilerChildProtocol
         await output.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<byte[]> ReadAllBoundedAsync(
-        Stream input,
-        int maximumBytes,
-        CancellationToken cancellationToken)
+    private static async Task<byte[]> ReadAllBoundedAsync(Stream input, int maximumBytes, CancellationToken cancellationToken)
     {
         using var output = new MemoryStream(Math.Min(maximumBytes, 64 * 1024));
         var buffer = new byte[64 * 1024];
@@ -513,15 +408,10 @@ public static class CompilerChildProtocol
 public sealed record CompilerChildRequest<TRequest>(int SchemaVersion, TRequest Request)
     where TRequest : class;
 
-public sealed record CompilerChildResponse<TResponse>(
-    int SchemaVersion,
-    TResponse? Result,
-    CompilerChildFailure? Failure)
+public sealed record CompilerChildResponse<TResponse>(int SchemaVersion, TResponse? Result, CompilerChildFailure? Failure)
     where TResponse : class;
 
-public sealed record CompilerChildFailure(
-    CompilerChildFailureKind Kind,
-    string PublicMessage);
+public sealed record CompilerChildFailure(CompilerChildFailureKind Kind, string PublicMessage);
 
 public enum CompilerChildFailureKind
 {
@@ -536,42 +426,27 @@ public enum CompilerChildFailureKind
 
 public abstract class CompilerProcessException : Exception
 {
-    protected CompilerProcessException(string message, Exception? innerException = null)
-        : base(message, innerException)
-    {
-    }
+    protected CompilerProcessException(string message, Exception? innerException = null) : base(message, innerException) { }
 }
 
-public sealed class CompilerProcessCapacityExceededException()
-    : CompilerProcessException("The compiler process capacity is exhausted.");
+public sealed class CompilerProcessCapacityExceededException() : CompilerProcessException("The compiler process capacity is exhausted.");
 
-public sealed class CompilerProcessTimeoutException(string message)
-    : CompilerProcessException(message);
+public sealed class CompilerProcessTimeoutException(string message) : CompilerProcessException(message);
 
-public sealed class CompilerProcessCrashedException(
-    int? exitCode,
-    string message,
-    Exception? innerException = null) : CompilerProcessException(message, innerException)
+public sealed class CompilerProcessCrashedException(int? exitCode, string message, Exception? innerException = null) : CompilerProcessException(message, innerException)
 {
     public int? ExitCode { get; } = exitCode;
 }
 
-public sealed class CompilerProcessMemoryLimitExceededException(
-    long limitBytes,
-    long observedBytes)
-    : CompilerProcessException("The compiler process exceeded its memory limit.")
+public sealed class CompilerProcessMemoryLimitExceededException(long limitBytes, long observedBytes) : CompilerProcessException("The compiler process exceeded its memory limit.")
 {
     public long LimitBytes { get; } = limitBytes;
     public long ObservedBytes { get; } = observedBytes;
 }
 
-public sealed class CompilerProcessProtocolException(
-    string message,
-    Exception? innerException = null) : CompilerProcessException(message, innerException);
+public sealed class CompilerProcessProtocolException(string message, Exception? innerException = null) : CompilerProcessException(message, innerException);
 
-public sealed class CompilerChildReportedException(
-    CompilerChildFailureKind kind,
-    string publicMessage) : CompilerProcessException(publicMessage)
+public sealed class CompilerChildReportedException(CompilerChildFailureKind kind, string publicMessage) : CompilerProcessException(publicMessage)
 {
     public CompilerChildFailureKind Kind { get; } = kind;
     public string PublicMessage { get; } = publicMessage;

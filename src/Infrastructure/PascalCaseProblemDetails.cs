@@ -14,24 +14,19 @@ namespace SharpLabNext.Http;
 /// </summary>
 internal static class SharpLabNextProblemDetailsExtensions
 {
-    public static IServiceCollection AddSharpLabNextProblemDetails(
-        this IServiceCollection services)
+    public static IServiceCollection AddSharpLabNextProblemDetails(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddOptions();
         // Register our writer before AddProblemDetails adds the framework
         // writer. ProblemDetailsService uses the first writer that can write.
-        services.TryAddEnumerable(
-            ServiceDescriptor.Singleton<IProblemDetailsWriter, PascalCaseProblemDetailsWriter>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IProblemDetailsWriter, PascalCaseProblemDetailsWriter>());
         services.AddProblemDetails();
         return services;
     }
 
-    public static ValueTask WriteProblemDetailsAsync(
-        this HttpResponse response,
-        ProblemDetails problem,
-        CancellationToken cancellationToken = default)
+    public static ValueTask WriteProblemDetailsAsync(this HttpResponse response, ProblemDetails problem, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(response);
         ArgumentNullException.ThrowIfNull(problem);
@@ -56,16 +51,10 @@ internal sealed class PascalCaseProblemDetailsWriter : IProblemDetailsWriter
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        return WriteAsync(
-            context.HttpContext.Response,
-            context.ProblemDetails,
-            context.HttpContext.RequestAborted);
+        return WriteAsync(context.HttpContext.Response, context.ProblemDetails, context.HttpContext.RequestAborted);
     }
 
-    internal static async ValueTask WriteAsync(
-        HttpResponse response,
-        ProblemDetails problem,
-        CancellationToken cancellationToken)
+    internal static async ValueTask WriteAsync(HttpResponse response, ProblemDetails problem, CancellationToken cancellationToken)
     {
         response.StatusCode = problem.Status ?? response.StatusCode;
         response.ContentType = "application/problem+json; charset=utf-8";
@@ -90,11 +79,7 @@ internal sealed class PascalCaseProblemDetailsWriter : IProblemDetailsWriter
             payload[name] = extension.Value;
         }
 
-        await JsonSerializer.SerializeAsync(
-            response.Body,
-            payload,
-            JsonOptions,
-            cancellationToken).ConfigureAwait(false);
+        await JsonSerializer.SerializeAsync(response.Body, payload, JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
     private static string ToPascalCase(string name)

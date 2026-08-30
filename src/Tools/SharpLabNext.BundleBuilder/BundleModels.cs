@@ -169,40 +169,15 @@ public sealed record BundleImageDocument
     public string? JitCommit { get; init; }
 }
 
-public sealed record BundleBuildResult(
-    string OutputDirectory,
-    string ReleaseId,
-    IReadOnlyList<InspectedImage> Images,
-    bool ContainsImages,
-    bool HasSignature);
+public sealed record BundleBuildResult(string OutputDirectory, string ReleaseId, IReadOnlyList<InspectedImage> Images, bool ContainsImages, bool HasSignature);
 
-public sealed record DependencyComponent(
-    string PackageManager,
-    string Name,
-    string Version,
-    string? Integrity,
-    string License,
-    string? SourceUri,
-    bool Direct,
-    bool Optional);
+public sealed record DependencyComponent(string PackageManager, string Name, string Version, string? Integrity, string License, string? SourceUri, bool Direct, bool Optional);
 
-public sealed record DependencyInventoryDocument(
-    int SchemaVersion,
-    DateTimeOffset GeneratedAt,
-    IReadOnlyList<DependencyComponent> Components);
+public sealed record DependencyInventoryDocument(int SchemaVersion, DateTimeOffset GeneratedAt, IReadOnlyList<DependencyComponent> Components);
 
-public sealed record SourceMaterialDocument(
-    int SchemaVersion,
-    DateTimeOffset GeneratedAt,
-    IReadOnlyList<SourceMaterialComponent> Components);
+public sealed record SourceMaterialDocument(int SchemaVersion, DateTimeOffset GeneratedAt, IReadOnlyList<SourceMaterialComponent> Components);
 
-public sealed record SourceMaterialComponent(
-    string PackageManager,
-    string Name,
-    string Version,
-    string License,
-    string? SourceUri,
-    string MaterialPath);
+public sealed record SourceMaterialComponent(string PackageManager, string Name, string Version, string License, string? SourceUri, string MaterialPath);
 
 public sealed record LicensePolicy
 {

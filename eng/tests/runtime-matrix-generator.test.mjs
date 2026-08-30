@@ -10,9 +10,9 @@ import {
   runtimePromotionPlanSignaturePath,
   serializeRuntimePromotionPlan,
   signRuntimePromotionPlan,
-} from './runtime-promotion-plan-signature.mjs'
+} from '../release/runtime-promotion-plan-signature.mjs'
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 const hex = character => character.repeat(64)
 
@@ -23,10 +23,7 @@ test('net30 composition generates its reference, presets, compatibility, and ful
   const matrixPath = path.join(root, 'runtime-matrix.json')
   const catalogPath = path.join(root, 'catalog.json')
   const profileDirectory = path.join(root, 'candidates')
-  const matrix = JSON.parse(fs.readFileSync(
-    path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'),
-    'utf8',
-  ))
+  const matrix = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'), 'utf8'));
   blockAllMatrixCapabilities(matrix)
   fs.writeFileSync(matrixPath, `${JSON.stringify(matrix, null, 2)}\n`)
   fs.copyFileSync(path.join(repositoryRoot, 'profiles', 'catalog', 'catalog.json'), catalogPath)
@@ -39,7 +36,7 @@ test('net30 composition generates its reference, presets, compatibility, and ful
   const run = () => spawnSync(
     'dotnet',
     [
-      'run', path.join(repositoryRoot, 'eng', 'generate-runtime-matrix.cs'), '--',
+      'run', path.join(repositoryRoot, 'eng', 'tools', 'generate-runtime-matrix.cs'), '--',
       '--repository-root', repositoryRoot,
       '--matrix', matrixPath,
       '--catalog', catalogPath,
@@ -66,9 +63,7 @@ test('net30 composition generates its reference, presets, compatibility, and ful
   const generatedText = generatedBytes.toString('utf8')
   assert.match(generatedText, /C\+\+\/CLI/)
   const generated = JSON.parse(generatedText)
-  const generatedProfileBytes = fs.readFileSync(
-    path.join(profileDirectory, 'dotnet-10-linux-x64.json'),
-  )
+  const generatedProfileBytes = fs.readFileSync(path.join(profileDirectory, 'dotnet-10-linux-x64.json'));
   assert.equal(generatedProfileBytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])), false)
   assert.equal(generatedProfileBytes.includes(0x0d), false)
   const target = matrix.framework.targets.find(candidate => candidate.id === 'netfx30')
@@ -133,7 +128,7 @@ test('payload fallback identity follows the selected CoreCLR platform', { timeou
     'dotnet',
     [
       'run',
-      path.join(repositoryRoot, 'eng', 'generate-runtime-matrix.cs'),
+      path.join(repositoryRoot, 'eng', 'tools', 'generate-runtime-matrix.cs'),
       '--',
       '--repository-root', repositoryRoot,
       '--matrix', matrixPath,
@@ -189,7 +184,7 @@ test('Wine profile generation rejects execution users outside the closed identit
     'dotnet',
     [
       'run',
-      path.join(repositoryRoot, 'eng', 'generate-runtime-matrix.cs'),
+      path.join(repositoryRoot, 'eng', 'tools', 'generate-runtime-matrix.cs'),
       '--',
       '--repository-root', repositoryRoot,
       '--matrix', matrixPath,
@@ -249,7 +244,7 @@ test('blocked runtime refresh revokes a stale allowed artifact edge', { timeout:
     'dotnet',
     [
       'run',
-      path.join(repositoryRoot, 'eng', 'generate-runtime-matrix.cs'),
+      path.join(repositoryRoot, 'eng', 'tools', 'generate-runtime-matrix.cs'),
       '--',
       '--repository-root', repositoryRoot,
       '--matrix', matrixPath,
@@ -333,7 +328,7 @@ test('checked JIT source lock selects the isolated bridge only for Linux', { tim
     'dotnet',
     [
       'run',
-      path.join(repositoryRoot, 'eng', 'generate-runtime-matrix.cs'),
+      path.join(repositoryRoot, 'eng', 'tools', 'generate-runtime-matrix.cs'),
       '--',
       '--repository-root', repositoryRoot,
       '--matrix', matrixPath,
@@ -397,10 +392,7 @@ test('blocked modern profiler rows retain one closed Runner and JIT provider con
     path.join(repositoryRoot, 'profiles', 'catalog', 'catalog.json'),
     'utf8',
   ))
-  const modernProfileIds = new Set([
-    'dotnet-10-linux-x64',
-    'dotnet-11-preview-linux-x64',
-  ])
+  const modernProfileIds = new Set(['dotnet-10-linux-x64', 'dotnet-11-preview-linux-x64'])
   catalog.runtimes = catalog.runtimes.filter(runtime => !modernProfileIds.has(runtime.id))
   fs.writeFileSync(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`)
 
@@ -408,7 +400,7 @@ test('blocked modern profiler rows retain one closed Runner and JIT provider con
     'dotnet',
     [
       'run',
-      path.join(repositoryRoot, 'eng', 'generate-runtime-matrix.cs'),
+      path.join(repositoryRoot, 'eng', 'tools', 'generate-runtime-matrix.cs'),
       '--',
       '--repository-root', repositoryRoot,
       '--matrix', matrixPath,
@@ -482,15 +474,13 @@ test('verified runtime generation consumes immutable receipt identities and JIT 
   const matrixPath = path.join(root, 'profiles', 'runtime-matrix.json')
   const catalogPath = path.join(root, 'profiles', 'catalog', 'catalog.json')
   const profileDirectory = path.join(root, 'profiles', 'runtimes', 'candidates')
-  const validatorDirectory = path.join(root, 'eng')
+  const validatorDirectory = path.join(root, 'eng', 'release')
   fs.mkdirSync(path.dirname(matrixPath), { recursive: true })
   fs.mkdirSync(path.dirname(catalogPath), { recursive: true })
   fs.mkdirSync(validatorDirectory, { recursive: true })
   const planKeys = crypto.generateKeyPairSync('ed25519')
   const planPublicKey = planKeys.publicKey.export({ type: 'spki', format: 'pem' })
-  const planKeyId = `sha256:${crypto.createHash('sha256').update(
-    planKeys.publicKey.export({ type: 'spki', format: 'der' }),
-  ).digest('hex')}`
+  const planKeyId = `sha256:${crypto.createHash('sha256').update(planKeys.publicKey.export({ type: 'spki', format: 'der' })).digest('hex')}`;
   for (const fileName of [
     'json-schema-formats.mjs',
     'json-schema-instance-validation.mjs',
@@ -502,13 +492,8 @@ test('verified runtime generation consumes immutable receipt identities and JIT 
     'runtime-wine-operator-binding.mjs',
     'wine-coreclr-operator-receipt.mjs',
   ]) {
-    const source = path.join(repositoryRoot, 'eng', fileName)
-    const targetPath = path.join(
-      validatorDirectory,
-      fileName === 'runtime-promotion-receipt-validation.mjs'
-        ? 'runtime-promotion-receipt-validation-impl.mjs'
-        : fileName,
-    )
+    const source = path.join(repositoryRoot, 'eng', 'release', fileName)
+    const targetPath = path.join(validatorDirectory, fileName === 'runtime-promotion-receipt-validation.mjs' ? 'runtime-promotion-receipt-validation-impl.mjs' : fileName);
     fs.copyFileSync(source, targetPath)
   }
   const schemaDirectory = path.join(root, 'schemas')
@@ -664,16 +649,12 @@ if (failures.length > 0) {
     `${JSON.stringify(preflightProfile, null, 2)}\n`,
   )
   const securityPolicy = preflightProfile.securityPolicies[0]
-  const performancePolicyRelativePath =
-    'profiles/runtime-performance-policies/runtime-image-linux-x64-v1.json'
+  const performancePolicyRelativePath = 'profiles/runtime-performance-policies/runtime-image-linux-x64-v1.json';
   const performancePolicyPath = path.join(root, ...performancePolicyRelativePath.split('/'))
   fs.mkdirSync(path.dirname(performancePolicyPath), { recursive: true })
-  const performancePolicyBytes = fs.readFileSync(
-    path.join(repositoryRoot, ...performancePolicyRelativePath.split('/')),
-  )
+  const performancePolicyBytes = fs.readFileSync(path.join(repositoryRoot, ...performancePolicyRelativePath.split('/')));
   fs.writeFileSync(performancePolicyPath, performancePolicyBytes)
-  const performancePolicyDigest =
-    `sha256:${crypto.createHash('sha256').update(performancePolicyBytes).digest('hex')}`
+  const performancePolicyDigest = `sha256:${crypto.createHash('sha256').update(performancePolicyBytes).digest('hex')}`;
   const writePerformanceEvidence = () => {
     const capabilities = receipt.checks.map(check => check.capability).sort()
     const jitCheck = receipt.checks.find(check => check.capability === 'jit-asm')
@@ -682,8 +663,7 @@ if (failures.length > 0) {
     if (jitCheck !== undefined && !['none', 'not-applicable'].includes(jitCheck.sourceMappingKind)) {
       scenarios.mapping = performanceScenario()
     }
-    const performanceEvidenceRelativePath =
-      `profiles/runtime-promotion-evidence/${profileId}/performance.json`
+    const performanceEvidenceRelativePath = `profiles/runtime-promotion-evidence/${profileId}/performance.json`;
     const performanceEvidencePath = path.join(root, ...performanceEvidenceRelativePath.split('/'))
     const performanceEvidence = {
       schemaVersion: 1,
@@ -734,8 +714,7 @@ if (failures.length > 0) {
   }
   const writeEvidence = () => {
     for (const check of receipt.checks) {
-      const relativePath =
-        `profiles/runtime-promotion-evidence/${profileId}/${check.capability}.json`
+      const relativePath = `profiles/runtime-promotion-evidence/${profileId}/${check.capability}.json`;
       const absolutePath = path.join(root, ...relativePath.split('/'))
       const helper = {
         role: 'helper',
@@ -932,8 +911,7 @@ if (failures.length > 0) {
       fs.mkdirSync(path.dirname(absolutePath), { recursive: true })
       fs.writeFileSync(absolutePath, bytes)
       check.evidencePath = relativePath
-      check.evidenceSha256 =
-        `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`
+      check.evidenceSha256 = `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
     }
     writePerformanceEvidence()
   }
@@ -947,8 +925,7 @@ if (failures.length > 0) {
     delete boundPreflight.promotionReceipt
     const planRoot = path.join(root, 'profiles', 'runtime-promotion-plans')
     fs.mkdirSync(planRoot, { recursive: true })
-    const preflightRelativePath =
-      `profiles/runtime-promotion-plans/${profileId}.profile.json`
+    const preflightRelativePath = `profiles/runtime-promotion-plans/${profileId}.profile.json`;
     const preflightBytes = Buffer.from(`${JSON.stringify(boundPreflight, null, 2)}\n`)
     fs.writeFileSync(path.join(root, ...preflightRelativePath.split('/')), preflightBytes)
     const plan = {
@@ -992,8 +969,7 @@ if (failures.length > 0) {
     }
     const planBytes = serializeRuntimePromotionPlan(plan)
     fs.writeFileSync(path.join(planRoot, `${profileId}.json`), planBytes)
-    receipt.planSha256 =
-      `sha256:${crypto.createHash('sha256').update(planBytes).digest('hex')}`
+    receipt.planSha256 = `sha256:${crypto.createHash('sha256').update(planBytes).digest('hex')}`;
     const signatureRelativePath = runtimePromotionPlanSignaturePath(profileId)
     const signatureBytes = Buffer.from(`${signRuntimePromotionPlan(planBytes, planKeys.privateKey)}\n`)
     fs.writeFileSync(path.join(root, ...signatureRelativePath.split('/')), signatureBytes)
@@ -1025,7 +1001,7 @@ if (failures.length > 0) {
       'dotnet',
       [
         'run',
-        path.join(repositoryRoot, 'eng', 'generate-runtime-matrix.cs'),
+        path.join(repositoryRoot, 'eng', 'tools', 'generate-runtime-matrix.cs'),
         '--',
         '--repository-root', root,
         '--matrix', matrixPath,
@@ -1119,8 +1095,7 @@ if (failures.length > 0) {
   writeEvidence()
   let updatedReceiptBytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`)
   fs.writeFileSync(receiptPath, updatedReceiptBytes)
-  target.linuxCapability.promotionReceipt.sha256 =
-    `sha256:${crypto.createHash('sha256').update(updatedReceiptBytes).digest('hex')}`
+  target.linuxCapability.promotionReceipt.sha256 = `sha256:${crypto.createHash('sha256').update(updatedReceiptBytes).digest('hex')}`;
   fs.writeFileSync(matrixPath, `${JSON.stringify(matrix, null, 2)}\n`)
   writeFixtureCatalog()
 

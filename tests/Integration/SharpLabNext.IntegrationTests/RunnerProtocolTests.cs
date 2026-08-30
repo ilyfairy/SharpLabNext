@@ -28,10 +28,7 @@ public sealed class RunnerProtocolTests
     [Fact]
     public void CgroupMemoryEventsToleratesMissingAndMalformedInput()
     {
-        var missingPath = Path.Combine(
-            Path.GetTempPath(),
-            Guid.NewGuid().ToString("N"),
-            "memory.events");
+        var missingPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "memory.events");
 
         Assert.Null(CgroupMemoryEvents.TryReadOomKillCount(missingPath));
         Assert.Null(CgroupMemoryEvents.ParseOomKillCount("oom_kill not-a-number\n"));
@@ -41,33 +38,15 @@ public sealed class RunnerProtocolTests
     [Fact]
     public void RunnerOnlySynthesizesOutOfMemoryForAnObservedOomKill()
     {
-        Assert.Equal(
-            "out-of-memory",
-            RunnerExitClassification.GetSyntheticStatus(
-                childExitReported: false,
-                oomKillCountBefore: 4,
-                oomKillCountAfter: 5));
-        Assert.Equal(
-            "process-crash",
-            RunnerExitClassification.GetSyntheticStatus(
-                childExitReported: false,
-                oomKillCountBefore: 4,
-                oomKillCountAfter: 4));
-        Assert.Equal(
-            "process-crash",
-            RunnerExitClassification.GetSyntheticStatus(
-                childExitReported: false,
-                oomKillCountBefore: null,
-                oomKillCountAfter: 5));
+        Assert.Equal("out-of-memory", RunnerExitClassification.GetSyntheticStatus(childExitReported: false, oomKillCountBefore: 4, oomKillCountAfter: 5));
+        Assert.Equal("process-crash", RunnerExitClassification.GetSyntheticStatus(childExitReported: false, oomKillCountBefore: 4, oomKillCountAfter: 4));
+        Assert.Equal("process-crash", RunnerExitClassification.GetSyntheticStatus(childExitReported: false, oomKillCountBefore: null, oomKillCountAfter: 5));
     }
 
     [Fact]
     public void RunnerKeepsStructuredExitAuthoritativeWhenOomCounterIncreases()
     {
-        Assert.Null(RunnerExitClassification.GetSyntheticStatus(
-            childExitReported: true,
-            oomKillCountBefore: 4,
-            oomKillCountAfter: 5));
+        Assert.Null(RunnerExitClassification.GetSyntheticStatus(childExitReported: true, oomKillCountBefore: 4, oomKillCountAfter: 5));
     }
 
     [Fact]
@@ -97,17 +76,14 @@ public sealed class RunnerProtocolTests
 
         Assert.Equal(7, process.ExitCode);
         Assert.Empty(processError);
-        Assert.Contains(frames, frame =>
-            frame.Kind == RuntimeFrameKind.Stdout && Encoding.UTF8.GetString(frame.Payload.Span) == "fixture-stdout");
-        Assert.Contains(frames, frame =>
-            frame.Kind == RuntimeFrameKind.Stderr && Encoding.UTF8.GetString(frame.Payload.Span) == "fixture-stderr");
+        Assert.Contains(frames, frame => frame.Kind == RuntimeFrameKind.Stdout && Encoding.UTF8.GetString(frame.Payload.Span) == "fixture-stdout");
+        Assert.Contains(frames, frame => frame.Kind == RuntimeFrameKind.Stderr && Encoding.UTF8.GetString(frame.Payload.Span) == "fixture-stderr");
         Assert.Contains(frames, static frame => frame.Kind == RuntimeFrameKind.Inspection);
         var graphFrame = Assert.Single(frames, static frame => frame.Kind == RuntimeFrameKind.MemoryGraph);
         var graph = RuntimeStructuredPayloadCodec.DeserializeInspection(graphFrame.Payload.Span);
         Assert.Equal("MemoryGraph", graph.Kind);
         Assert.Equal(2, graph.Graph.Roots.Count);
-        Assert.Contains(graph.Graph.Nodes, static node =>
-            node.Edges.Any(edge => edge.TargetNodeId == node.Id));
+        Assert.Contains(graph.Graph.Nodes, static node => node.Edges.Any(edge => edge.TargetNodeId == node.Id));
         var exit = Assert.Single(frames, static frame => frame.Kind == RuntimeFrameKind.Exit);
         using var exitJson = JsonDocument.Parse(exit.Payload);
         Assert.Equal(7, exitJson.RootElement.GetProperty("ExitCode").GetInt32());
@@ -157,16 +133,9 @@ public sealed class RunnerProtocolTests
     [Fact]
     public async Task StructuredExitDoesNotWaitForPipeEnd()
     {
-        var exitPayload = RuntimeStructuredPayloadCodec.Serialize(new
-        {
-            Status = "completed",
-            ExitCode = 0
-        });
+        var exitPayload = RuntimeStructuredPayloadCodec.Serialize(new { Status = "completed", ExitCode = 0 });
         await using var encoded = new MemoryStream();
-        await RuntimeFrameCodec.WriteAsync(
-            encoded,
-            new RuntimeFrame(1, RuntimeFrameKind.Exit, exitPayload),
-            TestContext.Current.CancellationToken);
+        await RuntimeFrameCodec.WriteAsync(encoded, new RuntimeFrame(1, RuntimeFrameKind.Exit, exitPayload), TestContext.Current.CancellationToken);
         await using var source = new FailOnReadAfterContentStream(encoded.ToArray());
         await using var forwarded = new MemoryStream();
         await using (var writer = new RuntimeFrameWriter(forwarded))
@@ -175,14 +144,10 @@ public sealed class RunnerProtocolTests
         }
 
         forwarded.Position = 0;
-        var exit = await RuntimeFrameCodec.ReadAsync(
-            forwarded,
-            cancellationToken: TestContext.Current.CancellationToken);
+        var exit = await RuntimeFrameCodec.ReadAsync(forwarded, cancellationToken: TestContext.Current.CancellationToken);
         Assert.NotNull(exit);
         Assert.Equal(RuntimeFrameKind.Exit, exit.Kind);
-        Assert.Null(await RuntimeFrameCodec.ReadAsync(
-            forwarded,
-            cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Null(await RuntimeFrameCodec.ReadAsync(forwarded, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -201,8 +166,7 @@ public sealed class RunnerProtocolTests
         startInfo.ArgumentList.Add(fixturePath);
         startInfo.ArgumentList.Add("runner-descendant-parent");
         startInfo.ArgumentList.Add(pidPath);
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Failed to start Runner.");
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start Runner.");
         Process? descendant = null;
         try
         {
@@ -230,32 +194,21 @@ public sealed class RunnerProtocolTests
             }
             catch (OperationCanceledException exception) when (timeout.IsCancellationRequested)
             {
-                throw new TimeoutException(
-                    $"Runner did not complete the descendant scenario. " +
-                    $"Exited={process.HasExited}; frames={string.Join(',', frames.Select(static frame => frame.Kind))}; " +
-                    $"stdout={observedOutputLength}/{expectedOutputLength}; pidFile={File.Exists(pidPath)}.",
-                    exception);
+                throw new TimeoutException($"Runner did not complete the descendant scenario. " + $"Exited={process.HasExited}; frames={string.Join(',', frames.Select(static frame => frame.Kind))}; " + $"stdout={observedOutputLength}/{expectedOutputLength}; pidFile={File.Exists(pidPath)}.", exception);
             }
 
             await process.WaitForExitAsync(timeout.Token);
 
             Assert.Equal(0, process.ExitCode);
-            var stdout = frames
-                .Where(static frame => frame.Kind == RuntimeFrameKind.Stdout)
-                .SelectMany(static frame => frame.Payload.ToArray())
-                .ToArray();
+            var stdout = frames.Where(static frame => frame.Kind == RuntimeFrameKind.Stdout).SelectMany(static frame => frame.Payload.ToArray()).ToArray();
             Assert.Equal(expectedOutputLength, stdout.Length);
-            Assert.Equal(
-                DescendantParentOutput,
-                Encoding.UTF8.GetString(stdout.AsSpan(0, DescendantParentOutput.Length)));
+            Assert.Equal(DescendantParentOutput, Encoding.UTF8.GetString(stdout.AsSpan(0, DescendantParentOutput.Length)));
             Assert.True(stdout.AsSpan(DescendantParentOutput.Length, 1024 * 1024).IndexOfAnyExcept((byte)'x') < 0);
             var exit = Assert.Single(frames, static frame => frame.Kind == RuntimeFrameKind.Exit);
             using var exitJson = JsonDocument.Parse(exit.Payload);
             Assert.Equal("completed", exitJson.RootElement.GetProperty("Status").GetString());
             Assert.Equal(0, exitJson.RootElement.GetProperty("ExitCode").GetInt32());
-            var descendantId = int.Parse(
-                await File.ReadAllTextAsync(pidPath, timeout.Token),
-                System.Globalization.CultureInfo.InvariantCulture);
+            var descendantId = int.Parse(await File.ReadAllTextAsync(pidPath, timeout.Token), System.Globalization.CultureInfo.InvariantCulture);
             descendant = Process.GetProcessById(descendantId);
             Assert.False(descendant.HasExited);
         }
@@ -263,19 +216,13 @@ public sealed class RunnerProtocolTests
         {
             if (!process.HasExited)
                 process.Kill(entireProcessTree: true);
-            if (descendant is null && File.Exists(pidPath) && int.TryParse(
-                    await File.ReadAllTextAsync(pidPath, CancellationToken.None),
-                    System.Globalization.NumberStyles.None,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out var descendantId))
+            if (descendant is null && File.Exists(pidPath) && int.TryParse(await File.ReadAllTextAsync(pidPath, CancellationToken.None), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var descendantId))
             {
                 try
                 {
                     descendant = Process.GetProcessById(descendantId);
                 }
-                catch (ArgumentException)
-                {
-                }
+                catch (ArgumentException) { }
             }
             if (descendant is not null && !descendant.HasExited)
             {
@@ -289,9 +236,7 @@ public sealed class RunnerProtocolTests
 
     private sealed class FailOnReadAfterContentStream(byte[] content) : MemoryStream(content)
     {
-        public override ValueTask<int> ReadAsync(
-            Memory<byte> buffer,
-            CancellationToken cancellationToken = default)
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
             if (Position == Length)
                 throw new InvalidOperationException("The structured reader read past the Exit frame.");
@@ -323,8 +268,7 @@ public sealed class RunnerProtocolTests
             startInfo.ArgumentList.Add("--");
             startInfo.ArgumentList.Add("user argument;$(not-a-shell)");
             startInfo.Environment["SHARPLABNEXT_STDIN_PATH"] = stdinPath;
-            using var process = Process.Start(startInfo)
-                ?? throw new InvalidOperationException("Failed to start Wine Runner.");
+            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start Wine Runner.");
             var stderrTask = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
             var frames = new List<RuntimeFrame>();
             var reader = new RuntimeFrameLogReader(process.StandardOutput.BaseStream);
@@ -335,17 +279,9 @@ public sealed class RunnerProtocolTests
 
             Assert.Equal(23, process.ExitCode);
             Assert.Empty(await stderrTask);
-            Assert.Contains(frames, frame =>
-                frame.Kind == RuntimeFrameKind.Stdout &&
-                Encoding.UTF8.GetString(frame.Payload.Span) ==
-                "bridge-stdout:fixed argument:user argument;$(not-a-shell):from-stdin");
-            var stderr = string.Concat(frames
-                .Where(static frame => frame.Kind == RuntimeFrameKind.Stderr)
-                .Select(static frame => Encoding.UTF8.GetString(frame.Payload.Span)));
-            Assert.Contains(
-                "wineserver: could not save registry branch to user.reg : Read-only file system\n",
-                stderr,
-                StringComparison.Ordinal);
+            Assert.Contains(frames, frame => frame.Kind == RuntimeFrameKind.Stdout && Encoding.UTF8.GetString(frame.Payload.Span) == "bridge-stdout:fixed argument:user argument;$(not-a-shell):from-stdin");
+            var stderr = string.Concat(frames.Where(static frame => frame.Kind == RuntimeFrameKind.Stderr).Select(static frame => Encoding.UTF8.GetString(frame.Payload.Span)));
+            Assert.Contains("wineserver: could not save registry branch to user.reg : Read-only file system\n", stderr, StringComparison.Ordinal);
             Assert.Contains("bridge-stderr", stderr, StringComparison.Ordinal);
             var exit = Assert.Single(frames, static frame => frame.Kind == RuntimeFrameKind.Exit);
             using var exitJson = JsonDocument.Parse(exit.Payload);
@@ -363,8 +299,7 @@ public sealed class RunnerProtocolTests
     {
         var missing = Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.exe");
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
-            ProcessBridgeArguments.Parse(["bridge", missing, "--"]));
+        var exception = Assert.Throws<FileNotFoundException>(() => ProcessBridgeArguments.Parse(["bridge", missing, "--"]));
 
         Assert.Equal(Path.GetFullPath(missing), exception.FileName);
         Assert.Contains("process bridge", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -384,8 +319,7 @@ public sealed class RunnerProtocolTests
         startInfo.ArgumentList.Add("bridge");
         startInfo.ArgumentList.Add("../injected-executable");
         startInfo.ArgumentList.Add("--");
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Failed to start Process Bridge.");
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start Process Bridge.");
         var stderrTask = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
         var frames = new List<RuntimeFrame>();
         var reader = new RuntimeFrameLogReader(process.StandardOutput.BaseStream);
@@ -410,18 +344,12 @@ public sealed class RunnerProtocolTests
     {
         const string visibleBefore = "user-stderr-before\n";
         const string visibleWithoutLineBreak = "stderr-ok";
-        const string systemWarning =
-            "wineserver: could not save registry branch to system.reg : Read-only file system\n";
-        const string userDefaultWarning =
-            "wineserver: could not save registry branch to userdef.reg : Read-only file system\n";
-        const string userWarning =
-            "wineserver: could not save registry branch to user.reg : Read-only file system\n";
-        const string lookalike =
-            "wineserver: could not save registry branch to other.reg : Read-only file system\n";
+        const string systemWarning = "wineserver: could not save registry branch to system.reg : Read-only file system\n";
+        const string userDefaultWarning = "wineserver: could not save registry branch to userdef.reg : Read-only file system\n";
+        const string userWarning = "wineserver: could not save registry branch to user.reg : Read-only file system\n";
+        const string lookalike = "wineserver: could not save registry branch to other.reg : Read-only file system\n";
         const string visibleAfter = "user-stderr-after";
-        var input = Encoding.UTF8.GetBytes(
-            visibleBefore + visibleWithoutLineBreak + systemWarning +
-            userDefaultWarning + userWarning + lookalike + visibleAfter);
+        var input = Encoding.UTF8.GetBytes(visibleBefore + visibleWithoutLineBreak + systemWarning + userDefaultWarning + userWarning + lookalike + visibleAfter);
         await using var framed = new MemoryStream();
         await using (var writer = new RuntimeFrameWriter(framed))
         {
@@ -441,8 +369,6 @@ public sealed class RunnerProtocolTests
             visible.Write(frame.Payload.Span);
         }
 
-        Assert.Equal(
-            visibleBefore + visibleWithoutLineBreak + lookalike + visibleAfter,
-            Encoding.UTF8.GetString(visible.ToArray()));
+        Assert.Equal(visibleBefore + visibleWithoutLineBreak + lookalike + visibleAfter, Encoding.UTF8.GetString(visible.ToArray()));
     }
 }

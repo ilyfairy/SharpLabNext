@@ -35,33 +35,16 @@ public sealed class MiniLanguageWorkerEndpointTests : IClassFixture<WebApplicati
     public async Task WorkerPassesTheReusableLanguageConformanceSuite()
     {
         using var client = _factory.CreateClient();
-        Assert.Same(
-            SharpLabNextTelemetry.Metrics,
-            _factory.Services.GetRequiredService<SharpLabNextMetrics>());
-        var manifest = await client.GetFromJsonAsync<LanguageWorkerCapabilityManifest>(
-            "/api/v1/worker/capabilities",
-            JsonOptions,
-            TestContext.Current.CancellationToken);
+        Assert.Same(SharpLabNextTelemetry.Metrics, _factory.Services.GetRequiredService<SharpLabNextMetrics>());
+        var manifest = await client.GetFromJsonAsync<LanguageWorkerCapabilityManifest>("/api/v1/worker/capabilities", JsonOptions, TestContext.Current.CancellationToken);
         Assert.NotNull(manifest);
-        var expectedIdentity = new ServiceIdentity(
-            MiniLanguageCompiler.ToolchainId,
-            ServiceKind.ToolchainWorker,
-            "development",
-            ProtocolVersion.WorkerV1,
-            manifest.Capabilities,
-            "ready");
+        var expectedIdentity = new ServiceIdentity(MiniLanguageCompiler.ToolchainId, ServiceKind.ToolchainWorker, "development", ProtocolVersion.WorkerV1, manifest.Capabilities, "ready");
         const string validSource = "print \"Hello from MiniLang\"";
         const string invalidSource = "say \"This is not MiniLang\"";
         var compileCheck = CreateBuildRequest(BuildTarget.CompileCheck, validSource);
         var artifact = CreateBuildRequest(BuildTarget.Artifact, validSource);
         var sessionWorkspace = CreateWorkspace(invalidSource);
-        var openSession = new OpenLanguageSessionRequest(
-            "request-minilang-lsp",
-            "pipeline-minilang-lsp",
-            MiniLanguageCompiler.LanguageId,
-            MiniLanguageCompiler.ToolchainId,
-            sessionWorkspace.ReferenceSetId,
-            sessionWorkspace);
+        var openSession = new OpenLanguageSessionRequest("request-minilang-lsp", "pipeline-minilang-lsp", MiniLanguageCompiler.LanguageId, MiniLanguageCompiler.ToolchainId, sessionWorkspace.ReferenceSetId, sessionWorkspace);
         var scenario = new LanguageWorkerConformanceScenario(
             expectedIdentity,
             $"sha256:{new string('0', 64)}",
@@ -76,9 +59,7 @@ public sealed class MiniLanguageWorkerEndpointTests : IClassFixture<WebApplicati
             "print",
             "MINI1001");
         var webSocketClient = _factory.Server.CreateWebSocketClient();
-        var runner = new LanguageWorkerConformanceRunner(
-            client,
-            (uri, cancellationToken) => webSocketClient.ConnectAsync(uri, cancellationToken));
+        var runner = new LanguageWorkerConformanceRunner(client, (uri, cancellationToken) => webSocketClient.ConnectAsync(uri, cancellationToken));
 
         var report = await runner.VerifyAsync(scenario, TestContext.Current.CancellationToken);
 
@@ -90,11 +71,7 @@ public sealed class MiniLanguageWorkerEndpointTests : IClassFixture<WebApplicati
     public async Task ArtifactBuildReturnsGeneratedCilTextInTheGenericEnvelope()
     {
         using var client = _factory.CreateClient();
-        using var response = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            CreateBuildRequest(BuildTarget.Artifact, "print \"one\"\nprint \"two\""),
-            JsonOptions,
-            TestContext.Current.CancellationToken);
+        using var response = await client.PostAsJsonAsync("/api/v1/build", CreateBuildRequest(BuildTarget.Artifact, "print \"one\"\nprint \"two\""), JsonOptions, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.True(response.IsSuccessStatusCode, body);
@@ -107,8 +84,7 @@ public sealed class MiniLanguageWorkerEndpointTests : IClassFixture<WebApplicati
         Assert.Null(envelope.PeImageBase64);
         Assert.Null(envelope.PortablePdbBase64);
         Assert.NotNull(envelope.FileContentsBase64);
-        var cil = Encoding.UTF8.GetString(Convert.FromBase64String(
-            envelope.FileContentsBase64[MiniLanguageCompiler.GeneratedFileName]));
+        var cil = Encoding.UTF8.GetString(Convert.FromBase64String(envelope.FileContentsBase64[MiniLanguageCompiler.GeneratedFileName]));
         Assert.Contains(".entrypoint", cil, StringComparison.Ordinal);
         Assert.Contains("ldstr \"one\"", cil, StringComparison.Ordinal);
         Assert.Contains("ldstr \"two\"", cil, StringComparison.Ordinal);
@@ -119,39 +95,20 @@ public sealed class MiniLanguageWorkerEndpointTests : IClassFixture<WebApplicati
     public async Task LibraryBuildOmitsEntrypointAndUnsupportedOutputKindsAreRejected()
     {
         using var client = _factory.CreateClient();
-        using var libraryResponse = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            CreateBuildRequest(BuildTarget.Artifact, "print \"library\"", BuildOutputKind.Library),
-            JsonOptions,
-            TestContext.Current.CancellationToken);
+        using var libraryResponse = await client.PostAsJsonAsync("/api/v1/build", CreateBuildRequest(BuildTarget.Artifact, "print \"library\"", BuildOutputKind.Library), JsonOptions, TestContext.Current.CancellationToken);
         var libraryBody = await libraryResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.True(libraryResponse.IsSuccessStatusCode, libraryBody);
         var libraryBuild = JsonSerializer.Deserialize<LanguageWorkerBuildHttpResponse>(libraryBody, JsonOptions);
         Assert.NotNull(libraryBuild);
         var envelope = Assert.IsType<LanguageWorkerArtifactEnvelope>(libraryBuild.DevelopmentArtifact);
         Assert.Null(envelope.Manifest.EntryPoint);
-        var cil = Encoding.UTF8.GetString(Convert.FromBase64String(
-            envelope.FileContentsBase64![MiniLanguageCompiler.GeneratedFileName]));
+        var cil = Encoding.UTF8.GetString(Convert.FromBase64String(envelope.FileContentsBase64![MiniLanguageCompiler.GeneratedFileName]));
         Assert.DoesNotContain(".entrypoint", cil, StringComparison.Ordinal);
 
-        using var windowsResponse = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            CreateBuildRequest(
-                BuildTarget.Artifact,
-                "print \"windows\"",
-                BuildOutputKind.WindowsApplication),
-            JsonOptions,
-            TestContext.Current.CancellationToken);
+        using var windowsResponse = await client.PostAsJsonAsync("/api/v1/build", CreateBuildRequest(BuildTarget.Artifact, "print \"windows\"", BuildOutputKind.WindowsApplication), JsonOptions, TestContext.Current.CancellationToken);
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, windowsResponse.StatusCode);
 
-        using var autoResponse = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            CreateBuildRequest(
-                BuildTarget.Artifact,
-                "print \"automatic\"",
-                BuildOutputKind.Auto),
-            JsonOptions,
-            TestContext.Current.CancellationToken);
+        using var autoResponse = await client.PostAsJsonAsync("/api/v1/build", CreateBuildRequest(BuildTarget.Artifact, "print \"automatic\"", BuildOutputKind.Auto), JsonOptions, TestContext.Current.CancellationToken);
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, autoResponse.StatusCode);
     }
 
@@ -159,28 +116,17 @@ public sealed class MiniLanguageWorkerEndpointTests : IClassFixture<WebApplicati
     public async Task EffectiveOptionsDriveBothGeneratedCodeAndManifest()
     {
         using var client = _factory.CreateClient();
-        var request = CreateBuildRequest(
-            BuildTarget.Artifact,
-            "print \"effective\"",
-            BuildOutputKind.Auto);
-        request = request with
-        {
-            Options = request.Workspace.BuildOptions with { OutputKind = BuildOutputKind.Console }
-        };
+        var request = CreateBuildRequest(BuildTarget.Artifact, "print \"effective\"", BuildOutputKind.Auto);
+        request = request with { Options = request.Workspace.BuildOptions with { OutputKind = BuildOutputKind.Console } };
 
-        using var response = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            request,
-            JsonOptions,
-            TestContext.Current.CancellationToken);
+        using var response = await client.PostAsJsonAsync("/api/v1/build", request, JsonOptions, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.True(response.IsSuccessStatusCode, body);
         var build = JsonSerializer.Deserialize<LanguageWorkerBuildHttpResponse>(body, JsonOptions);
         var envelope = Assert.IsType<LanguageWorkerArtifactEnvelope>(build?.DevelopmentArtifact);
         Assert.Equal(BuildOutputKind.Console, envelope.Manifest.OutputKind);
-        var cil = Encoding.UTF8.GetString(Convert.FromBase64String(
-            envelope.FileContentsBase64![MiniLanguageCompiler.GeneratedFileName]));
+        var cil = Encoding.UTF8.GetString(Convert.FromBase64String(envelope.FileContentsBase64![MiniLanguageCompiler.GeneratedFileName]));
         Assert.Contains(".entrypoint", cil, StringComparison.Ordinal);
     }
 
@@ -188,11 +134,7 @@ public sealed class MiniLanguageWorkerEndpointTests : IClassFixture<WebApplicati
     public async Task InvalidProgramReturnsRevisionedDiagnosticsWithoutAnArtifact()
     {
         using var client = _factory.CreateClient();
-        using var response = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            CreateBuildRequest(BuildTarget.Artifact, "write \"invalid\""),
-            JsonOptions,
-            TestContext.Current.CancellationToken);
+        using var response = await client.PostAsJsonAsync("/api/v1/build", CreateBuildRequest(BuildTarget.Artifact, "write \"invalid\""), JsonOptions, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.True(response.IsSuccessStatusCode, body);
@@ -213,11 +155,7 @@ public sealed class MiniLanguageWorkerEndpointTests : IClassFixture<WebApplicati
     public async Task CompileCheckUsesTheSameCompilerButNeverReturnsAnArtifact()
     {
         using var client = _factory.CreateClient();
-        using var response = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            CreateBuildRequest(BuildTarget.CompileCheck, "not-a-statement"),
-            JsonOptions,
-            TestContext.Current.CancellationToken);
+        using var response = await client.PostAsJsonAsync("/api/v1/build", CreateBuildRequest(BuildTarget.CompileCheck, "not-a-statement"), JsonOptions, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.True(response.IsSuccessStatusCode, body);
@@ -234,11 +172,7 @@ public sealed class MiniLanguageWorkerEndpointTests : IClassFixture<WebApplicati
     {
         using var client = _factory.CreateClient();
         var oversized = new string('x', 262_145);
-        using var response = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            CreateBuildRequest(BuildTarget.CompileCheck, oversized),
-            JsonOptions,
-            TestContext.Current.CancellationToken);
+        using var response = await client.PostAsJsonAsync("/api/v1/build", CreateBuildRequest(BuildTarget.CompileCheck, oversized), JsonOptions, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(413, (int)response.StatusCode);
@@ -251,11 +185,7 @@ public sealed class MiniLanguageWorkerEndpointTests : IClassFixture<WebApplicati
         using var client = _factory.CreateClient();
         var request = CreateBuildRequest(BuildTarget.CompileCheck, "print \"valid\"");
         request = request with { Workspace = request.Workspace with { LanguageId = "another-language" } };
-        using var response = await client.PostAsJsonAsync(
-            "/api/v1/build",
-            request,
-            JsonOptions,
-            TestContext.Current.CancellationToken);
+        using var response = await client.PostAsJsonAsync("/api/v1/build", request, JsonOptions, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(400, (int)response.StatusCode);
@@ -278,70 +208,26 @@ public sealed class MiniLanguageWorkerEndpointTests : IClassFixture<WebApplicati
     [Fact]
     public void CapabilityManifestSupportsMultipleToolchainsBehindAWorkerIdentity()
     {
-        var manifest = LanguageWorkerCapabilityManifestSerializer.Load(
-            Path.Combine(AppContext.BaseDirectory, "language-worker.json")) with
-        {
-            WorkerId = "minilang-worker",
-            ToolchainIds = ["minilang-stable", "minilang-preview"]
-        };
-        var identity = new ServiceIdentity(
-            manifest.WorkerId,
-            ServiceKind.ToolchainWorker,
-            "development",
-            ProtocolVersion.WorkerV1,
-            manifest.Capabilities,
-            "ready");
+        var manifest = LanguageWorkerCapabilityManifestSerializer.Load(Path.Combine(AppContext.BaseDirectory, "language-worker.json")) with { WorkerId = "minilang-worker", ToolchainIds = ["minilang-stable", "minilang-preview"] };
+        var identity = new ServiceIdentity(manifest.WorkerId, ServiceKind.ToolchainWorker, "development", ProtocolVersion.WorkerV1, manifest.Capabilities, "ready");
 
         LanguageWorkerCapabilityManifestSerializer.Validate(manifest, identity);
 
         Assert.Equal("minilang-worker", manifest.WorkerId);
         Assert.Equal(["minilang-stable", "minilang-preview"], manifest.ToolchainIds);
         Assert.Throws<ArgumentException>(() =>
-            LanguageWorkerCapabilityManifestSerializer.Validate(manifest with
-            {
-                ToolchainIds = ["minilang-stable", "minilang-stable"]
-            }));
+            LanguageWorkerCapabilityManifestSerializer.Validate(manifest with { ToolchainIds = ["minilang-stable", "minilang-stable"] }));
     }
 
-    private static BuildRequest CreateBuildRequest(
-        BuildTarget target,
-        string source,
-        BuildOutputKind outputKind = BuildOutputKind.Console)
+    private static BuildRequest CreateBuildRequest(BuildTarget target, string source, BuildOutputKind outputKind = BuildOutputKind.Console)
     {
         var workspace = CreateWorkspace(source, outputKind);
-        return new BuildRequest(
-            $"request-{Guid.NewGuid():N}",
-            $"idempotency-{Guid.NewGuid():N}",
-            "pipeline-minilang-test",
-            MiniLanguageCompiler.ToolchainId,
-            workspace.ReferenceSetId,
-            workspace,
-            DateTimeOffset.UtcNow.AddSeconds(20),
-            workspace.BuildOptions,
-            target);
+        return new BuildRequest($"request-{Guid.NewGuid():N}", $"idempotency-{Guid.NewGuid():N}", "pipeline-minilang-test", MiniLanguageCompiler.ToolchainId, workspace.ReferenceSetId, workspace, DateTimeOffset.UtcNow.AddSeconds(20), workspace.BuildOptions, target);
     }
 
-    private static WorkspaceSnapshot CreateWorkspace(
-        string source,
-        BuildOutputKind outputKind = BuildOutputKind.Console)
+    private static WorkspaceSnapshot CreateWorkspace(string source, BuildOutputKind outputKind = BuildOutputKind.Console)
     {
-        var options = new BuildOptions(
-            BuildConfiguration.Release,
-            Optimize: true,
-            outputKind,
-            AllowUnsafe: false,
-            EmitPortablePdb: false,
-            NullableContextMode.Disable,
-            LanguageVersion: MiniLanguageCompiler.Version);
-        return new WorkspaceSnapshot(
-            ContractSchemaVersions.WorkspaceSnapshot,
-            7,
-            3,
-            MiniLanguageCompiler.LanguageId,
-            [new WorkspaceFile(MiniLanguageCompiler.DefaultFileName, 5, source)],
-            MiniLanguageCompiler.DefaultFileName,
-            [MiniLanguageCompiler.DefaultFileName],
-            "net10-ref",
-            options);
+        var options = new BuildOptions(BuildConfiguration.Release, Optimize: true, outputKind, AllowUnsafe: false, EmitPortablePdb: false, NullableContextMode.Disable, LanguageVersion: MiniLanguageCompiler.Version);
+        return new WorkspaceSnapshot(ContractSchemaVersions.WorkspaceSnapshot, 7, 3, MiniLanguageCompiler.LanguageId, [new WorkspaceFile(MiniLanguageCompiler.DefaultFileName, 5, source)], MiniLanguageCompiler.DefaultFileName, [MiniLanguageCompiler.DefaultFileName], "net10-ref", options);
     }
 }

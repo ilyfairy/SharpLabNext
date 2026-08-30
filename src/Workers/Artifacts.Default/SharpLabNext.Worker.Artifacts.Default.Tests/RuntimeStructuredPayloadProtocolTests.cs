@@ -8,15 +8,7 @@ public sealed class RuntimeStructuredPayloadProtocolTests
     [Fact]
     public void RuntimePayloadsUseStrictPascalCaseMemberNames()
     {
-        var payload = new RuntimeFlowPayload(
-            "method-enter",
-            "Program.cs",
-            new RuntimeSourceRange(1, 2, 1, 3),
-            7,
-            11,
-            "Run",
-            null,
-            false);
+        var payload = new RuntimeFlowPayload("method-enter", "Program.cs", new RuntimeSourceRange(1, 2, 1, 3), 7, 11, "Run", null, false);
 
         var json = Encoding.UTF8.GetString(RuntimeStructuredPayloadCodec.Serialize(payload));
 
@@ -32,7 +24,6 @@ public sealed class RuntimeStructuredPayloadProtocolTests
     {
         var legacy = "{\"eventKind\":\"method-enter\",\"managedThreadId\":7,\"truncated\":false}"u8.ToArray();
 
-        Assert.Throws<InvalidDataException>(() =>
-            RuntimeStructuredPayloadCodec.DeserializeFlow(legacy));
+        Assert.Throws<InvalidDataException>(() => RuntimeStructuredPayloadCodec.DeserializeFlow(legacy));
     }
 }

@@ -38,61 +38,38 @@ public sealed class RuntimePromotionPreflightOptions
         configuration.GetSection(SectionName).Bind(options);
         if (!options.Enabled)
         {
-            if (options.PlanSha256 is not null || options.SourceRevision is not null ||
-                options.ProfilePath is not null ||
-                options.ProfileSha256 is not null ||
-                options.MeasurementHelperImage is not null ||
-                options.MeasurementHelperImageId is not null)
+            if (options.PlanSha256 is not null || options.SourceRevision is not null || options.ProfilePath is not null || options.ProfileSha256 is not null || options.MeasurementHelperImage is not null || options.MeasurementHelperImageId is not null)
             {
-                throw new InvalidOperationException(
-                    "Disabled runtime promotion preflight configuration cannot retain trusted inputs.");
+                throw new InvalidOperationException("Disabled runtime promotion preflight configuration cannot retain trusted inputs.");
             }
             return options;
         }
 
-        if (!RuntimeProfileValidation.IsSha256(options.PlanSha256) ||
-            !RuntimeProfileValidation.IsSha256(options.ProfileSha256) ||
-            !RuntimeProfileValidation.IsSha256(options.MeasurementHelperImageId))
+        if (!RuntimeProfileValidation.IsSha256(options.PlanSha256) || !RuntimeProfileValidation.IsSha256(options.ProfileSha256) || !RuntimeProfileValidation.IsSha256(options.MeasurementHelperImageId))
         {
-            throw new InvalidOperationException(
-                "Runtime promotion preflight plan/profile/helper digests must be canonical SHA-256 values.");
+            throw new InvalidOperationException("Runtime promotion preflight plan/profile/helper digests must be canonical SHA-256 values.");
         }
         if (!IsRepositoryDigest(options.MeasurementHelperImage))
         {
-            throw new InvalidOperationException(
-                "Runtime promotion preflight MeasurementHelperImage must be a canonical immutable repository digest.");
+            throw new InvalidOperationException("Runtime promotion preflight MeasurementHelperImage must be a canonical immutable repository digest.");
         }
-        if (options.SourceRevision is null || options.SourceRevision.Length is not (40 or 64) ||
-            options.SourceRevision.Any(static character =>
-                !char.IsAsciiDigit(character) && character is not (>= 'a' and <= 'f')))
+        if (options.SourceRevision is null || options.SourceRevision.Length is not (40 or 64) || options.SourceRevision.Any(static character => !char.IsAsciiDigit(character) && character is not (>= 'a' and <= 'f')))
         {
-            throw new InvalidOperationException(
-                "Runtime promotion preflight source revision must be a full lowercase Git commit.");
+            throw new InvalidOperationException("Runtime promotion preflight source revision must be a full lowercase Git commit.");
         }
-        if (string.IsNullOrWhiteSpace(options.ProfilePath) ||
-            !Path.IsPathFullyQualified(options.ProfilePath))
+        if (string.IsNullOrWhiteSpace(options.ProfilePath) || !Path.IsPathFullyQualified(options.ProfilePath))
         {
-            throw new InvalidOperationException(
-                "Runtime promotion preflight ProfilePath must be an absolute local path.");
+            throw new InvalidOperationException("Runtime promotion preflight ProfilePath must be an absolute local path.");
         }
 
         var path = Path.GetFullPath(options.ProfilePath);
         var info = new FileInfo(path);
-        if (!info.Exists || info.LinkTarget is not null ||
-            (info.Attributes & FileAttributes.ReparsePoint) != 0 ||
-            info.Length is < 1 or > MaximumProfileBytes)
+        if (!info.Exists || info.LinkTarget is not null || (info.Attributes & FileAttributes.ReparsePoint) != 0 || info.Length is < 1 or > MaximumProfileBytes)
         {
-            throw new InvalidOperationException(
-                "Runtime promotion preflight profile must be a bounded regular non-link file.");
+            throw new InvalidOperationException("Runtime promotion preflight profile must be a bounded regular non-link file.");
         }
         byte[] bytes;
-        using (var stream = new FileStream(
-                   path,
-                   FileMode.Open,
-                   FileAccess.Read,
-                   FileShare.Read,
-                   64 * 1024,
-                   FileOptions.SequentialScan))
+        using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan))
         {
             bytes = new byte[checked((int)info.Length)];
             stream.ReadExactly(bytes);
@@ -100,44 +77,28 @@ public sealed class RuntimePromotionPreflightOptions
                 throw new InvalidOperationException("Runtime promotion preflight profile changed while loading.");
         }
         var observedSha256 = $"sha256:{Convert.ToHexStringLower(SHA256.HashData(bytes))}";
-        if (!CryptographicOperations.FixedTimeEquals(
-                System.Text.Encoding.ASCII.GetBytes(options.ProfileSha256!),
-                System.Text.Encoding.ASCII.GetBytes(observedSha256)))
+        if (!CryptographicOperations.FixedTimeEquals(System.Text.Encoding.ASCII.GetBytes(options.ProfileSha256!), System.Text.Encoding.ASCII.GetBytes(observedSha256)))
         {
-            throw new InvalidOperationException(
-                "Runtime promotion preflight profile digest does not match the local startup binding.");
+            throw new InvalidOperationException("Runtime promotion preflight profile digest does not match the local startup binding.");
         }
 
         RuntimeProfileOptions profile;
         try
         {
-            profile = JsonSerializer.Deserialize<RuntimeProfileOptions>(bytes, ProfileJson)
-                ?? throw new JsonException("The profile document is empty.");
+            profile = JsonSerializer.Deserialize<RuntimeProfileOptions>(bytes, ProfileJson) ?? throw new JsonException("The profile document is empty.");
         }
         catch (JsonException exception)
         {
-            throw new InvalidOperationException(
-                $"Runtime promotion preflight profile is invalid JSON: {exception.Message}",
-                exception);
+            throw new InvalidOperationException($"Runtime promotion preflight profile is invalid JSON: {exception.Message}", exception);
         }
-        var failures = RuntimeProfileValidation.ValidatePackage(
-            profile,
-            requireDigestPinnedImage: true);
+        var failures = RuntimeProfileValidation.ValidatePackage(profile, requireDigestPinnedImage: true);
         if (failures.Count > 0)
         {
-            throw new InvalidOperationException(
-                $"Runtime promotion preflight profile '{profile.Id}' is invalid: " +
-                string.Join(" ", failures));
+            throw new InvalidOperationException($"Runtime promotion preflight profile '{profile.Id}' is invalid: " + string.Join(" ", failures));
         }
-        if (profile.PromotionReceipt is not null ||
-            profile.AllowedSecurityPolicyIds.Count != 1 ||
-            profile.SecurityPolicies.Count != 1 ||
-            !StringComparer.Ordinal.Equals(
-                profile.AllowedSecurityPolicyIds[0],
-                profile.SecurityPolicies[0].Id))
+        if (profile.PromotionReceipt is not null || profile.AllowedSecurityPolicyIds.Count != 1 || profile.SecurityPolicies.Count != 1 || !StringComparer.Ordinal.Equals(profile.AllowedSecurityPolicyIds[0], profile.SecurityPolicies[0].Id))
         {
-            throw new InvalidOperationException(
-                "Runtime promotion preflight requires exactly one embedded security policy and no receipt.");
+            throw new InvalidOperationException("Runtime promotion preflight requires exactly one embedded security policy and no receipt.");
         }
 
         options.ProfilePath = path;
@@ -150,23 +111,12 @@ public sealed class RuntimePromotionPreflightOptions
         ArgumentNullException.ThrowIfNull(options);
         if (!Enabled)
             return;
-        var profile = Profile
-            ?? throw new InvalidOperationException("Runtime promotion preflight profile was not loaded.");
+        var profile = Profile ?? throw new InvalidOperationException("Runtime promotion preflight profile was not loaded.");
         var policy = profile.SecurityPolicies.Single();
         options.Profiles = [profile];
         options.SecurityPolicies =
         [
-            new RuntimeSecurityPolicyOptions
-            {
-                Id = policy.Id,
-                MemoryBytes = policy.MemoryBytes,
-                NanoCpus = policy.NanoCpus,
-                PidsLimit = policy.PidsLimit,
-                MaximumDurationSeconds = policy.MaximumDurationSeconds,
-                MaximumArtifactBytes = policy.MaximumArtifactBytes,
-                MaximumOutputBytes = policy.MaximumOutputBytes,
-                TmpfsBytes = policy.TmpfsBytes
-            }
+            new RuntimeSecurityPolicyOptions { Id = policy.Id, MemoryBytes = policy.MemoryBytes, NanoCpus = policy.NanoCpus, PidsLimit = policy.PidsLimit, MaximumDurationSeconds = policy.MaximumDurationSeconds, MaximumArtifactBytes = policy.MaximumArtifactBytes, MaximumOutputBytes = policy.MaximumOutputBytes, TmpfsBytes = policy.TmpfsBytes }
         ];
         options.RequireDigestPinnedImages = true;
         options.SessionReuseEnabled = false;

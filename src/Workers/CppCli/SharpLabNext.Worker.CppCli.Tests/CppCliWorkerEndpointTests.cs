@@ -22,27 +22,17 @@ public sealed class CppCliWorkerEndpointTests
         {
             await using var factory = new CppCliWebApplicationFactory(root);
             using var client = factory.CreateClient();
-            var manifest = await client.GetFromJsonAsync<LanguageWorkerCapabilityManifest>(
-                "/api/v1/worker/capabilities",
-                JsonOptions,
-                TestContext.Current.CancellationToken);
+            var manifest = await client.GetFromJsonAsync<LanguageWorkerCapabilityManifest>("/api/v1/worker/capabilities", JsonOptions, TestContext.Current.CancellationToken);
 
             Assert.NotNull(manifest);
             Assert.Equal(["artifact", "compile-check"], manifest.Capabilities);
-            var descriptor = await client.GetFromJsonAsync<WorkerDescriptor>(
-                "/api/v1/worker/describe",
-                JsonOptions,
-                TestContext.Current.CancellationToken);
+            var descriptor = await client.GetFromJsonAsync<WorkerDescriptor>("/api/v1/worker/describe", JsonOptions, TestContext.Current.CancellationToken);
             var referenceSet = Assert.Single(descriptor!.ReferenceSets!);
             Assert.Equal(CppCliToolchain.ReferenceSetId, referenceSet.Id);
             Assert.Equal(CppCliToolchain.TargetFramework, referenceSet.TargetFramework);
             Assert.Equal($"sha256:{new string('b', 64)}", referenceSet.Digest);
             Assert.Equal("operator-image", referenceSet.Provenance.Kind);
-            using var response = await client.PostAsJsonAsync(
-                "/api/v1/build",
-                CppCliTestSettings.CreateRequest(BuildTarget.Artifact),
-                JsonOptions,
-                TestContext.Current.CancellationToken);
+            using var response = await client.PostAsJsonAsync("/api/v1/build", CppCliTestSettings.CreateRequest(BuildTarget.Artifact), JsonOptions, TestContext.Current.CancellationToken);
             var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
             Assert.True(response.IsSuccessStatusCode, body);
             var build = JsonSerializer.Deserialize<LanguageWorkerBuildHttpResponse>(body, JsonOptions);
@@ -97,14 +87,7 @@ internal sealed class CppCliWebApplicationFactory : WebApplicationFactory<Progra
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<ILanguageWorkerBuildService>();
-            services.AddSingleton<ILanguageWorkerBuildService>(provider =>
-                new CppCliBuildService(
-                    new FakeCppCliCompilerProcess(new CppCliCompilerInvocation(
-                        true,
-                        CppCliTestSettings.CreateMixedModePe(),
-                        [])),
-                    provider.GetRequiredService<CppCliWorkerSettings>(),
-                    provider.GetRequiredService<LanguageWorkerCapabilityManifest>()));
+            services.AddSingleton<ILanguageWorkerBuildService>(provider => new CppCliBuildService(new FakeCppCliCompilerProcess(new CppCliCompilerInvocation(true, CppCliTestSettings.CreateMixedModePe(), [])), provider.GetRequiredService<CppCliWorkerSettings>(), provider.GetRequiredService<LanguageWorkerCapabilityManifest>()));
         });
     }
 

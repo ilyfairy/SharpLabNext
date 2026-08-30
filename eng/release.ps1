@@ -15,21 +15,17 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-if (-not $AcceptMicrosoftLicenses) {
-    throw "AcceptMicrosoftLicenses is required because the complete image set contains Microsoft proprietary inputs."
-}
+if (-not $AcceptMicrosoftLicenses) { throw "AcceptMicrosoftLicenses is required because the complete image set contains Microsoft proprietary inputs." }
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $lockPath = Join-Path $repositoryRoot "profiles/lock.json"
-    $releaseId = [string](& dotnet run (Join-Path $repositoryRoot "eng/read-release-id.cs") -- $lockPath | Select-Object -Last 1)
+    $releaseId = [string](& dotnet run (Join-Path $repositoryRoot "eng/tools/read-release-id.cs") -- $lockPath | Select-Object -Last 1)
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($releaseId)) {
         throw "Could not read the release id from profiles/lock.json."
     }
     $OutputDirectory = Join-Path $repositoryRoot "artifacts/sharplabnext-$releaseId"
 }
 $OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
-if (Test-Path -LiteralPath $OutputDirectory) {
-    throw "Bundle output already exists: $OutputDirectory"
-}
+if (Test-Path -LiteralPath $OutputDirectory) { throw "Bundle output already exists: $OutputDirectory" }
 
 $buildArguments = @{
     ImagePrefix = $ImagePrefix

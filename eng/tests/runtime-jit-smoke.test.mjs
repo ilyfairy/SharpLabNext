@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { runRuntimeJitSmokes } from './runtime-jit-smoke.mjs'
+import { runRuntimeJitSmokes } from '../smoke/runtime-jit-smoke.mjs'
 
 const probeMethod = 'SharpLabNext.RuntimeCapabilityProbe.Program.MultipleSequencePoints'
 const fixedNow = () => new Date('2026-08-13T05:00:00.000Z')

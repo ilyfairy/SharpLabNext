@@ -26,8 +26,7 @@ public sealed class GatewayTrafficProtectionTests
         Assert.Equal(HttpStatusCode.TooManyRequests, rejected.StatusCode);
         Assert.NotNull(rejected.Headers.RetryAfter);
         Assert.Equal(HttpStatusCode.OK, health.StatusCode);
-        using var problem = JsonDocument.Parse(await rejected.Content.ReadAsByteArrayAsync(
-            TestContext.Current.CancellationToken));
+        using var problem = JsonDocument.Parse(await rejected.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken));
         Assert.Equal("request-rate-limit-exceeded", problem.RootElement.GetProperty("Code").GetString());
     }
 
@@ -39,14 +38,10 @@ public sealed class GatewayTrafficProtectionTests
         using var content = new ByteArrayContent(new byte[1024 * 1024 + 1]);
         content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
-        using var response = await client.PostAsync(
-            "/api/v1/selections/resolve",
-            content,
-            TestContext.Current.CancellationToken);
+        using var response = await client.PostAsync("/api/v1/selections/resolve", content, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
-        using var problem = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(
-            TestContext.Current.CancellationToken));
+        using var problem = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken));
         Assert.Equal("request-body-too-large", problem.RootElement.GetProperty("Code").GetString());
     }
 
@@ -85,12 +80,8 @@ public sealed class GatewayTrafficProtectionTests
 
         for (var index = 0; index < 5; index++)
         {
-            using var health = await limiter.AcquireAsync(
-                Context("/health/ready", "192.0.2.20", HttpMethods.Get),
-                cancellationToken: TestContext.Current.CancellationToken);
-            using var staticAsset = await limiter.AcquireAsync(
-                Context("/assets/app.js", "192.0.2.20", HttpMethods.Get),
-                cancellationToken: TestContext.Current.CancellationToken);
+            using var health = await limiter.AcquireAsync(Context("/health/ready", "192.0.2.20", HttpMethods.Get), cancellationToken: TestContext.Current.CancellationToken);
+            using var staticAsset = await limiter.AcquireAsync(Context("/assets/app.js", "192.0.2.20", HttpMethods.Get), cancellationToken: TestContext.Current.CancellationToken);
             Assert.True(health.IsAcquired);
             Assert.True(staticAsset.IsAcquired);
         }
@@ -118,9 +109,7 @@ public sealed class GatewayTrafficProtectionTests
         Assert.Equal(StatusCodes.Status413PayloadTooLarge, context.Response.StatusCode);
         Assert.StartsWith("application/problem+json", context.Response.ContentType, StringComparison.Ordinal);
         context.Response.Body.Position = 0;
-        using var problem = await JsonDocument.ParseAsync(
-            context.Response.Body,
-            cancellationToken: TestContext.Current.CancellationToken);
+        using var problem = await JsonDocument.ParseAsync(context.Response.Body, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("request-body-too-large", problem.RootElement.GetProperty("Code").GetString());
     }
 
@@ -146,10 +135,7 @@ public sealed class GatewayTrafficProtectionTests
         RuntimeWindow = TimeSpan.FromMinutes(1)
     };
 
-    private static DefaultHttpContext Context(
-        string path,
-        string address,
-        string method = "POST")
+    private static DefaultHttpContext Context(string path, string address, string method = "POST")
     {
         var context = new DefaultHttpContext();
         context.Request.Path = path;

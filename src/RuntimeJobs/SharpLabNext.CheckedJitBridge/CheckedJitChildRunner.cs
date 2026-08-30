@@ -24,13 +24,7 @@ internal static class CheckedJitChildRunner
             var assembly = loader.Load();
             var methods = ChildMethodInspector.Inspect(assembly, parsed.MethodFilter);
             ChildNativeStreamFlusher.FlushAll();
-            envelope = new ChildResultEnvelope(
-                ChildResultEnvelope.ProtocolMagic,
-                parsed.Nonce,
-                assembly.GetName().Name ?? throw new BadImageFormatException(
-                    "User assembly does not define a simple assembly name."),
-                methods,
-                null);
+            envelope = new ChildResultEnvelope(ChildResultEnvelope.ProtocolMagic, parsed.Nonce, assembly.GetName().Name ?? throw new BadImageFormatException("User assembly does not define a simple assembly name."), methods, null);
         }
         catch (OutOfMemoryException exception)
         {
@@ -49,9 +43,7 @@ internal static class CheckedJitChildRunner
         return exitCode;
     }
 
-    private static ChildResultEnvelope CreateFailureEnvelope(
-        CheckedJitChildArguments parsed,
-        Exception exception)
+    private static ChildResultEnvelope CreateFailureEnvelope(CheckedJitChildArguments parsed, Exception exception)
     {
         string assemblyName;
         try
@@ -64,15 +56,7 @@ internal static class CheckedJitChildRunner
             assemblyName = Path.GetFileNameWithoutExtension(parsed.AssemblyPath);
         }
 
-        return new ChildResultEnvelope(
-            ChildResultEnvelope.ProtocolMagic,
-            parsed.Nonce,
-            assemblyName,
-            Array.Empty<ChildMethodRecord>(),
-            new ChildErrorRecord(
-                Bound(exception.GetType().FullName ?? exception.GetType().Name, 4_096),
-                Bound(exception.Message, 4_096),
-                exception.StackTrace is null ? null : Bound(exception.StackTrace, 4_096)));
+        return new ChildResultEnvelope(ChildResultEnvelope.ProtocolMagic, parsed.Nonce, assemblyName, Array.Empty<ChildMethodRecord>(), new ChildErrorRecord(Bound(exception.GetType().FullName ?? exception.GetType().Name, 4_096), Bound(exception.Message, 4_096), exception.StackTrace is null ? null : Bound(exception.StackTrace, 4_096)));
     }
 
     private static string Bound(string value, int maximumLength)

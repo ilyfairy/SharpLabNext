@@ -18,9 +18,7 @@ namespace SharpLabNext.LegacyJitInspector
         public static RunArguments Parse(string[] args)
         {
             if (args == null || args.Length < 3)
-                throw new ArgumentException(
-                    "Usage: SharpLabNext.LegacyJitInspector run <absolute-assembly-path> -- [arguments]",
-                    nameof(args));
+                throw new ArgumentException("Usage: SharpLabNext.LegacyJitInspector run <absolute-assembly-path> -- [arguments]", nameof(args));
             if (!string.Equals(args[0], "run", StringComparison.Ordinal))
                 throw new ArgumentException("The run command is invalid.", nameof(args));
             if (!string.Equals(args[2], "--", StringComparison.Ordinal))

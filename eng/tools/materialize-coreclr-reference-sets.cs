@@ -1,5 +1,6 @@
 #:sdk Microsoft.NET.Sdk
 #:property TargetFramework=net10.0
+#:property RestorePackagesWithLockFile=false
 
 using System.IO.Compression;
 using System.Net;
@@ -51,25 +52,15 @@ foreach (var referenceSet in referenceSets)
 WriteAppsettings(options, referenceSets);
 Console.WriteLine($"Materialized {referenceSets.Count} locked CoreCLR reference sets.");
 
-static JsonObject ReadJsonObject(string path, string description) =>
-    JsonNode.Parse(File.ReadAllText(path))?.AsObject()
-    ?? throw new InvalidDataException($"{description} is not a JSON object.");
+static JsonObject ReadJsonObject(string path, string description) => JsonNode.Parse(File.ReadAllText(path))?.AsObject() ?? throw new InvalidDataException($"{description} is not a JSON object.");
 
-static IReadOnlyList<LockedReferenceSet> ReadReferenceSets(
-    JsonObject matrix,
-    JsonObject releaseLock,
-    CandidateOverrides overrides)
+static IReadOnlyList<LockedReferenceSet> ReadReferenceSets(JsonObject matrix, JsonObject releaseLock, CandidateOverrides overrides)
 {
-    var coreClr = matrix["coreClr"]?.AsArray()
-        ?? throw new InvalidDataException("Runtime matrix does not contain a coreClr array.");
-    var targets = coreClr.Select(static item => item?.AsObject()
-        ?? throw new InvalidDataException("Runtime matrix coreClr item is not an object."))
-        .ToDictionary(static target => Required(target, "id"), StringComparer.Ordinal);
-    var components = releaseLock["components"]?.AsObject()
-        ?? throw new InvalidDataException("Release lock does not contain components.");
+    var coreClr = matrix["coreClr"]?.AsArray() ?? throw new InvalidDataException("Runtime matrix does not contain a coreClr array.");
+    var targets = coreClr.Select(static item => item?.AsObject() ?? throw new InvalidDataException("Runtime matrix coreClr item is not an object.")).ToDictionary(static target => Required(target, "id"), StringComparer.Ordinal);
+    var components = releaseLock["components"]?.AsObject() ?? throw new InvalidDataException("Release lock does not contain components.");
 
-    if (targets.Count != Contract.ExpectedTargets.Count ||
-        !targets.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(Contract.ExpectedTargets.Select(static target => target.RuntimeId)))
+    if (targets.Count != Contract.ExpectedTargets.Count || !targets.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(Contract.ExpectedTargets.Select(static target => target.RuntimeId)))
     {
         throw new InvalidDataException("Runtime matrix must contain exactly the 12 approved CoreCLR reference-set rows.");
     }
@@ -78,24 +69,16 @@ static IReadOnlyList<LockedReferenceSet> ReadReferenceSets(
     foreach (var expected in Contract.ExpectedTargets)
     {
         var matrixTarget = targets[expected.RuntimeId];
-        RequireEqual(expected.ReferenceSetId, Required(matrixTarget, "referenceSetId"),
-            $"Runtime matrix {expected.RuntimeId} referenceSetId");
-        var matrixPackage = matrixTarget["referencePackage"]?.AsObject()
-            ?? throw new InvalidDataException($"Runtime matrix {expected.RuntimeId} has no referencePackage.");
-        RequireEqual(expected.Package, Required(matrixPackage, "id"),
-            $"Runtime matrix {expected.RuntimeId} reference package");
+        RequireEqual(expected.ReferenceSetId, Required(matrixTarget, "referenceSetId"), $"Runtime matrix {expected.RuntimeId} referenceSetId");
+        var matrixPackage = matrixTarget["referencePackage"]?.AsObject() ?? throw new InvalidDataException($"Runtime matrix {expected.RuntimeId} has no referencePackage.");
+        RequireEqual(expected.Package, Required(matrixPackage, "id"), $"Runtime matrix {expected.RuntimeId} reference package");
 
-        var lockComponent = components[expected.ReferenceSetId]?.AsObject()
-            ?? throw new InvalidDataException($"Release lock has no '{expected.ReferenceSetId}' reference-set component.");
+        var lockComponent = components[expected.ReferenceSetId]?.AsObject() ?? throw new InvalidDataException($"Release lock has no '{expected.ReferenceSetId}' reference-set component.");
         var referenceSet = ReadLockComponent(expected, lockComponent);
-        RequireEqual(referenceSet.ResolvedVersion, RequiredNuGetVersion(matrixPackage, "version"),
-            $"Runtime matrix {expected.RuntimeId} reference package version");
-        RequireEqual(referenceSet.SourceUri, RequiredHttpsUri(matrixPackage, "url"),
-            $"Runtime matrix {expected.RuntimeId} reference package URL");
-        RequireEqual(referenceSet.Sha512, RequiredLowerHex(matrixPackage, "sha512", 128),
-            $"Runtime matrix {expected.RuntimeId} reference package SHA-512");
-        RequireEqual(referenceSet.PackageContentHash, RequiredNuGetContentHash(matrixPackage, "packageContentHash"),
-            $"Runtime matrix {expected.RuntimeId} reference package content hash");
+        RequireEqual(referenceSet.ResolvedVersion, RequiredNuGetVersion(matrixPackage, "version"), $"Runtime matrix {expected.RuntimeId} reference package version");
+        RequireEqual(referenceSet.SourceUri, RequiredHttpsUri(matrixPackage, "url"), $"Runtime matrix {expected.RuntimeId} reference package URL");
+        RequireEqual(referenceSet.Sha512, RequiredLowerHex(matrixPackage, "sha512", 128), $"Runtime matrix {expected.RuntimeId} reference package SHA-512");
+        RequireEqual(referenceSet.PackageContentHash, RequiredNuGetContentHash(matrixPackage, "packageContentHash"), $"Runtime matrix {expected.RuntimeId} reference package content hash");
         overrides.Verify(referenceSet);
         result.Add(referenceSet);
     }
@@ -116,19 +99,8 @@ static LockedReferenceSet ReadLockComponent(ExpectedTarget expected, JsonObject 
     RequireEqual(expectedUri, sourceUri, $"{expected.ReferenceSetId}.sourceUri");
     var sha512 = RequiredLowerHex(component, "sha512", 128);
     var contentHash = RequiredNuGetContentHash(component, "packageContentHash");
-    RequireEqual(
-        "sha512-" + Convert.ToBase64String(Convert.FromHexString(sha512)),
-        contentHash,
-        $"{expected.ReferenceSetId}.packageContentHash");
-    return new LockedReferenceSet(
-        expected.ReferenceSetId,
-        expected.TargetFramework,
-        expected.Package,
-        version,
-        sourceUri,
-        sha512,
-        contentHash,
-        expected.IncludeSharpLabRuntime);
+    RequireEqual("sha512-" + Convert.ToBase64String(Convert.FromHexString(sha512)), contentHash, $"{expected.ReferenceSetId}.packageContentHash");
+    return new LockedReferenceSet(expected.ReferenceSetId, expected.TargetFramework, expected.Package, version, sourceUri, sha512, contentHash, expected.IncludeSharpLabRuntime);
 }
 
 static async Task EnsureArchiveAsync(HttpClient http, string sourceUri, string archivePath, string expectedSha512)
@@ -138,8 +110,7 @@ static async Task EnsureArchiveAsync(HttpClient http, string sourceUri, string a
         if ((File.GetAttributes(archivePath) & FileAttributes.ReparsePoint) != 0)
             throw new InvalidDataException($"Cached archive '{archivePath}' must be a regular file.");
         var cachedLength = new FileInfo(archivePath).Length;
-        if (cachedLength <= Contract.MaximumArchiveBytes &&
-            await MatchesSha512Async(archivePath, expectedSha512))
+        if (cachedLength <= Contract.MaximumArchiveBytes && await MatchesSha512Async(archivePath, expectedSha512))
         {
             return;
         }
@@ -153,10 +124,7 @@ static async Task EnsureArchiveAsync(HttpClient http, string sourceUri, string a
         using var response = await http.GetAsync(sourceUri, HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();
         if (response.Content.Headers.ContentLength is > Contract.MaximumArchiveBytes)
-        {
-            throw new InvalidDataException(
-                $"Downloaded archive '{sourceUri}' exceeds the {Contract.MaximumArchiveBytes}-byte limit.");
-        }
+            throw new InvalidDataException($"Downloaded archive '{sourceUri}' exceeds the {Contract.MaximumArchiveBytes}-byte limit.");
         await using (var input = await response.Content.ReadAsStreamAsync())
         await using (var output = File.Create(temporaryPath))
             await CopyWithLimitAsync(input, output, Contract.MaximumArchiveBytes);
@@ -212,9 +180,7 @@ static void ExtractReferenceAssemblies(string archivePath, string destination, s
         if (declaredExpandedBytes > maximumExpandedBytes)
             throw new InvalidDataException($"Reference package '{archivePath}' exceeds the expanded-size limit.");
         ValidateArchiveEntry(entry, archiveFiles, archivePath);
-        if (!entry.FullName.StartsWith(prefix, StringComparison.Ordinal) ||
-            entry.FullName[prefix.Length..].Contains('/') ||
-            !entry.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+        if (!entry.FullName.StartsWith(prefix, StringComparison.Ordinal) || entry.FullName[prefix.Length..].Contains('/') || !entry.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
         {
             continue;
         }
@@ -222,11 +188,7 @@ static void ExtractReferenceAssemblies(string archivePath, string destination, s
         var destinationPath = SafeChild(destination, entry.Name);
         using var input = entry.Open();
         using var output = File.Create(destinationPath);
-        var copied = CopyWithLimit(
-            input,
-            output,
-            maximumExpandedBytes - actualExpandedBytes,
-            $"Reference package '{archivePath}' exceeds the expanded-size limit.");
+        var copied = CopyWithLimit(input, output, maximumExpandedBytes - actualExpandedBytes, $"Reference package '{archivePath}' exceeds the expanded-size limit.");
         if (copied != entry.Length)
             throw new InvalidDataException($"Reference package '{archivePath}' has inconsistent ZIP entry lengths.");
         actualExpandedBytes = checked(actualExpandedBytes + copied);
@@ -256,8 +218,7 @@ static long CopyWithLimit(Stream input, Stream output, long maximumBytes, string
 static void ValidateArchiveEntry(ZipArchiveEntry entry, ISet<string> archiveFiles, string archivePath)
 {
     var name = entry.FullName;
-    if (string.IsNullOrWhiteSpace(name) || name.StartsWith('/') || name.StartsWith('\\') ||
-        name.Contains('\\') || name.Contains(':'))
+    if (string.IsNullOrWhiteSpace(name) || name.StartsWith('/') || name.StartsWith('\\') || name.Contains('\\') || name.Contains(':'))
         throw new InvalidDataException($"Reference package '{archivePath}' contains an unsafe ZIP path.");
     var isDirectory = name.EndsWith('/');
     var components = name.Split('/', StringSplitOptions.None);
@@ -286,10 +247,7 @@ static void ValidateRequiredReferenceAssemblyFiles(string path, string reference
     foreach (var name in Contract.RequiredReferenceAssemblyNames)
     {
         if (!File.Exists(Path.Combine(path, name)))
-        {
-            throw new InvalidDataException(
-                $"Reference set '{referenceSetId}' is missing required CoreCLR reference assembly '{name}'.");
-        }
+            throw new InvalidDataException($"Reference set '{referenceSetId}' is missing required CoreCLR reference assembly '{name}'.");
     }
 }
 
@@ -303,9 +261,7 @@ static void ValidateReferenceAssembly(string path, string referenceSetId)
             throw new BadImageFormatException("Assembly has no metadata.");
         var metadata = pe.GetMetadataReader();
         var assembly = metadata.GetAssemblyDefinition();
-        if (!assembly.GetCustomAttributes().Any(handle =>
-                string.Equals(GetAttributeTypeName(metadata, metadata.GetCustomAttribute(handle).Constructor),
-                    "System.Runtime.CompilerServices.ReferenceAssemblyAttribute", StringComparison.Ordinal)))
+        if (!assembly.GetCustomAttributes().Any(handle => string.Equals(GetAttributeTypeName(metadata, metadata.GetCustomAttribute(handle).Constructor), "System.Runtime.CompilerServices.ReferenceAssemblyAttribute", StringComparison.Ordinal)))
         {
             throw new InvalidDataException($"Reference set '{referenceSetId}' contains an implementation System.Runtime assembly.");
         }
@@ -330,13 +286,7 @@ static void ValidateSharpLabRuntimeAssembly(string path, string referenceSetId)
         if (!pe.HasMetadata)
             throw new BadImageFormatException("Assembly has no metadata.");
         var metadata = pe.GetMetadataReader();
-        var targetFrameworkAttributes = metadata.GetAssemblyDefinition().GetCustomAttributes()
-            .Where(handle => string.Equals(
-                GetAttributeTypeName(metadata, metadata.GetCustomAttribute(handle).Constructor),
-                "System.Runtime.Versioning.TargetFrameworkAttribute",
-                StringComparison.Ordinal))
-            .Select(handle => ReadTargetFrameworkAttribute(metadata, metadata.GetCustomAttribute(handle)))
-            .ToArray();
+        var targetFrameworkAttributes = metadata.GetAssemblyDefinition().GetCustomAttributes().Where(handle => string.Equals(GetAttributeTypeName(metadata, metadata.GetCustomAttribute(handle).Constructor), "System.Runtime.Versioning.TargetFrameworkAttribute", StringComparison.Ordinal)).Select(handle => ReadTargetFrameworkAttribute(metadata, metadata.GetCustomAttribute(handle))).ToArray();
         ValidateSharpLabRuntimeTargetFramework(targetFrameworkAttributes, referenceSetId, requiredTargetFramework);
     }
     catch (InvalidDataException)
@@ -345,21 +295,15 @@ static void ValidateSharpLabRuntimeAssembly(string path, string referenceSetId)
     }
     catch (Exception exception) when (exception is IOException or BadImageFormatException or UnauthorizedAccessException)
     {
-        throw new InvalidDataException(
-            $"Reference set '{referenceSetId}' has an unreadable SharpLab.Runtime assembly.", exception);
+        throw new InvalidDataException($"Reference set '{referenceSetId}' has an unreadable SharpLab.Runtime assembly.", exception);
     }
 }
 
-static void ValidateSharpLabRuntimeTargetFramework(
-    IReadOnlyList<string> targetFrameworkAttributes,
-    string referenceSetId,
-    string requiredTargetFramework = ".NETStandard,Version=v2.1")
+static void ValidateSharpLabRuntimeTargetFramework(IReadOnlyList<string> targetFrameworkAttributes, string referenceSetId, string requiredTargetFramework = ".NETStandard,Version=v2.1")
 {
-    if (targetFrameworkAttributes.Count != 1 ||
-        !string.Equals(targetFrameworkAttributes[0], requiredTargetFramework, StringComparison.Ordinal))
+    if (targetFrameworkAttributes.Count != 1 || !string.Equals(targetFrameworkAttributes[0], requiredTargetFramework, StringComparison.Ordinal))
     {
-        throw new InvalidDataException(
-            $"Reference set '{referenceSetId}' must contain SharpLab.Runtime built for {requiredTargetFramework}.");
+        throw new InvalidDataException($"Reference set '{referenceSetId}' must contain SharpLab.Runtime built for {requiredTargetFramework}.");
     }
 }
 
@@ -368,8 +312,7 @@ static string ReadTargetFrameworkAttribute(MetadataReader metadata, CustomAttrib
     var value = metadata.GetBlobReader(attribute.Value);
     if (value.ReadUInt16() != 1)
         throw new InvalidDataException("SharpLab.Runtime has an invalid TargetFrameworkAttribute payload.");
-    return value.ReadSerializedString()
-        ?? throw new InvalidDataException("SharpLab.Runtime has a null TargetFrameworkAttribute value.");
+    return value.ReadSerializedString() ?? throw new InvalidDataException("SharpLab.Runtime has a null TargetFrameworkAttribute value.");
 }
 
 static string? GetAttributeTypeName(MetadataReader reader, EntityHandle constructor)
@@ -388,46 +331,21 @@ static string? GetAttributeTypeName(MetadataReader reader, EntityHandle construc
     };
 }
 
-static string FormatReference(MetadataReader reader, TypeReference type) =>
-    $"{reader.GetString(type.Namespace)}.{reader.GetString(type.Name)}";
+static string FormatReference(MetadataReader reader, TypeReference type) => $"{reader.GetString(type.Namespace)}.{reader.GetString(type.Name)}";
 
-static string FormatDefinition(MetadataReader reader, TypeDefinition type) =>
-    $"{reader.GetString(type.Namespace)}.{reader.GetString(type.Name)}";
+static string FormatDefinition(MetadataReader reader, TypeDefinition type) => $"{reader.GetString(type.Namespace)}.{reader.GetString(type.Name)}";
 
 static async Task WriteAttestationAsync(string path, LockedReferenceSet referenceSet)
 {
-    var files = Directory.EnumerateFiles(path, "*.dll", SearchOption.TopDirectoryOnly)
-        .OrderBy(Path.GetFileName, StringComparer.Ordinal)
-        .Select(file =>
+    var files = Directory.EnumerateFiles(path, "*.dll", SearchOption.TopDirectoryOnly).OrderBy(Path.GetFileName, StringComparer.Ordinal).Select(file =>
         {
             using var stream = File.OpenRead(file);
-            return new AttestedFile(
-                Path.GetFileName(file),
-                stream.Length,
-                $"sha256:{Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant()}");
-        })
-        .ToArray();
+            return new AttestedFile(Path.GetFileName(file), stream.Length, $"sha256:{Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant()}");
+        }).ToArray();
     var canonical = string.Concat(files.Select(file => $"{file.Digest}  {file.Size}  {file.Path}\n"));
     var contentDigest = $"sha256:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant()}";
-    var document = new AttestationDocument(
-        1,
-        new AttestedReferenceSet(
-            referenceSet.Id,
-            referenceSet.TargetFramework,
-            referenceSet.PackageContentHash,
-            contentDigest,
-            new Provenance(
-                "nuget-package",
-                referenceSet.ResolvedVersion,
-                referenceSet.Package,
-                referenceSet.SourceUri,
-                null,
-                $"sha512:{referenceSet.Sha512}")),
-        files);
-    await WriteUtf8LfAsync(
-        Path.Combine(path, "reference-set.attestation.json"),
-        JsonSerializer.Serialize(document, AttestationJsonContext.Default.AttestationDocument)
-            .ReplaceLineEndings("\n") + "\n");
+    var document = new AttestationDocument(1, new AttestedReferenceSet(referenceSet.Id, referenceSet.TargetFramework, referenceSet.PackageContentHash, contentDigest, new Provenance("nuget-package", referenceSet.ResolvedVersion, referenceSet.Package, referenceSet.SourceUri, null, $"sha512:{referenceSet.Sha512}")), files);
+    await WriteUtf8LfAsync(Path.Combine(path, "reference-set.attestation.json"), JsonSerializer.Serialize(document, AttestationJsonContext.Default.AttestationDocument).ReplaceLineEndings("\n") + "\n");
 }
 
 static void WriteAppsettings(Options options, IReadOnlyList<LockedReferenceSet> referenceSets)
@@ -435,26 +353,10 @@ static void WriteAppsettings(Options options, IReadOnlyList<LockedReferenceSet> 
     var appsettings = ReadJsonObject(options.AppsettingsTemplatePath, "Roslyn appsettings template");
     var configured = new JsonObject();
     foreach (var referenceSet in referenceSets)
-    {
-        configured[referenceSet.Id] = new JsonObject
-        {
-            ["Path"] = $"/reference-sets/{referenceSet.Id}",
-            ["TargetFramework"] = referenceSet.TargetFramework,
-            ["FrameworkVersion"] = referenceSet.ResolvedVersion,
-            ["Digest"] = referenceSet.PackageContentHash,
-            ["IncludeSharpLabRuntime"] = referenceSet.IncludeSharpLabRuntime
-        };
-    }
+        configured[referenceSet.Id] = new JsonObject { ["Path"] = $"/reference-sets/{referenceSet.Id}", ["TargetFramework"] = referenceSet.TargetFramework, ["FrameworkVersion"] = referenceSet.ResolvedVersion, ["Digest"] = referenceSet.PackageContentHash, ["IncludeSharpLabRuntime"] = referenceSet.IncludeSharpLabRuntime };
     appsettings["ReferenceSets"] = configured;
     Directory.CreateDirectory(Path.GetDirectoryName(options.AppsettingsOutputPath)!);
-    WriteUtf8Lf(
-        options.AppsettingsOutputPath,
-        appsettings.ToJsonString(new JsonSerializerOptions
-        {
-            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-            WriteIndented = true
-        })
-            .ReplaceLineEndings("\n") + "\n");
+    WriteUtf8Lf(options.AppsettingsOutputPath, appsettings.ToJsonString(new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, WriteIndented = true }).ReplaceLineEndings("\n") + "\n");
 }
 
 static void WriteUtf8Lf(string path, string content)
@@ -486,39 +388,11 @@ static async Task RunSelfTestAsync()
     const string version = "1.2.3";
     var sha512 = new string('a', 128);
     var packageContentHash = "sha512-" + Convert.ToBase64String(Convert.FromHexString(sha512));
-    var matrix = new JsonObject
-    {
-        ["coreClr"] = new JsonArray(Contract.ExpectedTargets.Select(target => (JsonNode)new JsonObject
-        {
-            ["id"] = target.RuntimeId,
-            ["referenceSetId"] = target.ReferenceSetId,
-            ["referencePackage"] = new JsonObject
-            {
-                ["id"] = target.Package,
-                ["version"] = version,
-                ["url"] = $"https://api.nuget.org/v3-flatcontainer/{target.Package.ToLowerInvariant()}/{version}/{target.Package.ToLowerInvariant()}.{version}.nupkg",
-                ["sha512"] = sha512,
-                ["packageContentHash"] = packageContentHash
-            }
-        }).ToArray())
-    };
+    var matrix = new JsonObject { ["coreClr"] = new JsonArray(Contract.ExpectedTargets.Select(target => (JsonNode)new JsonObject { ["id"] = target.RuntimeId, ["referenceSetId"] = target.ReferenceSetId, ["referencePackage"] = new JsonObject { ["id"] = target.Package, ["version"] = version, ["url"] = $"https://api.nuget.org/v3-flatcontainer/{target.Package.ToLowerInvariant()}/{version}/{target.Package.ToLowerInvariant()}.{version}.nupkg", ["sha512"] = sha512, ["packageContentHash"] = packageContentHash } }).ToArray()) };
     var components = new JsonObject();
     foreach (var target in Contract.ExpectedTargets)
-    {
-        components[target.ReferenceSetId] = new JsonObject
-        {
-            ["kind"] = "reference-set",
-            ["resolvedVersion"] = version,
-            ["package"] = target.Package,
-            ["sourceUri"] = $"https://api.nuget.org/v3-flatcontainer/{target.Package.ToLowerInvariant()}/{version}/{target.Package.ToLowerInvariant()}.{version}.nupkg",
-            ["sha512"] = sha512,
-            ["packageContentHash"] = packageContentHash
-        };
-    }
-    var resolved = ReadReferenceSets(
-        matrix,
-        new JsonObject { ["components"] = components.DeepClone() },
-        CandidateOverrides.Empty);
+        components[target.ReferenceSetId] = new JsonObject { ["kind"] = "reference-set", ["resolvedVersion"] = version, ["package"] = target.Package, ["sourceUri"] = $"https://api.nuget.org/v3-flatcontainer/{target.Package.ToLowerInvariant()}/{version}/{target.Package.ToLowerInvariant()}.{version}.nupkg", ["sha512"] = sha512, ["packageContentHash"] = packageContentHash };
+    var resolved = ReadReferenceSets(matrix, new JsonObject { ["components"] = components.DeepClone() }, CandidateOverrides.Empty);
     if (resolved.Count != Contract.ExpectedTargets.Count || resolved.Count(static set => set.IncludeSharpLabRuntime) != 9)
         throw new InvalidOperationException("CoreCLR materializer self-test did not resolve the approved reference closure.");
     var candidateValues = Contract.ExpectedTargets.ToDictionary(
@@ -535,47 +409,31 @@ static async Task RunSelfTestAsync()
         new KeyValuePair<string, string>($"{pair.Key}-sha512", pair.Value.Sha512),
         new KeyValuePair<string, string>($"{pair.Key}-content-hash", pair.Value.ContentHash)
     }).ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal);
-    _ = ReadReferenceSets(
-        matrix,
-        new JsonObject { ["components"] = components.DeepClone() },
-        CandidateOverrides.Parse(candidateArguments));
+    _ = ReadReferenceSets(matrix, new JsonObject { ["components"] = components.DeepClone() }, CandidateOverrides.Parse(candidateArguments));
     candidateArguments["netcoreapp20-content-hash"] = "sha512-" + Convert.ToBase64String(new byte[64]);
     try
     {
-        _ = ReadReferenceSets(
-            matrix,
-            new JsonObject { ["components"] = components.DeepClone() },
-            CandidateOverrides.Parse(candidateArguments));
+        _ = ReadReferenceSets(matrix, new JsonObject { ["components"] = components.DeepClone() }, CandidateOverrides.Parse(candidateArguments));
         throw new InvalidOperationException("CoreCLR materializer self-test accepted legacy CoreCLR build-argument drift.");
     }
-    catch (InvalidDataException)
-    {
-    }
+    catch (InvalidDataException) { }
     candidateArguments.Remove("net9-url");
     try
     {
         _ = CandidateOverrides.Parse(candidateArguments);
         throw new InvalidOperationException("CoreCLR materializer self-test accepted incomplete CoreCLR build arguments.");
     }
-    catch (ArgumentException)
-    {
-    }
+    catch (ArgumentException) { }
     var invalidComponents = components.DeepClone().AsObject();
     invalidComponents["net10-ref"]!.AsObject()["sourceUri"] = "https://example.invalid/reference.nupkg";
     try
     {
-        _ = ReadReferenceSets(
-            matrix,
-            new JsonObject { ["components"] = invalidComponents },
-            CandidateOverrides.Empty);
+        _ = ReadReferenceSets(matrix, new JsonObject { ["components"] = invalidComponents }, CandidateOverrides.Empty);
         throw new InvalidOperationException("CoreCLR materializer self-test accepted a non-canonical package URI.");
     }
-    catch (InvalidDataException)
-    {
-    }
+    catch (InvalidDataException) { }
     var driftedMatrix = matrix.DeepClone().AsObject();
-    driftedMatrix["coreClr"]!.AsArray()
-        .Single(item => item!["id"]!.GetValue<string>() == "dotnet-10")!["referencePackage"]!["sha512"] =
+    driftedMatrix["coreClr"]!.AsArray().Single(item => item!["id"]!.GetValue<string>() == "dotnet-10")!["referencePackage"]!["sha512"] =
         new string('b', 128);
     AssertIdentityRejected(
         driftedMatrix,
@@ -593,25 +451,19 @@ static async Task RunSelfTestAsync()
         _ = RequiredNuGetVersion(new JsonObject { ["version"] = "../../escape" }, "version");
         throw new InvalidOperationException("CoreCLR materializer self-test accepted an unsafe package version.");
     }
-    catch (InvalidDataException)
-    {
-    }
+    catch (InvalidDataException) { }
     try
     {
         _ = CopyWithLimit(new MemoryStream(new byte[4]), Stream.Null, 3, "bounded copy rejected");
         throw new InvalidOperationException("CoreCLR materializer self-test accepted an oversized extracted stream.");
     }
-    catch (InvalidDataException exception) when (exception.Message == "bounded copy rejected")
-    {
-    }
+    catch (InvalidDataException exception) when (exception.Message == "bounded copy rejected") { }
     try
     {
         ValidateSharpLabRuntimeTargetFramework([".NETCoreApp,Version=v10.0"], "self-test-ref");
         throw new InvalidOperationException("CoreCLR materializer self-test accepted SharpLab.Runtime outside netstandard2.1.");
     }
-    catch (InvalidDataException)
-    {
-    }
+    catch (InvalidDataException) { }
     var temporary = Path.Combine(Path.GetTempPath(), $"SharpLabNext.CoreReferenceMaterializer.{Guid.NewGuid():N}");
     try
     {
@@ -638,9 +490,7 @@ static async Task RunSelfTestAsync()
             ValidateRequiredReferenceAssemblyFiles(extracted, "self-test-ref");
             throw new InvalidOperationException("CoreCLR materializer self-test accepted a missing required assembly.");
         }
-        catch (InvalidDataException)
-        {
-        }
+        catch (InvalidDataException) { }
         File.WriteAllBytes(collectionsPath, [3]);
 
         var duplicate = Path.Combine(temporary, "duplicate.nupkg");
@@ -673,9 +523,7 @@ static async Task RunSelfTestAsync()
         await WriteAttestationAsync(attestationRoot, resolved.Single(static set => set.Id == "net10-ref"));
         VerifyUtf8Lf(Path.Combine(attestationRoot, "reference-set.attestation.json"));
         var appsettingsOutput = Path.Combine(temporary, "generated", "appsettings.json");
-        WriteAppsettings(
-            new Options("matrix", "lock", "output", "archive", appsettingsTemplate, appsettingsOutput, null, CandidateOverrides.Empty),
-            resolved);
+        WriteAppsettings(new Options("matrix", "lock", "output", "archive", appsettingsTemplate, appsettingsOutput, null, CandidateOverrides.Empty), resolved);
         VerifyUtf8Lf(appsettingsOutput);
         var generated = ReadJsonObject(appsettingsOutput, "Generated appsettings");
         if (generated["ReferenceSets"]?.AsObject().Count != Contract.ExpectedTargets.Count)
@@ -696,9 +544,7 @@ static void AssertIdentityRejected(JsonObject matrix, JsonObject releaseLock, st
         _ = ReadReferenceSets(matrix, releaseLock, CandidateOverrides.Empty);
         throw new InvalidOperationException(failureMessage);
     }
-    catch (InvalidDataException)
-    {
-    }
+    catch (InvalidDataException) { }
 }
 
 static void CreateZip(string path, IReadOnlyList<(string Path, byte[] Contents)> files)
@@ -723,9 +569,7 @@ static void AssertZipRejected(string archive)
             ExtractReferenceAssemblies(archive, destination, "net10.0");
             throw new InvalidOperationException("CoreCLR materializer self-test accepted an unsafe ZIP archive.");
         }
-        catch (InvalidDataException)
-        {
-        }
+        catch (InvalidDataException) { }
     }
     finally
     {
@@ -751,19 +595,14 @@ static string SafeChild(string parent, string name)
     return candidate;
 }
 
-static string Required(JsonObject value, string property) =>
-    value[property]?.GetValue<string>() is { Length: > 0 } text
-        ? text
-        : throw new InvalidDataException($"Required property '{property}' is missing.");
+static string Required(JsonObject value, string property) => value[property]?.GetValue<string>() is { Length: > 0 } text ? text : throw new InvalidDataException($"Required property '{property}' is missing.");
 
 static string RequiredNuGetVersion(JsonObject value, string property)
 {
     var text = Required(value, property);
-    if (text.Length > 128 ||
-        !Regex.IsMatch(text, "^[0-9](?:[0-9A-Za-z.-]{0,126}[0-9A-Za-z])?$", RegexOptions.CultureInvariant))
+    if (text.Length > 128 || !Regex.IsMatch(text, "^[0-9](?:[0-9A-Za-z.-]{0,126}[0-9A-Za-z])?$", RegexOptions.CultureInvariant))
     {
-        throw new InvalidDataException(
-            $"Property '{property}' must be a bounded normalized NuGet version safe for use in a cache filename.");
+        throw new InvalidDataException($"Property '{property}' must be a bounded normalized NuGet version safe for use in a cache filename.");
     }
     return text;
 }
@@ -771,9 +610,7 @@ static string RequiredNuGetVersion(JsonObject value, string property)
 static string RequiredHttpsUri(JsonObject value, string property)
 {
     var text = Required(value, property);
-    if (!Uri.TryCreate(text, UriKind.Absolute, out var uri) ||
-        !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal) ||
-        !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+    if (!Uri.TryCreate(text, UriKind.Absolute, out var uri) || !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal) || !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
     {
         throw new InvalidDataException($"Property '{property}' must be an absolute HTTPS URL without credentials, query, or fragment.");
     }
@@ -808,14 +645,7 @@ static void RequireEqual(string expected, string actual, string name)
         throw new InvalidDataException($"{name} must equal '{expected}'.");
 }
 
-sealed record ExpectedTarget(
-    string RuntimeId,
-    string ReferenceSetId,
-    string TargetFramework,
-    string Package,
-    bool IncludeSharpLabRuntime,
-    string BuildArgumentPrefix,
-    string VersionBuildArgument);
+sealed record ExpectedTarget(string RuntimeId, string ReferenceSetId, string TargetFramework, string Package, bool IncludeSharpLabRuntime, string BuildArgumentPrefix, string VersionBuildArgument);
 sealed record LockedReferenceSet(string Id, string TargetFramework, string Package, string ResolvedVersion, string SourceUri, string Sha512, string PackageContentHash, bool IncludeSharpLabRuntime);
 sealed record AttestationDocument(int SchemaVersion, AttestedReferenceSet ReferenceSet, IReadOnlyList<AttestedFile> Files);
 sealed record AttestedReferenceSet(string Id, string TargetFramework, string Digest, string ContentDigest, Provenance Provenance);
@@ -863,15 +693,13 @@ sealed record CandidateOverrides(IReadOnlyDictionary<string, CandidateIdentity> 
 
     public static CandidateOverrides Parse(IReadOnlyDictionary<string, string> values)
     {
-        var overrideKeys = Contract.ExpectedTargets
-            .SelectMany(static target => new[]
+        var overrideKeys = Contract.ExpectedTargets.SelectMany(static target => new[]
             {
                 $"{target.BuildArgumentPrefix}-version",
                 $"{target.BuildArgumentPrefix}-url",
                 $"{target.BuildArgumentPrefix}-sha512",
                 $"{target.BuildArgumentPrefix}-content-hash"
-            })
-            .ToArray();
+            }).ToArray();
         if (!overrideKeys.Any(values.ContainsKey))
             return Empty;
 
@@ -879,11 +707,7 @@ sealed record CandidateOverrides(IReadOnlyDictionary<string, CandidateIdentity> 
         foreach (var target in Contract.ExpectedTargets)
         {
             var prefix = target.BuildArgumentPrefix;
-            identities.Add(target.ReferenceSetId, new CandidateIdentity(
-                RequiredValue(values, $"{prefix}-version"),
-                RequiredValue(values, $"{prefix}-url"),
-                RequiredValue(values, $"{prefix}-sha512"),
-                RequiredValue(values, $"{prefix}-content-hash")));
+            identities.Add(target.ReferenceSetId, new CandidateIdentity(RequiredValue(values, $"{prefix}-version"), RequiredValue(values, $"{prefix}-url"), RequiredValue(values, $"{prefix}-sha512"), RequiredValue(values, $"{prefix}-content-hash")));
         }
         return new CandidateOverrides(identities);
     }
@@ -892,30 +716,16 @@ sealed record CandidateOverrides(IReadOnlyDictionary<string, CandidateIdentity> 
     {
         if (!Identities.TryGetValue(set.Id, out var identity))
             return;
-        if (!string.Equals(set.ResolvedVersion, identity.Version, StringComparison.Ordinal) ||
-            !string.Equals(set.SourceUri, identity.Url, StringComparison.Ordinal) ||
-            !string.Equals(set.Sha512, identity.Sha512, StringComparison.Ordinal) ||
-            !string.Equals(set.PackageContentHash, identity.ContentHash, StringComparison.Ordinal))
+        if (!string.Equals(set.ResolvedVersion, identity.Version, StringComparison.Ordinal) || !string.Equals(set.SourceUri, identity.Url, StringComparison.Ordinal) || !string.Equals(set.Sha512, identity.Sha512, StringComparison.Ordinal) || !string.Equals(set.PackageContentHash, identity.ContentHash, StringComparison.Ordinal))
         {
             throw new InvalidDataException($"Candidate override for '{set.Id}' does not match the release lock.");
         }
     }
 
-    private static string RequiredValue(IReadOnlyDictionary<string, string> values, string key) =>
-        values.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value)
-            ? value
-            : throw new ArgumentException($"--{key} is required.");
+    private static string RequiredValue(IReadOnlyDictionary<string, string> values, string key) => values.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value : throw new ArgumentException($"--{key} is required.");
 }
 
-sealed record Options(
-    string MatrixPath,
-    string LockPath,
-    string OutputDirectory,
-    string ArchiveDirectory,
-    string AppsettingsTemplatePath,
-    string AppsettingsOutputPath,
-    string? RuntimeAssemblyPath,
-    CandidateOverrides Overrides)
+sealed record Options(string MatrixPath, string LockPath, string OutputDirectory, string ArchiveDirectory, string AppsettingsTemplatePath, string AppsettingsOutputPath, string? RuntimeAssemblyPath, CandidateOverrides Overrides)
 {
     public static Options Parse(string[] arguments)
     {
@@ -935,8 +745,7 @@ sealed record Options(
         for (var index = 0; index < arguments.Length; index++)
         {
             var key = arguments[index];
-            if (!key.StartsWith("--", StringComparison.Ordinal) || index + 1 >= arguments.Length ||
-                !allowedKeys.Contains(key[2..]) || !values.TryAdd(key[2..], arguments[++index]))
+            if (!key.StartsWith("--", StringComparison.Ordinal) || index + 1 >= arguments.Length || !allowedKeys.Contains(key[2..]) || !values.TryAdd(key[2..], arguments[++index]))
                 throw new ArgumentException($"Invalid argument '{key}'.");
         }
         string RequiredValue(string key) => values.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value)
@@ -945,14 +754,6 @@ sealed record Options(
         var runtimeAssembly = OptionalValue("runtime-assembly");
         if (!string.IsNullOrWhiteSpace(runtimeAssembly) && !File.Exists(runtimeAssembly))
             throw new ArgumentException($"Runtime assembly '{runtimeAssembly}' does not exist.");
-        return new Options(
-            Path.GetFullPath(RequiredValue("matrix")),
-            Path.GetFullPath(RequiredValue("lock")),
-            Path.GetFullPath(RequiredValue("output")),
-            Path.GetFullPath(RequiredValue("archive-cache")),
-            Path.GetFullPath(RequiredValue("appsettings-template")),
-            Path.GetFullPath(RequiredValue("appsettings-output")),
-            string.IsNullOrWhiteSpace(runtimeAssembly) ? null : Path.GetFullPath(runtimeAssembly),
-            CandidateOverrides.Parse(values));
+        return new Options(Path.GetFullPath(RequiredValue("matrix")), Path.GetFullPath(RequiredValue("lock")), Path.GetFullPath(RequiredValue("output")), Path.GetFullPath(RequiredValue("archive-cache")), Path.GetFullPath(RequiredValue("appsettings-template")), Path.GetFullPath(RequiredValue("appsettings-output")), string.IsNullOrWhiteSpace(runtimeAssembly) ? null : Path.GetFullPath(runtimeAssembly), CandidateOverrides.Parse(values));
     }
 }

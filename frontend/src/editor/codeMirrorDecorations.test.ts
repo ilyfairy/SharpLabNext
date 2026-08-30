@@ -16,7 +16,10 @@ import {
 
 describe('CodeMirror language feature state', () => {
   it('keeps signature help stable while typing and closes it at the end of the invocation', () => {
-    let state = EditorState.create({ doc: 'Write(', extensions: [signatureHelpField] })
+    let state = EditorState.create({
+      doc: 'Write(',
+      extensions: [signatureHelpField],
+    })
     state = state.update({
       effects: setSignatureHelp.of({
         position: 6,
@@ -37,10 +40,15 @@ describe('CodeMirror language feature state', () => {
       doc: 'class C {\n  void Run() {}\n}',
       extensions: [lspFoldingExtension],
     })
-    state = state.update({ effects: setFoldingRanges.of([{ from: 9, to: 27 }]) }).state
+    state = state.update({
+      effects: setFoldingRanges.of([{ from: 9, to: 27 }]),
+    }).state
     const firstLine = state.doc.line(1)
     expect(state.field(foldingRangeField)).toEqual([{ from: 9, to: 27 }])
-    expect(foldable(state, firstLine.from, firstLine.to)).toEqual({ from: 9, to: 27 })
+    expect(foldable(state, firstLine.from, firstLine.to)).toEqual({
+      from: 9,
+      to: 27,
+    })
   })
 
   it('maps the previous semantic token set through edits until a replacement arrives', () => {
@@ -49,9 +57,7 @@ describe('CodeMirror language feature state', () => {
       extensions: [semanticDecorationExtension],
     })
     state = state.update({
-      effects: setSemanticDecorations.of([
-        { from: 6, to: 12, className: 'cm-semantic-token cm-semantic-type' },
-      ]),
+      effects: setSemanticDecorations.of([{ from: 6, to: 12, className: 'cm-semantic-token cm-semantic-type' }]),
     }).state
 
     state = state.update({ changes: { from: 0, insert: '// ' } }).state

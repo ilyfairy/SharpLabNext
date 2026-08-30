@@ -1,41 +1,29 @@
-import { expect, type Locator, type Page, test } from '@playwright/test'
-import { editorHost, switchEditor, waitForLanguageServiceReady } from './helpers/workbench'
+import { expect, type Locator, type Page, test } from '@playwright/test';
+import { editorHost, switchEditor, waitForLanguageServiceReady } from './helpers/workbench';
 
 async function openCSharpWorkbench(page: Page) {
-  await page.goto('/')
-  await expect(page.getByLabel('Language')).toBeEnabled()
-  await expect(page.getByLabel('Language')).toHaveValue('csharp')
-  await waitForLanguageServiceReady(page)
+  await page.goto('/');
+  await expect(page.getByLabel('Language')).toBeEnabled();
+  await expect(page.getByLabel('Language')).toHaveValue('csharp');
+  await waitForLanguageServiceReady(page);
 }
 
 async function replaceSource(page: Page, source: string) {
   await page.getByRole('region', { name: 'Source editor' }).click({
     position: { x: 320, y: 180 },
-  })
+  });
   await page.keyboard.press('ControlOrMeta+A')
   await page.keyboard.insertText(source)
 }
 
 async function expectTokenColor(root: Locator, text: string, color: string) {
-  await expect
-    .poll(() =>
-      root
-        .locator('span')
-        .evaluateAll(
-          (elements, expectedText) =>
-            elements
-              .filter((element) => element.textContent?.includes(expectedText))
-              .map((element) => getComputedStyle(element).color),
-          text,
-        ),
-    )
-    .toContain(color)
+  await expect.poll(() => root.locator('span').evaluateAll((elements, expectedText) => elements.filter((element) => element.textContent?.includes(expectedText)).map((element) => getComputedStyle(element).color), text)).toContain(color)
 }
 
 test.describe('C# language service', () => {
   test.beforeEach(({ isMobile }) => {
     test.skip(isMobile, 'Desktop Monaco language-service coverage.')
-  })
+  });
 
   test('shows Roslyn completion items in Monaco', async ({ page }) => {
     await openCSharpWorkbench(page)
@@ -45,12 +33,7 @@ test.describe('C# language service', () => {
 
     const suggestions = page.locator('.suggest-widget.visible')
     await expect(suggestions).toBeVisible()
-    await expect(
-      suggestions
-        .locator('.monaco-list-row')
-        .filter({ hasText: /WriteLine/ })
-        .first(),
-    ).toBeVisible()
+    await expect(suggestions.locator('.monaco-list-row').filter({ hasText: /WriteLine/ }).first()).toBeVisible()
   })
 
   test('offers and accepts top-level while completion in Monaco', async ({ page }) => {
@@ -62,9 +45,7 @@ test.describe('C# language service', () => {
     const suggestions = page.locator('.suggest-widget.visible')
     await expect(suggestions).toBeVisible()
     await expect(suggestions).not.toContainText('No suggestions.')
-    await expect(
-      suggestions.locator('.monaco-list-row').filter({ hasText: /while/ }).first(),
-    ).toBeVisible()
+    await expect(suggestions.locator('.monaco-list-row').filter({ hasText: /while/ }).first()).toBeVisible()
 
     await page.keyboard.press('Tab')
 
@@ -82,21 +63,12 @@ test.describe('C# language service', () => {
 
     const suggestions = page.locator('.cm-tooltip-autocomplete')
     await expect(suggestions).toBeVisible()
-    await expect(
-      suggestions
-        .getByRole('option')
-        .filter({ hasText: /WriteLine/ })
-        .first(),
-    ).toBeVisible()
+    await expect(suggestions.getByRole('option').filter({ hasText: /WriteLine/ }).first()).toBeVisible()
 
     await page.keyboard.press('Tab')
 
     await expect(suggestions).toBeHidden()
-    await expect
-      .poll(async () =>
-        (await editorHost(page, 'codemirror').locator('.cm-line').allTextContents()).join('\n'),
-      )
-      .toBe('using System;\nConsole.WriteLine')
+    await expect.poll(async () => (await editorHost(page, 'codemirror').locator('.cm-line').allTextContents()).join('\n')).toBe('using System;\nConsole.WriteLine')
   })
 
   test('shows Roslyn hover information in Monaco', async ({ page }) => {
@@ -141,14 +113,10 @@ test.describe('IL language highlighting', () => {
     await expect(suggestions).toContainText('No suggestions.')
 
     await page.keyboard.press('Enter')
-    await expect(
-      suggestions.locator('.monaco-list-row').filter({ hasText: /^add/ }).first(),
-    ).toBeVisible()
+    await expect(suggestions.locator('.monaco-list-row').filter({ hasText: /^add/ }).first()).toBeVisible()
   })
 
-  test('keeps IL readable in both editors while the language service is unavailable', async ({
-    page,
-  }) => {
+  test('keeps IL readable in both editors while the language service is unavailable', async ({ page }) => {
     await page.route('**/api/v1/language-sessions', async (route) => {
       if (route.request().method() !== 'POST') {
         await route.continue()

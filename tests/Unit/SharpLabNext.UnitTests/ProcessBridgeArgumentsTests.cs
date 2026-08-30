@@ -79,8 +79,7 @@ public sealed class ProcessBridgeArgumentsTests
     [InlineData("dotnet\0--info")]
     public void ParseRejectsExecutablePathInjection(string executable)
     {
-        Assert.Throws<ArgumentException>(() =>
-            ProcessBridgeArguments.Parse(["bridge", executable, "--"]));
+        Assert.Throws<ArgumentException>(() => ProcessBridgeArguments.Parse(["bridge", executable, "--"]));
     }
 
     [Fact]
@@ -88,8 +87,7 @@ public sealed class ProcessBridgeArgumentsTests
     {
         var missing = Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}", "dotnet.exe");
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
-            ProcessBridgeArguments.Parse(["bridge", missing, "--"]));
+        var exception = Assert.Throws<FileNotFoundException>(() => ProcessBridgeArguments.Parse(["bridge", missing, "--"]));
 
         Assert.Equal(Path.GetFullPath(missing), exception.FileName);
     }
@@ -97,23 +95,16 @@ public sealed class ProcessBridgeArgumentsTests
     [Fact]
     public void ParseRejectsTraversalInsideAnAbsoluteExecutablePath()
     {
-        var executable = Environment.ProcessPath
-            ?? throw new InvalidOperationException("The test host executable path is unavailable.");
-        var injected = Path.Combine(
-            Path.GetDirectoryName(executable)!,
-            "unused-directory",
-            "..",
-            Path.GetFileName(executable));
+        var executable = Environment.ProcessPath ?? throw new InvalidOperationException("The test host executable path is unavailable.");
+        var injected = Path.Combine(Path.GetDirectoryName(executable)!, "unused-directory", "..", Path.GetFileName(executable));
 
-        Assert.Throws<ArgumentException>(() =>
-            ProcessBridgeArguments.Parse(["bridge", injected, "--"]));
+        Assert.Throws<ArgumentException>(() => ProcessBridgeArguments.Parse(["bridge", injected, "--"]));
     }
 
     [Fact]
     public void ParseAcceptsAnExistingAbsoluteExecutable()
     {
-        var executable = Environment.ProcessPath
-            ?? throw new InvalidOperationException("The test host executable path is unavailable.");
+        var executable = Environment.ProcessPath ?? throw new InvalidOperationException("The test host executable path is unavailable.");
 
         var parsed = ProcessBridgeArguments.Parse(["bridge", executable, "--"]);
 

@@ -1,11 +1,5 @@
 import { php } from '@codemirror/lang-php'
-import {
-  HighlightStyle,
-  StreamLanguage,
-  type StreamParser,
-  type StringStream,
-  syntaxHighlighting,
-} from '@codemirror/language'
+import { HighlightStyle, StreamLanguage, type StreamParser, type StringStream, syntaxHighlighting } from '@codemirror/language'
 import { cpp, csharp, java } from '@codemirror/legacy-modes/mode/clike'
 import { javascript } from '@codemirror/legacy-modes/mode/javascript'
 import { fSharp } from '@codemirror/legacy-modes/mode/mllike'
@@ -15,41 +9,9 @@ import { EditorView } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { ilWordTokens } from './ilLanguageTokens'
 
-const controlNames = new Set([
-  'catch',
-  'for',
-  'foreach',
-  'if',
-  'lock',
-  'match',
-  'nameof',
-  'sizeof',
-  'switch',
-  'typeof',
-  'using',
-  'while',
-])
+const controlNames = new Set(['catch', 'for', 'foreach', 'if', 'lock', 'match', 'nameof', 'sizeof', 'switch', 'typeof', 'using', 'while'])
 
-const csharpPredefinedTypeKeywords = new Set([
-  'bool',
-  'byte',
-  'char',
-  'decimal',
-  'double',
-  'float',
-  'int',
-  'long',
-  'nint',
-  'nuint',
-  'object',
-  'sbyte',
-  'short',
-  'string',
-  'uint',
-  'ulong',
-  'ushort',
-  'void',
-])
+const csharpPredefinedTypeKeywords = new Set(['bool', 'byte', 'char', 'decimal', 'double', 'float', 'int', 'long', 'nint', 'nuint', 'object', 'sbyte', 'short', 'string', 'uint', 'ulong', 'ushort', 'void'])
 
 let languages: ReadonlyMap<string, Extension> | null = null
 
@@ -65,7 +27,10 @@ export const visualStudioLightHighlightStyle = HighlightStyle.define([
   { tag: [tags.variableName, tags.name], color: '#001080' },
   { tag: tags.labelName, color: '#AF00DB' },
   { tag: tags.macroName, color: '#AF00DB' },
-  { tag: [tags.keyword, tags.modifier, tags.atom, tags.bool, tags.null], color: '#0000FF' },
+  {
+    tag: [tags.keyword, tags.modifier, tags.atom, tags.bool, tags.null],
+    color: '#0000FF',
+  },
   { tag: [tags.string, tags.character], color: '#A31515' },
   { tag: tags.escape, color: '#EE0000' },
   { tag: tags.number, color: '#098658' },
@@ -91,7 +56,10 @@ export const visualStudioLightEditorTheme = EditorView.theme(
       backgroundColor: 'transparent',
       color: 'inherit',
     },
-    '.cm-activeLine': { backgroundColor: 'rgba(237, 242, 247, 0.58)', color: 'inherit' },
+    '.cm-activeLine': {
+      backgroundColor: 'rgba(237, 242, 247, 0.58)',
+      color: 'inherit',
+    },
     '.cm-gutters': {
       backgroundColor: '#f7f8fa',
       color: '#68717d',
@@ -120,19 +88,11 @@ export function codeMirrorLanguageExtension(languageId: string): Extension {
 }
 
 export function codeMirrorSyntaxExtensions(languageId: string): Extension[] {
-  return [
-    codeMirrorLanguageExtension(languageId),
-    syntaxHighlighting(visualStudioLightHighlightStyle),
-    visualStudioLightEditorTheme,
-  ]
+  return [codeMirrorLanguageExtension(languageId), syntaxHighlighting(visualStudioLightHighlightStyle), visualStudioLightEditorTheme]
 }
 
 export function codeMirrorReadOnlyExtensions(languageId: string): Extension[] {
-  return [
-    ...codeMirrorSyntaxExtensions(languageId),
-    EditorState.readOnly.of(true),
-    EditorView.editable.of(false),
-  ]
+  return [...codeMirrorSyntaxExtensions(languageId), EditorState.readOnly.of(true), EditorView.editable.of(false)]
 }
 
 export function semanticTokenCssClass(tokenType: string): string {
@@ -190,10 +150,7 @@ export function semanticTokenCssClass(tokenType: string): string {
   }
 }
 
-function withFunctionNames(
-  parser: StreamParser<unknown>,
-  languageId: 'csharp' | 'visual-basic' | 'fsharp' | 'jsharp',
-): StreamParser<unknown> {
+function withFunctionNames(parser: StreamParser<unknown>, languageId: 'csharp' | 'visual-basic' | 'fsharp' | 'jsharp'): StreamParser<unknown> {
   return {
     ...parser,
     token(stream, state) {
@@ -219,20 +176,10 @@ function withFunctionNames(
       if (isNonIdentifierStyle(style)) return style
 
       if (/\bnamespace\s+$/i.test(before)) return 'namespace'
-      if (
-        /\b(?:class|struct|interface|enum|delegate|record|module|type|data|object)\s+$/i.test(
-          before,
-        )
-      ) {
+      if (/\b(?:class|struct|interface|enum|delegate|record|module|type|data|object)\s+$/i.test(before)) {
         return 'typeName'
       }
-      if (
-        /^\s*(?:<[^>{}]*>\s*)?\(/.test(after) ||
-        /\b(?:Sub|Function|func|fn)\s+$/i.test(before) ||
-        /\b(?:let|member)\s+(?:(?:inline|rec|private|internal|public|static)\s+)*(?:[A-Za-z_][\w']*\.)?$/i.test(
-          before,
-        )
-      ) {
+      if (/^\s*(?:<[^>{}]*>\s*)?\(/.test(after) || /\b(?:Sub|Function|func|fn)\s+$/i.test(before) || /\b(?:let|member)\s+(?:(?:inline|rec|private|internal|public|static)\s+)*(?:[A-Za-z_][\w']*\.)?$/i.test(before)) {
         return 'variableName.function'
       }
       return style
@@ -240,25 +187,7 @@ function withFunctionNames(
   }
 }
 
-const cppCliKeywords = new Set([
-  'array',
-  'delegate',
-  'event',
-  'finally',
-  'gcnew',
-  'generic',
-  'initonly',
-  'interface',
-  'interior_ptr',
-  'literal',
-  'pin_ptr',
-  'property',
-  'ref',
-  'safe_cast',
-  'sealed',
-  'value',
-  'where',
-])
+const cppCliKeywords = new Set(['array', 'delegate', 'event', 'finally', 'gcnew', 'generic', 'initonly', 'interface', 'interior_ptr', 'literal', 'pin_ptr', 'property', 'ref', 'safe_cast', 'sealed', 'value', 'where'])
 
 function withCppCliTokens(parser: StreamParser<unknown>): StreamParser<unknown> {
   return {
@@ -274,11 +203,7 @@ function withCppCliTokens(parser: StreamParser<unknown>): StreamParser<unknown> 
         return /^\s*\(/.test(after) ? 'variableName.function' : 'variableName'
       }
       if (/^[A-Z][A-Za-z0-9_]*\^*$/.test(text)) return 'typeName'
-      if (
-        /^[A-Za-z_][A-Za-z0-9_]*$/.test(text) &&
-        !controlNames.has(text.toLowerCase()) &&
-        /^\s*\(/.test(after)
-      ) {
+      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(text) && !controlNames.has(text.toLowerCase()) && /^\s*\(/.test(after)) {
         return 'variableName.function'
       }
       return style
@@ -286,29 +211,18 @@ function withCppCliTokens(parser: StreamParser<unknown>): StreamParser<unknown> 
   }
 }
 
-function csharpAttributeStyle(
-  identifier: string,
-  before: string,
-  after: string,
-): 'keyword' | 'namespace' | 'typeName' | null {
+function csharpAttributeStyle(identifier: string, before: string, after: string): 'keyword' | 'namespace' | 'typeName' | null {
   const openBracket = before.lastIndexOf('[')
   if (openBracket < 0 || before.lastIndexOf(']') > openBracket) return null
   const beforeAttribute = before.slice(0, openBracket)
   if (!/^(?:\s*\[[^\]]*\])*\s*$/.test(beforeAttribute)) return null
 
   const content = before.slice(openBracket + 1)
-  if (
-    /^\s*$/.test(content) &&
-    /^(?:assembly|module|return|method|field|property|event|type|param)$/i.test(identifier) &&
-    /^\s*:/.test(after)
-  ) {
+  if (/^\s*$/.test(content) && /^(?:assembly|module|return|method|field|property|event|type|param)$/i.test(identifier) && /^\s*:/.test(after)) {
     return 'keyword'
   }
 
-  const namePrefix = content.replace(
-    /^\s*(?:assembly|module|return|method|field|property|event|type|param)\s*:\s*/i,
-    '',
-  )
+  const namePrefix = content.replace(/^\s*(?:assembly|module|return|method|field|property|event|type|param)\s*:\s*/i, '')
   if (!/^(?:\s*(?:global\s*::\s*)?)?(?:[A-Za-z_]\w*\s*\.\s*)*$/.test(namePrefix)) {
     return null
   }
@@ -340,21 +254,14 @@ function isCsharpTypeReference(identifier: string, before: string, after: string
 }
 
 function isCompilerGeneratedMethodPart(identifier: string, before: string, after: string): boolean {
-  if (
-    /^[A-Za-z_][\w']*$/.test(identifier) &&
-    /<$/.test(before) &&
-    /^>\$?\s*(?:<[^>{}]*>\s*)?\(/.test(after)
-  ) {
+  if (/^[A-Za-z_][\w']*$/.test(identifier) && /<$/.test(before) && /^>\$?\s*(?:<[^>{}]*>\s*)?\(/.test(after)) {
     return true
   }
   return identifier === '$' && /<[A-Za-z_][\w']*>$/.test(before) && /^\s*\(/.test(after)
 }
 
 function isNonIdentifierStyle(style: string | null): boolean {
-  return (
-    style !== null &&
-    /(?:comment|string|keyword|type|number|operator|meta|atom|property)/.test(style)
-  )
+  return style !== null && /(?:comment|string|keyword|type|number|operator|meta|atom|property)/.test(style)
 }
 
 type SimpleLanguage = 'asm' | 'il' | 'gsharp' | 'minilang'
@@ -375,13 +282,9 @@ function createSimpleParser(language: SimpleLanguage): StreamParser<SimpleState>
     },
     languageData: {
       closeBrackets: {
-        brackets:
-          language === 'il' || language === 'asm'
-            ? ['(', '[', '{', '"']
-            : ['(', '[', '{', '"', "'"],
+        brackets: language === 'il' || language === 'asm' ? ['(', '[', '{', '"'] : ['(', '[', '{', '"', "'"],
       },
-      commentTokens:
-        language === 'asm' ? { line: ';' } : { line: '//', block: { open: '/*', close: '*/' } },
+      commentTokens: language === 'asm' ? { line: ';' } : { line: '//', block: { open: '/*', close: '*/' } },
     },
     token(stream, state) {
       if (stream.eatSpace()) return null
@@ -411,19 +314,11 @@ function createSimpleParser(language: SimpleLanguage): StreamParser<SimpleState>
         return readString(stream, state)
       }
 
-      if (
-        stream.match(
-          /^(?:0x[0-9a-f_]+|0b[01_]+|[0-9][0-9a-f_]*h\b|\d(?:[\d_]*\.?[\d_]*)(?:e[+-]?\d+)?)/i,
-        )
-      ) {
+      if (stream.match(/^(?:0x[0-9a-f_]+|0b[01_]+|[0-9][0-9a-f_]*h\b|\d(?:[\d_]*\.?[\d_]*)(?:e[+-]?\d+)?)/i)) {
         return 'number'
       }
       if (language === 'il' && stream.match(/^\.[A-Za-z_][\w.]*/)) return 'keyword'
-      if (
-        stream.match(
-          language === 'il' ? /^[A-Za-z_][\w']*(?:\.[A-Za-z0-9_]+)*\.?/ : /^[A-Za-z_][\w']*/,
-        )
-      ) {
+      if (stream.match(language === 'il' ? /^[A-Za-z_][\w']*(?:\.[A-Za-z0-9_]+)*\.?/ : /^[A-Za-z_][\w']*/)) {
         const word = stream.current()
         if (language === 'il' && isIlAssemblyName(stream, word)) return 'macroName'
         if (stream.match(/^\s*:(?!:)/, false)) return 'labelName'
@@ -450,17 +345,12 @@ function createSimpleParser(language: SimpleLanguage): StreamParser<SimpleState>
 
 function isAssemblyOpcodePosition(line: string, tokenStart: number): boolean {
   const before = line.slice(0, tokenStart)
-  return /^\s*(?:[A-Za-z_.$?][\w.$?]*\s*:\s*)?(?:(?:lock|rep|repe|repz|repne|repnz)\s+)*$/i.test(
-    before,
-  )
+  return /^\s*(?:[A-Za-z_.$?][\w.$?]*\s*:\s*)?(?:(?:lock|rep|repe|repz|repne|repnz)\s+)*$/i.test(before)
 }
 
 function isAssemblyRegister(word: string): boolean {
   const value = word.toLowerCase()
-  return (
-    assemblyRegisters.has(value) ||
-    /^(?:[xyz]mm(?:[12]?\d|3[01])|k[0-7]|bnd[0-3]|st[0-7])$/.test(value)
-  )
+  return assemblyRegisters.has(value) || /^(?:[xyz]mm(?:[12]?\d|3[01])|k[0-7]|bnd[0-3]|st[0-7])$/.test(value)
 }
 
 function isIlAssemblyName(stream: StringStream, word: string): boolean {
@@ -510,11 +400,7 @@ function looksLikeFunction(stream: StringStream, word: string): boolean {
   if (controlNames.has(word.toLowerCase())) return false
   const before = stream.string.slice(0, stream.start)
   const after = stream.string.slice(stream.pos)
-  return (
-    /^\s*(?:<[^>{}]*>\s*)?\(/.test(after) ||
-    /\b(?:func|fn)\s+$/i.test(before) ||
-    /::\s*$/.test(before)
-  )
+  return /^\s*(?:<[^>{}]*>\s*)?\(/.test(after) || /\b(?:func|fn)\s+$/i.test(before) || /::\s*$/.test(before)
 }
 
 const simpleKeywords: Record<SimpleLanguage, ReadonlySet<string>> = {

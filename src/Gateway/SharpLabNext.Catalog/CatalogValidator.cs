@@ -52,11 +52,7 @@ public static class CatalogValidator
 
         foreach (var referenceSet in catalog.ReferenceSets)
         {
-            ValidateLifecycle(
-                referenceSet.SupportStatus,
-                referenceSet.Visibility,
-                $"Reference set '{referenceSet.Id}'",
-                errors);
+            ValidateLifecycle(referenceSet.SupportStatus, referenceSet.Visibility, $"Reference set '{referenceSet.Id}'", errors);
             if (referenceSet.ReplacementReferenceSetId is not { } replacementId)
                 continue;
             if (string.Equals(referenceSet.Id, replacementId, StringComparison.Ordinal))
@@ -64,20 +60,12 @@ public static class CatalogValidator
                 errors.Add($"Reference set '{referenceSet.Id}' cannot replace itself.");
                 continue;
             }
-            RequireReference(
-                replacementId,
-                referenceSets,
-                $"Reference set '{referenceSet.Id}' replacement",
-                errors);
+            RequireReference(replacementId, referenceSets, $"Reference set '{referenceSet.Id}' replacement", errors);
         }
 
         foreach (var runtime in catalog.Runtimes)
         {
-            ValidateLifecycle(
-                runtime.SupportStatus,
-                runtime.Visibility,
-                $"Runtime '{runtime.Id}'",
-                errors);
+            ValidateLifecycle(runtime.SupportStatus, runtime.Visibility, $"Runtime '{runtime.Id}'", errors);
         }
 
         foreach (var processor in catalog.ArtifactProcessors)
@@ -91,24 +79,18 @@ public static class CatalogValidator
                 }
                 if (!processor.AcceptsArtifactFormats.Contains(transformation.InputArtifactFormat, StringComparer.Ordinal))
                 {
-                    errors.Add(
-                        $"Artifact processor '{processor.Id}' transformation '{transformation.Id}' does not declare input format '{transformation.InputArtifactFormat}' in acceptsArtifactFormats.");
+                    errors.Add($"Artifact processor '{processor.Id}' transformation '{transformation.Id}' does not declare input format '{transformation.InputArtifactFormat}' in acceptsArtifactFormats.");
                 }
                 if (!processor.ProducesArtifactFormats.Contains(transformation.OutputArtifactFormat, StringComparer.Ordinal))
                 {
-                    errors.Add(
-                        $"Artifact processor '{processor.Id}' transformation '{transformation.Id}' does not declare output format '{transformation.OutputArtifactFormat}' in producesArtifactFormats.");
+                    errors.Add($"Artifact processor '{processor.Id}' transformation '{transformation.Id}' does not declare output format '{transformation.OutputArtifactFormat}' in producesArtifactFormats.");
                 }
             }
         }
 
         foreach (var preset in catalog.Presets)
         {
-            ValidateLifecycle(
-                preset.SupportStatus,
-                preset.Visibility,
-                $"Preset '{preset.Id}'",
-                errors);
+            ValidateLifecycle(preset.SupportStatus, preset.Visibility, $"Preset '{preset.Id}'", errors);
             RequireReference(preset.LanguageId, languages, $"Preset '{preset.Id}' language", errors);
             RequireReference(preset.ToolchainId, toolchains, $"Preset '{preset.Id}' toolchain", errors);
             RequireReference(preset.ReferenceSetId, referenceSets, $"Preset '{preset.Id}' reference set", errors);
@@ -129,20 +111,16 @@ public static class CatalogValidator
                     break;
                 case CompatibilityRuleKind.ArtifactProcessor:
                     RequireReference(rule.ToId, processors, $"Rule '{rule.Id}' target", errors);
-                    if (processors.TryGetValue(rule.ToId, out var processor) &&
-                        !processor.AcceptsArtifactFormats.Contains(rule.FromId, StringComparer.Ordinal))
+                    if (processors.TryGetValue(rule.ToId, out var processor) && !processor.AcceptsArtifactFormats.Contains(rule.FromId, StringComparer.Ordinal))
                     {
-                        errors.Add(
-                            $"Rule '{rule.Id}' source format '{rule.FromId}' is not accepted by artifact processor '{processor.Id}'.");
+                        errors.Add($"Rule '{rule.Id}' source format '{rule.FromId}' is not accepted by artifact processor '{processor.Id}'.");
                     }
                     break;
                 case CompatibilityRuleKind.ArtifactRuntime:
                     RequireReference(rule.ToId, runtimes, $"Rule '{rule.Id}' target", errors);
-                    if (runtimes.TryGetValue(rule.ToId, out var runtime) &&
-                        !runtime.AcceptedArtifactFormats.Contains(rule.FromId, StringComparer.Ordinal))
+                    if (runtimes.TryGetValue(rule.ToId, out var runtime) && !runtime.AcceptedArtifactFormats.Contains(rule.FromId, StringComparer.Ordinal))
                     {
-                        errors.Add(
-                            $"Rule '{rule.Id}' source format '{rule.FromId}' is not accepted by runtime '{runtime.Id}'.");
+                        errors.Add($"Rule '{rule.Id}' source format '{rule.FromId}' is not accepted by runtime '{runtime.Id}'.");
                     }
                     break;
                 default:
@@ -154,11 +132,7 @@ public static class CatalogValidator
         return errors;
     }
 
-    private static void ValidateLifecycle(
-        string supportStatus,
-        string visibility,
-        string description,
-        List<string> errors)
+    private static void ValidateLifecycle(string supportStatus, string visibility, string description, List<string> errors)
     {
         if (supportStatus is not ("active" or "maintenance" or "preview" or "legacy" or "experimental"))
             errors.Add($"{description} has unsupported support status '{supportStatus}'.");
@@ -166,11 +140,7 @@ public static class CatalogValidator
             errors.Add($"{description} has unsupported visibility '{visibility}'.");
     }
 
-    private static Dictionary<string, T> Index<T>(
-        IEnumerable<T> items,
-        Func<T, string> getId,
-        string kind,
-        List<string> errors)
+    private static Dictionary<string, T> Index<T>(IEnumerable<T> items, Func<T, string> getId, string kind, List<string> errors)
     {
         var index = new Dictionary<string, T>(StringComparer.Ordinal);
         foreach (var item in items)
@@ -186,23 +156,13 @@ public static class CatalogValidator
         return index;
     }
 
-    private static void AddMissing<T>(
-        IEnumerable<string> ids,
-        IReadOnlyDictionary<string, T> index,
-        string description,
-        List<string> errors)
+    private static void AddMissing<T>(IEnumerable<string> ids, IReadOnlyDictionary<string, T> index, string description, List<string> errors)
     {
         foreach (var id in ids)
-        {
             RequireReference(id, index, description, errors);
-        }
     }
 
-    private static void RequireReference<T>(
-        string id,
-        IReadOnlyDictionary<string, T> index,
-        string description,
-        List<string> errors)
+    private static void RequireReference<T>(string id, IReadOnlyDictionary<string, T> index, string description, List<string> errors)
     {
         if (!index.ContainsKey(id))
         {

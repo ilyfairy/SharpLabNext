@@ -25,13 +25,9 @@ public sealed class IlLinkedRangeParserTests
                 """.Replace("\r\n", "\n", StringComparison.Ordinal),
                 TestContext.Current.CancellationToken);
 
-            var result = await IlLinkedRangeParser.ParseAndStripAsync(
-                path,
-                TestContext.Current.CancellationToken);
+            var result = await IlLinkedRangeParser.ParseAndStripAsync(path, TestContext.Current.CancellationToken);
 
-            var filtered = await File.ReadAllTextAsync(
-                path,
-                TestContext.Current.CancellationToken);
+            var filtered = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
             Assert.Equal(
                 """
                 .method private static void Main() cil managed

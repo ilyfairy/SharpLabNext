@@ -5,22 +5,15 @@ using SharpLabNext.Contracts;
 
 namespace SharpLabNext.ArtifactWorker;
 
-internal sealed class ArtifactOperationRegistry(
-    ArtifactWorkerSettings settings,
-    ILogger<ArtifactOperationRegistry> logger) : IDisposable
+internal sealed class ArtifactOperationRegistry(ArtifactWorkerSettings settings, ILogger<ArtifactOperationRegistry> logger) : IDisposable
 {
     private readonly ConcurrentDictionary<string, ArtifactOperation> _operations = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _idempotency = new(StringComparer.Ordinal);
 
-    public OperationHandle Start(
-        string requestId,
-        string idempotencyKey,
-        OperationKind kind,
-        Func<string, CancellationToken, Task<ArtifactJobExecution>> execute)
+    public OperationHandle Start(string requestId, string idempotencyKey, OperationKind kind, Func<string, CancellationToken, Task<ArtifactJobExecution>> execute)
     {
         var idempotencyId = $"{kind}:{idempotencyKey}";
-        if (_idempotency.TryGetValue(idempotencyId, out var existingId) &&
-            _operations.TryGetValue(existingId, out var existing))
+        if (_idempotency.TryGetValue(idempotencyId, out var existingId) && _operations.TryGetValue(existingId, out var existing))
         {
             return new OperationHandle(existing.OperationId, existing.RequestId, existing.CreatedAtUtc, true);
         }
@@ -52,8 +45,7 @@ internal sealed class ArtifactOperationRegistry(
         if (fromSequence < 0)
             throw new ArtifactRequestValidationException("fromSequence cannot be negative.");
         return _operations.TryGetValue(operationId, out var operation)
-            ? operation.Events(fromSequence)
-            : null;
+            ? operation.Events(fromSequence) : null;
     }
 
     public CancelResult Cancel(string operationId)
@@ -69,9 +61,7 @@ internal sealed class ArtifactOperationRegistry(
             operation.Dispose();
     }
 
-    private async Task ExecuteAsync(
-        ArtifactOperation operation,
-        Func<string, CancellationToken, Task<ArtifactJobExecution>> execute)
+    private async Task ExecuteAsync(ArtifactOperation operation, Func<string, CancellationToken, Task<ArtifactJobExecution>> execute)
     {
         var started = DateTimeOffset.UtcNow;
         operation.MarkRunning();
@@ -82,17 +72,11 @@ internal sealed class ArtifactOperationRegistry(
             execution = execution with { Result = AttachIdentity(execution.Result) };
             if (execution.Content is not null)
             {
-                operation.Append(new ContentProducedOperationEventPayload(
-                    execution.Content.ContentRef,
-                    execution.Content.MediaType,
-                    execution.Content.Size));
+                operation.Append(new ContentProducedOperationEventPayload(execution.Content.ContentRef, execution.Content.MediaType, execution.Content.Size));
             }
             if (execution.Artifact is not null)
             {
-                operation.Append(new ArtifactProducedOperationEventPayload(
-                    execution.Artifact.ArtifactRef,
-                    execution.Artifact.ArtifactFormat,
-                    execution.Artifact.Role));
+                operation.Append(new ArtifactProducedOperationEventPayload(execution.Artifact.ArtifactRef, execution.Artifact.ArtifactFormat, execution.Artifact.Role));
             }
             operation.Append(new TypedResultOperationEventPayload(execution.Result));
             operation.Complete(OperationCompletionStatus.Completed, DateTimeOffset.UtcNow - started);
@@ -103,11 +87,7 @@ internal sealed class ArtifactOperationRegistry(
         }
         catch (Exception exception)
         {
-            ArtifactWorkerLog.OperationFailed(
-                logger,
-                exception,
-                operation.OperationId,
-                operation.TraceId);
+            ArtifactWorkerLog.OperationFailed(logger, exception, operation.OperationId, operation.TraceId);
             operation.Fail(ToWorkerError(exception, operation.TraceId));
         }
     }
@@ -123,11 +103,7 @@ internal sealed class ArtifactOperationRegistry(
         };
         if (version is null)
             return result;
-        var identity = new ArtifactProcessorIdentity(
-            settings.Identity.ReleaseId,
-            settings.Identity.ProcessorId,
-            version,
-            settings.Identity.WorkerImageId);
+        var identity = new ArtifactProcessorIdentity(settings.Identity.ReleaseId, settings.Identity.ProcessorId, version, settings.Identity.WorkerImageId);
         return result switch
         {
             TransformArtifactResult transform => transform with { Identity = identity },
@@ -141,57 +117,20 @@ internal sealed class ArtifactOperationRegistry(
     {
         var (code, category, message, retryable, safeToRetry) = exception switch
         {
-            ArtifactRequestValidationException => (
-                "invalid-argument",
-                WorkerErrorCategory.InvalidArgument,
-                "The artifact request is invalid.",
-                false,
-                false),
-            ArtifactNotFoundException => (
-                "artifact-not-found",
-                WorkerErrorCategory.NotFound,
-                "The requested artifact was not found.",
-                false,
-                false),
-            ArtifactStoreUnavailableException => (
-                "artifact-store-unavailable",
-                WorkerErrorCategory.Unavailable,
-                "The Artifact Store is unavailable.",
-                true,
-                true),
-            ArtifactProcessorCrashedException => (
-                "artifact-processor-failed",
-                WorkerErrorCategory.Internal,
-                "The isolated artifact processor failed.",
-                true,
-                true),
-            _ => (
-                "artifact-worker-internal",
-                WorkerErrorCategory.Internal,
-                "The artifact worker failed.",
-                true,
-                true)
+            ArtifactRequestValidationException => ("invalid-argument", WorkerErrorCategory.InvalidArgument, "The artifact request is invalid.", false, false),
+            ArtifactNotFoundException => ("artifact-not-found", WorkerErrorCategory.NotFound, "The requested artifact was not found.", false, false),
+            ArtifactStoreUnavailableException => ("artifact-store-unavailable", WorkerErrorCategory.Unavailable, "The Artifact Store is unavailable.", true, true),
+            ArtifactProcessorCrashedException => ("artifact-processor-failed", WorkerErrorCategory.Internal, "The isolated artifact processor failed.", true, true),
+            _ => ("artifact-worker-internal", WorkerErrorCategory.Internal, "The artifact worker failed.", true, true)
         };
-        return new WorkerError(
-            code,
-            category,
-            message,
-            retryable,
-            safeToRetry,
-            traceId,
-            settings.Identity.ProcessorId,
-            settings.Identity.WorkerImageId);
+        return new WorkerError(code, category, message, retryable, safeToRetry, traceId, settings.Identity.ProcessorId, settings.Identity.WorkerImageId);
     }
 
     private void TrimCompleted()
     {
         if (_operations.Count < settings.Limits.MaxRetainedOperations)
             return;
-        var removable = _operations.Values
-            .Where(static operation => operation.IsTerminal)
-            .OrderBy(static operation => operation.UpdatedAtUtc)
-            .Take(Math.Max(1, settings.Limits.MaxRetainedOperations / 4))
-            .ToArray();
+        var removable = _operations.Values.Where(static operation => operation.IsTerminal).OrderBy(static operation => operation.UpdatedAtUtc).Take(Math.Max(1, settings.Limits.MaxRetainedOperations / 4)).ToArray();
         foreach (var operation in removable)
         {
             if (_operations.TryRemove(operation.OperationId, out var removed))
@@ -269,15 +208,9 @@ internal sealed class ArtifactOperationRegistry(
                 if (_completedAtUtc is not null)
                     return;
                 var now = DateTimeOffset.UtcNow;
-                _events.Add(new OperationEvent(
-                    OperationId,
-                    ++_sequence,
-                    now,
-                    TraceId,
-                    new CompletedOperationEventPayload(status, elapsed)));
+                _events.Add(new OperationEvent(OperationId, ++_sequence, now, TraceId, new CompletedOperationEventPayload(status, elapsed)));
                 _status = status == OperationCompletionStatus.Cancelled
-                    ? OperationStatus.Cancelled
-                    : OperationStatus.Completed;
+                    ? OperationStatus.Cancelled : OperationStatus.Completed;
                 _completedAtUtc = now;
                 UpdatedAtUtc = now;
             }
@@ -290,12 +223,7 @@ internal sealed class ArtifactOperationRegistry(
                 if (_completedAtUtc is not null)
                     return;
                 var now = DateTimeOffset.UtcNow;
-                _events.Add(new OperationEvent(
-                    OperationId,
-                    ++_sequence,
-                    now,
-                    TraceId,
-                    new FailedOperationEventPayload(error)));
+                _events.Add(new OperationEvent(OperationId, ++_sequence, now, TraceId, new FailedOperationEventPayload(error)));
                 _error = error;
                 _status = OperationStatus.Failed;
                 _completedAtUtc = now;
@@ -307,17 +235,7 @@ internal sealed class ArtifactOperationRegistry(
         {
             lock (_gate)
             {
-                return new OperationState(
-                    OperationId,
-                    RequestId,
-                    Kind,
-                    _status,
-                    _sequence,
-                    CreatedAtUtc,
-                    UpdatedAtUtc,
-                    _completedAtUtc,
-                    TraceId,
-                    _error);
+                return new OperationState(OperationId, RequestId, Kind, _status, _sequence, CreatedAtUtc, UpdatedAtUtc, _completedAtUtc, TraceId, _error);
             }
         }
 

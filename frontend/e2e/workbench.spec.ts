@@ -1,14 +1,14 @@
-import { expect, type Locator, type Page, type TestInfo, test } from '@playwright/test'
-import { replaceSource, waitForLanguageServiceReady } from './helpers/workbench'
+import { expect, type Locator, type Page, type TestInfo, test } from '@playwright/test';
+import { replaceSource, waitForLanguageServiceReady } from './helpers/workbench';
 
 async function openWorkbench(page: Page) {
-  await page.goto('/')
-  await expect(page.getByLabel('Language')).toBeEnabled()
+  await page.goto('/');
+  await expect(page.getByLabel('Language')).toBeEnabled();
 }
 
 async function waitForCompletedOperation(page: Page) {
-  await expect(page.locator('.operation-state')).toHaveText('completed', { timeout: 90_000 })
-  await expect(page.locator('.result-error')).toHaveCount(0)
+  await expect(page.locator('.operation-state')).toHaveText('completed', { timeout: 90_000 });
+  await expect(page.locator('.result-error')).toHaveCount(0);
 }
 
 async function assertNoDocumentOverflow(page: Page) {
@@ -20,28 +20,21 @@ async function assertNoDocumentOverflow(page: Page) {
     bodyScrollWidth: document.body.scrollWidth,
     bodyScrollHeight: document.body.scrollHeight,
   }))
-  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth)
-  expect(dimensions.bodyScrollWidth).toBeLessThanOrEqual(dimensions.clientWidth)
-  expect(dimensions.scrollHeight).toBeLessThanOrEqual(dimensions.clientHeight)
-  expect(dimensions.bodyScrollHeight).toBeLessThanOrEqual(dimensions.clientHeight)
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+  expect(dimensions.bodyScrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+  expect(dimensions.scrollHeight).toBeLessThanOrEqual(dimensions.clientHeight);
+  expect(dimensions.bodyScrollHeight).toBeLessThanOrEqual(dimensions.clientHeight);
 }
 
 async function assertSelectorControlsFitViewport(page: Page) {
   const layout = await page.evaluate(() => {
-    const controls = [
-      ...document.querySelectorAll<HTMLElement>(
-        '.selector-bar .select-field, .selector-bar .mode-field, .selector-bar .run-button',
-      ),
-    ].filter((element) => element.getClientRects().length > 0)
+    const controls = [...document.querySelectorAll<HTMLElement>('.selector-bar .select-field, .selector-bar .mode-field, .selector-bar .run-button')].filter((element) => element.getClientRects().length > 0)
     const groups = [...document.querySelectorAll<HTMLElement>('.selector-bar .selector-group')]
 
     return {
       outOfBounds: controls
         .map((element) => ({
-          label:
-            element.querySelector('span, legend')?.textContent?.trim() ??
-            element.getAttribute('aria-label') ??
-            element.className,
+          label: element.querySelector('span, legend')?.textContent?.trim() ?? element.getAttribute('aria-label') ?? element.className,
           left: element.getBoundingClientRect().left,
           right: element.getBoundingClientRect().right,
         }))
@@ -54,17 +47,13 @@ async function assertSelectorControlsFitViewport(page: Page) {
         }))
         .filter(({ clientWidth, scrollWidth }) => scrollWidth > clientWidth + 1),
     }
-  })
+  });
 
   expect(layout.outOfBounds).toEqual([])
   expect(layout.overflowingGroups).toEqual([])
 }
 
-async function assertSelectAllIsConfinedTo(
-  page: Page,
-  outputDocument: Locator,
-  expectedText: string,
-) {
+async function assertSelectAllIsConfinedTo(page: Page, outputDocument: Locator, expectedText: string) {
   await outputDocument.click()
   await expect(outputDocument).toBeFocused()
   await page.keyboard.press('ControlOrMeta+A')
@@ -74,17 +63,13 @@ async function assertSelectAllIsConfinedTo(
     if (!current || current.rangeCount === 0) {
       return { text: '', rangeCount: 0, confined: false }
     }
-    const ranges = Array.from({ length: current.rangeCount }, (_, index) =>
-      current.getRangeAt(index),
-    )
+    const ranges = Array.from({ length: current.rangeCount }, (_, index) => current.getRangeAt(index))
     return {
       text: current.toString(),
       rangeCount: current.rangeCount,
-      confined: ranges.every(
-        (range) => element.contains(range.startContainer) && element.contains(range.endContainer),
-      ),
+      confined: ranges.every((range) => element.contains(range.startContainer) && element.contains(range.endContainer)),
     }
-  })
+  });
 
   expect(selection.rangeCount).toBeGreaterThan(0)
   expect(selection.confined).toBe(true)
@@ -98,10 +83,7 @@ async function capture(page: Page, testInfo: TestInfo, name: string) {
 }
 
 test.describe('SharpLabNext workbench', () => {
-  test('runs C# on the selected .NET runtime with a live language session', async ({
-    page,
-    isMobile,
-  }, testInfo) => {
+  test('runs C# on the selected .NET runtime with a live language session', async ({ page, isMobile }, testInfo) => {
     test.skip(isMobile, 'Desktop workbench coverage.')
     await openWorkbench(page)
     await waitForLanguageServiceReady(page)
@@ -112,11 +94,11 @@ test.describe('SharpLabNext workbench', () => {
     await page.getByRole('button', { name: 'Run', exact: true }).click()
 
     await waitForCompletedOperation(page)
-    await expect(page.getByRole('tab', { name: 'Output', exact: true })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
-    const programOutput = page.getByRole('region', { name: 'Program output', exact: true })
+    await expect(page.getByRole('tab', { name: 'Output', exact: true })).toHaveAttribute('aria-selected', 'true')
+    const programOutput = page.getByRole('region', {
+      name: 'Program output',
+      exact: true,
+    })
     await expect(programOutput).toContainText('Hello from SharpLabNext')
     await assertSelectAllIsConfinedTo(page, programOutput, 'Hello from SharpLabNext')
     await expect(page.locator('.status-bar .run-status')).toContainText('Exit 0')
@@ -125,12 +107,9 @@ test.describe('SharpLabNext workbench', () => {
     await expect(page.getByLabel('Reference set')).toHaveValue('net11-preview-ref')
     await assertNoDocumentOverflow(page)
     await capture(page, testInfo, 'desktop-csharp-run.png')
-  })
+  });
 
-  test('filters the F# toolchain and restores a v3 URL before rendering IL', async ({
-    page,
-    isMobile,
-  }, testInfo) => {
+  test('filters the F# toolchain and restores a v3 URL before rendering IL', async ({ page, isMobile }, testInfo) => {
     test.skip(isMobile, 'Desktop workbench coverage.')
     await openWorkbench(page)
     await page.getByLabel('Language').selectOption('fsharp')
@@ -147,16 +126,16 @@ test.describe('SharpLabNext workbench', () => {
 
     await page.getByRole('button', { name: 'Render IL', exact: true }).click()
     await waitForCompletedOperation(page)
-    await expect(page.getByRole('tab', { name: 'IL', exact: true })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
-    const ilDocument = page.getByRole('textbox', { name: 'Intermediate language', exact: true })
+    await expect(page.getByRole('tab', { name: 'IL', exact: true })).toHaveAttribute('aria-selected', 'true')
+    const ilDocument = page.getByRole('textbox', {
+      name: 'Intermediate language',
+      exact: true,
+    })
     await expect(ilDocument).toContainText('.method')
     await expect(ilDocument).not.toContainText('Microsoft.FSharp.Collections.ArrayModule')
     await assertSelectAllIsConfinedTo(page, ilDocument, '.method')
     await capture(page, testInfo, 'desktop-fsharp-il.png')
-  })
+  });
 
   test('decompiles IL without requiring an entry point outside Run', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop IL artifact-pipeline coverage.')
@@ -185,19 +164,13 @@ test.describe('SharpLabNext workbench', () => {
     await page.getByRole('button', { name: 'Decompile', exact: true }).click()
 
     await waitForCompletedOperation(page)
-    await expect(page.getByRole('tab', { name: 'Decompiled C#', exact: true })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    await expect(page.getByRole('tab', { name: 'Decompiled C#', exact: true })).toHaveAttribute('aria-selected', 'true')
     const resultPanel = page.getByRole('tabpanel')
     await expect(resultPanel.locator('.monaco-editor .view-lines')).toContainText('Method')
     await expect(resultPanel).not.toContainText('No entry point found')
   })
 
-  test('selects the ConstGenerics toolchain and renders its extended AST', async ({
-    page,
-    isMobile,
-  }, testInfo) => {
+  test('selects the ConstGenerics toolchain and renders its extended AST', async ({ page, isMobile }, testInfo) => {
     test.skip(isMobile, 'Desktop ConstGenerics coverage.')
     await openWorkbench(page)
 
@@ -225,10 +198,7 @@ public static class Program
     await page.getByRole('button', { name: 'Build AST', exact: true }).click()
 
     await waitForCompletedOperation(page)
-    await expect(page.getByRole('tab', { name: 'AST', exact: true })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    await expect(page.getByRole('tab', { name: 'AST', exact: true })).toHaveAttribute('aria-selected', 'true')
     for (let attempt = 0; attempt < 500; attempt++) {
       const collapsed = page.locator('.ast-tree-toggle[aria-expanded="false"]')
       if ((await collapsed.count()) === 0) break
@@ -240,33 +210,23 @@ public static class Program
     await capture(page, testInfo, 'desktop-const-generics-ast.png')
   })
 
-  test('links execution flow to source and clears decorations when the result becomes stale', async ({
-    page,
-    isMobile,
-  }, testInfo) => {
+  test('links execution flow to source and clears decorations when the result becomes stale', async ({ page, isMobile }, testInfo) => {
     test.skip(isMobile, 'Desktop execution-flow coverage.')
     await openWorkbench(page)
     await page.getByLabel('Output', { exact: true }).selectOption('execution-flow')
     await page.getByRole('button', { name: 'Run', exact: true }).click()
 
     await waitForCompletedOperation(page)
-    await expect(page.getByRole('tab', { name: 'Flow', exact: true })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    await expect(page.getByRole('tab', { name: 'Flow', exact: true })).toHaveAttribute('aria-selected', 'true')
     const location = page.locator('.runtime-flow-location').first()
     await expect(location).toBeVisible()
     await expect(page.locator('.monaco-editor .execution-flow-range').first()).toBeVisible()
     const countMarker = page.locator('.monaco-editor .execution-flow-count').first()
     await expect(countMarker).toBeVisible()
-    await expect
-      .poll(() => countMarker.evaluate((element) => getComputedStyle(element, '::before').content))
-      .not.toBe('none')
+    await expect.poll(() => countMarker.evaluate((element) => getComputedStyle(element, '::before').content)).not.toBe('none')
 
     await location.click()
-    await expect(
-      page.getByRole('textbox', { name: /Source editor\. Execution flow shows/ }),
-    ).toBeFocused()
+    await expect(page.getByRole('textbox', { name: /Source editor\. Execution flow shows/ })).toBeFocused()
 
     await page.getByLabel('Output', { exact: true }).selectOption('ast')
     await expect(page.getByRole('status', { name: 'Result stale' })).toBeVisible()
@@ -277,10 +237,7 @@ public static class Program
     await capture(page, testInfo, 'desktop-execution-flow-source.png')
   })
 
-  test('reorders F# source files without overflowing the mobile workbench', async ({
-    page,
-    isMobile,
-  }, testInfo) => {
+  test('reorders F# source files without overflowing the mobile workbench', async ({ page, isMobile }, testInfo) => {
     test.skip(!isMobile, 'Mobile F# source-order coverage.')
     await openWorkbench(page)
     const settings = page.getByRole('button', { name: 'Workbench settings' })
@@ -290,7 +247,9 @@ public static class Program
     await expect(page.getByLabel('Toolchain')).toHaveValue('fsharp-stable')
     await settings.click()
     await expect(settings).toHaveAttribute('aria-expanded', 'false')
-    const mobileFiles = page.getByRole('button', { name: /^Workspace files, current / })
+    const mobileFiles = page.getByRole('button', {
+      name: /^Workspace files, current /,
+    })
     await mobileFiles.click()
     await expect(mobileFiles).toHaveAttribute('aria-expanded', 'true')
     await page.getByRole('button', { name: 'Add file' }).click()
@@ -312,21 +271,17 @@ public static class Program
 
     await expect(moveEarlier).toBeDisabled()
     await expect(moveLater).toBeEnabled()
-    const workspaceTabs = page.getByRole('tablist', { name: 'Workspace files' })
+    const workspaceTabs = page.getByRole('tablist', {
+      name: 'Workspace files',
+    })
     await expect(workspaceTabs.getByRole('tab').nth(0)).toContainText('File2.fs')
     await expect(workspaceTabs.getByRole('tab').nth(1)).toContainText('Program.fs')
-    await expect(workspaceTabs.getByRole('tab', { name: /File2\.fs/ })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    await expect(workspaceTabs.getByRole('tab', { name: /File2\.fs/ })).toHaveAttribute('aria-selected', 'true')
     await assertNoDocumentOverflow(page)
     await capture(page, testInfo, 'mobile-fsharp-source-order.png')
   })
 
-  test('keeps source and results visible in the mobile vertical split without horizontal overflow', async ({
-    page,
-    isMobile,
-  }, testInfo) => {
+  test('keeps source and results visible in the mobile vertical split without horizontal overflow', async ({ page, isMobile }, testInfo) => {
     test.skip(!isMobile, 'Mobile workbench coverage.')
     await openWorkbench(page)
 
@@ -353,9 +308,7 @@ public static class Program
     expect(resultBox).not.toBeNull()
     expect(sourceBox?.height ?? 0).toBeGreaterThan(180)
     expect(resultBox?.height ?? 0).toBeGreaterThan(180)
-    expect((sourceBox?.y ?? 0) + (sourceBox?.height ?? 0)).toBeLessThanOrEqual(
-      (resultBox?.y ?? 0) + 1,
-    )
+    expect((sourceBox?.y ?? 0) + (sourceBox?.height ?? 0)).toBeLessThanOrEqual((resultBox?.y ?? 0) + 1)
     await assertNoDocumentOverflow(page)
     await capture(page, testInfo, 'mobile-vertical-split.png')
   })

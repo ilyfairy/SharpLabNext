@@ -53,8 +53,8 @@ ARG NET11_REFERENCE_VERSION
 ARG NET11_REFERENCE_URL
 ARG NET11_REFERENCE_SHA512
 ARG NET11_REFERENCE_PACKAGE_CONTENT_HASH
-COPY eng/extract-zip.cs /tools/extract-zip.cs
-COPY eng/create-reference-set-attestation.cs /tools/create-reference-set-attestation.cs
+COPY eng/tools/extract-zip.cs /tools/extract-zip.cs
+COPY eng/tools/create-reference-set-attestation.cs /tools/create-reference-set-attestation.cs
 COPY --chmod=0555 deploy/docker/fetch-verified-reference-package.sh /tools/fetch-verified-reference-package
 RUN --mount=type=cache,id=sharplabnext-reference-archives,target=/reference-archives,sharing=locked \
     mkdir -p /reference-sets/net10-ref /reference-sets/net11-preview-ref \
@@ -156,7 +156,7 @@ ARG NET11_REFERENCE_SHA512
 ARG NET11_REFERENCE_PACKAGE_CONTENT_HASH
 COPY profiles/runtime-matrix.json /inputs/runtime-matrix.json
 COPY profiles/lock.json /inputs/lock.json
-COPY eng/materialize-coreclr-reference-sets.cs /tools/materialize-coreclr-reference-sets.cs
+COPY eng/tools/materialize-coreclr-reference-sets.cs /tools/materialize-coreclr-reference-sets.cs
 RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages,sharing=locked \
     --mount=type=cache,id=sharplabnext-reference-archives,target=/reference-archives,sharing=locked \
     dotnet restore \
@@ -233,7 +233,7 @@ RUN --mount=type=cache,id=sharplabnext-dotnet-nuget,target=/root/.nuget/packages
 FROM publish AS framework-reference-sets
 COPY profiles/runtime-matrix.json /inputs/runtime-matrix.json
 COPY deploy/docker/roslyn-netfx48-appsettings.json /inputs/appsettings.template.json
-COPY eng/materialize-framework-reference-sets.cs /tools/materialize-framework-reference-sets.cs
+COPY eng/tools/materialize-framework-reference-sets.cs /tools/materialize-framework-reference-sets.cs
 RUN --mount=type=cache,id=sharplabnext-reference-archives,target=/reference-archives,sharing=locked \
     cd /tools \
     && NUGET_PACKAGES=/tmp/sharplabnext-nuget dotnet run materialize-framework-reference-sets.cs -- \

@@ -8,19 +8,12 @@ namespace SharpLabNext.Worker.FSharp;
 
 public interface IFSharpBuildExecutor
 {
-    Task<FSharpWorkerBuildExecution> ExecuteAsync(
-        BuildRequest request,
-        CancellationToken cancellationToken);
+    Task<FSharpWorkerBuildExecution> ExecuteAsync(BuildRequest request, CancellationToken cancellationToken);
 }
 
-public sealed class FSharpBuildProcessExecutor(
-    FSharpBuildService inProcessBuildService,
-    ICompilerProcessRunner processRunner,
-    FSharpWorkerSettings settings) : IFSharpBuildExecutor
+public sealed class FSharpBuildProcessExecutor(FSharpBuildService inProcessBuildService, ICompilerProcessRunner processRunner, FSharpWorkerSettings settings) : IFSharpBuildExecutor
 {
-    public async Task<FSharpWorkerBuildExecution> ExecuteAsync(
-        BuildRequest request,
-        CancellationToken cancellationToken)
+    public async Task<FSharpWorkerBuildExecution> ExecuteAsync(BuildRequest request, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var outcome = SharpLabNextTelemetryOutcome.Failed;
@@ -63,18 +56,11 @@ public sealed class FSharpBuildProcessExecutor(
         finally
         {
             stopwatch.Stop();
-            SharpLabNextTelemetry.Metrics.RecordBuild(
-                request.Workspace.LanguageId,
-                request.ToolchainId,
-                stopwatch.Elapsed,
-                outcome,
-                cacheHit: false);
+            SharpLabNextTelemetry.Metrics.RecordBuild(request.Workspace.LanguageId, request.ToolchainId, stopwatch.Elapsed, outcome, cacheHit: false);
         }
     }
 
-    private async Task<FSharpWorkerBuildExecution> ExecuteCoreAsync(
-        BuildRequest request,
-        CancellationToken cancellationToken)
+    private async Task<FSharpWorkerBuildExecution> ExecuteCoreAsync(BuildRequest request, CancellationToken cancellationToken)
     {
         if (!settings.BuildProcess.Enabled)
             return await inProcessBuildService.ExecuteAsync(request, cancellationToken).ConfigureAwait(false);
@@ -82,19 +68,13 @@ public sealed class FSharpBuildProcessExecutor(
         var timeout = EffectiveTimeout(request.DeadlineUtc, settings.CompilationLimits.MaxBuildMilliseconds);
         try
         {
-            var execution = await processRunner.RunAsync<BuildRequest, FSharpWorkerBuildExecution>(
-                FSharpBuildChild.ChildArgument,
-                request,
-                timeout,
-                cancellationToken).ConfigureAwait(false);
+            var execution = await processRunner.RunAsync<BuildRequest, FSharpWorkerBuildExecution>(FSharpBuildChild.ChildArgument, request, timeout, cancellationToken).ConfigureAwait(false);
             ValidateExecution(request, execution);
             return execution;
         }
         catch (CompilerProcessTimeoutException)
         {
-            throw new FSharpBuildDeadlineExceededException(
-                "The F# compiler process deadline elapsed.",
-                cancellationToken);
+            throw new FSharpBuildDeadlineExceededException("The F# compiler process deadline elapsed.", cancellationToken);
         }
         catch (CompilerChildReportedException exception)
         {
@@ -119,24 +99,18 @@ public sealed class FSharpBuildProcessExecutor(
             CompilationCheckResult result => result.Identity,
             AstResult result => result.Identity,
             GeneratedSourceResult result => result.Identity,
-            _ => throw new CompilerProcessProtocolException(
-                "The F# compiler process returned an unexpected result type.")
+            _ => throw new CompilerProcessProtocolException("The F# compiler process returned an unexpected result type.")
         };
-        if (identity is not null &&
-            (!StringComparer.Ordinal.Equals(identity.ToolchainId, request.ToolchainId) ||
-             !StringComparer.Ordinal.Equals(identity.ReferenceSetId, request.ReferenceSetId) ||
-             !StringComparer.Ordinal.Equals(identity.LanguageId, request.Workspace.LanguageId)))
+        if (identity is not null && (!StringComparer.Ordinal.Equals(identity.ToolchainId, request.ToolchainId) || !StringComparer.Ordinal.Equals(identity.ReferenceSetId, request.ReferenceSetId) || !StringComparer.Ordinal.Equals(identity.LanguageId, request.Workspace.LanguageId)))
         {
-            throw new CompilerProcessProtocolException(
-                "The F# compiler process returned a mismatched build identity.");
+            throw new CompilerProcessProtocolException("The F# compiler process returned a mismatched build identity.");
         }
 
         if (execution.Artifact is null)
         {
             if (execution.Result is BuildResult { Outcome: BuildOutcome.Succeeded })
             {
-                throw new CompilerProcessProtocolException(
-                    "The F# compiler process omitted a successful build artifact.");
+                throw new CompilerProcessProtocolException("The F# compiler process omitted a successful build artifact.");
             }
             return;
         }
@@ -151,8 +125,7 @@ public sealed class FSharpBuildProcessExecutor(
             buildResult.Identity != execution.Artifact.Identity ||
             !StringComparer.Ordinal.Equals(execution.Artifact.ReferenceSetId, request.ReferenceSetId))
         {
-            throw new CompilerProcessProtocolException(
-                "The F# compiler process artifact did not match its typed result.");
+            throw new CompilerProcessProtocolException("The F# compiler process artifact did not match its typed result.");
         }
     }
 
@@ -163,9 +136,7 @@ public sealed class FSharpBuildProcessExecutor(
         return remaining < maximum ? remaining : maximum;
     }
 
-    private static Exception MapFailure(
-        CompilerChildReportedException exception,
-        CancellationToken cancellationToken) => exception.Kind switch
+    private static Exception MapFailure(CompilerChildReportedException exception, CancellationToken cancellationToken) => exception.Kind switch
         {
             CompilerChildFailureKind.InvalidRequest =>
                 new FSharpBuildRequestValidationException(exception.PublicMessage),
@@ -177,8 +148,7 @@ public sealed class FSharpBuildProcessExecutor(
                 new FSharpBuildDeadlineExceededException(exception.PublicMessage, cancellationToken),
             CompilerChildFailureKind.CompilerFailure =>
                 new FSharpCompilerFailureException(exception.PublicMessage),
-            _ => new CompilerProcessProtocolException(
-                "The F# compiler process reported an internal compiler failure.")
+            _ => new CompilerProcessProtocolException("The F# compiler process reported an internal compiler failure.")
         };
 }
 
@@ -192,27 +162,14 @@ public static class FSharpBuildChild
     public static async Task RunAsync(WebApplicationBuilder builder)
     {
         var settings = FSharpWorkerSettings.FromConfiguration(builder.Configuration);
-        using var referenceSets = new FSharpReferenceSetProvider(
-            settings.ReferenceSets,
-            builder.Environment.IsProduction() ||
-            builder.Configuration.GetValue("ReferenceSetAttestation:Required", false));
-        var buildService = new FSharpBuildService(
-            referenceSets,
-            new FSharpCompilerFacade(),
-            settings);
+        using var referenceSets = new FSharpReferenceSetProvider(settings.ReferenceSets, builder.Environment.IsProduction() || builder.Configuration.GetValue("ReferenceSetAttestation:Required", false));
+        var buildService = new FSharpBuildService(referenceSets, new FSharpCompilerFacade(), settings);
         var output = Console.OpenStandardOutput();
         try
         {
-            var request = await CompilerChildProtocol.ReadRequestAsync<BuildRequest>(
-                Console.OpenStandardInput(),
-                settings.BuildProcess.MaximumRequestBytes,
-                CancellationToken.None).ConfigureAwait(false);
+            var request = await CompilerChildProtocol.ReadRequestAsync<BuildRequest>(Console.OpenStandardInput(), settings.BuildProcess.MaximumRequestBytes, CancellationToken.None).ConfigureAwait(false);
             var execution = await buildService.ExecuteAsync(request, CancellationToken.None).ConfigureAwait(false);
-            await CompilerChildProtocol.WriteSuccessAsync(
-                output,
-                execution,
-                settings.BuildProcess.MaximumResponseBytes,
-                CancellationToken.None).ConfigureAwait(false);
+            await CompilerChildProtocol.WriteSuccessAsync(output, execution, settings.BuildProcess.MaximumResponseBytes, CancellationToken.None).ConfigureAwait(false);
         }
         catch (FSharpBuildRequestValidationException exception)
         {
@@ -236,23 +193,14 @@ public static class FSharpBuildChild
         }
         catch (OperationCanceledException)
         {
-            await WriteFailureAsync(
-                CompilerChildFailureKind.DeadlineExceeded,
-                "The F# compiler process deadline elapsed.");
+            await WriteFailureAsync(CompilerChildFailureKind.DeadlineExceeded, "The F# compiler process deadline elapsed.");
         }
         catch (Exception)
         {
-            await WriteFailureAsync(
-                CompilerChildFailureKind.Internal,
-                "The F# compiler process failed.");
+            await WriteFailureAsync(CompilerChildFailureKind.Internal, "The F# compiler process failed.");
         }
 
         async Task WriteFailureAsync(CompilerChildFailureKind kind, string message) =>
-            await CompilerChildProtocol.WriteFailureAsync<FSharpWorkerBuildExecution>(
-                output,
-                kind,
-                message,
-                settings.BuildProcess.MaximumResponseBytes,
-                CancellationToken.None).ConfigureAwait(false);
+            await CompilerChildProtocol.WriteFailureAsync<FSharpWorkerBuildExecution>(output, kind, message, settings.BuildProcess.MaximumResponseBytes, CancellationToken.None).ConfigureAwait(false);
     }
 }

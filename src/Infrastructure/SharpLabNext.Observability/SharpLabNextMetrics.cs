@@ -5,54 +5,19 @@ namespace SharpLabNext.Observability;
 
 public sealed class SharpLabNextMetrics
 {
-    private readonly Gauge<long> _queueDepth = SharpLabNextTelemetry.Meter.CreateGauge<long>(
-        "sharplabnext.queue.depth",
-        "{request}",
-        "Current requests waiting in a bounded queue.");
-    private readonly Histogram<double> _queueWaitDuration = SharpLabNextTelemetry.Meter.CreateHistogram<double>(
-        "sharplabnext.queue.wait.duration",
-        "s",
-        "Time spent waiting for dispatch from a bounded queue.");
-    private readonly Counter<long> _queueRejected = SharpLabNextTelemetry.Meter.CreateCounter<long>(
-        "sharplabnext.queue.rejected",
-        "{request}",
-        "Requests rejected before queue admission.");
-    private readonly UpDownCounter<long> _activeSessions = SharpLabNextTelemetry.Meter.CreateUpDownCounter<long>(
-        "sharplabnext.session.active",
-        "{session}",
-        "Currently active language sessions.");
-    private readonly Counter<long> _endedSessions = SharpLabNextTelemetry.Meter.CreateCounter<long>(
-        "sharplabnext.session.ended",
-        "{session}",
-        "Language sessions ended by outcome.");
-    private readonly Histogram<double> _buildDuration = SharpLabNextTelemetry.Meter.CreateHistogram<double>(
-        "sharplabnext.build.duration",
-        "s",
-        "Immutable build request duration.");
-    private readonly Histogram<double> _runtimeDuration = SharpLabNextTelemetry.Meter.CreateHistogram<double>(
-        "sharplabnext.runtime.duration",
-        "s",
-        "Run or JIT request duration.");
-    private readonly Histogram<double> _containerPhaseDuration = SharpLabNextTelemetry.Meter.CreateHistogram<double>(
-        "sharplabnext.runtime.container.duration",
-        "s",
-        "Runtime container create or start duration.");
-    private readonly Histogram<double> _reaperDuration = SharpLabNextTelemetry.Meter.CreateHistogram<double>(
-        "sharplabnext.reaper.duration",
-        "s",
-        "Runtime container reaper pass duration.");
-    private readonly Counter<long> _reaperRemoved = SharpLabNextTelemetry.Meter.CreateCounter<long>(
-        "sharplabnext.reaper.removed",
-        "{container}",
-        "Stale runtime containers removed by the reaper.");
-    private readonly Counter<long> _reaperFailures = SharpLabNextTelemetry.Meter.CreateCounter<long>(
-        "sharplabnext.reaper.failures",
-        "{failure}",
-        "Runtime container reaper failures.");
+    private readonly Gauge<long> _queueDepth = SharpLabNextTelemetry.Meter.CreateGauge<long>("sharplabnext.queue.depth", "{request}", "Current requests waiting in a bounded queue.");
+    private readonly Histogram<double> _queueWaitDuration = SharpLabNextTelemetry.Meter.CreateHistogram<double>("sharplabnext.queue.wait.duration", "s", "Time spent waiting for dispatch from a bounded queue.");
+    private readonly Counter<long> _queueRejected = SharpLabNextTelemetry.Meter.CreateCounter<long>("sharplabnext.queue.rejected", "{request}", "Requests rejected before queue admission.");
+    private readonly UpDownCounter<long> _activeSessions = SharpLabNextTelemetry.Meter.CreateUpDownCounter<long>("sharplabnext.session.active", "{session}", "Currently active language sessions.");
+    private readonly Counter<long> _endedSessions = SharpLabNextTelemetry.Meter.CreateCounter<long>("sharplabnext.session.ended", "{session}", "Language sessions ended by outcome.");
+    private readonly Histogram<double> _buildDuration = SharpLabNextTelemetry.Meter.CreateHistogram<double>("sharplabnext.build.duration", "s", "Immutable build request duration.");
+    private readonly Histogram<double> _runtimeDuration = SharpLabNextTelemetry.Meter.CreateHistogram<double>("sharplabnext.runtime.duration", "s", "Run or JIT request duration.");
+    private readonly Histogram<double> _containerPhaseDuration = SharpLabNextTelemetry.Meter.CreateHistogram<double>("sharplabnext.runtime.container.duration", "s", "Runtime container create or start duration.");
+    private readonly Histogram<double> _reaperDuration = SharpLabNextTelemetry.Meter.CreateHistogram<double>("sharplabnext.reaper.duration", "s", "Runtime container reaper pass duration.");
+    private readonly Counter<long> _reaperRemoved = SharpLabNextTelemetry.Meter.CreateCounter<long>("sharplabnext.reaper.removed", "{container}", "Stale runtime containers removed by the reaper.");
+    private readonly Counter<long> _reaperFailures = SharpLabNextTelemetry.Meter.CreateCounter<long>("sharplabnext.reaper.failures", "{failure}", "Runtime container reaper failures.");
 
-    internal SharpLabNextMetrics()
-    {
-    }
+    internal SharpLabNextMetrics() { }
 
     public void RecordQueueDepth(string queueName, long depth)
     {
@@ -61,16 +26,9 @@ public sealed class SharpLabNextMetrics
         _queueDepth.Record(depth, tags);
     }
 
-    public void RecordQueueWait(
-        string queueName,
-        TimeSpan duration,
-        SharpLabNextTelemetryOutcome outcome)
+    public void RecordQueueWait(string queueName, TimeSpan duration, SharpLabNextTelemetryOutcome outcome)
     {
-        var tags = new TagList
-        {
-            { "sharplabnext.queue.name", Dimension(queueName, nameof(queueName)) },
-            { "sharplabnext.outcome", Outcome(outcome) }
-        };
+        var tags = new TagList { { "sharplabnext.queue.name", Dimension(queueName, nameof(queueName)) }, { "sharplabnext.outcome", Outcome(outcome) } };
         _queueWaitDuration.Record(DurationSeconds(duration, nameof(duration)), tags);
     }
 
@@ -86,10 +44,7 @@ public sealed class SharpLabNextMetrics
         _activeSessions.Add(1, tags);
     }
 
-    public void SessionEnded(
-        string languageId,
-        string toolchainId,
-        SharpLabNextTelemetryOutcome outcome)
+    public void SessionEnded(string languageId, string toolchainId, SharpLabNextTelemetryOutcome outcome)
     {
         var activeTags = SessionTags(languageId, toolchainId);
         _activeSessions.Add(-1, activeTags);
@@ -98,12 +53,7 @@ public sealed class SharpLabNextMetrics
         _endedSessions.Add(1, endedTags);
     }
 
-    public void RecordBuild(
-        string languageId,
-        string toolchainId,
-        TimeSpan duration,
-        SharpLabNextTelemetryOutcome outcome,
-        bool cacheHit)
+    public void RecordBuild(string languageId, string toolchainId, TimeSpan duration, SharpLabNextTelemetryOutcome outcome, bool cacheHit)
     {
         var tags = SessionTags(languageId, toolchainId);
         tags.Add("sharplabnext.outcome", Outcome(outcome));
@@ -111,48 +61,23 @@ public sealed class SharpLabNextMetrics
         _buildDuration.Record(DurationSeconds(duration, nameof(duration)), tags);
     }
 
-    public void RecordRuntime(
-        SharpLabNextRuntimeOperation operation,
-        string runtimeId,
-        TimeSpan duration,
-        SharpLabNextTelemetryOutcome outcome)
+    public void RecordRuntime(SharpLabNextRuntimeOperation operation, string runtimeId, TimeSpan duration, SharpLabNextTelemetryOutcome outcome)
     {
-        var tags = new TagList
-        {
-            { "sharplabnext.runtime.id", Dimension(runtimeId, nameof(runtimeId)) },
-            { "sharplabnext.operation.type", RuntimeOperation(operation) },
-            { "sharplabnext.outcome", Outcome(outcome) }
-        };
+        var tags = new TagList { { "sharplabnext.runtime.id", Dimension(runtimeId, nameof(runtimeId)) }, { "sharplabnext.operation.type", RuntimeOperation(operation) }, { "sharplabnext.outcome", Outcome(outcome) } };
         _runtimeDuration.Record(DurationSeconds(duration, nameof(duration)), tags);
     }
 
-    public void RecordContainerPhase(
-        SharpLabNextContainerPhase phase,
-        string runtimeId,
-        TimeSpan duration,
-        SharpLabNextTelemetryOutcome outcome)
+    public void RecordContainerPhase(SharpLabNextContainerPhase phase, string runtimeId, TimeSpan duration, SharpLabNextTelemetryOutcome outcome)
     {
-        var tags = new TagList
-        {
-            { "sharplabnext.runtime.id", Dimension(runtimeId, nameof(runtimeId)) },
-            { "sharplabnext.container.phase", ContainerPhase(phase) },
-            { "sharplabnext.outcome", Outcome(outcome) }
-        };
+        var tags = new TagList { { "sharplabnext.runtime.id", Dimension(runtimeId, nameof(runtimeId)) }, { "sharplabnext.container.phase", ContainerPhase(phase) }, { "sharplabnext.outcome", Outcome(outcome) } };
         _containerPhaseDuration.Record(DurationSeconds(duration, nameof(duration)), tags);
     }
 
-    public void RecordReaperPass(
-        string resourceScope,
-        TimeSpan duration,
-        int removedContainers,
-        int failures)
+    public void RecordReaperPass(string resourceScope, TimeSpan duration, int removedContainers, int failures)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(removedContainers);
         ArgumentOutOfRangeException.ThrowIfNegative(failures);
-        var tags = new TagList
-        {
-            { "sharplabnext.resource.scope", Dimension(resourceScope, nameof(resourceScope)) }
-        };
+        var tags = new TagList { { "sharplabnext.resource.scope", Dimension(resourceScope, nameof(resourceScope)) } };
         _reaperDuration.Record(DurationSeconds(duration, nameof(duration)), tags);
         if (removedContainers > 0)
         {
@@ -174,9 +99,7 @@ public sealed class SharpLabNextMetrics
     private static double DurationSeconds(TimeSpan duration, string parameterName)
     {
         if (duration < TimeSpan.Zero)
-        {
             throw new ArgumentOutOfRangeException(parameterName, "Telemetry durations cannot be negative.");
-        }
         return duration.TotalSeconds;
     }
 
@@ -184,9 +107,7 @@ public sealed class SharpLabNextMetrics
     {
         if (!SharpLabNextObservabilityExtensions.IsStableIdentity(value))
         {
-            throw new ArgumentException(
-                "Metric dimensions must be stable label values of at most 128 characters.",
-                parameterName);
+            throw new ArgumentException("Metric dimensions must be stable label values of at most 128 characters.", parameterName);
         }
         return value;
     }

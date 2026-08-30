@@ -74,17 +74,13 @@ public sealed class InternalServiceAuthenticationTests
     public void ProductionRequiresASecretFileAndRejectsInlineTokens()
     {
         Assert.Throws<InvalidOperationException>(() => CreateOptions("Production"));
-        Assert.Throws<InvalidOperationException>(() => CreateOptions(
-            "Production",
-            ("InternalServiceAuth:Token", Token)));
+        Assert.Throws<InvalidOperationException>(() => CreateOptions("Production", ("InternalServiceAuth:Token", Token)));
 
         var tokenFile = Path.GetTempFileName();
         try
         {
             File.WriteAllText(tokenFile, Token + Environment.NewLine);
-            var options = CreateOptions(
-                "Production",
-                ("InternalServiceAuth:TokenFile", tokenFile));
+            var options = CreateOptions("Production", ("InternalServiceAuth:TokenFile", tokenFile));
             using var client = new HttpClient();
 
             options.ConfigureClient(client);
@@ -109,16 +105,10 @@ public sealed class InternalServiceAuthenticationTests
         return context;
     }
 
-    private static InternalServiceAuthenticationOptions CreateOptions(
-        string environmentName,
-        params (string Key, string? Value)[] values)
+    private static InternalServiceAuthenticationOptions CreateOptions(string environmentName, params (string Key, string? Value)[] values)
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(values.ToDictionary(static value => value.Key, static value => value.Value))
-            .Build();
-        return InternalServiceAuthenticationOptions.FromConfiguration(
-            configuration,
-            new TestHostEnvironment(environmentName));
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(values.ToDictionary(static value => value.Key, static value => value.Value)).Build();
+        return InternalServiceAuthenticationOptions.FromConfiguration(configuration, new TestHostEnvironment(environmentName));
     }
 
     private sealed class TestHostEnvironment(string environmentName) : IHostEnvironment

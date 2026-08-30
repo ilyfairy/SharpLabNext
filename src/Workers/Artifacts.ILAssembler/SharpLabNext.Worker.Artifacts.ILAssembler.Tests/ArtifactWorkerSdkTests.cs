@@ -12,24 +12,14 @@ public sealed class ArtifactWorkerSdkTests
     {
         var manifestPath = Path.Combine(AppContext.BaseDirectory, "artifact-worker.json");
         var manifest = ArtifactWorkerCapabilityManifestSerializer.Load(manifestPath);
-        var identity = new ServiceIdentity(
-            "il-assembler",
-            ServiceKind.ArtifactWorker,
-            "test-release",
-            ProtocolVersion.WorkerV1,
-            ["generated-il", "assemble-il", "managed-pe"],
-            "ready");
+        var identity = new ServiceIdentity("il-assembler", ServiceKind.ArtifactWorker, "test-release", ProtocolVersion.WorkerV1, ["generated-il", "assemble-il", "managed-pe"], "ready");
 
         ArtifactWorkerCapabilityManifestSerializer.Validate(manifest, identity);
         Assert.Equal(2 * 1024 * 1024, manifest.Limits.MaximumInputArtifactBytes);
         Assert.Equal(["assemble-il"], manifest.TransformIds);
         Assert.Equal(["generated-il"], manifest.RenderOutputIds);
 
-        var error = ArtifactWorkerErrorMapper.Map(
-            new ArtifactWorkerIncompatibleArtifactException("private detail must not be substituted"),
-            "trace-test",
-            "il-assembler",
-            $"sha256:{new string('a', 64)}");
+        var error = ArtifactWorkerErrorMapper.Map(new ArtifactWorkerIncompatibleArtifactException("private detail must not be substituted"), "trace-test", "il-assembler", $"sha256:{new string('a', 64)}");
         Assert.Equal("incompatible-artifact", error.Code);
         Assert.Equal(WorkerErrorCategory.IncompatibleArtifact, error.Category);
         Assert.False(error.Retryable);
@@ -63,19 +53,14 @@ public sealed class ArtifactWorkerSdkTests
             """;
         using var content = new MemoryStream(Encoding.UTF8.GetBytes(json));
 
-        Assert.Throws<System.Text.Json.JsonException>(() =>
-            ArtifactWorkerCapabilityManifestSerializer.Load(content));
+        Assert.Throws<System.Text.Json.JsonException>(() => ArtifactWorkerCapabilityManifestSerializer.Load(content));
     }
 
     [Fact]
     public async Task OperationRegistryCancellationProducesContractTerminalEvent()
     {
-        var manifest = ArtifactWorkerCapabilityManifestSerializer.Load(
-            Path.Combine(AppContext.BaseDirectory, "artifact-worker.json"));
-        using var registry = new ArtifactWorkerOperationRegistry(
-            manifest,
-            new ArtifactWorkerHostIdentity($"sha256:{new string('a', 64)}"),
-            NullLogger<ArtifactWorkerOperationRegistry>.Instance);
+        var manifest = ArtifactWorkerCapabilityManifestSerializer.Load(Path.Combine(AppContext.BaseDirectory, "artifact-worker.json"));
+        using var registry = new ArtifactWorkerOperationRegistry(manifest, new ArtifactWorkerHostIdentity($"sha256:{new string('a', 64)}"), NullLogger<ArtifactWorkerOperationRegistry>.Instance);
         var handle = registry.Start(
             "cancel-request",
             "cancel-key",
