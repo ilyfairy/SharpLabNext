@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import https from 'node:https'
@@ -9,6 +8,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const defaultRepositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const defaultManifestPath = path.join(defaultRepositoryRoot, 'eng', 'release-prerequisites.json')
+const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE'
+const contentSourceIdentityMode = 'content'
 const sha256Pattern = /^[0-9a-f]{64}$/
 const imageIdPattern = /^sha256:[0-9a-f]{64}$/
 const maximumRedirects = 5
@@ -222,19 +223,29 @@ function isLfsPointer(filename, info) {
 }
 
 function requireLfsAttribute(root, relativePath, id) {
-  const result = spawnSync(
-    'git',
-    ['-C', root, 'check-attr', 'filter', '--', relativePath],
-    { encoding: 'utf8', shell: false, stdio: ['ignore', 'pipe', 'pipe'] },
-  )
-  if (result.error !== undefined || result.status !== 0 ||
-      !String(result.stdout ?? '').trim().endsWith(': filter: lfs')) {
+  let attributes
+  try {
+    attributes = fs.readFileSync(path.join(root, '.gitattributes'), 'utf8')
+  } catch {
+    fail(`Repository prerequisite '${id}' is not covered by a Git LFS filter rule`)
+  }
+  const normalizedPath = relativePath.replaceAll('\\', '/')
+  const covered = attributes.split(/\r?\n/).some(line => {
+    const content = line.replace(/#.*/, '').trim()
+    if (content.length === 0) return false
+    const fields = content.split(/\s+/)
+    return fields[0] === normalizedPath && fields.slice(1).includes('filter=lfs')
+  })
+  if (!covered) {
     fail(`Repository prerequisite '${id}' is not covered by a Git LFS filter rule`)
   }
 }
 
 export async function validateRepositoryFiles(repositoryRoot, items) {
   const files = {}
+  const contentIdentityMode = String(
+    process.env[sourceIdentityModeEnvironmentVariable] ?? '',
+  ).toLowerCase() === contentSourceIdentityMode
   for (const item of items) {
     const { root, filename } = repositoryPath(
       repositoryRoot,
@@ -257,7 +268,7 @@ export async function validateRepositoryFiles(repositoryRoot, items) {
         'Run git lfs pull before building.',
       )
     }
-    requireLfsAttribute(root, item.path, item.id)
+    if (!contentIdentityMode) requireLfsAttribute(root, item.path, item.id)
     if (!await verifyFile(filename, item.sizeBytes, item.sha256)) {
       fail(`Repository prerequisite '${item.id}' size or SHA-256 is invalid`)
     }

@@ -17,6 +17,8 @@ import { canonicalFrameworkCandidateInput, frameworkCandidateInputStrategy, read
 import { createCommittedSourceContext } from './committed-source-context.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE'
+const contentSourceIdentityMode = 'content'
 const maximumJsonBytes = 1024 * 1024
 const installerManifestPath = path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json')
 const requiredFrameworkRows = Object.freeze([
@@ -313,11 +315,20 @@ function usage() {
 }
 
 function workingTreeSourceContext(sourceRevision, spawn) {
+  if (String(process.env[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() === contentSourceIdentityMode &&
+      isGitCommitIdentity(sourceRevision)) {
+    return Object.freeze({ directory: repositoryRoot, dispose() {} })
+  }
   const revision = spawn('git', ['rev-parse', '--verify', 'HEAD'], {
     cwd: repositoryRoot, encoding: 'utf8', shell: false,
   })
-  if (revision?.error !== undefined || revision?.status !== 0 ||
-      String(revision.stdout ?? '').trim() !== sourceRevision) {
+  if (revision?.error !== undefined || revision?.status !== 0) {
+    if (isGitCommitIdentity(sourceRevision) || sourceRevision === 'development') {
+      return Object.freeze({ directory: repositoryRoot, dispose() {} })
+    }
+    fail('development Framework input source revision is invalid')
+  }
+  if (String(revision.stdout ?? '').trim() !== sourceRevision) {
     fail('development Framework input source revision must match Git HEAD')
   }
   return Object.freeze({ directory: repositoryRoot, dispose() {} })

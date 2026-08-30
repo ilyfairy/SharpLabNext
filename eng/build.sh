@@ -50,11 +50,13 @@ cd "$root"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_NOLOGO=1
 export NUGET_XMLDOC_MODE=skip
+export SHARPLABNEXT_SOURCE_IDENTITY_MODE=content
 
 if [[ "$skip_restore" == false ]]; then
     dotnet run eng/verify-ilsense-inputs.cs -- \
         --repository-root "$root" \
-        --verify-restore
+        --verify-restore \
+        --allow-missing-git
     dotnet restore SharpLabNext.slnx --locked-mode
 fi
 

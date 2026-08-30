@@ -22,6 +22,9 @@ internal static partial class FrameworkRuntimePreparation
     private const string VendoredContextName = "framework-vendored-context";
     private const string CachedContextName = "framework-cached-context";
     private const string InstallerContextName = "framework-installer-context";
+    private const string SourceIdentityModeEnvironmentVariable =
+        "SHARPLABNEXT_SOURCE_IDENTITY_MODE";
+    private const string ContentSourceIdentityMode = "content";
     private const long MaximumInstallerBytes = 2L * 1024 * 1024 * 1024;
     private const int MaximumGitLfsPointerBytes = 1024;
     private const string Usage =
@@ -44,6 +47,10 @@ internal static partial class FrameworkRuntimePreparation
         try
         {
             options = Parse(args);
+            if (IsContentSourceIdentity())
+            {
+                options = options with { AllowUncommittedSourceForDevelopment = true };
+            }
         }
         catch (UsageException exception)
         {
@@ -298,7 +305,8 @@ internal static partial class FrameworkRuntimePreparation
             ? null
             : ValidateVendoredPayload(
                 repositoryRoot,
-                manifest.VendoredWinetricksPayloads.Single());
+                manifest.VendoredWinetricksPayloads.Single(),
+                options.AllowUncommittedSourceForDevelopment);
         var cachedPayloadLock = manifest.CachedWinetricksPayloads.Single();
         var cachedPayloadRequired = options.BuildKind switch
         {
@@ -553,7 +561,8 @@ internal static partial class FrameworkRuntimePreparation
 
     private static ValidatedVendoredPayload ValidateVendoredPayload(
         string repositoryRoot,
-        VendoredWinetricksPayload payload)
+        VendoredWinetricksPayload payload,
+        bool allowUncommittedSourceForDevelopment)
     {
         var normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(repositoryRoot));
         var path = Path.GetFullPath(Path.Combine(
@@ -568,13 +577,32 @@ internal static partial class FrameworkRuntimePreparation
                 "The vendored Winetricks payload path escapes the repository root.");
         }
 
-        var attribute = RunGit(
-            normalizedRoot,
-            "check-attr",
-            "filter",
-            "--",
-            payload.RepositoryPath).Trim();
-        if (!attribute.EndsWith(": filter: lfs", StringComparison.Ordinal))
+        var contentIdentityMode = IsContentSourceIdentity() &&
+            allowUncommittedSourceForDevelopment;
+        string? attribute = null;
+        if (!contentIdentityMode && HasGitMetadata(normalizedRoot))
+        {
+            try
+            {
+                attribute = RunGit(
+                    normalizedRoot,
+                    "check-attr",
+                    "filter",
+                    "--",
+                    payload.RepositoryPath).Trim();
+            }
+            catch (InputValidationException) when (allowUncommittedSourceForDevelopment)
+            {
+                // The byte-level checks below remain authoritative when the
+                // optional Git metadata cannot be inspected.
+            }
+        }
+        else if (!contentIdentityMode && !allowUncommittedSourceForDevelopment)
+        {
+            throw new InputValidationException(
+                "The Framework source metadata is unavailable; use the local development build entry point.");
+        }
+        if (attribute is not null && !attribute.EndsWith(": filter: lfs", StringComparison.Ordinal))
         {
             throw new InputValidationException(
                 "The vendored .NET Framework 2.0 payload is not tracked by Git LFS.");
@@ -1047,7 +1075,7 @@ internal static partial class FrameworkRuntimePreparation
                 character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
         {
             throw new UsageException(
-                "--source-revision must be a complete lowercase Git commit identity.");
+                "--source-revision must be a 40- or 64-character lowercase source identity.");
         }
         return value;
     }
@@ -1065,24 +1093,60 @@ internal static partial class FrameworkRuntimePreparation
         bool dryRun,
         bool allowUncommittedSourceForDevelopment)
     {
-        var head = RunGit(repositoryRoot, "rev-parse", "--verify", "HEAD").Trim();
+        if (IsContentSourceIdentity() && allowUncommittedSourceForDevelopment)
+            return;
+        if (!HasGitMetadata(repositoryRoot))
+        {
+            if (allowUncommittedSourceForDevelopment)
+                return;
+            throw new InputValidationException(
+                "The Framework source metadata is unavailable; use the local development build entry point.");
+        }
+
+        string head;
+        try
+        {
+            head = RunGit(repositoryRoot, "rev-parse", "--verify", "HEAD").Trim();
+        }
+        catch (InputValidationException) when (allowUncommittedSourceForDevelopment)
+        {
+            return;
+        }
         if (!StringComparer.Ordinal.Equals(head, sourceRevision))
         {
             throw new InputValidationException(
                 $"The source revision '{sourceRevision}' does not match Git HEAD '{head}'.");
         }
 
-        var status = RunGit(
-            repositoryRoot,
-            "status",
-            "--porcelain=v1",
-            "--untracked-files=normal");
+        string status;
+        try
+        {
+            status = RunGit(
+                repositoryRoot,
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=normal");
+        }
+        catch (InputValidationException) when (allowUncommittedSourceForDevelopment)
+        {
+            return;
+        }
         if (!dryRun && status.Length != 0 && !allowUncommittedSourceForDevelopment)
         {
             throw new InputValidationException(
                 "The Framework operator source worktree must be clean.");
         }
     }
+
+    private static bool HasGitMetadata(string repositoryRoot) =>
+        File.Exists(Path.Combine(repositoryRoot, ".git")) ||
+        Directory.Exists(Path.Combine(repositoryRoot, ".git"));
+
+    private static bool IsContentSourceIdentity() =>
+        string.Equals(
+            Environment.GetEnvironmentVariable(SourceIdentityModeEnvironmentVariable),
+            ContentSourceIdentityMode,
+            StringComparison.OrdinalIgnoreCase);
 
     private static string RunGit(string repositoryRoot, params string[] arguments)
     {

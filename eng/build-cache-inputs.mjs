@@ -19,6 +19,8 @@ const excludedBuildDirectories = new Set([
   'coverage',
   'TestResults',
 ])
+const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE'
+const contentSourceIdentityMode = 'content'
 
 function normalizeRelativePath(value) {
   return value.replaceAll('\\', '/').replace(/^\.\//, '')
@@ -77,6 +79,48 @@ function updateFile(hash, filename) {
   }
 }
 
+function computeContentFingerprintSync(repositoryRoot) {
+  const root = fs.realpathSync(path.resolve(repositoryRoot))
+  const files = []
+  const pending = [root]
+  while (pending.length > 0) {
+    const directory = pending.pop()
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const filename = path.join(directory, entry.name)
+      const relativePath = normalizeRelativePath(path.relative(root, filename))
+      if (isContentExcludedPath(relativePath) || relativePath === '.git' ||
+          relativePath.startsWith('.git/')) continue
+      if (entry.isSymbolicLink()) continue
+      if (entry.isDirectory()) {
+        pending.push(filename)
+      } else if (entry.isFile()) {
+        files.push({ filename, relativePath })
+      }
+    }
+  }
+  files.sort((left, right) =>
+    left.relativePath < right.relativePath ? -1 :
+      left.relativePath > right.relativePath ? 1 : 0)
+  const hash = crypto.createHash('sha256')
+  hash.update('sharplabnext-source-content-v1\0')
+  for (const file of files) {
+    hash.update(file.relativePath)
+    hash.update('\0')
+    updateFile(hash, file.filename)
+    hash.update('\0')
+  }
+  return `sha256:${hash.digest('hex')}`
+}
+
+function isContentExcludedPath(value) {
+  const relativePath = normalizeRelativePath(value)
+  const segments = relativePath.split('/')
+  return segments.some(segment =>
+    segment === 'artifacts' || segment === '.tmp' || segment === '_tmp' ||
+    segment === '.vs' || segment === '.idea' || segment === '.vscode' ||
+    excludedBuildDirectories.has(segment) || segment.startsWith('.sharplabnext-'))
+}
+
 function trackedDiff(repositoryRoot, head) {
   const diffArguments = [
     'diff', '--binary', '--no-ext-diff', '--no-renames',
@@ -118,29 +162,39 @@ function untrackedFiles(repositoryRoot) {
 }
 
 export function computeBuildCacheInputFingerprintSync(repositoryRoot) {
-  const root = fs.realpathSync(path.resolve(repositoryRoot))
-  const head = readHead(root)
-  const hash = crypto.createHash('sha256')
-  hash.update(`${fingerprintVersion}\0`)
-  hash.update(`head\0${head}\0`)
-  hash.update('tracked-diff\0')
-  hash.update(trackedDiff(root, head))
-
-  for (const relativePath of untrackedFiles(root)) {
-    const filename = path.resolve(root, ...relativePath.split('/'))
-    const info = fs.lstatSync(filename)
-    if (info.isSymbolicLink()) {
-      hash.update(`untracked-link\0${relativePath}\0`)
-      hash.update(fs.readlinkSync(filename))
-    } else if (info.isFile()) {
-      hash.update(`untracked\0${relativePath}\0${info.mode}\0`)
-      updateFile(hash, filename)
-    } else {
-      continue
-    }
-    hash.update('\0')
+  if (String(process.env[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() ===
+      contentSourceIdentityMode) {
+    return computeContentFingerprintSync(repositoryRoot)
   }
-  return `sha256:${hash.digest('hex')}`
+  const root = fs.realpathSync(path.resolve(repositoryRoot))
+  try {
+    const head = readHead(root)
+    const hash = crypto.createHash('sha256')
+    hash.update(`${fingerprintVersion}\0`)
+    hash.update(`head\0${head}\0`)
+    hash.update('tracked-diff\0')
+    hash.update(trackedDiff(root, head))
+
+    for (const relativePath of untrackedFiles(root)) {
+      const filename = path.resolve(root, ...relativePath.split('/'))
+      const info = fs.lstatSync(filename)
+      if (info.isSymbolicLink()) {
+        hash.update(`untracked-link\0${relativePath}\0`)
+        hash.update(fs.readlinkSync(filename))
+      } else if (info.isFile()) {
+        hash.update(`untracked\0${relativePath}\0${info.mode}\0`)
+        updateFile(hash, filename)
+      } else {
+        continue
+      }
+      hash.update('\0')
+    }
+    return `sha256:${hash.digest('hex')}`
+  } catch {
+    // Exported source trees and source archives have no Git metadata. Their
+    // bytes are still a complete and deterministic cache identity.
+    return computeContentFingerprintSync(root)
+  }
 }
 
 export async function computeBuildCacheInputFingerprint(repositoryRoot) {

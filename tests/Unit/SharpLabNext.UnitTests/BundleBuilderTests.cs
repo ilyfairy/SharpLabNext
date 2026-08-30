@@ -1651,21 +1651,23 @@ public sealed class BundleBuilderTests
     }
 
     [Fact]
-    public void SourceProvenanceRejectsMissingHeadDirtyTreesAndUnknownRevision()
+    public void SourceProvenanceUsesAnUnverifiedIdentityForMissingHeadAndDirtyTrees()
     {
-        var noHead = Assert.Throws<BundleValidationException>(() =>
-            RepositorySourceProvenanceResolver.Resolve(
-                new RepositorySourceState(true, null, true),
-                requestedRevision: null,
-                allowUncommittedSourceForDevelopment: false));
-        Assert.Contains("HEAD", noHead.Message, StringComparison.Ordinal);
+        var noHead = RepositorySourceProvenanceResolver.Resolve(
+            new RepositorySourceState(true, null, true),
+            requestedRevision: null,
+            allowUncommittedSourceForDevelopment: false);
+        Assert.Equal(RepositorySourceProvenanceResolver.LocalUncommittedRevision, noHead.Revision);
+        Assert.False(noHead.IsVerified);
+        Assert.True(noHead.DevelopmentOverrideUsed);
 
-        var dirty = Assert.Throws<BundleValidationException>(() =>
-            RepositorySourceProvenanceResolver.Resolve(
-                new RepositorySourceState(true, TestSourceRevision, true),
-                requestedRevision: null,
-                allowUncommittedSourceForDevelopment: false));
-        Assert.Contains("clean Git worktree", dirty.Message, StringComparison.Ordinal);
+        var dirty = RepositorySourceProvenanceResolver.Resolve(
+            new RepositorySourceState(true, TestSourceRevision, true),
+            requestedRevision: null,
+            allowUncommittedSourceForDevelopment: false);
+        Assert.Equal(TestSourceRevision, dirty.Revision);
+        Assert.False(dirty.IsVerified);
+        Assert.True(dirty.DevelopmentOverrideUsed);
 
         var unknown = Assert.Throws<BundleValidationException>(() =>
             RepositorySourceProvenanceResolver.Resolve(
@@ -1694,6 +1696,46 @@ public sealed class BundleBuilderTests
         Assert.False(source.IsVerified);
         Assert.True(source.IsDirty);
         Assert.True(source.DevelopmentOverrideUsed);
+    }
+
+    [Fact]
+    public void CleanGitSourceRemainsVerifiedEvenWhenTheLegacyDevelopmentSwitchIsPresent()
+    {
+        var source = RepositorySourceProvenanceResolver.Resolve(
+            new RepositorySourceState(true, TestSourceRevision, false),
+            requestedRevision: TestSourceRevision,
+            allowUncommittedSourceForDevelopment: true);
+
+        Assert.True(source.IsVerified);
+        Assert.False(source.DevelopmentOverrideUsed);
+        Assert.False(source.IsDirty);
+    }
+
+    [Fact]
+    public async Task SourceInspectorUsesAContentIdentityWhenGitMetadataIsUnavailable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sharplabnext-source-fingerprint-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var file = Path.Combine(root, "source.txt");
+            await File.WriteAllTextAsync(file, "one\n", TestContext.Current.CancellationToken);
+            var inspector = new GitRepositorySourceInspector();
+
+            var first = await inspector.InspectAsync(root, TestContext.Current.CancellationToken);
+            Assert.False(first.IsGitRepository);
+            Assert.True(first.IsDirty);
+            Assert.NotNull(first.HeadRevision);
+            Assert.Matches("^[0-9a-f]{64}$", first.HeadRevision!);
+
+            await File.WriteAllTextAsync(file, "two\n", TestContext.Current.CancellationToken);
+            var second = await inspector.InspectAsync(root, TestContext.Current.CancellationToken);
+            Assert.NotEqual(first.HeadRevision, second.HeadRevision);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]

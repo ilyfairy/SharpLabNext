@@ -27,6 +27,8 @@ import {
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const matrixInputName = 'matrix-input.json'
 const matrixStrategy = 'shared-framework-prefix-input-v1'
+const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE'
+const contentSourceIdentityMode = 'content'
 const maximumMatrixMetadataBytes = 1024 * 1024
 const maximumMetadataImageBytes = 16 * 1024 * 1024
 const safeId = /^[a-z0-9][a-z0-9._-]{0,127}$/
@@ -520,22 +522,37 @@ function usage() {
   `A host context is accepted only for local development.`
 }
 
-function inspectGitSource(spawn = spawnSync) {
-  const revision = spawn('git', ['rev-parse', '--verify', 'HEAD'], {
-    cwd: repositoryRoot,
-    encoding: 'utf8',
-    shell: false,
-  })
-  if (revision.error !== undefined || revision.status !== 0) fail('could not resolve Git HEAD')
-  const headRevision = String(revision.stdout ?? '').trim()
-  if (!isGitCommitIdentity(headRevision)) fail('Git HEAD is not a full commit identity')
-  const status = spawn('git', ['status', '--porcelain=v1', '--untracked-files=normal'], {
-    cwd: repositoryRoot,
-    encoding: 'utf8',
-    shell: false,
-  })
-  if (status.error !== undefined || status.status !== 0) fail('could not inspect Git source state')
-  return { headRevision, isDirty: String(status.stdout ?? '').length > 0 }
+function inspectGitSource(
+  spawn = spawnSync,
+  fallbackRevision = undefined,
+  environment = process.env,
+) {
+  if (String(environment?.[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() === contentSourceIdentityMode &&
+      isGitCommitIdentity(fallbackRevision)) {
+    return { headRevision: fallbackRevision, isDirty: true }
+  }
+  try {
+    const revision = spawn('git', ['rev-parse', '--verify', 'HEAD'], {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+      shell: false,
+    })
+    if (revision.error !== undefined || revision.status !== 0) fail('could not resolve Git HEAD')
+    const headRevision = String(revision.stdout ?? '').trim()
+    if (!isGitCommitIdentity(headRevision)) fail('Git HEAD is not a full commit identity')
+    const status = spawn('git', ['status', '--porcelain=v1', '--untracked-files=normal'], {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+      shell: false,
+    })
+    if (status.error !== undefined || status.status !== 0) fail('could not inspect Git source state')
+    return { headRevision, isDirty: String(status.stdout ?? '').length > 0 }
+  } catch (error) {
+    if (isGitCommitIdentity(fallbackRevision)) {
+      return { headRevision: fallbackRevision, isDirty: true }
+    }
+    throw error
+  }
 }
 
 function createCommittedSourceContext(revision, spawn = spawnSync) {
@@ -672,6 +689,10 @@ export function runParentBuild(argv, values = process.env, spawn = spawnSync, ou
   }
   if (parsed.help) { output.log(usage()); return 0 }
   const merged = { ...values, ...parsed }
+  if (String(merged[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() ===
+      contentSourceIdentityMode) {
+    merged.allowDirty = true
+  }
   const failures = validateParentInputs(merged)
   if (failures.length > 0) {
     for (const failure of failures) output.error(`framework parent input error: ${failure}`)
@@ -716,7 +737,7 @@ export function runParentBuild(argv, values = process.env, spawn = spawnSync, ou
     return 1
   }
   let sourceBefore
-  try { sourceBefore = inspectGitSource(spawn) } catch (error) {
+  try { sourceBefore = inspectGitSource(spawn, merged.SOURCE_REVISION, merged) } catch (error) {
     output.error(`framework parent source error: ${error.message}`)
     return 1
   }
@@ -729,7 +750,7 @@ export function runParentBuild(argv, values = process.env, spawn = spawnSync, ou
     )
     return 1
   }
-  if (dirty && !parsed.allowDirty) {
+  if (dirty && !merged.allowDirty) {
     output.error('framework parent source error: worktree is dirty; use the explicit development override')
     return 1
   }
@@ -805,7 +826,7 @@ export function runParentBuild(argv, values = process.env, spawn = spawnSync, ou
     return 1
   }
   try {
-    const sourceAfter = inspectGitSource(spawn)
+    const sourceAfter = inspectGitSource(spawn, merged.SOURCE_REVISION, merged)
     if (sourceAfter.headRevision !== sourceBefore.headRevision ||
         sourceAfter.isDirty !== sourceBefore.isDirty ||
         (parsed.push && sourceAfter.isDirty)) {

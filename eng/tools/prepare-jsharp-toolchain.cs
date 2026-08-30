@@ -19,6 +19,9 @@ internal static class JSharpToolchainPreparation
     private const string InstallerSha256 =
         "3a7a6ff79eeb5d51f8bf4cab188f74de0a220722e3d9d97858092ea3ef41b2b0";
     private const string InstallerContextName = "visual-jsharp-installer-context";
+    private const string SourceIdentityModeEnvironmentVariable =
+        "SHARPLABNEXT_SOURCE_IDENTITY_MODE";
+    private const string ContentSourceIdentityMode = "content";
     private const string Usage =
         "Usage: dotnet run eng/prepare-jsharp-toolchain.cs -- " +
         "--framework-seed-image REFERENCE --output-image REFERENCE " +
@@ -162,7 +165,11 @@ internal static class JSharpToolchainPreparation
                     "The Visual J# input is an unexpanded Git LFS pointer. " +
                     "Run git lfs pull before building.");
             }
-            ValidateLfsAttribute(repositoryRoot);
+            // The installer bytes are the build input. Git LFS metadata is
+            // useful provenance when present, but an exported source tree
+            // must still be buildable without the root repository metadata.
+            if (HasGitMetadata(repositoryRoot) && !IsContentSourceIdentity())
+                ValidateLfsAttribute(repositoryRoot);
             if (info.Length != InstallerSize)
             {
                 throw new InputValidationException(
@@ -248,6 +255,16 @@ internal static class JSharpToolchainPreparation
                 "Git could not validate the Visual J# LFS attribute.");
         }
     }
+
+    private static bool HasGitMetadata(string repositoryRoot) =>
+        File.Exists(Path.Combine(repositoryRoot, ".git")) ||
+        Directory.Exists(Path.Combine(repositoryRoot, ".git"));
+
+    private static bool IsContentSourceIdentity() =>
+        string.Equals(
+            Environment.GetEnvironmentVariable(SourceIdentityModeEnvironmentVariable),
+            ContentSourceIdentityMode,
+            StringComparison.OrdinalIgnoreCase);
 
     private static DockerInvocation CreateDockerInvocation(
         PreparationOptions options,

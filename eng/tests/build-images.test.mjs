@@ -6,8 +6,10 @@ import { fileURLToPath } from 'node:url'
 
 import {
   buildRuntimeCandidates,
+  applySourceVerificationMarker,
   createBakeChildEnvironment,
   parseBakeEnvironmentSnapshot,
+  resolveOrdinaryBakeTarget,
   runParallel,
   validateLocalImageBuildDriverInspection,
   validateRegistryContainer,
@@ -19,6 +21,25 @@ const configuration = JSON.parse(fs.readFileSync(
   path.join(repositoryRoot, 'eng', 'release-prerequisites.json'),
   'utf8',
 )).localRegistry
+
+test('ordinary image mode resolves one standalone Bake target without a release plan', () => {
+  assert.deepEqual(resolveOrdinaryBakeTarget('gateway'), {
+    bakeTarget: 'gateway',
+    imageName: 'gateway',
+  })
+  assert.deepEqual(resolveOrdinaryBakeTarget('dotnet-10-linux-x64'), {
+    bakeTarget: 'runtime-dotnet10',
+    imageName: 'runtime-dotnet10',
+  })
+  assert.throws(
+    () => resolveOrdinaryBakeTarget('worker-cppcli'),
+    /not a standalone ordinary image target/,
+  )
+  assert.throws(
+    () => resolveOrdinaryBakeTarget('toString'),
+    /not a standalone ordinary image target/,
+  )
+})
 
 function container() {
   return {
@@ -173,6 +194,26 @@ test('candidate child environment replaces inherited development grants', () => 
   )
 })
 
+test('source verification marker selects the build context without user flags', () => {
+  const clean = { allowUncommittedSourceForDevelopment: true }
+  assert.equal(
+    applySourceVerificationMarker(clean, 'SHARPLABNEXT_SOURCE_VERIFIED=true\n'),
+    'true',
+  )
+  assert.equal(clean.allowUncommittedSourceForDevelopment, false)
+
+  const development = { allowUncommittedSourceForDevelopment: false }
+  assert.equal(
+    applySourceVerificationMarker(development, 'SHARPLABNEXT_SOURCE_VERIFIED=false\n'),
+    'false',
+  )
+  assert.equal(development.allowUncommittedSourceForDevelopment, true)
+  assert.throws(
+    () => applySourceVerificationMarker({}, 'SHARPLABNEXT_SOURCE_VERIFIED=maybe\n'),
+    /invalid verification marker/,
+  )
+})
+
 test('runtime candidates resolve Bake environment once and still build in parallel', async () => {
   const options = {
     repositoryRoot,
@@ -298,7 +339,18 @@ test('complete image build keeps installers out of host execution', () => {
 })
 
 test('build, image build, bundle, and release entry points keep distinct responsibilities', () => {
+  const imageOrchestrator = fs.readFileSync(
+    path.join(repositoryRoot, 'eng', 'build-images.mjs'),
+    'utf8',
+  )
+  assert.match(imageOrchestrator, /target: 'gateway'/)
+  assert.match(imageOrchestrator, /argument === '--all'/)
+  assert.match(imageOrchestrator, /runOrdinaryImageBuild/)
   for (const extension of ['ps1', 'sh']) {
+    const hostBuild = fs.readFileSync(
+      path.join(repositoryRoot, 'eng', `build.${extension}`),
+      'utf8',
+    )
     const bundle = fs.readFileSync(
       path.join(repositoryRoot, 'eng', `bundle.${extension}`),
       'utf8',
@@ -307,10 +359,15 @@ test('build, image build, bundle, and release entry points keep distinct respons
       path.join(repositoryRoot, 'eng', `release.${extension}`),
       'utf8',
     )
+    assert.doesNotMatch(hostBuild, /Test-Path[^\n]*\.git|\[\[.*\.git/)
     assert.doesNotMatch(bundle, /buildx|dotnet restore|npm (?:ci|install)/)
     assert.ok(release.includes(`build.${extension}`))
     assert.match(release, /build-images/)
     assert.match(release, /bundle/)
+    assert.match(
+      release,
+      extension === 'ps1' ? /All\s*=\s*\$true/ : /build_arguments=\(--all\)/,
+    )
     assert.ok(release.lastIndexOf(`build.${extension}`) < release.lastIndexOf(`build-images.${extension}`))
     assert.ok(release.lastIndexOf(`build-images.${extension}`) < release.lastIndexOf(`bundle.${extension}`))
   }

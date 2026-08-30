@@ -254,6 +254,15 @@ test('Git inspection independently observes HEAD and dirty state', () => {
   ])
 })
 
+test('local build source inspection falls back to the supplied content identity without Git', () => {
+  const fallbackRevision = 'a'.repeat(64)
+  const state = inspectGitSourceState({
+    fallbackRevision,
+    spawn() { return { status: 127, stdout: '', stderr: 'git unavailable' } },
+  })
+  assert.deepEqual(state, { headRevision: fallbackRevision, isDirty: true })
+})
+
 test('Git inspection permits only explicitly bound generated paths', () => {
   const inspect = stdout => inspectGitSourceState({
     allowedDirtyPaths: [

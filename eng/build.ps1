@@ -30,6 +30,8 @@ function Invoke-Checked {
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 $env:DOTNET_NOLOGO = "1"
 $env:NUGET_XMLDOC_MODE = "skip"
+$previousSourceIdentityMode = [Environment]::GetEnvironmentVariable("SHARPLABNEXT_SOURCE_IDENTITY_MODE")
+$env:SHARPLABNEXT_SOURCE_IDENTITY_MODE = "content"
 
 Push-Location $root
 try {
@@ -37,7 +39,8 @@ try {
         Invoke-Checked -FilePath "dotnet" -Arguments @(
             "run", "eng/verify-ilsense-inputs.cs", "--",
             "--repository-root", $root,
-            "--verify-restore"
+            "--verify-restore",
+            "--allow-missing-git"
         )
         Invoke-Checked -FilePath "dotnet" -Arguments @(
             "restore",
@@ -97,5 +100,11 @@ try {
     }
 }
 finally {
+    if ($null -eq $previousSourceIdentityMode) {
+        Remove-Item Env:SHARPLABNEXT_SOURCE_IDENTITY_MODE -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:SHARPLABNEXT_SOURCE_IDENTITY_MODE = $previousSourceIdentityMode
+    }
     Pop-Location
 }

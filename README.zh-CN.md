@@ -120,15 +120,8 @@ Cancel、State 和可恢复的事件订阅。LSP session 同样使用 WebSocket�
 宿主命令直接使用系统安装的 .NET SDK、Node.js 和 npm。Dockerfile 中的版本只属于
 可复现镜像构建输入，不表示要在宿主机重复安装一套工具。
 
-克隆时应使用 `--recurse-submodules`。已有 checkout 在 restore 或 build 前需要把经过
-审计的 ILSense 源码初始化到 gitlink 固定的精确提交：
-
-```powershell
-git submodule update --init --recursive
-```
-
-构建和发布流程只读取固定提交的 `third_party/ILSense` 子模块，不读取同级目录或浮动
-分支 checkout。
+构建只要求经过审核的 `third_party/ILSense` 源码文件已经存在。文件的获取方式不属于
+构建流程；普通入口不会读取 Git 元数据、仓库状态，也不会执行 submodule 命令。
 
 ## 快速启动
 
@@ -137,9 +130,19 @@ git submodule update --init --recursive
 | 入口 | 职责 |
 | --- | --- |
 | `eng/build.ps1` / `eng/build.sh` | 在宿主机 restore、构建前后端并运行静态合同校验，不构建 Docker 镜像。 |
-| `eng/build-images.ps1` / `eng/build-images.sh` | 先生成并校验 Catalog 镜像计划，再构建计划中的全部镜像；BuildKit 会复用未变化的层和下载缓存。 |
+| `eng/build-images.ps1` / `eng/build-images.sh` | 默认构建一个普通本地 Docker 镜像（不需要 Git 元数据、环境开关或 bundle）；传入 `-All`/`--all` 时才构建完整镜像图。 |
 | `eng/bundle.ps1` / `eng/bundle.sh` | 只检查并打包已经存在的完整镜像集合，不做 restore 或镜像构建。缺少或身份不匹配时立即失败。 |
 | `eng/release.ps1` / `eng/release.sh` | 完整入口：预检输出和所有静态合同、构建并校验全部计划镜像，全部成功后才生成离线 bundle。 |
+
+最简单的本地构建直接执行：
+
+```powershell
+.\eng\build-images.ps1
+```
+
+命令会把镜像加载到本机 Docker，默认标签为
+`sharplabnext/gateway:development`。传入 `-Target <名称>` 可以换成其他独立 Bake 目标；需要
+完整发布图时才使用 `-All` 或 `release.ps1`。
 
 完整环境还需要受 Microsoft 许可约束的输入。以下两份原始下载路径不能作为可靠的首次
 构建来源，因此精确文件通过 Git LFS 保存：
@@ -149,12 +152,9 @@ git submodule update --init --recursive
 - `Visual J# 2.0 Second Edition x64`：
   `eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe`
 
-正常的 LFS clone 会自动取得实体文件；如果工作树中只有 pointer，可执行：
-
-```powershell
-git lfs install
-git lfs pull --include="eng/prerequisites/dotnet-framework-2.0/NetFx64.exe,eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe"
-```
+构建只要求这两份文件的实体字节已经存在；文件可以由任意受控的制品分发方式提供，
+不需要 Git 或 Git LFS 命令。若文件仍是 LFS pointer，准备阶段会明确报告文件大小和
+SHA-256 不匹配。
 
 Docker 启动前，清单和准备工具会校验两份文件各自的精确大小与 SHA-256。它们只进入各自
 的私有 BuildKit context，不会在宿主机执行，也不会以安装器形式进入最终镜像或离线
@@ -163,7 +163,7 @@ J# Docker 阶段内安装。其他 .NET Framework 载荷继续通过锁定的 Wi
 下载路径获取。
 
 `.NET Framework 3.5 SP1`、`4.5.1` 和 `4.7` 安装器仍从清单锁定的 Microsoft HTTPS
-地址下载到 Git 忽略的 `artifacts/prerequisites/downloads`，并校验大小和 SHA-256。
+地址下载到被忽略的 `artifacts/prerequisites/downloads`，并校验大小和 SHA-256。
 安装器不会在 Windows 宿主机启动，也不会写入宿主注册表或系统目录；它们只作为
 BuildKit 私有输入，在隔离的 Linux/Wine 构建阶段用静默参数安装到专用 Wine prefix，
 临时安装器随后从镜像层删除。3.5 SP1 文件会预填 Winetricks 的精确缓存路径，因此容器
@@ -177,10 +177,10 @@ prefix、禁用对应 NGen 服务、删除安装器残留、记录 seed 镜像 d
 
 构建脚本不会再通过 `docker image save` 额外封存这些 seed。每次构建都会把同一个锁定
 构建图交给 BuildKit；Docker 自身复用未变化的镜像层，输入摘要变化则使对应层自然失效。
-重装 Docker 或清空全部镜像后，会从 Git LFS 与经过校验的下载输入重新构建，不依赖任何
+重装 Docker 或清空全部镜像后，会从本地已提供的输入与经过校验的下载字节重新构建，不依赖任何
 预先生成的镜像 TAR。
 
-J# 会从仓库 LFS 对象与 CLR2 seed 重建。C++/CLI 会从锁定的 `msvc-wine` revision、
+J# 会从已提供的安装器字节与 CLR2 seed 重建。C++/CLI 会从锁定的 `msvc-wine` revision、
 Visual Studio 18.8 manifest 与 .NET Framework 4.8 Developer Pack 重建。源码归档和
 Microsoft 输入只作为经过大小/SHA-256 校验的字节下载到被忽略的 prerequisite cache；
 解压、准备和真实 `/clr` 预检全部发生在 Docker 内。
@@ -201,8 +201,11 @@ image inputs，只能生成可部署的 unsigned 开发产物。正式签名/晋
 operator receipt 和 promotion 流程得到的不可变镜像，再由
 `bundle.ps1` 单独打包；开发输入授权不会弱化这条边界。
 
-当前工作树含有明确要测试的未提交改动时使用开发开关；这种 bundle 会记录开发输入且
-不能签名或晋级：
+普通构建入口直接根据源码文件计算内容身份，不读取 Git 元数据或工作树状态；没有 `.git`
+的导出源码树与 checkout 使用相同流程。生成的本地镜像是普通开发镜像，bundle 也是
+unsigned。正式签名/晋级是独立操作，届时才可能要求独立、可验证的 Git provenance。
+
+旧版本的开发开关仍接受，但只为兼容旧脚本保留：
 
 ```powershell
 .\eng\release.ps1 `
@@ -219,7 +222,7 @@ operator receipt 和 promotion 流程得到的不可变镜像，再由
   -OutputDirectory D:\Bundles\SharpLabNext-20260824
 ```
 
-只重建镜像或只打包现有镜像时分别调用 `build-images.ps1` 与 `bundle.ps1`。普通的
+只重建普通镜像或只打包现有镜像时分别调用 `build-images.ps1` 与 `bundle.ps1`。普通的
 `release.ps1`/`release.sh` 会先复用所有身份匹配的本地镜像，再让 BuildKit 只重建发生
 变化的输入，因此打包阶段失败后再次执行通常不会全量重建。`-BundleOnly`（或
 `--bundle-only`）只是可选的直接打包快捷方式。`-Offline`

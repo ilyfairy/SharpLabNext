@@ -8,6 +8,7 @@ using SharpLabNext.BundleBuilder;
 string? repositoryRoot = null;
 string? requestedRevision = null;
 var allowUncommittedSourceForDevelopment = false;
+var verifyGit = false;
 for (var index = 0; index < args.Length; index++)
 {
     switch (args[index])
@@ -21,6 +22,9 @@ for (var index = 0; index < args.Length; index++)
         case "--allow-uncommitted-source-for-development":
             allowUncommittedSourceForDevelopment = true;
             break;
+        case "--verify-git":
+            verifyGit = true;
+            break;
         default:
             Console.Error.WriteLine($"Unknown argument '{args[index]}'.");
             return 64;
@@ -31,7 +35,7 @@ if (string.IsNullOrWhiteSpace(repositoryRoot))
 {
     Console.Error.WriteLine(
         "Usage: dotnet run eng/resolve-source-provenance.cs -- --repository-root PATH " +
-        "[--source-revision REVISION] [--allow-uncommitted-source-for-development]");
+        "[--source-revision REVISION] [--allow-uncommitted-source-for-development] [--verify-git]");
     return 64;
 }
 
@@ -40,8 +44,12 @@ try
     var source = await RepositorySourceProvenanceResolver.ResolveAsync(
         repositoryRoot,
         requestedRevision,
-        allowUncommittedSourceForDevelopment);
+        allowUncommittedSourceForDevelopment,
+        verifyGit
+            ? new GitRepositorySourceInspector(allowFallback: false)
+            : new ContentRepositorySourceInspector());
     Console.WriteLine($"SHARPLABNEXT_SOURCE_REVISION={source.Revision}");
+    Console.WriteLine($"SHARPLABNEXT_SOURCE_VERIFIED={(source.IsVerified ? "true" : "false")}");
     return 0;
 }
 catch (BundleValidationException exception)

@@ -14,6 +14,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
+$useContentSourceIdentity = [string]::IsNullOrWhiteSpace($SigningKey)
+$previousSourceIdentityMode = [Environment]::GetEnvironmentVariable("SHARPLABNEXT_SOURCE_IDENTITY_MODE")
 $lockPath = Join-Path $repositoryRoot "profiles/lock.json"
 $releaseId = [string](& dotnet run (Join-Path $repositoryRoot "eng/read-release-id.cs") -- $lockPath | Select-Object -Last 1)
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($releaseId)) {
@@ -39,6 +41,12 @@ if (($AllowUncommittedSourceForDevelopment -or $AllowDevelopmentImageInputs) -an
 
 Push-Location $repositoryRoot
 try {
+    if ($useContentSourceIdentity) {
+        $env:SHARPLABNEXT_SOURCE_IDENTITY_MODE = "content"
+    }
+    else {
+        Remove-Item Env:SHARPLABNEXT_SOURCE_IDENTITY_MODE -ErrorAction SilentlyContinue
+    }
     $sourceArguments = @(
         "run", "eng/resolve-source-provenance.cs", "--",
         "--repository-root", $repositoryRoot
@@ -48,6 +56,9 @@ try {
     }
     if ($AllowUncommittedSourceForDevelopment) {
         $sourceArguments += "--allow-uncommitted-source-for-development"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($SigningKey)) {
+        $sourceArguments += "--verify-git"
     }
     $sourceOutput = @(& dotnet @sourceArguments)
     if ($LASTEXITCODE -ne 0) { throw "Source provenance validation failed." }
@@ -86,6 +97,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "SharpLabNext.BundleBuilder failed." }
 }
 finally {
+    if ($null -eq $previousSourceIdentityMode) {
+        Remove-Item Env:SHARPLABNEXT_SOURCE_IDENTITY_MODE -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:SHARPLABNEXT_SOURCE_IDENTITY_MODE = $previousSourceIdentityMode
+    }
     Pop-Location
 }
 

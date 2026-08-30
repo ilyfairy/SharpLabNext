@@ -53,12 +53,20 @@ if [[ -n "$signing_key" ]] &&
   echo "Development source or image inputs cannot be used for a signed bundle" >&2
   exit 64
 fi
+if [[ -z "$signing_key" ]]; then
+  export SHARPLABNEXT_SOURCE_IDENTITY_MODE=content
+else
+  unset SHARPLABNEXT_SOURCE_IDENTITY_MODE || true
+fi
 
 cd "$repository_root"
 source_arguments=(run "$repository_root/eng/resolve-source-provenance.cs" -- --repository-root "$repository_root")
 if [[ -n "$source_revision" ]]; then source_arguments+=(--source-revision "$source_revision"); fi
 if [[ "$allow_uncommitted_source_for_development" == true ]]; then
   source_arguments+=(--allow-uncommitted-source-for-development)
+fi
+if [[ -n "$signing_key" ]]; then
+  source_arguments+=(--verify-git)
 fi
 source_revision="$(dotnet "${source_arguments[@]}" | sed -n 's/^SHARPLABNEXT_SOURCE_REVISION=//p' | tail -n 1)"
 if [[ -z "$source_revision" ]]; then

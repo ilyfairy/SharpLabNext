@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -83,6 +84,29 @@ test('repository prerequisites require expanded Git LFS bytes', async t => {
     validateRepositoryFiles(root, manifest.value.repositoryFiles),
     /unexpanded Git LFS pointer/,
   )
+})
+
+test('content identity validates repository bytes without Git metadata', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-content-prerequisite-'))
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  const { manifest } = writeFixture(root)
+  const installer = path.join(root, 'eng', 'prerequisites', 'jsharp', 'installer.exe')
+  fs.mkdirSync(path.dirname(installer), { recursive: true })
+  const bytes = Buffer.from([0])
+  fs.writeFileSync(installer, bytes)
+  const item = manifest.value.repositoryFiles[0]
+  item.sizeBytes = bytes.length
+  item.sha256 = crypto.createHash('sha256').update(bytes).digest('hex')
+
+  const previous = process.env.SHARPLABNEXT_SOURCE_IDENTITY_MODE
+  process.env.SHARPLABNEXT_SOURCE_IDENTITY_MODE = 'content'
+  try {
+    const files = await validateRepositoryFiles(root, manifest.value.repositoryFiles)
+    assert.equal(files['jsharp-installer'], installer)
+  } finally {
+    if (previous === undefined) delete process.env.SHARPLABNEXT_SOURCE_IDENTITY_MODE
+    else process.env.SHARPLABNEXT_SOURCE_IDENTITY_MODE = previous
+  }
 })
 
 test('prerequisite manifest requires the pinned local registry image ID', t => {

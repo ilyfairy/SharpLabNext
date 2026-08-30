@@ -1931,6 +1931,7 @@ export function runCandidateBuild(
         cwd: effectiveRepositoryRoot,
         env: dockerEnvironment,
         allowedDirtyPaths,
+        fallbackRevision: values.SOURCE_REVISION,
       })
       sourceBinding = validateGitSourceState(sourceState, values.SOURCE_REVISION, {
         allowUncommittedSourceForDevelopment,
@@ -2147,6 +2148,7 @@ export function runCandidateBuild(
         cwd: effectiveRepositoryRoot,
         env: dockerEnvironment,
         allowedDirtyPaths,
+        fallbackRevision: values.SOURCE_REVISION,
       })
       let after = validateGitSourceState(sourceState, values.SOURCE_REVISION, {
         allowUncommittedSourceForDevelopment,

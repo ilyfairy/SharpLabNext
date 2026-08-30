@@ -22,6 +22,9 @@ const string developmentGrantEnvironmentVariable =
     "SHARPLABNEXT_BAKE_ALLOW_UNCOMMITTED_SOURCE_FOR_DEVELOPMENT";
 const string developmentImageInputsGrantEnvironmentVariable =
     "SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS";
+const string sourceIdentityModeEnvironmentVariable =
+    "SHARPLABNEXT_SOURCE_IDENTITY_MODE";
+const string contentSourceIdentityMode = "content";
 const string environmentJsonPrefix = "SHARPLABNEXT_BAKE_ENVIRONMENT_JSON=";
 var imagePrefix = "sharplabnext";
 var developmentImageInputs = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -72,6 +75,17 @@ for (var index = 0; index < args.Length; index++)
     }
 }
 
+// Content-addressed builds are ordinary local builds by definition. Keep the
+// low-level wrapper consistent with the top-level entry point even when it is
+// invoked directly without the legacy development switch.
+if (string.Equals(
+        Environment.GetEnvironmentVariable(sourceIdentityModeEnvironmentVariable),
+        contentSourceIdentityMode,
+        StringComparison.OrdinalIgnoreCase))
+{
+    allowUncommittedSourceForDevelopment = true;
+}
+
 if (string.IsNullOrWhiteSpace(lockPath) ||
     string.IsNullOrWhiteSpace(baseImageManifestPath) ||
     string.IsNullOrWhiteSpace(sourceRevision) ||
@@ -105,7 +119,10 @@ if (emitEnvironmentJson && command.Count > 0)
 
 try
 {
-    await VerifyILSenseInputsAsync(repositoryRoot, lockPath);
+    await VerifyILSenseInputsAsync(
+        repositoryRoot,
+        lockPath,
+        allowUncommittedSourceForDevelopment);
     var sourceDateEpoch = await SourceDateEpochResolver.ResolveAsync(
         repositoryRoot,
         sourceRevision,
@@ -149,6 +166,13 @@ try
         startInfo.Environment[pair.Key] = pair.Value;
     startInfo.Environment.Remove(developmentGrantEnvironmentVariable);
     startInfo.Environment.Remove(developmentImageInputsGrantEnvironmentVariable);
+    if (string.Equals(
+            Environment.GetEnvironmentVariable(sourceIdentityModeEnvironmentVariable),
+            contentSourceIdentityMode,
+            StringComparison.OrdinalIgnoreCase))
+    {
+        startInfo.Environment[sourceIdentityModeEnvironmentVariable] = contentSourceIdentityMode;
+    }
     if (allowUncommittedSourceForDevelopment)
         startInfo.Environment[developmentGrantEnvironmentVariable] = "true";
     if (allowDevelopmentImageInputs)
@@ -186,7 +210,10 @@ static async Task<string> ReadControlRuntimeTargetFrameworkAsync(string path)
     return targetFramework.GetString()!;
 }
 
-static async Task VerifyILSenseInputsAsync(string repositoryRoot, string releaseLockPath)
+static async Task VerifyILSenseInputsAsync(
+    string repositoryRoot,
+    string releaseLockPath,
+    bool allowMissingGit)
 {
     var dotnet = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
     var verifier = Path.Combine(repositoryRoot, "eng", "verify-ilsense-inputs.cs");
@@ -196,12 +223,15 @@ static async Task VerifyILSenseInputsAsync(string repositoryRoot, string release
         WorkingDirectory = repositoryRoot,
         UseShellExecute = false
     };
-    foreach (var argument in new[]
+    var verifierArguments = new List<string>
     {
         "run", verifier, "--",
         "--repository-root", repositoryRoot,
         "--lock", releaseLockPath
-    })
+    };
+    if (allowMissingGit)
+        verifierArguments.Add("--allow-missing-git");
+    foreach (var argument in verifierArguments)
     {
         startInfo.ArgumentList.Add(argument);
     }

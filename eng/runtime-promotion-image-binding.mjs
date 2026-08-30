@@ -16,6 +16,8 @@ import path from 'node:path'
 const imageIdPattern = /^sha256:[0-9a-f]{64}$/
 const pinnedReferencePattern = /^[^@\s]+@sha256:[0-9a-f]{64}$/
 const gitCommitPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE'
+const contentSourceIdentityMode = 'content'
 const containerIdPattern = /^[0-9a-f]{12,64}$/
 const trustedHelperRoot = '/opt/sharplabnext/'
 
@@ -281,26 +283,41 @@ export function inspectGitSourceState(options = {}) {
     cwd = process.cwd(),
     env = process.env,
     allowedDirtyPaths = [],
+    fallbackRevision,
   } = options
-  const revision = runChecked(
-    spawn,
-    'git',
-    ['rev-parse', '--verify', 'HEAD'],
-    { cwd, env },
-    'Could not resolve Git HEAD',
-  )
-  const status = runChecked(
-    spawn,
-    'git',
-    ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
-    { cwd, env },
-    'Could not inspect Git worktree state',
-  )
-  const allowed = new Set(allowedDirtyPaths)
-  return Object.freeze({
-    headRevision: String(revision.stdout).trim(),
-    isDirty: gitStatusHasUnexpectedPaths(String(status.stdout), allowed),
-  })
+  if (String(env?.[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() ===
+      contentSourceIdentityMode && gitCommitPattern.test(fallbackRevision ?? '')) {
+    return Object.freeze({ headRevision: fallbackRevision, isDirty: true })
+  }
+  try {
+    const revision = runChecked(
+      spawn,
+      'git',
+      ['rev-parse', '--verify', 'HEAD'],
+      { cwd, env },
+      'Could not resolve Git HEAD',
+    )
+    const status = runChecked(
+      spawn,
+      'git',
+      ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
+      { cwd, env },
+      'Could not inspect Git worktree state',
+    )
+    const allowed = new Set(allowedDirtyPaths)
+    return Object.freeze({
+      headRevision: String(revision.stdout).trim(),
+      isDirty: gitStatusHasUnexpectedPaths(String(status.stdout), allowed),
+    })
+  } catch (error) {
+    // Ordinary local builds may be run from an exported source tree. The
+    // caller supplies the content-derived revision, so treat that tree as
+    // unverified development input while keeping promotion callers strict.
+    if (gitCommitPattern.test(fallbackRevision ?? '')) {
+      return Object.freeze({ headRevision: fallbackRevision, isDirty: true })
+    }
+    throw error
+  }
 }
 
 function gitStatusHasUnexpectedPaths(stdout, allowedPaths) {

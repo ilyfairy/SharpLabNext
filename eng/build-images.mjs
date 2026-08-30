@@ -25,6 +25,8 @@ import {
 
 const defaultRepositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const sourceRevisionPattern = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/
+const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE'
+const contentSourceIdentityMode = 'content'
 const imageIdPattern = /^sha256:[0-9a-f]{64}$/
 const digestReferencePattern = /^[^@\s]+@sha256:[0-9a-f]{64}$/
 const developmentInputsLabel = 'io.sharplabnext.development-image-inputs'
@@ -48,6 +50,52 @@ const jsharpBuildTargets = new Set([
   'runtime-wine-jsharp20', 'worker-jsharp', 'worker-artifacts-default',
 ])
 const cppcliBuildTargets = new Set(['runtime-wine-netfx48', 'worker-cppcli'])
+
+// These targets can be built as ordinary local images without first
+// materializing the private Wine/Framework operator graph.  The full release
+// path still handles the remaining targets and runtime candidates through the
+// complete image plan.
+const ordinaryBakeTargetImageNames = Object.freeze({
+  gateway: 'gateway',
+  'artifact-store': 'artifact-store',
+  'runtime-supervisor': 'runtime-supervisor',
+  'runtime-dotnet10': 'runtime-dotnet10',
+  'runtime-dotnet11': 'runtime-dotnet11',
+  'worker-roslyn-stable': 'worker-roslyn-stable',
+  'worker-roslyn-netfx48': 'worker-roslyn-netfx48',
+  'worker-roslyn-main': 'worker-roslyn-main',
+  'worker-fsharp': 'worker-fsharp',
+  'worker-gsharp': 'worker-gsharp',
+  'worker-peachpie': 'worker-peachpie',
+  'worker-il': 'worker-il',
+  'worker-minilang': 'worker-minilang',
+  'worker-artifacts-jsil': 'worker-artifacts-jsil',
+  'worker-artifacts-il-assembler': 'worker-artifacts-il-assembler',
+})
+
+const ordinaryBakeTargetAliases = Object.freeze({
+  'dotnet-10-linux-x64': 'runtime-dotnet10',
+  'dotnet-11-preview-linux-x64': 'runtime-dotnet11',
+})
+
+export function resolveOrdinaryBakeTarget(value) {
+  const requested = String(value ?? '').trim()
+  const target = Object.hasOwn(ordinaryBakeTargetAliases, requested)
+    ? ordinaryBakeTargetAliases[requested]
+    : requested
+  const imageName = Object.hasOwn(ordinaryBakeTargetImageNames, target)
+    ? ordinaryBakeTargetImageNames[target]
+    : undefined
+  if (typeof imageName !== 'string') {
+    const supported = Object.keys(ordinaryBakeTargetImageNames).sort().join(', ')
+    fail(
+      `Target '${requested}' is not a standalone ordinary image target. ` +
+      `Supported targets: ${supported}. ` +
+      'Use --all for the complete operator and runtime image graph.',
+    )
+  }
+  return Object.freeze({ bakeTarget: target, imageName })
+}
 
 // These are external build capabilities, not language-specific cache paths.
 // A target asks for a capability; the dependency closure below supplies the
@@ -173,7 +221,7 @@ export function validateLocalImageBuildDriverInspection(inspection) {
   const driver = /^Driver:\s*(\S+)\s*$/m.exec(inspection)?.[1]
   if (driver !== 'docker') {
     fail(
-      `The complete development build requires the Docker Buildx driver so it can ` +
+      `The local image build requires the Docker Buildx driver so it can ` +
       `consume source-built operator images from the host image store; ` +
       `observed '${driver ?? '<unknown>'}'. ` +
       'Select the Docker default builder and retry.',
@@ -301,9 +349,28 @@ function resolveBuildCacheInputDigest(options) {
   try {
     return computeBuildCacheInputFingerprintSync(options.repositoryRoot)
   } catch (error) {
+    // Exported source trees have no Git diff to fingerprint. The resolved
+    // content identity still gives the cache state a stable source key.
+    if (sourceRevisionPattern.test(options.resolvedSourceRevision ?? '')) {
+      return `sha256:${options.resolvedSourceRevision}`
+    }
     console.warn(`Build cache input fingerprint unavailable; using image labels only: ${error.message}`)
     return undefined
   }
+}
+
+export function applySourceVerificationMarker(options, output) {
+  const verified = String(output).split(/\r?\n/)
+    .filter(line => line.startsWith('SHARPLABNEXT_SOURCE_VERIFIED='))
+    .at(-1)?.slice('SHARPLABNEXT_SOURCE_VERIFIED='.length)
+  if (verified !== undefined && verified !== 'true' && verified !== 'false') {
+    fail('Source provenance resolver returned an invalid verification marker')
+  }
+  // The marker is authoritative for the internal source binding. Ordinary
+  // builds intentionally use the development context for every source tree;
+  // the legacy command-line switch remains accepted by lower-level tools.
+  if (verified !== undefined) options.allowUncommittedSourceForDevelopment = verified !== 'true'
+  return verified
 }
 
 function resolveSourceRevision(options) {
@@ -312,12 +379,12 @@ function resolveSourceRevision(options) {
     '--repository-root', options.repositoryRoot,
   ]
   if (options.sourceRevision !== undefined) arguments_.push('--source-revision', options.sourceRevision)
-  if (options.allowUncommittedSourceForDevelopment) arguments_.push('--allow-uncommitted-source-for-development')
   const output = run('dotnet', arguments_, { cwd: options.repositoryRoot, capture: true })
   const revision = output.split(/\r?\n/)
     .filter(line => line.startsWith('SHARPLABNEXT_SOURCE_REVISION='))
     .at(-1)?.slice('SHARPLABNEXT_SOURCE_REVISION='.length)
   if (!sourceRevisionPattern.test(revision ?? '')) fail('Source provenance resolver did not return a full revision')
+  applySourceVerificationMarker(options, output)
   return revision
 }
 
@@ -436,6 +503,9 @@ export function createBakeChildEnvironment(
   operatorImages = undefined,
 ) {
   const environment = { ...parentEnvironment, ...snapshot }
+  if (options.sourceIdentityMode === contentSourceIdentityMode) {
+    environment[sourceIdentityModeEnvironmentVariable] = contentSourceIdentityMode
+  }
   for (const name of Object.keys(environment)) {
     const normalized = name.toUpperCase()
     if (normalized === developmentSourceGrant || normalized === developmentImageInputsGrant) {
@@ -1278,6 +1348,66 @@ function buildBakeTargets(options, sourceRevision, operatorImages, targets, envi
   ], environmentSnapshot)
 }
 
+function ordinaryImageExpectedLabels(sourceRevision, releaseId) {
+  return {
+    [versionLabel]: releaseId,
+    [sourceRevisionLabel]: sourceRevision,
+    [developmentInputsLabel]: 'true',
+  }
+}
+
+async function runOrdinaryImageBuild(options, sourceRevision, output) {
+  const target = resolveOrdinaryBakeTarget(options.target)
+  // Resolve the same lock/base-image environment used by Bake, but do not
+  // create a release plan or start any prerequisite/operator orchestration.
+  const environmentSnapshot = resolveBakeEnvironmentSnapshot(
+    options,
+    sourceRevision,
+    undefined,
+  )
+  const releaseId = environmentSnapshot.RELEASE_ID
+  if (typeof releaseId !== 'string' || releaseId.length === 0) {
+    fail('Bake environment did not provide a release id for the ordinary image')
+  }
+  options.releaseId = releaseId
+  const reference = `${options.imagePrefix}/${target.imageName}:${releaseId}`
+  const expectedLabels = ordinaryImageExpectedLabels(sourceRevision, releaseId)
+  output.log(`Ordinary image target: ${target.bakeTarget} -> ${reference}`)
+  output.log(`Source identity: ${sourceRevision}`)
+
+  if (options.planOnly) return 0
+
+  const cached = tryReuseLocalImage(
+    reference,
+    expectedLabels,
+    options.repositoryRoot,
+    options.reuseExisting,
+  )
+  if (options.cacheProbe) {
+    output.log(`${imageCacheProbePrefix}${cached === undefined ? 'miss' : 'hit'}`)
+    return 0
+  }
+  if (cached !== undefined) {
+    output.log(`Ordinary image already present: ${reference} (${cached.Id})`)
+    return 0
+  }
+
+  runWithRetry('dotnet', [
+    'run', path.join(options.repositoryRoot, 'eng', 'verify-buildkit.cs'),
+  ], { cwd: options.repositoryRoot })
+  buildBakeTargets(
+    options,
+    sourceRevision,
+    undefined,
+    [target.bakeTarget],
+    environmentSnapshot,
+  )
+  const image = inspectImage(reference, options.repositoryRoot)
+  validateImageInspection(image, reference, expectedLabels, 'Built ordinary image')
+  output.log(`Built ordinary image: ${reference} (${image.Id})`)
+  return 0
+}
+
 export async function buildRuntimeCandidates(
   options,
   sourceRevision,
@@ -1431,6 +1561,9 @@ function parseArguments(argv) {
     planOnly: false,
     cacheProbe: false,
     reuseExisting: true,
+    target: 'gateway',
+    all: false,
+    targetSpecified: false,
   }
   for (let index = 0; index < argv.length; index++) {
     const argument = argv[index]
@@ -1440,39 +1573,58 @@ function parseArguments(argv) {
     if (argument === '--plan-only') { result.planOnly = true; continue }
     if (argument === '--cache-probe') { result.cacheProbe = true; continue }
     if (argument === '--no-reuse-existing') { result.reuseExisting = false; continue }
+    if (argument === '--all') {
+      if (result.targetSpecified) fail('--target and --all cannot be used together')
+      result.all = true
+      result.target = undefined
+      continue
+    }
     if (argument === '--help' || argument === '-h') return { help: true }
     const field = {
       '--repository-root': 'repositoryRoot',
       '--image-prefix': 'imagePrefix',
       '--source-revision': 'sourceRevision',
       '--max-parallel': 'maximumParallel',
+      '--target': 'target',
     }[argument]
     if (field === undefined) fail(`Unknown build-images argument '${argument}'`)
     const value = argv[++index]
     if (value === undefined || value.length === 0) fail(`${argument} requires a value`)
     result[field] = field === 'maximumParallel' ? Number(value) : value
+    if (field === 'target') result.targetSpecified = true
   }
   result.repositoryRoot = path.resolve(result.repositoryRoot)
   if (!fs.existsSync(path.join(result.repositoryRoot, 'SharpLabNext.slnx'))) fail('Repository root does not contain SharpLabNext.slnx')
   if (!/^[a-z0-9][a-z0-9._/-]{0,255}$/.test(result.imagePrefix) || result.imagePrefix.endsWith('/')) fail('--image-prefix is invalid')
-  if (result.sourceRevision !== undefined && !sourceRevisionPattern.test(result.sourceRevision)) fail('--source-revision must be a full Git revision')
+  if (result.sourceRevision !== undefined && !sourceRevisionPattern.test(result.sourceRevision)) fail('--source-revision must be a 40- or 64-character source identity')
   if (!Number.isSafeInteger(result.maximumParallel) || result.maximumParallel < 1 || result.maximumParallel > 8) fail('--max-parallel must be an integer from 1 through 8')
+  if (result.targetSpecified && result.all) fail('--target and --all cannot be used together')
+  delete result.targetSpecified
   return result
 }
 
 function usage() {
   return `Usage: node eng/build-images.mjs [--repository-root PATH] [--image-prefix PREFIX]\n` +
     `  [--source-revision COMMIT] [--max-parallel 1..8] [--offline]\n` +
-    `  [--allow-uncommitted-source-for-development] [--plan-only] [--cache-probe]\n` +
-    `  [--no-reuse-existing]\n` +
-    `  --accept-microsoft-licenses`
+    `  [--target TARGET | --all] [--allow-uncommitted-source-for-development]\n` +
+    `  [--plan-only] [--cache-probe] [--no-reuse-existing]\n` +
+    `  [--accept-microsoft-licenses]\n` +
+    `  (default target: gateway; --all selects the complete image graph)`
 }
 
 export async function runBuildImages(argv, output = console) {
+  const previousSourceIdentityMode = process.env[sourceIdentityModeEnvironmentVariable]
   try {
     const options = parseArguments(argv)
     if (options.help) { output.log(usage()); return 0 }
+    // The ordinary image entry point is content-addressed and does not need Git.
+    options.sourceIdentityMode = contentSourceIdentityMode
+    process.env[sourceIdentityModeEnvironmentVariable] = contentSourceIdentityMode
     const sourceRevision = resolveSourceRevision(options)
+    options.resolvedSourceRevision = sourceRevision
+    if (options.target !== undefined) {
+      return await runOrdinaryImageBuild(options, sourceRevision, output)
+    }
     const imagePlan = generateImagePlan(options, sourceRevision)
     options.releaseId = imagePlan.plan.releaseId
     const sourceInputDigest = resolveBuildCacheInputDigest(options)
@@ -1644,6 +1796,12 @@ export async function runBuildImages(argv, output = console) {
   } catch (error) {
     output.error(`Build images failed: ${error.message}`)
     return error instanceof BuildImagesError ? 1 : 1
+  } finally {
+    if (previousSourceIdentityMode === undefined) {
+      delete process.env[sourceIdentityModeEnvironmentVariable]
+    } else {
+      process.env[sourceIdentityModeEnvironmentVariable] = previousSourceIdentityMode
+    }
   }
 }
 

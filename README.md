@@ -138,15 +138,9 @@ The repository uses the system .NET SDK, Node.js, and npm for host commands.
 Versions inside Dockerfiles are reproducible image-build inputs, not additional
 host installations.
 
-Clone with `--recurse-submodules`. For an existing checkout, initialize the
-audited ILSense source at the exact gitlink before restoring or building:
-
-```powershell
-git submodule update --init --recursive
-```
-
-Build and release automation consumes only the pinned `third_party/ILSense`
-submodule and ignores sibling or floating checkouts.
+The build only needs the pinned `third_party/ILSense` source files to be
+present. How those files were obtained is outside the build; no Git metadata,
+repository status, or submodule command is read by the ordinary entry points.
 
 ## Quick Start
 
@@ -155,9 +149,20 @@ Build and packaging entry points have separate responsibilities:
 | Entry point | Responsibility |
 | --- | --- |
 | `eng/build.ps1` / `eng/build.sh` | Restore and build the host backend/frontend and run static contract checks. It does not build Docker images. |
-| `eng/build-images.ps1` / `eng/build-images.sh` | Generate and validate the Catalog image plan, then build every planned image. BuildKit reuses unchanged layers and download caches. |
+| `eng/build-images.ps1` / `eng/build-images.sh` | Build one ordinary local Docker image by default; no Git metadata, environment switch, or bundle step is required. Pass `-All`/`--all` only for the complete image graph. |
 | `eng/bundle.ps1` / `eng/bundle.sh` | Validate and package an already-complete image set. It performs no restore or image build and fails on missing or mismatched images. |
 | `eng/release.ps1` / `eng/release.sh` | Complete entry point: preflight output and static contracts, build and validate every planned image, then create the offline bundle only after all images pass. |
+
+For a normal local image, run one command:
+
+```powershell
+.\eng\build-images.ps1
+```
+
+The image is loaded into the local Docker store as
+`sharplabnext/gateway:development`. Pass `-Target <name>` for another
+standalone Bake target. Use `-All` or `release.ps1` only for the complete
+release graph.
 
 The complete stack also requires licensed Microsoft prerequisites. Two exact
 binaries whose original download path is not a reliable clean-build input are
@@ -168,13 +173,10 @@ versioned through Git LFS:
 - `Visual J# 2.0 Second Edition x64`:
   `eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe`
 
-A normal LFS-aware clone hydrates them automatically; repair a pointer-only
-checkout with:
-
-```powershell
-git lfs install
-git lfs pull --include="eng/prerequisites/dotnet-framework-2.0/NetFx64.exe,eng/prerequisites/visual-jsharp-2.0-se-x64/vjredist64.exe"
-```
+The build only requires the expanded bytes of these files. They may be supplied
+by any controlled artifact mechanism; Git and Git LFS are not build
+requirements. A pointer-only file is rejected by the preparation step with its
+expected size and SHA-256.
 
 The manifest and preparation tools require each exact size and SHA-256 before
 Docker starts. Each file enters only its private BuildKit context; neither is
@@ -185,7 +187,7 @@ Framework payloads continue through the locked Winetricks/Microsoft download
 paths.
 
 The locked .NET Framework 3.5 SP1, 4.5.1, and 4.7 installers are downloaded
-from Microsoft HTTPS origins into the Git-ignored
+from Microsoft HTTPS origins into the ignored
 `artifacts/prerequisites/downloads` cache and checked by size and SHA-256. They
 are never started on the Windows host and do not modify its registry or system
 directories. They enter BuildKit as private inputs and run silently only
@@ -207,10 +209,10 @@ The build does not export these seeds through an additional `docker image save`
 archive. Every invocation submits the same locked build graph to BuildKit;
 Docker reuses unchanged layers and naturally invalidates them when the build
 input identity changes. Reinstalling Docker or clearing every image rebuilds
-the seeds from Git LFS and the verified download inputs without requiring a
+the seeds from the supplied and verified input bytes without requiring a
 pre-generated image TAR.
 
-J# is rebuilt from its repository LFS object and the CLR2 seed. C++/CLI is
+J# is rebuilt from its supplied installer bytes and the CLR2 seed. C++/CLI is
 rebuilt from the locked `msvc-wine` revision, Visual Studio 18.8 manifest and
 .NET Framework 4.8 Developer Pack. The source archives and Microsoft inputs are
 downloaded as size/SHA-256-verified bytes under the ignored prerequisite cache;
@@ -237,8 +239,15 @@ images produced through the independent operator-receipt and promotion flows,
 followed by packaging with `bundle.ps1`; the development grant does not relax
 that boundary.
 
-For intentional uncommitted changes, use the development override. Such a
-bundle records its development inputs and cannot be signed or promoted:
+The ordinary build entry points resolve source identity from the source files
+themselves. They do not read Git metadata or worktree status, and an exported
+tree without `.git` builds the same way as a checkout. The resulting local
+images are ordinary development images and unsigned bundles. Formal signing
+and promotion are separate operations that may require independently
+verifiable Git provenance.
+
+The old development switch remains accepted for compatibility with existing
+automation:
 
 ```powershell
 .\eng\release.ps1 `
@@ -255,7 +264,7 @@ immutable and never overwritten, so use a new explicit path for another run:
   -OutputDirectory D:\Bundles\SharpLabNext-20260824
 ```
 
-Use `build-images.ps1` to rebuild only images or `bundle.ps1` to package an
+Use `build-images.ps1` to rebuild ordinary images or `bundle.ps1` to package an
 existing image set. A normal `release.ps1`/`release.sh` run first reuses every
 matching local image and lets BuildKit rebuild only changed inputs; a bundle
 failure therefore does not normally trigger a full rebuild. `-BundleOnly` (or

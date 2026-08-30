@@ -3,7 +3,7 @@ set -euo pipefail
 
 repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 bundle_arguments=(--allow-development-image-inputs)
-build_arguments=()
+build_arguments=(--all)
 output_directory=""
 accept_microsoft_licenses=false
 rebuild_images=false

@@ -322,6 +322,7 @@ export function runWineCoreClrOperatorBuild(
         cwd: effectiveRepositoryRoot,
         env: dockerEnvironment,
         allowedDirtyPaths: testHooks.allowedDirtyPaths ?? [],
+        fallbackRevision: values.SOURCE_REVISION,
       })
       binding = validateGitSourceState(before, values.SOURCE_REVISION, {
         allowUncommittedSourceForDevelopment,
@@ -400,6 +401,7 @@ export function runWineCoreClrOperatorBuild(
         cwd: effectiveRepositoryRoot,
         env: dockerEnvironment,
         allowedDirtyPaths: testHooks.allowedDirtyPaths ?? [],
+        fallbackRevision: values.SOURCE_REVISION,
       }), values.SOURCE_REVISION, { allowUncommittedSourceForDevelopment })
       if (allowDevelopmentImageInputs) {
         after = { ...after, promotionEligible: false }

@@ -54,6 +54,9 @@ public sealed class GitSourceDateEpochReader : ISourceDateEpochReader
 public static class SourceDateEpochResolver
 {
     public const string DevelopmentFallbackUnixSeconds = "0";
+    private const string SourceIdentityModeEnvironmentVariable =
+        "SHARPLABNEXT_SOURCE_IDENTITY_MODE";
+    private const string ContentSourceIdentityMode = "content";
 
     public static async Task<string> ResolveAsync(
         string repositoryRoot,
@@ -64,7 +67,17 @@ public static class SourceDateEpochResolver
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceRevision);
+        var useDefaultReader = reader is null;
         reader ??= new GitSourceDateEpochReader();
+
+        if (useDefaultReader &&
+            string.Equals(
+                Environment.GetEnvironmentVariable(SourceIdentityModeEnvironmentVariable),
+                ContentSourceIdentityMode,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return DevelopmentFallbackUnixSeconds;
+        }
 
         var revision = allowUncommittedSourceForDevelopment ? "HEAD" : sourceRevision;
         var epoch = await reader.ReadAsync(repositoryRoot, revision, cancellationToken);

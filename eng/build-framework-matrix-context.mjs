@@ -28,6 +28,8 @@ const installerManifestPath = path.join(
   'runtime-framework-installers.json',
 )
 const matrixStrategy = 'shared-framework-prefix-input-v1'
+const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE'
+const contentSourceIdentityMode = 'content'
 const maximumMetadataBytes = 1024 * 1024
 const maximumMetadataImageBytes = 16 * 1024 * 1024
 const metadataContentKind = 'metadata-only-v1'
@@ -310,14 +312,29 @@ export function createContextBuildArguments(values, buildRoot, dockerfilePath, m
   return args
 }
 
-function inspectGitSource(spawn = spawnSync) {
-  const revision = spawn('git', ['rev-parse', '--verify', 'HEAD'], { cwd: repositoryRoot, encoding: 'utf8', shell: false })
-  if (revision.error !== undefined || revision.status !== 0) fail('could not resolve Git HEAD')
-  const headRevision = String(revision.stdout ?? '').trim()
-  if (!isGitCommitIdentity(headRevision)) fail('Git HEAD is not a full commit identity')
-  const status = spawn('git', ['status', '--porcelain=v1', '--untracked-files=normal'], { cwd: repositoryRoot, encoding: 'utf8', shell: false })
-  if (status.error !== undefined || status.status !== 0) fail('could not inspect Git source state')
-  return { headRevision, isDirty: String(status.stdout ?? '').length > 0 }
+function inspectGitSource(
+  spawn = spawnSync,
+  fallbackRevision = undefined,
+  environment = process.env,
+) {
+  if (String(environment?.[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() === contentSourceIdentityMode &&
+      isGitCommitIdentity(fallbackRevision)) {
+    return { headRevision: fallbackRevision, isDirty: true }
+  }
+  try {
+    const revision = spawn('git', ['rev-parse', '--verify', 'HEAD'], { cwd: repositoryRoot, encoding: 'utf8', shell: false })
+    if (revision.error !== undefined || revision.status !== 0) fail('could not resolve Git HEAD')
+    const headRevision = String(revision.stdout ?? '').trim()
+    if (!isGitCommitIdentity(headRevision)) fail('Git HEAD is not a full commit identity')
+    const status = spawn('git', ['status', '--porcelain=v1', '--untracked-files=normal'], { cwd: repositoryRoot, encoding: 'utf8', shell: false })
+    if (status.error !== undefined || status.status !== 0) fail('could not inspect Git source state')
+    return { headRevision, isDirty: String(status.stdout ?? '').length > 0 }
+  } catch (error) {
+    if (isGitCommitIdentity(fallbackRevision)) {
+      return { headRevision: fallbackRevision, isDirty: true }
+    }
+    throw error
+  }
 }
 
 function copyMetadata(spawn, containerId, source, destination) {
@@ -392,13 +409,17 @@ export function runContextBuild(argv, environment = process.env, spawn = spawnSy
   let values
   try { values = { ...environment, ...parseArguments(argv) } } catch (error) { output.error(`framework context input error: ${error.message}`); return 64 }
   if (values.help) { output.log(usage()); return 0 }
+  if (String(values[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() ===
+      contentSourceIdentityMode) {
+    values.allowDirty = true
+  }
   let document
   try { document = readMatrixInput(values.MATRIX_INPUT) } catch (error) { output.error(`framework context input error: ${error.message}`); return 1 }
   values.MATRIX_INPUT_SHA256 = matrixInputDigest(document)
   const inputFailures = validateContextInputs(values, document)
   if (inputFailures.length > 0) { inputFailures.forEach(failure => output.error(`framework context input error: ${failure}`)); return 1 }
   let before
-  try { before = inspectGitSource(spawn) } catch (error) { output.error(`framework context source error: ${error.message}`); return 1 }
+  try { before = inspectGitSource(spawn, values.SOURCE_REVISION, values) } catch (error) { output.error(`framework context source error: ${error.message}`); return 1 }
   if (values.SOURCE_REVISION !== 'development' && values.SOURCE_REVISION !== before.headRevision) { output.error('framework context source error: SOURCE_REVISION does not match Git HEAD'); return 1 }
   if (before.isDirty && !values.allowDirty) { output.error('framework context source error: worktree is dirty; use the explicit development override'); return 1 }
   if (values.push && before.isDirty) { output.error('framework context source error: --push requires a clean worktree'); return 1 }
@@ -431,7 +452,7 @@ export function runContextBuild(argv, environment = process.env, spawn = spawnSy
     const metadataFile = metadataRoot === undefined ? undefined : path.join(metadataRoot, 'build-metadata.json')
     const build = spawn('docker', createContextBuildArguments(values, root, dockerfilePath, metadataFile), { cwd: repositoryRoot, encoding: 'utf8', shell: false, stdio: 'inherit' })
     if (build.error !== undefined || build.status !== 0) { output.error(`framework context Docker build failed with exit code ${build.status ?? 1}`); return 1 }
-    const after = inspectGitSource(spawn)
+    const after = inspectGitSource(spawn, values.SOURCE_REVISION, values)
     if (after.headRevision !== before.headRevision || after.isDirty !== before.isDirty || (values.push && after.isDirty)) { output.error('framework context source error: Git source changed during the build'); return 1 }
     let reference = values.IMAGE
     let pushedDigest

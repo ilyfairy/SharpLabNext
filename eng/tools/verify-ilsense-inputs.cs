@@ -28,41 +28,54 @@ try
     var repositoryRoot = Path.GetFullPath(options.RepositoryRoot);
     var releaseLockPath = Path.GetFullPath(
         options.ReleaseLockPath ?? Path.Combine(repositoryRoot, "profiles", "lock.json"));
+
+    var contentIdentityMode = string.Equals(
+        Environment.GetEnvironmentVariable("SHARPLABNEXT_SOURCE_IDENTITY_MODE"),
+        "content",
+        StringComparison.OrdinalIgnoreCase);
     var submoduleRoot = Path.Combine(repositoryRoot, SubmodulePath.Replace('/', Path.DirectorySeparatorChar));
     var projectPath = Path.Combine(repositoryRoot, CoreProjectPath.Replace('/', Path.DirectorySeparatorChar));
     var nugetLockPath = Path.Combine(repositoryRoot, NuGetLockPath.Replace('/', Path.DirectorySeparatorChar));
 
-    Require(File.Exists(Path.Combine(repositoryRoot, ".gitmodules")), ".gitmodules is missing.");
     Require(File.Exists(projectPath), "The ILSense Core project is missing; initialize the submodule recursively.");
     Require(File.Exists(nugetLockPath), $"The committed ILSense NuGet lock is missing: {NuGetLockPath}");
 
-    var configuredPaths = await RunGitAsync(
-        repositoryRoot,
-        ["config", "--file", Path.Combine(repositoryRoot, ".gitmodules"), "--get-regexp", "^submodule\\..*\\.path$"]);
-    var configuredPathLines = Lines(configuredPaths);
-    Require(configuredPathLines.Length == 1 && configuredPathLines[0].EndsWith($" {SubmodulePath}", StringComparison.Ordinal),
-        ".gitmodules must declare exactly the approved ILSense submodule path.");
-    var configuredUrl = (await RunGitAsync(
-        repositoryRoot,
-        ["config", "--file", Path.Combine(repositoryRoot, ".gitmodules"), "--get", "submodule.third_party/ILSense.url"])).Trim();
-    Require(string.Equals(configuredUrl, SubmoduleUrl, StringComparison.Ordinal),
-        $"The ILSense submodule URL must be '{SubmoduleUrl}'.");
+    var skipGitProvenance = contentIdentityMode ||
+        (options.AllowMissingGit && !await IsGitWorktreeAsync(repositoryRoot));
+    string? gitlinkCommit = null;
+    string? commitTimestamp = null;
+    if (!skipGitProvenance)
+    {
+        Require(File.Exists(Path.Combine(repositoryRoot, ".gitmodules")), ".gitmodules is missing.");
 
-    var indexEntry = (await RunGitAsync(
-        repositoryRoot,
-        ["ls-files", "--stage", "--", SubmodulePath])).Trim();
-    var indexParts = indexEntry.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
-    Require(indexParts is ["160000", _, "0", SubmodulePath] && IsCommit(indexParts[1]),
-        "The ILSense path must be a stage-0 Git gitlink.");
-    var gitlinkCommit = indexParts[1];
-    var checkoutCommit = (await RunGitAsync(submoduleRoot, ["rev-parse", "HEAD"])).Trim();
-    Require(string.Equals(checkoutCommit, gitlinkCommit, StringComparison.Ordinal),
-        $"The ILSense checkout '{checkoutCommit}' does not match gitlink '{gitlinkCommit}'.");
-    var submoduleStatus = await RunGitAsync(
-        submoduleRoot,
-        ["status", "--porcelain=v1", "--untracked-files=all"]);
-    Require(string.IsNullOrWhiteSpace(submoduleStatus), "The ILSense submodule checkout is dirty.");
-    var commitTimestamp = (await RunGitAsync(submoduleRoot, ["show", "-s", "--format=%ct", "HEAD"])).Trim();
+        var configuredPaths = await RunGitAsync(
+            repositoryRoot,
+            ["config", "--file", Path.Combine(repositoryRoot, ".gitmodules"), "--get-regexp", "^submodule\\..*\\.path$"]);
+        var configuredPathLines = Lines(configuredPaths);
+        Require(configuredPathLines.Length == 1 && configuredPathLines[0].EndsWith($" {SubmodulePath}", StringComparison.Ordinal),
+            ".gitmodules must declare exactly the approved ILSense submodule path.");
+        var configuredUrl = (await RunGitAsync(
+            repositoryRoot,
+            ["config", "--file", Path.Combine(repositoryRoot, ".gitmodules"), "--get", "submodule.third_party/ILSense.url"])).Trim();
+        Require(string.Equals(configuredUrl, SubmoduleUrl, StringComparison.Ordinal),
+            $"The ILSense submodule URL must be '{SubmoduleUrl}'.");
+
+        var indexEntry = (await RunGitAsync(
+            repositoryRoot,
+            ["ls-files", "--stage", "--", SubmodulePath])).Trim();
+        var indexParts = indexEntry.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+        Require(indexParts is ["160000", _, "0", SubmodulePath] && IsCommit(indexParts[1]),
+            "The ILSense path must be a stage-0 Git gitlink.");
+        gitlinkCommit = indexParts[1];
+        var checkoutCommit = (await RunGitAsync(submoduleRoot, ["rev-parse", "HEAD"])).Trim();
+        Require(string.Equals(checkoutCommit, gitlinkCommit, StringComparison.Ordinal),
+            $"The ILSense checkout '{checkoutCommit}' does not match gitlink '{gitlinkCommit}'.");
+        var submoduleStatus = await RunGitAsync(
+            submoduleRoot,
+            ["status", "--porcelain=v1", "--untracked-files=all"]);
+        Require(string.IsNullOrWhiteSpace(submoduleStatus), "The ILSense submodule checkout is dirty.");
+        commitTimestamp = (await RunGitAsync(submoduleRoot, ["show", "-s", "--format=%ct", "HEAD"])).Trim();
+    }
 
     using var releaseLock = JsonDocument.Parse(await File.ReadAllBytesAsync(releaseLockPath));
     var components = RequiredProperty(releaseLock.RootElement, "components");
@@ -72,8 +85,19 @@ try
     Require(RequiredString(runtime, "kind") == "runtime-dependency", "ilsense.kind must be runtime-dependency.");
     Require(RequiredString(source, "kind") == "source", "ilsense-source.kind must be source.");
     Require(version == RequiredString(source, "resolvedVersion"), "ILSense runtime and source versions differ.");
-    Require(gitlinkCommit == RequiredString(runtime, "commit") && gitlinkCommit == RequiredString(source, "commit"),
-        "ILSense lock commits must match the actual gitlink and checkout.");
+    var runtimeCommit = RequiredString(runtime, "commit");
+    var sourceCommit = RequiredString(source, "commit");
+    if (gitlinkCommit is null)
+    {
+        Require(IsCommit(runtimeCommit) && string.Equals(runtimeCommit, sourceCommit, StringComparison.Ordinal),
+            "ILSense runtime and source lock commits must contain one matching source identity.");
+        gitlinkCommit = runtimeCommit;
+    }
+    else
+    {
+        Require(gitlinkCommit == runtimeCommit && gitlinkCommit == sourceCommit,
+            "ILSense lock commits must match the actual gitlink and checkout.");
+    }
     var digest = RequiredString(runtime, "digest");
     Require(IsSha256(digest) && digest == RequiredString(source, "digest"),
         "ILSense runtime and source archive digests must be the same SHA-256 identity.");
@@ -98,9 +122,19 @@ try
         "ILSense provenance compatibilityGroup does not match the locked version.");
     Require(RequiredString(provenanceRoot, "license") == "MIT", "ILSense provenance must declare MIT.");
     var provenanceBuilder = RequiredProperty(provenanceRoot, "builder");
-    Require(long.TryParse(commitTimestamp, NumberStyles.None, CultureInfo.InvariantCulture, out var commitEpoch) &&
-            RequiredProperty(provenanceBuilder, "sourceDateEpoch").GetInt64() == commitEpoch,
-        "ILSense provenance sourceDateEpoch does not match the gitlink commit timestamp.");
+    var sourceDateEpoch = RequiredProperty(provenanceBuilder, "sourceDateEpoch");
+    if (commitTimestamp is not null)
+    {
+        Require(long.TryParse(commitTimestamp, NumberStyles.None, CultureInfo.InvariantCulture, out var commitEpoch) &&
+                sourceDateEpoch.GetInt64() == commitEpoch,
+            "ILSense provenance sourceDateEpoch does not match the gitlink commit timestamp.");
+    }
+    else
+    {
+        Require(sourceDateEpoch.ValueKind == JsonValueKind.Number &&
+                sourceDateEpoch.TryGetInt64(out var epoch) && epoch >= 0,
+            "ILSense provenance sourceDateEpoch must be a non-negative Unix timestamp.");
+    }
     var provenanceBuild = RequiredProperty(provenanceRoot, "build");
     Require(RequiredString(provenanceBuild, "languageServerProject") == CoreProjectPath,
         "ILSense provenance must identify the gitlink Core project.");
@@ -192,6 +226,23 @@ static async Task<string> RunGitAsync(string workingDirectory, IReadOnlyList<str
     return result.Output;
 }
 
+static async Task<bool> IsGitWorktreeAsync(string repositoryRoot)
+{
+    try
+    {
+        var result = await RunProcessAsync(
+            "git",
+            ["-C", repositoryRoot, "rev-parse", "--is-inside-work-tree"],
+            repositoryRoot);
+        return string.Equals(result.Output.Trim(), "true", StringComparison.OrdinalIgnoreCase);
+    }
+    catch (Exception exception) when (
+        exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+    {
+        return false;
+    }
+}
+
 static async Task<ProcessResult> RunProcessAsync(
     string fileName,
     IReadOnlyList<string> arguments,
@@ -256,13 +307,18 @@ static void Require(bool condition, string message)
 
 sealed record ProcessResult(string Output, string Error);
 
-sealed record Options(string RepositoryRoot, string? ReleaseLockPath, bool VerifyRestore)
+sealed record Options(
+    string RepositoryRoot,
+    string? ReleaseLockPath,
+    bool VerifyRestore,
+    bool AllowMissingGit)
 {
     public static Options Parse(string[] arguments)
     {
         string repositoryRoot = Directory.GetCurrentDirectory();
         string? releaseLockPath = null;
         var verifyRestore = false;
+        var allowMissingGit = false;
         for (var index = 0; index < arguments.Length; index++)
         {
             switch (arguments[index])
@@ -276,11 +332,14 @@ sealed record Options(string RepositoryRoot, string? ReleaseLockPath, bool Verif
                 case "--verify-restore":
                     verifyRestore = true;
                     break;
+                case "--allow-missing-git":
+                    allowMissingGit = true;
+                    break;
                 default:
                     throw new ArgumentException($"Unknown option '{arguments[index]}'.");
             }
         }
-        return new Options(repositoryRoot, releaseLockPath, verifyRestore);
+        return new Options(repositoryRoot, releaseLockPath, verifyRestore, allowMissingGit);
     }
 
     private static string RequiredValue(string[] values, ref int index)

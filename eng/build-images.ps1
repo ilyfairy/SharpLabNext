@@ -2,6 +2,7 @@
 param(
     [string]$ImagePrefix = "sharplabnext",
     [string]$SourceRevision,
+    [string]$Target,
     [ValidateRange(1, 8)]
     [int]$MaxParallel = 4,
     [switch]$AllowUncommittedSourceForDevelopment,
@@ -9,7 +10,8 @@ param(
     [switch]$Offline,
     [switch]$PlanOnly,
     [switch]$CacheProbe,
-    [switch]$NoReuseExisting
+    [switch]$NoReuseExisting,
+    [switch]$All
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,12 +25,14 @@ $arguments = @(
 if (-not [string]::IsNullOrWhiteSpace($SourceRevision)) {
     $arguments += @("--source-revision", $SourceRevision)
 }
+if (-not [string]::IsNullOrWhiteSpace($Target)) { $arguments += @("--target", $Target) }
 if ($AllowUncommittedSourceForDevelopment) { $arguments += "--allow-uncommitted-source-for-development" }
 if ($AcceptMicrosoftLicenses) { $arguments += "--accept-microsoft-licenses" }
 if ($Offline) { $arguments += "--offline" }
 if ($PlanOnly) { $arguments += "--plan-only" }
 if ($CacheProbe) { $arguments += "--cache-probe" }
 if ($NoReuseExisting) { $arguments += "--no-reuse-existing" }
+if ($All) { $arguments += "--all" }
 
 & node @arguments
 if ($LASTEXITCODE -ne 0) { throw "SharpLabNext image build failed." }

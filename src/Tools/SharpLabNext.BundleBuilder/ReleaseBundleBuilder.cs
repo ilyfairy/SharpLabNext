@@ -119,17 +119,21 @@ public sealed class ReleaseBundleBuilder
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
+        var effectiveSourceInspector = sourceInspector ??
+            (command.SigningKeyPath is null
+                ? new ContentRepositorySourceInspector()
+                : new GitRepositorySourceInspector(allowFallback: false));
         var source = await RepositorySourceProvenanceResolver.ResolveAsync(
             command.RepositoryRoot,
             command.SourceRevision,
             command.AllowUncommittedSourceForDevelopment,
-            sourceInspector,
+            effectiveSourceInspector,
             cancellationToken);
-        if ((source.DevelopmentOverrideUsed || command.AllowDevelopmentImageInputs) &&
+        if ((!source.IsVerified || command.AllowDevelopmentImageInputs) &&
             command.SigningKeyPath is not null)
         {
             throw new BundleValidationException(
-                "Development source or image-input overrides cannot be used to create a signed release bundle.");
+                "An unverified source or development image inputs cannot be used to create a signed release bundle.");
         }
         EnsureInputFile(command.CatalogPath);
         EnsureInputFile(command.LockPath);
@@ -312,6 +316,7 @@ public sealed class ReleaseBundleBuilder
                 baseImagesPath,
                 maintainedProvenance,
                 source,
+                effectiveSourceInspector,
                 runtimePromotionTrust,
                 runtimePromotionSourceClosure,
                 staging,
@@ -779,6 +784,7 @@ public sealed class ReleaseBundleBuilder
         string baseImagesPath,
         IReadOnlyList<MaintainedProvenanceInput> maintainedProvenance,
         RepositorySourceProvenance source,
+        IRepositorySourceInspector effectiveSourceInspector,
         IReadOnlyList<RuntimePromotionTrustSnapshot> runtimePromotionTrust,
         RuntimePromotionSourceClosureSnapshot? runtimePromotionSourceClosure,
         string staging,
@@ -944,6 +950,7 @@ public sealed class ReleaseBundleBuilder
         await RevalidateRuntimePromotionTrustAsync(
             command,
             source,
+            effectiveSourceInspector,
             runtimePromotionTrust,
             runtimePromotionSourceClosure,
             cancellationToken);
@@ -1192,6 +1199,7 @@ public sealed class ReleaseBundleBuilder
     private async Task RevalidateRuntimePromotionTrustAsync(
         BundleBuilderCommand command,
         RepositorySourceProvenance source,
+        IRepositorySourceInspector effectiveSourceInspector,
         IReadOnlyList<RuntimePromotionTrustSnapshot> runtimePromotionTrust,
         RuntimePromotionSourceClosureSnapshot? runtimePromotionSourceClosure,
         CancellationToken cancellationToken)
@@ -1203,7 +1211,7 @@ public sealed class ReleaseBundleBuilder
             command.RepositoryRoot,
             command.SourceRevision,
             command.AllowUncommittedSourceForDevelopment,
-            sourceInspector,
+            effectiveSourceInspector,
             cancellationToken);
         if (currentSource != source)
         {

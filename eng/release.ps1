@@ -34,6 +34,7 @@ if (Test-Path -LiteralPath $OutputDirectory) {
 $buildArguments = @{
     ImagePrefix = $ImagePrefix
     MaxParallel = $MaxParallel
+    All = $true
 }
 if (-not [string]::IsNullOrWhiteSpace($SourceRevision)) {
     $buildArguments.SourceRevision = $SourceRevision
