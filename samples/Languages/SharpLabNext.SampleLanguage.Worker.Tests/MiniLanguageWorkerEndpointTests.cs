@@ -38,7 +38,7 @@ public sealed class MiniLanguageWorkerEndpointTests : IClassFixture<WebApplicati
         Assert.Same(SharpLabNextTelemetry.Metrics, _factory.Services.GetRequiredService<SharpLabNextMetrics>());
         var manifest = await client.GetFromJsonAsync<LanguageWorkerCapabilityManifest>("/api/v1/worker/capabilities", JsonOptions, TestContext.Current.CancellationToken);
         Assert.NotNull(manifest);
-        var expectedIdentity = new ServiceIdentity(MiniLanguageCompiler.ToolchainId, ServiceKind.ToolchainWorker, "development", ProtocolVersion.WorkerV1, manifest.Capabilities, "ready");
+        var expectedIdentity = new ServiceIdentity(MiniLanguageCompiler.ToolchainId, ServiceKind.ToolchainWorker, "content", ProtocolVersion.WorkerV1, manifest.Capabilities, "ready");
         const string validSource = "print \"Hello from MiniLang\"";
         const string invalidSource = "say \"This is not MiniLang\"";
         var compileCheck = CreateBuildRequest(BuildTarget.CompileCheck, validSource);
@@ -209,7 +209,7 @@ public sealed class MiniLanguageWorkerEndpointTests : IClassFixture<WebApplicati
     public void CapabilityManifestSupportsMultipleToolchainsBehindAWorkerIdentity()
     {
         var manifest = LanguageWorkerCapabilityManifestSerializer.Load(Path.Combine(AppContext.BaseDirectory, "language-worker.json")) with { WorkerId = "minilang-worker", ToolchainIds = ["minilang-stable", "minilang-preview"] };
-        var identity = new ServiceIdentity(manifest.WorkerId, ServiceKind.ToolchainWorker, "development", ProtocolVersion.WorkerV1, manifest.Capabilities, "ready");
+        var identity = new ServiceIdentity(manifest.WorkerId, ServiceKind.ToolchainWorker, "content", ProtocolVersion.WorkerV1, manifest.Capabilities, "ready");
 
         LanguageWorkerCapabilityManifestSerializer.Validate(manifest, identity);
 

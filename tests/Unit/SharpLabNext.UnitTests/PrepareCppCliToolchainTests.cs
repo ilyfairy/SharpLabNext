@@ -220,7 +220,7 @@ public sealed class PrepareCppCliToolchainTests
                 repositoryFiles = Array.Empty<object>(),
                 generatedImages = new[]
                 {
-                    new { id = "jsharp20-development-base", reference = "sharplabnext/operator-jsharp20:source-v2", buildKind = "jsharp20", license = "test" },
+                    new { id = "jsharp20-toolchain-base", reference = "sharplabnext/operator-jsharp20:source-v2", buildKind = "jsharp20", license = "test" },
                     new { id = "cppcli-prepared-base", reference = "sharplabnext/msvc-cppcli-prepared-base:source-v2", buildKind = "cppcli", license = "test" }
                 }
             };

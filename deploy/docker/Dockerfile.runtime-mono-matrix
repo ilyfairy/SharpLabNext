@@ -115,7 +115,7 @@ RUN set -eu; \
 RUN test -n "${VERSION}" \
     && test -n "${SOURCE_REVISION}" \
     && { test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "committed:true" \
-         || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "working-tree-development:false"; } \
+         || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "working-tree-content:false"; } \
     && test -n "${PROFILE_ID}" \
     && test -n "${MONO_VERSION}" \
     && test -n "${MONO_IMAGE}" \
@@ -143,7 +143,7 @@ LABEL org.opencontainers.image.title="SharpLabNext Mono Matrix Runtime Candidate
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
       io.sharplabnext.source.context="${CANDIDATE_SOURCE_CONTEXT}" \
       com.sharplabnext.runtime-candidate.promotion-eligible="${CANDIDATE_PROMOTION_ELIGIBLE}" \
-      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      org.opencontainers.image.source="https://github.com/ilyfairy/SharpLabNext" \
       com.sharplabnext.runtime-candidate="true" \
       com.sharplabnext.runtime-profile="${PROFILE_ID}" \
       io.sharplabnext.runtime.environment="mono" \

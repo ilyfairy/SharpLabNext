@@ -37,7 +37,6 @@ public sealed class ReleaseBundleBuilder
     public const string ReferenceSetLabelPrefix = "io.sharplabnext.reference-set.";
     public const string ComponentLabelPrefix = "io.sharplabnext.component.";
     public const string BaseImageLabelPrefix = "io.sharplabnext.base-image.";
-    public const string DevelopmentImageInputsLabel = "io.sharplabnext.development-image-inputs";
     public const string ComposeEnvironmentFileName = ".env";
     public const string DefaultInternalServiceToken = "sharplabnext-default-internal-service-token";
     public const string InternalServiceTokenRelativePath = "secrets/internal-service-token";
@@ -100,7 +99,6 @@ public sealed class ReleaseBundleBuilder
         {
             throw new BundleValidationException("An unverified source cannot be used to create a signed release bundle.");
         }
-        var allowLocalImageInputs = command.SigningKeyPath is null;
         EnsureInputFile(command.CatalogPath);
         EnsureInputFile(command.LockPath);
         EnsureInputFile(command.DeploymentImagesPath);
@@ -172,7 +170,7 @@ public sealed class ReleaseBundleBuilder
             item.Definition.ArtifactProcessorId ?? item.Definition.Id,
             item.Definition.ReleaseIdEnvironment,
             item.Definition.ImageIdEnvironment)).ToArray();
-        releaseLock = ResolveDevelopmentFrameworkComponentIdentities(catalog, releaseLock, inspectedImages, allowLocalImageInputs);
+        releaseLock = ResolveFrameworkComponentIdentities(catalog, releaseLock, inspectedImages);
 
         foreach (var (definition, reference, inspection) in pendingInspections)
         {
@@ -187,9 +185,7 @@ public sealed class ReleaseBundleBuilder
                 runtimeMatrixBaseImages,
                 catalog,
                 expectedReferenceSetDigests,
-                definition.RuntimeId is not null &&
-                promotionBoundRuntimeIds.Contains(definition.RuntimeId),
-                allowLocalImageInputs,
+                definition.RuntimeId is not null && promotionBoundRuntimeIds.Contains(definition.RuntimeId),
                 allowDifferentSourceRevision: true);
         }
         var runtimePromotionTrust = await RuntimePromotionTrust.CaptureAsync(command.RepositoryRoot, source, catalog, releaseLock, deployment, activeRuntimeProfiles, inspectedImages, docker, cancellationToken, runtimePromotionPlanSignatureVerifier);
@@ -603,7 +599,7 @@ public sealed class ReleaseBundleBuilder
             Platform = "linux/amd64",
             ContainsImages = !command.MetadataOnly,
             HasSignature = command.SigningKeyPath is not null,
-            Source = new BundleSourceDocument { Revision = source.Revision, HeadRevision = source.HeadRevision, Dirty = source.IsDirty, Verified = source.IsVerified, DevelopmentOverrideUsed = source.DevelopmentOverrideUsed, DevelopmentImageInputsUsed = images.Any(static image => image.Labels.TryGetValue(DevelopmentImageInputsLabel, out var value) && StringComparer.Ordinal.Equals(value, "true")) },
+            Source = new BundleSourceDocument { Revision = source.Revision, HeadRevision = source.HeadRevision, Dirty = source.IsDirty, Verified = source.IsVerified },
             SignatureAlgorithm = command.SigningKeyPath is null ? null : "ed25519",
             SignatureKeyId = command.SigningKeyPath is null
                 ? null : command.SigningKeyId ?? $"sha256:{signingPublicKeySha256}",
@@ -1205,8 +1201,7 @@ public sealed class ReleaseBundleBuilder
             sourcePackage.Files.Select(file => (object)new { uri = WineRuntimePackageManifestLoader.ArchiveUri(wineManifestSnapshot.Manifest, sourcePackage.ArchiveSnapshotId, file.Path).AbsoluteUri, digest = new Dictionary<string, string> { ["sha256"] = file.Sha256 }, sourcePackage = sourcePackage.Name, sourceVersion = sourcePackage.Version })));
         resolvedDependencies.Add(new
         {
-            uri = $"https://github.com/sharplabnext/SharpLabNext/blob/{source.Revision}/" +
-                WineRuntimePackageManifestLoader.ManifestRelativePath,
+            uri = $"https://github.com/ilyfairy/SharpLabNext/blob/{source.Revision}/" + WineRuntimePackageManifestLoader.ManifestRelativePath,
             digest = new Dictionary<string, string>
             {
                 ["sha256"] = WineManifestSha256(wineManifestSnapshot)
@@ -1257,8 +1252,6 @@ public sealed class ReleaseBundleBuilder
                         sourceHeadRevision = source.HeadRevision,
                         sourceDirty = source.IsDirty,
                         sourceVerified = source.IsVerified,
-                        developmentSourceOverride = source.DevelopmentOverrideUsed,
-                        developmentImageInputs = images.Any(static image => image.Labels.TryGetValue(DevelopmentImageInputsLabel, out var value) && StringComparer.Ordinal.Equals(value, "true")),
                         deploymentManifest = Path.GetRelativePath(command.RepositoryRoot, command.DeploymentImagesPath).Replace('\\', '/'),
                         baseImageManifest = "profiles/base-images.json",
                         maintainedProvenance = maintainedParameters
@@ -2060,7 +2053,6 @@ public sealed class ReleaseBundleBuilder
         CatalogDocument catalog,
         IReadOnlyDictionary<string, string> expectedReferenceSetDigests,
         bool promotionBoundRuntime,
-        bool allowDevelopmentImageInputs,
         bool allowDifferentSourceRevision)
     {
         if (!IsSha256(inspection.ImageId))
@@ -2081,18 +2073,6 @@ public sealed class ReleaseBundleBuilder
         if (!inspection.Labels.TryGetValue("org.opencontainers.image.version", out var version) || !string.Equals(version, releaseId, StringComparison.Ordinal))
         {
             throw new BundleValidationException($"Image '{definition.Id}' does not carry release label '{releaseId}'.");
-        }
-
-        if (inspection.Labels.TryGetValue(DevelopmentImageInputsLabel, out var developmentInputs))
-        {
-            if (developmentInputs is not ("true" or "false"))
-            {
-                throw new BundleValidationException($"Image '{definition.Id}' has invalid development image-input label '{developmentInputs}'.");
-            }
-            if (StringComparer.Ordinal.Equals(developmentInputs, "true") && !allowDevelopmentImageInputs)
-            {
-                throw new BundleValidationException($"Image '{definition.Id}' uses local image inputs and cannot be included in a signed bundle.");
-            }
         }
 
         ValidateInspectionSourceRevision(definition, inspection.Labels, source.Revision, promotionBoundRuntime, allowDifferentSourceRevision);
@@ -2190,7 +2170,7 @@ public sealed class ReleaseBundleBuilder
         }
     }
 
-    private static ReleaseLockDocument ResolveDevelopmentFrameworkComponentIdentities(CatalogDocument catalog, ReleaseLockDocument releaseLock, IReadOnlyList<InspectedImage> images, bool allowDevelopmentImageInputs)
+    private static ReleaseLockDocument ResolveFrameworkComponentIdentities(CatalogDocument catalog, ReleaseLockDocument releaseLock, IReadOnlyList<InspectedImage> images)
     {
         Dictionary<string, LockedComponent>? components = null;
         foreach (var image in images)
@@ -2240,11 +2220,6 @@ public sealed class ReleaseBundleBuilder
 
             if (!identityDiffers)
                 continue;
-            if (!allowDevelopmentImageInputs || !image.Labels.TryGetValue(DevelopmentImageInputsLabel, out var developmentInputs) || !StringComparer.Ordinal.Equals(developmentInputs, "true"))
-            {
-                continue;
-            }
-
             components ??= releaseLock.Components.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal);
             components[image.LockComponentId] = component with { Digest = operatorDigest, SourceUri = operatorSourceUri };
         }

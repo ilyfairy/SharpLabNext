@@ -343,14 +343,7 @@ export function validateParentInputs(values, matrixInput = undefined) {
       !hasRegistryHost(values.FRAMEWORK_MATRIX_SOURCE_URI)) {
     failures.push('FRAMEWORK_MATRIX_SOURCE_URI must include an explicit registry host when --push is used')
   }
-  const developmentRevision = values?.SOURCE_REVISION === 'development'
-  const developmentOverride = values?.allowDirty === true
-  if (!isGitCommitIdentity(values?.SOURCE_REVISION) &&
-      !(developmentRevision && developmentOverride)) {
-    failures.push(
-      'SOURCE_REVISION must be a lowercase 40- or 64-character Git commit (or content identity development)',
-    )
-  }
+  if (!isGitCommitIdentity(values?.SOURCE_REVISION)) failures.push('SOURCE_REVISION must be a lowercase 40- or 64-character source identity')
   if (typeof values?.IMAGE !== 'string' || !imageTag.test(values.IMAGE)) {
     failures.push('IMAGE must be a safe local repository tag')
   }
@@ -447,7 +440,7 @@ export function createParentBuildArguments(values, matrixInput, dockerfilePath) 
     '--build-arg', `WINE_IMAGE=${values.WINE_IMAGE}`,
     '--build-arg', `FRAMEWORK_MATRIX_INPUT_SHA256=${values.FRAMEWORK_MATRIX_INPUT_SHA256}`,
     '--build-arg', `FRAMEWORK_MATRIX_SOURCE_URI=${values.FRAMEWORK_MATRIX_SOURCE_URI}`,
-    '--build-arg', `VERSION=${values.VERSION ?? 'development'}`,
+    '--build-arg', `VERSION=${values.VERSION ?? 'content'}`,
     '--build-arg', `SOURCE_REVISION=${values.SOURCE_REVISION}`,
     '--tag', values.IMAGE,
     output, ...metadata, '--provenance=false', '.',
@@ -455,7 +448,7 @@ export function createParentBuildArguments(values, matrixInput, dockerfilePath) 
 }
 
 function parseArguments(arguments_) {
-  const values = { VERSION: 'development' }
+  const values = { VERSION: 'content' }
   let push = false
   for (let index = 0; index < arguments_.length; index++) {
     const argument = arguments_[index]
@@ -487,7 +480,7 @@ function usage() {
   --framework-matrix-input-sha256 sha256:<64-hex> \\
   --source-revision <40/64-hex> --image <registry/repository:tag> [--version <id>] [--push]\n\n` +
   `A digest-pinned docker:// matrix source is consumed directly and does not require --context. ` +
-  `A host context is accepted only for local development.`
+  `A host context is accepted only for a local content build.`
 }
 
 function inspectGitSource(spawn = spawnSync, fallbackRevision = undefined, environment = process.env) {
@@ -554,7 +547,7 @@ function expectedParentLabels(expectedValues) {
     'io.sharplabnext.framework.dedupe-policy': 'wine-static-runtime-payload-v1',
     'org.opencontainers.image.revision': expectedValues.SOURCE_REVISION,
     'io.sharplabnext.source.revision': expectedValues.SOURCE_REVISION,
-    'org.opencontainers.image.version': expectedValues.VERSION ?? 'development',
+    'org.opencontainers.image.version': expectedValues.VERSION ?? 'content',
     'io.sharplabnext.framework.matrix-input-sha256': expectedValues.FRAMEWORK_MATRIX_INPUT_SHA256,
     'io.sharplabnext.framework.matrix-source-uri': expectedValues.FRAMEWORK_MATRIX_SOURCE_URI,
     'io.sharplabnext.operator-image.wine': expectedValues.WINE_IMAGE,
@@ -691,7 +684,7 @@ export function runParentBuild(argv, values = process.env, spawn = spawnSync, ou
         installerManifestSha256: crypto.createHash('sha256').update(fs.readFileSync(
           path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json'),
         )).digest('hex'),
-        ...(merged.SOURCE_REVISION === 'development'
+        ...(merged.allowDirty
           ? {}
           : { sourceRevision: merged.SOURCE_REVISION }),
       })
@@ -706,7 +699,7 @@ export function runParentBuild(argv, values = process.env, spawn = spawnSync, ou
     return 1
   }
   const dirty = sourceBefore.isDirty
-  if (merged.SOURCE_REVISION !== 'development' &&
+  if (!merged.allowDirty &&
       sourceBefore.headRevision !== merged.SOURCE_REVISION) {
     output.error(
       `framework parent source error: SOURCE_REVISION '${merged.SOURCE_REVISION}' ` +
@@ -715,7 +708,7 @@ export function runParentBuild(argv, values = process.env, spawn = spawnSync, ou
     return 1
   }
   if (dirty && !merged.allowDirty) {
-    output.error('framework parent source error: worktree is dirty; use the explicit development override')
+    output.error('framework parent source error: worktree is dirty outside content source mode')
     return 1
   }
   if (parsed.push && dirty) {

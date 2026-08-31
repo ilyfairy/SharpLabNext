@@ -49,7 +49,7 @@ export const wineCoreClrUserspaceInputNames = Object.freeze({
 /**
  * The shared Wine userspace is a release component, not an untracked base
  * image detail. Keep its three lock-derived inputs strict before candidate
- * image resolution so a private or development operator cannot be relabelled
+ * image resolution so a private or local operator cannot be relabelled
  * into a promotion closure.
  */
 export function validateWineCoreClrUserspaceInputs(values) {

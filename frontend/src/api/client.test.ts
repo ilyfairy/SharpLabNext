@@ -229,7 +229,7 @@ describe('operationCommandsWebSocketUrl', () => {
       },
       pipelineResolutionId: 'pipeline-ws-selection',
       pipelinePlan: {
-        releaseId: 'development',
+        releaseId: 'content',
         languageWorkerId: 'roslyn-stable',
         compilerWorkerId: 'roslyn-stable',
         referenceSetId: 'net10-ref',
@@ -316,7 +316,7 @@ describe('operationCommandsWebSocketUrl', () => {
       },
       pipelineResolutionId: 'pr_reconnect',
       pipelinePlan: {
-        releaseId: 'development',
+        releaseId: 'content',
         languageWorkerId: 'roslyn-stable',
         compilerWorkerId: 'roslyn-stable',
         referenceSetId: 'net10-ref',
@@ -441,7 +441,7 @@ describe('operationCommandsWebSocketUrl', () => {
       },
       pipelineResolutionId: 'pipeline-before-restart',
       pipelinePlan: {
-        releaseId: 'development',
+        releaseId: 'content',
         languageWorkerId: 'roslyn-stable',
         compilerWorkerId: 'roslyn-stable',
         referenceSetId: 'net10-ref',
@@ -610,7 +610,7 @@ describe('secondary language-session selection', () => {
     },
     pipelineResolutionId: 'pipeline-il-output',
     pipelinePlan: {
-      releaseId: 'development',
+      releaseId: 'content',
       languageWorkerId: 'mobius-ilasm-stable',
       compilerWorkerId: 'mobius-ilasm-stable',
       referenceSetId: 'net10-ref',
@@ -832,7 +832,7 @@ describe('Explain and Gist API paths', () => {
     outputId: 'explain',
     runtimeId: null,
     buildMode: 'release',
-    releaseId: 'development',
+    releaseId: 'content',
     activeFile: 'Program.cs',
     sourceOrder: ['Program.cs'],
     files: [{ path: 'Program.cs', text: 'class Program {}' }],

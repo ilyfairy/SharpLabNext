@@ -127,8 +127,8 @@ test('complete image build requires the host-image-aware Docker driver', () => {
 });
 
 test('prerequisite image reuse requires exact labels and one immutable digest', () => {
-  const reference = 'localhost:5000/sharplabnext-development/cache:input-test';
-  const repository = 'localhost:5000/sharplabnext-development/cache';
+  const reference = 'localhost:5000/sharplabnext-content/cache:input-test';
+  const repository = 'localhost:5000/sharplabnext-content/cache';
   const digest = `${repository}@sha256:${'a'.repeat(64)}`;
   const image = {
     Id: `sha256:${'b'.repeat(64)}`,
@@ -166,11 +166,11 @@ test('parallel image build failures identify the exact target', async () => {
 test('Bake environment snapshot is structured', () => {
   const snapshot = parseBakeEnvironmentSnapshot(
     'ILSense inputs valid.\n' +
-    'SHARPLABNEXT_BAKE_ENVIRONMENT_JSON={"IMAGE_PREFIX":"registry.example/app","RELEASE_ID":"development"}\n',
+    'SHARPLABNEXT_BAKE_ENVIRONMENT_JSON={"IMAGE_PREFIX":"registry.example/app","RELEASE_ID":"content"}\n',
   );
   assert.deepEqual(snapshot, {
     IMAGE_PREFIX: 'registry.example/app',
-    RELEASE_ID: 'development',
+    RELEASE_ID: 'content',
   });
   assert.throws(() => parseBakeEnvironmentSnapshot('SHARPLABNEXT_BAKE_ENVIRONMENT_JSON=[]\n'), /must be an object/);
 });
@@ -191,7 +191,7 @@ test('candidate child environment preserves the trusted snapshot and adds operat
     { IMAGE_PREFIX: 'registry.example/app' },
     { capabilityDefinitions },
     {},
-    { 'jsharp20-development-base': 'registry.example/jsharp@sha256:' + 'a'.repeat(64) },
+    { 'jsharp20-toolchain-base': 'registry.example/jsharp@sha256:' + 'a'.repeat(64) },
   );
   assert.equal(operatorEnvironment.JSHARP_TOOLCHAIN_IMAGE, 'registry.example/jsharp@sha256:' + 'a'.repeat(64));
 });
@@ -200,8 +200,8 @@ test('source verification marker is validated without changing ordinary content 
   const clean = {};
   assert.equal(applySourceVerificationMarker(clean, 'SHARPLABNEXT_SOURCE_VERIFIED=true\n'), 'true');
 
-  const development = {};
-  assert.equal(applySourceVerificationMarker(development, 'SHARPLABNEXT_SOURCE_VERIFIED=false\n'), 'false');
+  const content = {};
+  assert.equal(applySourceVerificationMarker(content, 'SHARPLABNEXT_SOURCE_VERIFIED=false\n'), 'false');
   assert.throws(
     () => applySourceVerificationMarker({}, 'SHARPLABNEXT_SOURCE_VERIFIED=maybe\n'),
     /invalid verification marker/,
@@ -226,15 +226,15 @@ test('runtime candidates resolve Bake environment once and still build in parall
   await buildRuntimeCandidates(
     options,
     'f'.repeat(40),
-    { 'jsharp20-development-base': 'unused' },
+    { 'jsharp20-toolchain-base': 'unused' },
     images,
-    { localTag: 'sharplabnext/operator-wine-coreclr:development', digest: 'wine-digest' },
+    { localTag: 'sharplabnext/operator-wine-coreclr:content', digest: 'wine-digest' },
     { candidateInput: 'framework-input.json' },
     {
       parentEnvironment: { Path: 'host-path' },
       resolveBakeEnvironmentSnapshot() {
         resolutions++;
-        return { IMAGE_PREFIX: 'sharplabnext', RELEASE_ID: 'development' }
+        return { IMAGE_PREFIX: 'sharplabnext', RELEASE_ID: 'content' }
       },
       async start(command, arguments_, startOptions) {
         starts.push({ command, arguments_, startOptions })
@@ -288,7 +288,7 @@ test('complete image build keeps installers out of host execution', () => {
   assert.doesNotMatch(orchestrator, /prepare\w*Cache|seal\w*Cache|needsSeal|cache\.hit/);
   assert.doesNotMatch(orchestrator, /\['image', '(?:save|load)'/);
   assert.match(orchestrator, /requiredOperatorDefinitions/);
-  assert.doesNotMatch(orchestrator, /jsharp20-development-base|cppcli-prepared-base/);
+  assert.doesNotMatch(orchestrator, /jsharp20-toolchain-base|cppcli-prepared-base/);
   assert.ok(orchestrator.indexOf('buildFrameworkOperators') < orchestrator.indexOf('buildOperatorImages'));
   assert.ok(orchestrator.indexOf('buildOperatorImages') < orchestrator.indexOf('buildBakeTargets'));
   assert.match(orchestrator, /maximumParallel: 5/);

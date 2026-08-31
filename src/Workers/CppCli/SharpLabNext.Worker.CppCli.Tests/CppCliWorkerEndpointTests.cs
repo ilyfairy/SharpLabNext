@@ -62,7 +62,7 @@ internal sealed class CppCliWebApplicationFactory : WebApplicationFactory<Progra
     {
         var configuration = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
-            ["CppCli:ReleaseId"] = "development",
+            ["CppCli:ReleaseId"] = "content",
             ["CppCli:CompilerVersion"] = CppCliTestSettings.CompilerVersion,
             ["CppCli:WorkerImageId"] = $"sha256:{new string('0', 64)}",
             ["CppCli:ReferenceSetDigest"] = $"sha256:{new string('b', 64)}",

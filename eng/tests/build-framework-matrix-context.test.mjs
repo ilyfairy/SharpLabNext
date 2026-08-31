@@ -27,7 +27,7 @@ const rowDefinitions = [
   ['netfx47', '4.7', 'clr4'], ['netfx471', '4.7.1', 'clr4'],
   ['netfx472', '4.7.2', 'clr4'], ['netfx48', '4.8', 'clr4'],
 ]
-const operatorBase = `registry.example/wine:development@sha256:${'b'.repeat(64)}`
+const operatorBase = `registry.example/wine:content@sha256:${'b'.repeat(64)}`
 const operatorRoot = `registry.example/root:stable@sha256:${'a'.repeat(64)}`
 const installerManifestSha256 = crypto.createHash('sha256').update(fs.readFileSync(path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json'))).digest('hex');
 
@@ -75,7 +75,7 @@ test('normalizes matrix rows deterministically and binds the exact target prefix
 test('generated Dockerfile contains bounded metadata and no operator prefix stage', () => {
   const document = normalizeMatrixInput(matrix())
   const digest = matrixInputDigest(document)
-  const source = createContextDockerfile(document, digest, 'a'.repeat(40), 'development')
+  const source = createContextDockerfile(document, digest, 'a'.repeat(40), 'content')
   assert.ok(source.startsWith(`${pinnedDockerfileFrontendDirective}\n`))
   assert.match(source, /FROM scratch AS final/)
   assert.match(source, /COPY rows\/netfx20\/row\.json \/rows\/netfx20\/row\.json/)
@@ -120,7 +120,7 @@ test('operator image identity requires the expected labels, platform, and digest
 })
 
 test('context build arguments keep BuildKit on linux/amd64 and never mount a host prefix', () => {
-  const args = createContextBuildArguments({ IMAGE: 'localhost:5000/sharplabnext/framework-context:dev', push: true }, 'C:\\metadata-only-context', 'C:\\metadata-only-context\\Dockerfile', 'C:\\metadata\\build.json')
+  const args = createContextBuildArguments({ IMAGE: 'localhost:5000/sharplabnext/framework-context:content', push: true }, 'C:\\metadata-only-context', 'C:\\metadata-only-context\\Dockerfile', 'C:\\metadata\\build.json')
   assert.deepEqual(args.slice(0, 6), ['buildx', 'build', '--platform', 'linux/amd64', '--file', 'C:\\metadata-only-context\\Dockerfile'])
   assert.ok(args.includes('--push'))
   assert.ok(args.includes('--provenance=false'))
@@ -131,11 +131,11 @@ test('push validation rejects local-only operator references and mutable source 
   const document = normalizeMatrixInput(matrix())
   const failures = validateContextInputs({
     MATRIX_INPUT_SHA256: matrixInputDigest(document),
-    SOURCE_REVISION: 'development',
+    SOURCE_REVISION: 'invalid',
     IMAGE: 'localhost:5000/sharplabnext/framework-context:release',
     VERSION: 'release', push: true,
   }, document)
-  assert.match(failures.join('\n'), /committed SOURCE_REVISION/)
+  assert.match(failures.join('\n'), /source identity/)
   const localDocument = normalizeMatrixInput({
     ...matrix(), rows: matrix().rows.map(row => ({ ...row, operatorImage: row.operatorImage.replace('registry.example/', 'sharplabnext/') })),
   })
@@ -172,9 +172,9 @@ test('content identity build emits only the mocked metadata boundary', () => {
           'io.sharplabnext.framework.matrix-strategy': 'shared-framework-prefix-input-v1',
           'io.sharplabnext.framework.matrix-input-sha256': matrixInputDigest(document),
           'io.sharplabnext.framework.matrix-row-count': '14',
-          'org.opencontainers.image.revision': 'development',
-          'io.sharplabnext.source.revision': 'development',
-          'org.opencontainers.image.version': 'development',
+          'org.opencontainers.image.revision': 'c'.repeat(64),
+          'io.sharplabnext.source.revision': 'c'.repeat(64),
+          'org.opencontainers.image.version': 'content',
         } },
       }]) }
     }
@@ -198,8 +198,8 @@ test('content identity build emits only the mocked metadata boundary', () => {
   try {
     const status = runContextBuild([
       '--matrix-input', input,
-      '--source-revision', 'development',
-      '--image', 'sharplabnext/framework-context:development',
+      '--source-revision', 'c'.repeat(64),
+      '--image', 'sharplabnext/framework-context:content',
     ], { SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }, spawn, output)
     assert.equal(status, 0, output.errors.join('\n'))
     assert.deepEqual(output.errors, [])

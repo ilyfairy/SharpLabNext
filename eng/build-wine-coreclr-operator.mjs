@@ -47,7 +47,6 @@ const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE
 const contentSourceIdentityMode = 'content'
 const sourceContextInput = 'OPERATOR_SOURCE_CONTEXT'
 const promotionEligibilityInput = 'OPERATOR_PROMOTION_ELIGIBLE'
-const developmentOnlyInput = 'OPERATOR_DEVELOPMENT_ONLY'
 const publishDestinationInput = 'WINE_CORECLR_OPERATOR_PUBLISH_DESTINATION'
 const receiptPathInput = 'WINE_CORECLR_OPERATOR_RECEIPT_PATH'
 const signingKeyInput = 'WINE_CORECLR_OPERATOR_SIGNING_KEY_PATH'
@@ -141,7 +140,6 @@ function sourceEnvironment(values, binding) {
     ...values,
     [sourceContextInput]: binding.promotionEligible ? 'committed' : 'working-tree-content',
     [promotionEligibilityInput]: String(binding.promotionEligible),
-    [developmentOnlyInput]: String(!binding.promotionEligible),
   }
 }
 
@@ -279,7 +277,6 @@ export function runWineCoreClrOperatorBuild(argv, values = process.env, spawn = 
   delete dockerEnvironment.BUILDX_BAKE_FILE_SEPARATOR
   delete dockerEnvironment[sourceContextInput]
   delete dockerEnvironment[promotionEligibilityInput]
-  delete dockerEnvironment[developmentOnlyInput]
 
   let binding = { promotionEligible: true }
   let sourceContext
@@ -306,7 +303,7 @@ export function runWineCoreClrOperatorBuild(argv, values = process.env, spawn = 
           spawn,
         })
       } else {
-        output.log('Content source identity selects local working-tree bytes; this Wine operator is development-only.')
+        output.log('Content source identity selects local working-tree bytes; this Wine operator is not promotion-eligible.')
       }
     } catch (error) {
       output.error(`Wine operator source error: ${error.message}`)

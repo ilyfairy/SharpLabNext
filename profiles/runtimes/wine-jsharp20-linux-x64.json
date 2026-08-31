@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "wine-jsharp20-linux-x64",
-  "image": "sharplabnext/runtime-wine-jsharp20:development",
+  "image": "sharplabnext/runtime-wine-jsharp20:content",
   "family": "netfx-clr-wine",
   "acceptedRuntimeFamilies": [],
   "acceptedFrameworks": [
@@ -14,7 +14,7 @@
   "runtimeCommit": "not-applicable",
   "jitVersion": "not-applicable",
   "jitCommit": "not-applicable",
-  "runtimeImageId": "sharplabnext/runtime-wine-jsharp20:development",
+    "runtimeImageId": "sharplabnext/runtime-wine-jsharp20:content",
   "rid": "linux-x64",
   "architecture": "x64",
   "cpuFeatureProfile": "x64-v2",

@@ -384,7 +384,7 @@ public sealed class RuntimePromotionTrustTests
         fixture.WriteSourceClosureMaterial(inputs);
         var trust = await fixture.CaptureAsync();
         var inspector = new PromotionSourceInspector(isAncestor: true, fixture.SourceClosurePaths().Select(static path => new RuntimePromotionSourceChange("M", path)).ToArray());
-        var releaseSource = new RepositorySourceProvenance("abababababababababababababababababababab", "abababababababababababababababababababab", IsDirty: false, IsVerified: true, DevelopmentOverrideUsed: false);
+        var releaseSource = new RepositorySourceProvenance("abababababababababababababababababababab", "abababababababababababababababababababab", IsDirty: false, IsVerified: true);
 
         var snapshot = await RuntimePromotionSourceClosure.CaptureAsync(fixture.Root, releaseSource, trust, inspector, TestContext.Current.CancellationToken);
         Assert.NotNull(snapshot);
@@ -422,7 +422,7 @@ public sealed class RuntimePromotionTrustTests
         var trust = await fixture.CaptureAsync();
         var changes = fixture.SourceClosurePaths().Select(static path => new RuntimePromotionSourceChange("M", path)).Append(new RuntimePromotionSourceChange("M", "src/RuntimeJobs/Unexpected.cs")).ToArray();
 
-        var exception = await Assert.ThrowsAsync<BundleValidationException>(() => RuntimePromotionSourceClosure.CaptureAsync(fixture.Root, new RepositorySourceProvenance("abababababababababababababababababababab", "abababababababababababababababababababab", IsDirty: false, IsVerified: true, DevelopmentOverrideUsed: false), trust, new PromotionSourceInspector(isAncestor: true, changes), TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<BundleValidationException>(() => RuntimePromotionSourceClosure.CaptureAsync(fixture.Root, new RepositorySourceProvenance("abababababababababababababababababababab", "abababababababababababababababababababab", IsDirty: false, IsVerified: true), trust, new PromotionSourceInspector(isAncestor: true, changes), TestContext.Current.CancellationToken));
 
         Assert.Contains("exact verified transaction union", exception.Message, StringComparison.Ordinal);
         Assert.Contains("Unexpected.cs", exception.Message, StringComparison.Ordinal);
@@ -439,7 +439,7 @@ public sealed class RuntimePromotionTrustTests
         var trust = await fixture.CaptureAsync();
         File.AppendAllText(Path.Combine(fixture.Root, "profiles", "runtime-promotion-plans", $"{PromotionFixture.ProfileId}.json"), " ");
 
-        var closure = await RuntimePromotionSourceClosure.CaptureAsync(fixture.Root, new RepositorySourceProvenance("abababababababababababababababababababab", "abababababababababababababababababababab", IsDirty: false, IsVerified: true, DevelopmentOverrideUsed: false), trust, new PromotionSourceInspector(isAncestor: true, fixture.SourceClosurePaths().Select(static path => new RuntimePromotionSourceChange("M", path)).ToArray()), TestContext.Current.CancellationToken);
+        var closure = await RuntimePromotionSourceClosure.CaptureAsync(fixture.Root, new RepositorySourceProvenance("abababababababababababababababababababab", "abababababababababababababababababababab", IsDirty: false, IsVerified: true), trust, new PromotionSourceInspector(isAncestor: true, fixture.SourceClosurePaths().Select(static path => new RuntimePromotionSourceChange("M", path)).ToArray()), TestContext.Current.CancellationToken);
 
         Assert.NotNull(closure);
         Assert.Contains(closure!.CapturedFiles, file => file.RelativePath == $"profiles/runtime-promotion-plans/{PromotionFixture.ProfileId}.json" && file.Bytes.SequenceEqual(inputs.PlanBytes));
@@ -460,7 +460,7 @@ public sealed class RuntimePromotionTrustTests
         fixture.WriteSourceClosureMaterial(inputs);
         var trust = await fixture.CaptureAsync();
         var inspector = new PromotionSourceInspector(isAncestor: true, fixture.SourceClosurePaths().Select(static path => new RuntimePromotionSourceChange("M", path)).ToArray());
-        var closure = await RuntimePromotionSourceClosure.CaptureAsync(fixture.Root, new RepositorySourceProvenance("abababababababababababababababababababab", "abababababababababababababababababababab", IsDirty: false, IsVerified: true, DevelopmentOverrideUsed: false), trust, inspector, TestContext.Current.CancellationToken);
+        var closure = await RuntimePromotionSourceClosure.CaptureAsync(fixture.Root, new RepositorySourceProvenance("abababababababababababababababababababab", "abababababababababababababababababababab", IsDirty: false, IsVerified: true), trust, inspector, TestContext.Current.CancellationToken);
 
         Assert.NotNull(closure);
         var candidatePath = $"profiles/runtimes/candidates/{PromotionFixture.ProfileId}.json";
@@ -492,7 +492,7 @@ public sealed class RuntimePromotionTrustTests
         var candidatePath = $"profiles/runtimes/candidates/{PromotionFixture.ProfileId}.json";
         var changes = fixture.SourceClosurePaths().Select(static path => new RuntimePromotionSourceChange("M", path)).Append(new RuntimePromotionSourceChange("M", candidatePath)).ToArray();
 
-        var exception = await Assert.ThrowsAsync<BundleValidationException>(() => RuntimePromotionSourceClosure.CaptureAsync(fixture.Root, new RepositorySourceProvenance("abababababababababababababababababababab", "abababababababababababababababababababab", IsDirty: false, IsVerified: true, DevelopmentOverrideUsed: false), trust, new PromotionSourceInspector(isAncestor: true, changes), TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<BundleValidationException>(() => RuntimePromotionSourceClosure.CaptureAsync(fixture.Root, new RepositorySourceProvenance("abababababababababababababababababababab", "abababababababababababababababababababab", IsDirty: false, IsVerified: true), trust, new PromotionSourceInspector(isAncestor: true, changes), TestContext.Current.CancellationToken));
 
         Assert.Contains("exact verified transaction union", exception.Message, StringComparison.Ordinal);
         Assert.Contains(candidatePath, exception.Message, StringComparison.Ordinal);
@@ -504,7 +504,7 @@ public sealed class RuntimePromotionTrustTests
         using var fixture = new PromotionFixture();
         var trust = await fixture.CaptureAsync();
 
-        var exception = await Assert.ThrowsAsync<BundleValidationException>(() => RuntimePromotionSourceClosure.CaptureAsync(fixture.Root, new RepositorySourceProvenance(trust[0].BuildSourceRevision, trust[0].BuildSourceRevision, IsDirty: false, IsVerified: true, DevelopmentOverrideUsed: false), trust, new PromotionSourceInspector(isAncestor: true, []), TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<BundleValidationException>(() => RuntimePromotionSourceClosure.CaptureAsync(fixture.Root, new RepositorySourceProvenance(trust[0].BuildSourceRevision, trust[0].BuildSourceRevision, IsDirty: false, IsVerified: true), trust, new PromotionSourceInspector(isAncestor: true, []), TestContext.Current.CancellationToken));
 
         Assert.Contains("must be distinct commits", exception.Message, StringComparison.Ordinal);
     }
@@ -764,7 +764,7 @@ public sealed class RuntimePromotionTrustTests
 
     [Theory]
     [InlineData(null, "true")]
-    [InlineData("working-tree-development", "true")]
+    [InlineData("working-tree-content", "true")]
     [InlineData("committed", null)]
     [InlineData("committed", "false")]
     public async Task CaptureRejectsRuntimeImageThatIsNotCommittedPromotionEligible(string? sourceContext, string? promotionEligible)
@@ -779,7 +779,7 @@ public sealed class RuntimePromotionTrustTests
 
     [Theory]
     [InlineData(null, "true")]
-    [InlineData("working-tree-development", "true")]
+    [InlineData("working-tree-content", "true")]
     [InlineData("committed", null)]
     [InlineData("committed", "false")]
     public async Task RevalidationRejectsRuntimeImageThatIsNotCommittedPromotionEligible(string? sourceContext, string? promotionEligible)
@@ -1565,7 +1565,7 @@ public sealed class RuntimePromotionTrustTests
                 ProfileId,
                 null,
                 null);
-            return RuntimePromotionTrust.CaptureAsync(Root, new RepositorySourceProvenance(ReleaseRevision, ReleaseRevision, IsDirty: false, IsVerified: true, DevelopmentOverrideUsed: false), catalog, releaseLock, deployment, [Profile], [inspected], Docker, TestContext.Current.CancellationToken, CreateTestPlanVerifier());
+            return RuntimePromotionTrust.CaptureAsync(Root, new RepositorySourceProvenance(ReleaseRevision, ReleaseRevision, IsDirty: false, IsVerified: true), catalog, releaseLock, deployment, [Profile], [inspected], Docker, TestContext.Current.CancellationToken, CreateTestPlanVerifier());
         }
 
         public void Dispose()

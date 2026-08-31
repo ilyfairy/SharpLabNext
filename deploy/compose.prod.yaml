@@ -2,7 +2,7 @@ name: sharplabnext
 
 x-service-environment: &service-environment
   ASPNETCORE_URLS: http://+:8080
-  ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+  ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
   InternalServiceAuth__Required: "true"
   InternalServiceAuth__TokenFile: /run/secrets/sharplabnext-internal-service-token
 
@@ -32,7 +32,7 @@ x-service-defaults: &service-defaults
 services:
   gateway:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_GATEWAY_IMAGE:-sharplabnext/gateway:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_GATEWAY_IMAGE:-sharplabnext/gateway:content}
     ports:
       - "${SHARPLABNEXT_BIND_ADDRESS:-127.0.0.1}:${SHARPLABNEXT_HTTP_PORT:-8080}:8080"
     networks:
@@ -131,7 +131,7 @@ services:
 
   artifact-store:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_ARTIFACT_STORE_IMAGE:-sharplabnext/artifact-store:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_ARTIFACT_STORE_IMAGE:-sharplabnext/artifact-store:content}
     volumes:
       - artifact-data:/var/lib/sharplabnext
     environment:
@@ -140,7 +140,7 @@ services:
 
   runtime-supervisor:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_RUNTIME_SUPERVISOR_IMAGE:-sharplabnext/runtime-supervisor:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_RUNTIME_SUPERVISOR_IMAGE:-sharplabnext/runtime-supervisor:content}
     group_add:
       - "${DOCKER_GID:-0}"
     volumes:
@@ -152,20 +152,20 @@ services:
       RuntimeSupervisor__Sandbox__AppArmorProfile: "${SHARPLABNEXT_RUNTIME_APPARMOR_PROFILE:-}"
       RuntimeSupervisor__SessionReuseEnabled: "${SHARPLABNEXT_RUNTIME_SESSION_REUSE_ENABLED:-true}"
       RuntimeSupervisor__SessionMaximumAgeSeconds: "${SHARPLABNEXT_RUNTIME_SESSION_MAXIMUM_AGE_SECONDS:-600}"
-      RuntimeSupervisor__Profiles__2__Image: ${SHARPLABNEXT_CONST_GENERICS_RUNTIME_IMAGE:-sharplabnext/runtime-const-generics:development}
+      RuntimeSupervisor__Profiles__2__Image: ${SHARPLABNEXT_CONST_GENERICS_RUNTIME_IMAGE:-sharplabnext/runtime-const-generics:content}
       RuntimeSupervisor__Profiles__2__RuntimeImageId: ${SHARPLABNEXT_CONST_GENERICS_RUNTIME_IMAGE_ID:-unverified}
-      RuntimeSupervisor__Profiles__3__Image: ${SHARPLABNEXT_WINE_NETFX48_RUNTIME_IMAGE:-sharplabnext/runtime-wine-netfx48:development}
+      RuntimeSupervisor__Profiles__3__Image: ${SHARPLABNEXT_WINE_NETFX48_RUNTIME_IMAGE:-sharplabnext/runtime-wine-netfx48:content}
       RuntimeSupervisor__Profiles__3__RuntimeImageId: ${SHARPLABNEXT_WINE_NETFX48_RUNTIME_IMAGE_ID:-unverified}
-      RuntimeSupervisor__Profiles__4__Image: ${SHARPLABNEXT_WINE_JSHARP20_RUNTIME_IMAGE:-sharplabnext/runtime-wine-jsharp20:development}
+      RuntimeSupervisor__Profiles__4__Image: ${SHARPLABNEXT_WINE_JSHARP20_RUNTIME_IMAGE:-sharplabnext/runtime-wine-jsharp20:content}
       RuntimeSupervisor__Profiles__4__RuntimeImageId: ${SHARPLABNEXT_WINE_JSHARP20_RUNTIME_IMAGE_ID:-unverified}
 
   worker-roslyn-stable:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_ROSLYN_STABLE_IMAGE:-sharplabnext/worker-roslyn-stable:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_ROSLYN_STABLE_IMAGE:-sharplabnext/worker-roslyn-stable:content}
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      RoslynWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      RoslynWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
       RoslynWorker__WorkerImageId: ${SHARPLABNEXT_ROSLYN_STABLE_IMAGE_ID:-unverified}
       RoslynWorker__BuildProcess__MaximumConcurrentProcesses: "8"
       ArtifactStore__BaseUrl: http://artifact-store:8080
@@ -173,11 +173,11 @@ services:
 
   worker-roslyn-netfx48:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_ROSLYN_NETFX48_IMAGE:-sharplabnext/worker-roslyn-netfx48:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_ROSLYN_NETFX48_IMAGE:-sharplabnext/worker-roslyn-netfx48:content}
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      RoslynWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      RoslynWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
       RoslynWorker__WorkerImageId: ${SHARPLABNEXT_ROSLYN_NETFX48_IMAGE_ID:-unverified}
       RoslynWorker__BuildProcess__MaximumConcurrentProcesses: "8"
       ArtifactStore__BaseUrl: http://artifact-store:8080
@@ -185,11 +185,11 @@ services:
 
   worker-roslyn-main:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_ROSLYN_MAIN_IMAGE:-sharplabnext/worker-roslyn-main:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_ROSLYN_MAIN_IMAGE:-sharplabnext/worker-roslyn-main:content}
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      RoslynWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      RoslynWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
       RoslynWorker__WorkerImageId: ${SHARPLABNEXT_ROSLYN_MAIN_IMAGE_ID:-unverified}
       RoslynWorker__BuildProcess__MaximumConcurrentProcesses: "8"
       ArtifactStore__BaseUrl: http://artifact-store:8080
@@ -197,11 +197,11 @@ services:
 
   worker-roslyn-const-generics:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_ROSLYN_CONST_GENERICS_IMAGE:-sharplabnext/worker-roslyn-const-generics:development}
+    image: ${SHARPLABNEXT_ROSLYN_CONST_GENERICS_IMAGE:-sharplabnext/worker-roslyn-const-generics:content}
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      RoslynWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      RoslynWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
       RoslynWorker__WorkerImageId: ${SHARPLABNEXT_ROSLYN_CONST_GENERICS_IMAGE_ID:-unverified}
       RoslynWorker__BuildProcess__MaximumConcurrentProcesses: "8"
       ArtifactStore__BaseUrl: http://artifact-store:8080
@@ -210,15 +210,15 @@ services:
 
   worker-artifacts-default:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_ARTIFACTS_DEFAULT_IMAGE:-sharplabnext/worker-artifacts-default:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_ARTIFACTS_DEFAULT_IMAGE:-sharplabnext/worker-artifacts-default:content}
     environment:
       <<: *service-environment
-      ArtifactWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      ArtifactWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
       ArtifactWorker__WorkerImageId: ${SHARPLABNEXT_ARTIFACTS_DEFAULT_IMAGE_ID:-unverified}
 
   worker-artifacts-jsil:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_ARTIFACTS_JSIL_IMAGE:-sharplabnext/worker-artifacts-jsil:development}
+    image: ${SHARPLABNEXT_ARTIFACTS_JSIL_IMAGE:-sharplabnext/worker-artifacts-jsil:content}
     depends_on:
       artifact-store:
         condition: service_started
@@ -226,13 +226,13 @@ services:
       - /tmp:rw,nosuid,size=768m
     environment:
       <<: *service-environment
-      Jsil__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      Jsil__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
       Jsil__WorkerImageId: ${SHARPLABNEXT_ARTIFACTS_JSIL_IMAGE_ID:-unverified}
       ArtifactStore__BaseUrl: http://artifact-store:8080
 
   worker-artifacts-const-generics:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_ARTIFACTS_CONST_GENERICS_IMAGE:-sharplabnext/worker-artifacts-const-generics:development}
+    image: ${SHARPLABNEXT_ARTIFACTS_CONST_GENERICS_IMAGE:-sharplabnext/worker-artifacts-const-generics:content}
     depends_on:
       artifact-store:
         condition: service_started
@@ -240,7 +240,7 @@ services:
       - /tmp:rw,noexec,nosuid,size=256m
     environment:
       <<: *service-environment
-      ConstGenericsArtifactWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      ConstGenericsArtifactWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
       ConstGenericsArtifactWorker__WorkerImageId: ${SHARPLABNEXT_ARTIFACTS_CONST_GENERICS_IMAGE_ID:-unverified}
       ConstGenericsArtifactWorker__ProcessorDotNetHostPath: /opt/const-runtime/dotnet
       ConstGenericsArtifactWorker__ProcessorAssemblyPath: /app/processor/SharpLabNext.Worker.Artifacts.ConstGenerics.Processor.dll
@@ -249,23 +249,23 @@ services:
 
   worker-artifacts-il-assembler:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_IL_ASSEMBLER_IMAGE:-sharplabnext/worker-artifacts-il-assembler:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_IL_ASSEMBLER_IMAGE:-sharplabnext/worker-artifacts-il-assembler:content}
     depends_on:
       artifact-store:
         condition: service_started
     environment:
       <<: *service-environment
-      ArtifactAssembler__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      ArtifactAssembler__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
       ArtifactAssembler__WorkerImageId: ${SHARPLABNEXT_IL_ASSEMBLER_IMAGE_ID:-unverified}
       ArtifactStore__BaseUrl: http://artifact-store:8080
 
   worker-fsharp:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_FSHARP_IMAGE:-sharplabnext/worker-fsharp:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_FSHARP_IMAGE:-sharplabnext/worker-fsharp:content}
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      FSharpWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      FSharpWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
       FSharpWorker__WorkerImageId: ${SHARPLABNEXT_FSHARP_IMAGE_ID:-unverified}
       FSharpWorker__BuildProcess__MaximumConcurrentProcesses: "8"
       ArtifactStore__BaseUrl: http://artifact-store:8080
@@ -275,28 +275,28 @@ services:
 
   worker-gsharp:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_GSHARP_IMAGE:-sharplabnext/worker-gsharp:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_GSHARP_IMAGE:-sharplabnext/worker-gsharp:content}
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      GSharp__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      GSharp__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
       GSharp__WorkerImageId: ${SHARPLABNEXT_GSHARP_IMAGE_ID:-unverified}
       ReferenceSets__net10-ref__Path: /reference-sets/net10-ref
 
   worker-peachpie:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_PEACHPIE_IMAGE:-sharplabnext/worker-peachpie:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_PEACHPIE_IMAGE:-sharplabnext/worker-peachpie:content}
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      PeachPie__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      PeachPie__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
       PeachPie__WorkerImageId: ${SHARPLABNEXT_PEACHPIE_IMAGE_ID:-unverified}
       PeachPie__BuildProcess__MaximumConcurrentProcesses: "8"
       ReferenceSets__net10-ref__Path: /reference-sets/net10-ref
 
   worker-cppcli:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_CPPCLI_IMAGE:-sharplabnext/worker-cppcli:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_CPPCLI_IMAGE:-sharplabnext/worker-cppcli:content}
     user: "0:0"
     networks:
       - cppcli-control
@@ -309,13 +309,13 @@ services:
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      CppCli__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      CppCli__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
       CppCli__WorkerImageId: ${SHARPLABNEXT_CPPCLI_IMAGE_ID:-unverified}
       CppCli__CompilerVersion: "19.51.36248"
 
   worker-jsharp:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_JSHARP_IMAGE:-sharplabnext/worker-jsharp:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_JSHARP_IMAGE:-sharplabnext/worker-jsharp:content}
     user: "0:0"
     networks:
       - jsharp-control
@@ -332,16 +332,16 @@ services:
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      JSharp__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      JSharp__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
       JSharp__WorkerImageId: ${SHARPLABNEXT_JSHARP_IMAGE_ID:-unverified}
 
   worker-il:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_IL_WORKER_IMAGE:-sharplabnext/worker-il:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_IL_WORKER_IMAGE:-sharplabnext/worker-il:content}
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      IlWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      IlWorker__ReleaseId: ${SHARPLABNEXT_RELEASE_ID:-content}
       IlWorker__WorkerImageId: ${SHARPLABNEXT_IL_WORKER_IMAGE_ID:-unverified}
       ArtifactStore__BaseUrl: http://artifact-store:8080
       IlWorker__DevelopmentArtifactEnvelope__Enabled: "false"
@@ -350,11 +350,11 @@ services:
 
   worker-minilang:
     <<: *service-defaults
-    image: ${SHARPLABNEXT_MINILANG_IMAGE:-sharplabnext/worker-minilang:0.1.0-dev.1}
+    image: ${SHARPLABNEXT_MINILANG_IMAGE:-sharplabnext/worker-minilang:content}
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      MINILANG_RELEASE_ID: ${SHARPLABNEXT_RELEASE_ID:-0.1.0-dev.1}
+      MINILANG_RELEASE_ID: ${SHARPLABNEXT_RELEASE_ID:-content}
       MINILANG_WORKER_IMAGE_ID: ${SHARPLABNEXT_MINILANG_IMAGE_ID:-unverified}
 
 networks:

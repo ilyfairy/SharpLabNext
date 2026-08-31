@@ -63,7 +63,7 @@ test('operator image build input binds declared recipes and Framework seeds', as
   assert.match(spec.inputSha256, /^[0-9a-f]{64}$/)
   assert.equal(spec.descriptor.strategy, 'source-built-operator-image-v1')
   assert.deepEqual(spec.images.map(({ id, buildKind }) => ({ id, buildKind })), [
-    { id: 'jsharp20-development-base', buildKind: 'jsharp20' },
+    { id: 'jsharp20-toolchain-base', buildKind: 'jsharp20' },
     { id: 'cppcli-prepared-base', buildKind: 'cppcli' },
   ])
   assert.deepEqual(spec.descriptor.files.map(file => file.path), [

@@ -379,7 +379,7 @@ internal sealed class GatewayFakeWorkerClient : IToolchainWorkerClient
         return Task.FromResult(new ToolchainExplainResponse(request.RequestId, new ExplainResult(new ExplanationDocument(request.Workspace.LanguageId, "roslyn-stable", request.Workspace.Revision, request.Workspace.SelectionRevision, request.Workspace.Files.Select(file => new ExplanationFile(file.Path, [new ExplanationNode("CompilationUnit", "Compilation unit", "The root syntax node for this C# source file.", new TextRange(0, 0, 0, Math.Min(file.Text.Length, 1)), 0)])).ToArray(), false))));
     }
 
-    private static BuildIdentity Identity(BuildRequest request) => new("development", request.Workspace.LanguageId, request.ToolchainId, "test", null, request.ReferenceSetId, "test-worker");
+    private static BuildIdentity Identity(BuildRequest request) => new("content", request.Workspace.LanguageId, request.ToolchainId, "test", null, request.ReferenceSetId, "test-worker");
 }
 
 internal sealed class GatewayRejectingArtifactPublisher : IBuildArtifactPublisher

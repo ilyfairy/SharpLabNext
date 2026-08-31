@@ -23,7 +23,7 @@ test('formal rebuild invokes only the reviewed wrapper with stderr-only diagnost
     {
       SOURCE_REVISION: 'a'.repeat(40),
       RUNTIME_MATRIX_PROFILE_ID: 'mono-6.12-linux-x64',
-      RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-development',
+      RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-content',
       RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE: 'true',
       RUNTIME_CANDIDATE_ALLOWED_DIRTY_PATHS: 'eng/build-runtime-candidate.mjs',
       BUILDX_BAKE_FILE: 'untrusted.hcl',

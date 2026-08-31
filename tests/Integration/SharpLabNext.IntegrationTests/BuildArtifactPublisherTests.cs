@@ -105,7 +105,7 @@ public sealed class BuildArtifactPublisherTests
         var placeholder = new ArtifactManifest(
             1,
             new ArtifactRef($"sha256:{new string('0', 64)}"),
-            new ArtifactProducer("development", "tiny-language", "tiny-language-stable", "1.0.0", null, "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            new ArtifactProducer("content", "tiny-language", "tiny-language-stable", "1.0.0", null, "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
             "net10-ref",
             "net10.0",
             "cil-text-v1",

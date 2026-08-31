@@ -43,7 +43,7 @@
     "source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["revision", "dirty", "verified", "developmentOverrideUsed"],
+      "required": ["revision", "dirty", "verified"],
       "properties": {
         "revision": {
           "type": "string",
@@ -56,8 +56,7 @@
           "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
         },
         "dirty": { "type": "boolean" },
-        "verified": { "type": "boolean" },
-        "developmentOverrideUsed": { "type": "boolean" }
+        "verified": { "type": "boolean" }
       }
     },
     "image": {

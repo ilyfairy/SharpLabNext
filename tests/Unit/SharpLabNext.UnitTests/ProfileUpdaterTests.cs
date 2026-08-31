@@ -185,7 +185,7 @@ public sealed class ProfileUpdaterTests
                   autoPromoteAfterTests: false
                 """);
         var updater = new ReleaseLockUpdater(new FakeProfileSourceClient(), channels.Root);
-        var current = new ReleaseLockDocument { SchemaVersion = 1, ReleaseId = "development", ResolvedAt = DateTimeOffset.UnixEpoch, Components = new Dictionary<string, LockedComponent>() };
+        var current = new ReleaseLockDocument { SchemaVersion = 1, ReleaseId = "content", ResolvedAt = DateTimeOffset.UnixEpoch, Components = new Dictionary<string, LockedComponent>() };
 
         var result = await updater.ResolveAsync(current, cancellationToken: TestContext.Current.CancellationToken);
 
@@ -228,7 +228,7 @@ public sealed class ProfileUpdaterTests
                   autoPromoteAfterTests: false
                 """);
         var updater = new ReleaseLockUpdater(new FakeProfileSourceClient(), channels.Root);
-        var current = new ReleaseLockDocument { SchemaVersion = 1, ReleaseId = "development", ResolvedAt = DateTimeOffset.UnixEpoch, Components = new Dictionary<string, LockedComponent>() };
+        var current = new ReleaseLockDocument { SchemaVersion = 1, ReleaseId = "content", ResolvedAt = DateTimeOffset.UnixEpoch, Components = new Dictionary<string, LockedComponent>() };
 
         var exception = await Assert.ThrowsAsync<InvalidDataException>(() => updater.ResolveAsync(current, cancellationToken: TestContext.Current.CancellationToken));
 
@@ -389,7 +389,7 @@ public sealed class ProfileUpdaterTests
                   autoPromoteAfterTests: false
                 """);
         var updater = new ReleaseLockUpdater(new FakeProfileSourceClient(), channels.Root);
-        var current = new ReleaseLockDocument { SchemaVersion = 1, ReleaseId = "development", ResolvedAt = DateTimeOffset.UnixEpoch, Components = new Dictionary<string, LockedComponent>() };
+        var current = new ReleaseLockDocument { SchemaVersion = 1, ReleaseId = "content", ResolvedAt = DateTimeOffset.UnixEpoch, Components = new Dictionary<string, LockedComponent>() };
 
         await Assert.ThrowsAsync<InvalidDataException>(() => updater.ResolveAsync(current, cancellationToken: TestContext.Current.CancellationToken));
     }
@@ -407,7 +407,7 @@ public sealed class ProfileUpdaterTests
               autoPromoteAfterTests: false
             """);
         var updater = new ReleaseLockUpdater(new FakeProfileSourceClient(), channels.Root);
-        var current = new ReleaseLockDocument { SchemaVersion = 1, ReleaseId = "development", ResolvedAt = DateTimeOffset.UnixEpoch, Components = new Dictionary<string, LockedComponent>() };
+        var current = new ReleaseLockDocument { SchemaVersion = 1, ReleaseId = "content", ResolvedAt = DateTimeOffset.UnixEpoch, Components = new Dictionary<string, LockedComponent>() };
 
         var exception = await Assert.ThrowsAsync<InvalidDataException>(() => updater.ResolveAsync(current, cancellationToken: TestContext.Current.CancellationToken));
 
@@ -420,7 +420,7 @@ public sealed class ProfileUpdaterTests
         var current = new ReleaseLockDocument
         {
             SchemaVersion = 1,
-            ReleaseId = "development",
+            ReleaseId = "content",
             ResolvedAt = DateTimeOffset.UnixEpoch,
             Components = new Dictionary<string, LockedComponent>
             {
@@ -598,9 +598,9 @@ public sealed class ProfileUpdaterTests
         Assert.Equal(ProfileUpdateStatusKind.CandidateInProgress, status.Status);
         Assert.True(status.Checked);
         Assert.True(status.UpdateAvailable);
-        Assert.Equal("development", status.Active.ReleaseId);
+        Assert.Equal("content", status.Active.ReleaseId);
         Assert.Equal(repository.ActiveDigest, status.Active.LockDigest);
-        Assert.Equal("development", status.LastKnownGood?.ReleaseId);
+        Assert.Equal("content", status.LastKnownGood?.ReleaseId);
         Assert.Equal(repository.ActiveDigest, status.LastKnownGood?.LockDigest);
         Assert.Equal("candidate-public", status.Candidate?.ReleaseId);
         Assert.Equal(candidate.CandidateDigest, status.Candidate?.LockDigest);
@@ -811,16 +811,15 @@ public sealed class ProfileUpdaterTests
     }
 
     [Fact]
-    public async Task BakeEnvironmentMarksTheStandaloneWineOperatorAsDevelopmentOnly()
+    public async Task BakeEnvironmentMarksTheStandaloneWineOperatorAsNonPromotable()
     {
         var repositoryRoot = FindRepositoryRoot();
         var environment = await BakeEnvironmentResolver.CreateAsync(Path.Combine(repositoryRoot, "profiles", "lock.json"), Path.Combine(repositoryRoot, "profiles", "base-images.json"), "test-source-revision", "1700000000", cancellationToken: TestContext.Current.CancellationToken);
 
         // Only build-wine-coreclr-operator.mjs may promote this tuple after it
         // has verified a clean committed source context.
-        Assert.Equal("working-tree-development", environment["OPERATOR_SOURCE_CONTEXT"]);
+        Assert.Equal("working-tree-content", environment["OPERATOR_SOURCE_CONTEXT"]);
         Assert.Equal("false", environment["OPERATOR_PROMOTION_ELIGIBLE"]);
-        Assert.Equal("true", environment["OPERATOR_DEVELOPMENT_ONLY"]);
     }
 
     [Fact]
@@ -973,7 +972,7 @@ public sealed class ProfileUpdaterTests
     }
 
     [Fact]
-    public async Task DevelopmentComposeConsumesPrebuiltRoslynCoreClrImagesWithoutRemotePulls()
+    public async Task LocalComposeConsumesPrebuiltRoslynCoreClrImagesWithoutRemotePulls()
     {
         var repositoryRoot = FindRepositoryRoot();
         var compose = await File.ReadAllTextAsync(Path.Combine(repositoryRoot, "deploy", "compose.dev.yaml"), TestContext.Current.CancellationToken);
@@ -986,7 +985,7 @@ public sealed class ProfileUpdaterTests
         {
             var start = compose.IndexOf($"\n  {service}:\n", StringComparison.Ordinal);
             var end = compose.IndexOf($"\n  {nextService}:\n", start, StringComparison.Ordinal);
-            Assert.True(start >= 0 && end > start, $"Could not locate {service} in development Compose.");
+            Assert.True(start >= 0 && end > start, $"Could not locate {service} in Compose.");
             var block = compose[start..end];
             Assert.DoesNotContain("    build:\n", block, StringComparison.Ordinal);
             Assert.Contains("    pull_policy: never\n", block, StringComparison.Ordinal);
@@ -995,7 +994,7 @@ public sealed class ProfileUpdaterTests
         var composeValidator = await File.ReadAllTextAsync(Path.Combine(repositoryRoot, "eng", "validation", "validate-compose.mjs"), TestContext.Current.CancellationToken);
         Assert.Contains(".filter(key => /^ReferenceSets__/.test(key))", composeValidator, StringComparison.Ordinal);
         Assert.DoesNotContain("/^ReferenceSets__.+__Path$/.test(key)", composeValidator, StringComparison.Ordinal);
-        Assert.Contains("must use pull_policy=never for its prebuilt development image", composeValidator, StringComparison.Ordinal);
+        Assert.Contains("must use pull_policy=never for its prebuilt content image", composeValidator, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1734,7 +1733,7 @@ public sealed class ProfileUpdaterTests
             {
                 var runtimeProfilePath = Path.Combine(Root, "profiles", "runtimes", $"{runtimeProfileId}.json");
                 File.Copy(Path.Combine(sourceRepository, "profiles", "runtimes", $"{runtimeProfileId}.json"), runtimeProfilePath);
-                NormalizeDevelopmentRuntimeProfileImage(runtimeProfilePath, runtimeProfileId);
+                NormalizeContentRuntimeProfileImage(runtimeProfilePath, runtimeProfileId);
             }
             File.WriteAllText(Path.Combine(Root, "packages.lock.json"), "{}\n");
             ReferenceSetConfigurationPath = Path.Combine(Root, "src", "Workers", "Test", "SharpLabNext.Worker.Test", "appsettings.json");
@@ -1763,7 +1762,7 @@ public sealed class ProfileUpdaterTests
             var document = new ReleaseLockDocument
             {
                 SchemaVersion = 1,
-                ReleaseId = "development",
+                ReleaseId = "content",
                 ResolvedAt = DateTimeOffset.UnixEpoch,
                 Components = new Dictionary<string, LockedComponent>
                 {
@@ -1945,12 +1944,12 @@ public sealed class ProfileUpdaterTests
 
         private static bool IsResolvedBySyntheticChannel(string referenceSetId) => referenceSetId is "net10-ref" or "net11-preview-ref";
 
-        private static void NormalizeDevelopmentRuntimeProfileImage(string path, string runtimeProfileId)
+        private static void NormalizeContentRuntimeProfileImage(string path, string runtimeProfileId)
         {
             var profile = JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? throw new InvalidOperationException($"Runtime profile '{runtimeProfileId}' is invalid.");
             var image = profile["image"]?.GetValue<string>() ?? throw new InvalidOperationException($"Runtime profile '{runtimeProfileId}' has no image.");
             if (image.Contains('@'))
-                profile["image"] = $"{image[..image.IndexOf('@')]}:development";
+                profile["image"] = $"{image[..image.IndexOf('@')]}:content";
             File.WriteAllText(path, profile.ToJsonString() + "\n");
         }
     }

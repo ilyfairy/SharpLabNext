@@ -396,7 +396,7 @@ RUN test -n "${PROFILE_ID}" \
     && test -n "${VERSION}" \
     && test -n "${SOURCE_REVISION}" \
     && { test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "committed:true" \
-         || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "working-tree-development:false"; } \
+         || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "working-tree-content:false"; } \
     && test -n "${DOTNET_RUNTIME_VERSION}" \
     && test -n "${DOTNET_RUNTIME_COMMIT}" \
     && test -n "${DOTNET_JIT_COMMIT}" \
@@ -425,7 +425,7 @@ LABEL org.opencontainers.image.title="SharpLabNext Linux CoreCLR Matrix Runtime 
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
       io.sharplabnext.source.context="${CANDIDATE_SOURCE_CONTEXT}" \
       com.sharplabnext.runtime-candidate.promotion-eligible="${CANDIDATE_PROMOTION_ELIGIBLE}" \
-      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      org.opencontainers.image.source="https://github.com/ilyfairy/SharpLabNext" \
       com.sharplabnext.runtime-profile="${PROFILE_ID}" \
       com.sharplabnext.runtime-version="${DOTNET_RUNTIME_VERSION}" \
       io.sharplabnext.runtime.commit="${DOTNET_RUNTIME_COMMIT}" \

@@ -20,7 +20,7 @@ const string sourceIdentityModeEnvironmentVariable = "SHARPLABNEXT_SOURCE_IDENTI
 const string contentSourceIdentityMode = "content";
 const string environmentJsonPrefix = "SHARPLABNEXT_BAKE_ENVIRONMENT_JSON=";
 var imagePrefix = "sharplabnext";
-var developmentImageInputs = new Dictionary<string, string>(StringComparer.Ordinal);
+var imageInputs = new Dictionary<string, string>(StringComparer.Ordinal);
 var command = new List<string>();
 for (var index = 0; index < args.Length; index++)
 {
@@ -44,8 +44,8 @@ for (var index = 0; index < args.Length; index++)
         case "--emit-environment-json":
             emitEnvironmentJson = true;
             break;
-        case "--development-image-input":
-            AddDevelopmentImageInput(developmentImageInputs, RequiredValue(args, ref index));
+        case "--image-input":
+            AddImageInput(imageInputs, RequiredValue(args, ref index));
             break;
         case "--image-prefix":
             imagePrefix = RequiredValue(args, ref index);
@@ -64,12 +64,7 @@ var sourceIdentityMode = string.Equals(Environment.GetEnvironmentVariable(source
 
 if (string.IsNullOrWhiteSpace(lockPath) || string.IsNullOrWhiteSpace(baseImageManifestPath) || string.IsNullOrWhiteSpace(sourceRevision) || string.IsNullOrWhiteSpace(repositoryRoot))
 {
-    Console.Error.WriteLine("Usage: dotnet run eng/tools/run-with-bake-environment.cs -- " + "--lock PATH --base-images PATH --source-revision REVISION --repository-root PATH " + "[--runtime-matrix PATH] [--development-image-input NAME=REFERENCE] " + "[--emit-environment-json] [--image-prefix PREFIX] [-- COMMAND [ARG...]]");
-    return 64;
-}
-if (developmentImageInputs.Count > 0 && sourceIdentityMode != SourceIdentityMode.Content)
-{
-    Console.Error.WriteLine("--development-image-input requires content source identity.");
+    Console.Error.WriteLine("Usage: dotnet run eng/tools/run-with-bake-environment.cs -- " + "--lock PATH --base-images PATH --source-revision REVISION --repository-root PATH " + "[--runtime-matrix PATH] [--image-input NAME=REFERENCE] " + "[--emit-environment-json] [--image-prefix PREFIX] [-- COMMAND [ARG...]]");
     return 64;
 }
 
@@ -85,8 +80,7 @@ try
     var sourceDateEpoch = await SourceDateEpochResolver.ResolveAsync(repositoryRoot, sourceRevision, sourceIdentityMode);
     var controlRuntimeTargetFramework = await ReadControlRuntimeTargetFrameworkAsync(runtimeMatrixPath ?? Path.Combine(repositoryRoot, "profiles", "runtime-matrix.json"));
     var environment = await BakeEnvironmentResolver.CreateAsync(lockPath, baseImageManifestPath, sourceRevision, sourceDateEpoch, imagePrefix, controlRuntimeTargetFramework: controlRuntimeTargetFramework);
-    environment["DEVELOPMENT_IMAGE_INPUTS"] = sourceIdentityMode == SourceIdentityMode.Content ? "true" : "false";
-    foreach (var pair in developmentImageInputs)
+    foreach (var pair in imageInputs)
         environment[pair.Key] = pair.Value;
     if (emitEnvironmentJson)
     {
@@ -162,11 +156,11 @@ static string RequiredValue(string[] values, ref int index)
     return values[index];
 }
 
-static void AddDevelopmentImageInput(IDictionary<string, string> inputs, string configured)
+static void AddImageInput(IDictionary<string, string> inputs, string configured)
 {
     var separator = configured.IndexOf('=');
     if (separator <= 0 || separator == configured.Length - 1)
-        throw new BakeEnvironmentValidationException("--development-image-input must use NAME=REFERENCE.");
+        throw new BakeEnvironmentValidationException("--image-input must use NAME=REFERENCE.");
 
     var name = configured[..separator];
     var reference = configured[(separator + 1)..];
@@ -176,13 +170,13 @@ static void AddDevelopmentImageInput(IDictionary<string, string> inputs, string 
         "JSHARP_TOOLCHAIN_IMAGE"
     };
     if (!allowed.Contains(name))
-        throw new BakeEnvironmentValidationException($"Development image input '{name}' is not supported.");
+        throw new BakeEnvironmentValidationException($"Image input '{name}' is not supported.");
     if (reference.Length > 512 || reference.Any(static character => char.IsWhiteSpace(character) || char.IsControl(character)) || !reference.Contains(':', StringComparison.Ordinal))
     {
-        throw new BakeEnvironmentValidationException($"Development image input '{name}' has an invalid Docker reference.");
+        throw new BakeEnvironmentValidationException($"Image input '{name}' has an invalid Docker reference.");
     }
     if (!inputs.TryAdd(name, reference))
-        throw new BakeEnvironmentValidationException($"Development image input '{name}' was supplied more than once.");
+        throw new BakeEnvironmentValidationException($"Image input '{name}' was supplied more than once.");
 }
 
 [JsonSerializable(typeof(Dictionary<string, string>))]

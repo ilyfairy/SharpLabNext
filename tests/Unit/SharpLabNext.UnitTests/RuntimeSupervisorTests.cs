@@ -110,7 +110,7 @@ public sealed class RuntimeSupervisorTests
     }
 
     [Fact]
-    public void OptionsAcceptACompleteDevelopmentProfile()
+    public void OptionsAcceptACompleteContentProfile()
     {
         var result = new RuntimeSupervisorOptionsValidator().Validate(null, ValidOptions());
 
@@ -192,7 +192,7 @@ public sealed class RuntimeSupervisorTests
     }
 
     [Fact]
-    public void OptionsRejectFloatingLatestEvenInDevelopment()
+    public void OptionsRejectFloatingLatestEvenForContentProfile()
     {
         var options = ValidOptions();
         options.Profiles[0].Image = "sharplabnext/runtime:latest";
@@ -2673,10 +2673,10 @@ public sealed class RuntimeSupervisorTests
             new RuntimeProfileOptions
             {
                 Id = "dotnet-10-linux-x64",
-                Image = "sharplabnext/runtime-dotnet10:dev",
+                Image = "sharplabnext/runtime-dotnet10:content",
                 RuntimeVersion = "10.0.9",
                 JitVersion = "10.0.9",
-                RuntimeImageId = "development-image-id",
+                RuntimeImageId = "test-image-id",
                 AcceptedArtifactFormats = ["dotnet-managed-pe-v1"],
                 AcceptedFrameworks =
                 [
@@ -2694,10 +2694,10 @@ public sealed class RuntimeSupervisorTests
     private static RuntimeProfileOptions WineRuntimeProfile() => new()
     {
         Id = "wine-netfx48-linux-x64",
-        Image = "sharplabnext/runtime-wine-netfx48:dev",
+        Image = "sharplabnext/runtime-wine-netfx48:content",
         Family = "netfx-clr-wine",
         RuntimeVersion = "wine-9.0+netfx48",
-        RuntimeImageId = "development-image-id",
+        RuntimeImageId = "test-image-id",
         JitVersion = "not-supported",
         Rid = "linux-x64",
         Architecture = "x64",
@@ -2720,10 +2720,10 @@ public sealed class RuntimeSupervisorTests
     private static RuntimeProfileOptions JSharpWineRuntimeProfile() => new()
     {
         Id = "wine-jsharp20-linux-x64",
-        Image = "sharplabnext/runtime-wine-jsharp20:development",
+        Image = "sharplabnext/runtime-wine-jsharp20:content",
         Family = "netfx-clr-wine",
         RuntimeVersion = "wine-9.0+clr2+jsharp-2.0.50727.937",
-        RuntimeImageId = "development-image-id",
+        RuntimeImageId = "test-image-id",
         JitVersion = "not-supported",
         Rid = "linux-x64",
         Architecture = "x64",
@@ -2742,10 +2742,10 @@ public sealed class RuntimeSupervisorTests
     private static RuntimeProfileOptions WineNetFx20RuntimeProfile() => new()
     {
         Id = "wine-netfx20-linux-x64",
-        Image = "sharplabnext/runtime-wine-netfx20:development",
+        Image = "sharplabnext/runtime-wine-netfx20:content",
         Family = "netfx-clr-wine",
         RuntimeVersion = "2.0",
-        RuntimeImageId = "development-image-id",
+        RuntimeImageId = "test-image-id",
         JitVersion = "not-supported",
         Rid = "linux-x64",
         Architecture = "x64",

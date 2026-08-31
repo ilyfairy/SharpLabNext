@@ -59,8 +59,7 @@ static void VerifyPackage(string path, SdkPackageDefinition package, string vers
     Require(Value(metadata, ns + "license") == "BSD-2-Clause", $"{package.Id} license differs.");
     Require(Value(metadata, ns + "readme") == "README.md", $"{package.Id} readme metadata differs.");
     var repository = metadata.Element(ns + "repository");
-    Require((string?)repository?.Attribute("url") == "https://github.com/sharplabnext/SharpLabNext",
-        $"{package.Id} repository URL differs.");
+    Require((string?)repository?.Attribute("url") == "https://github.com/ilyfairy/SharpLabNext", $"{package.Id} repository URL differs.");
 
     var dependencies = metadata.Descendants(ns + "dependency").Select(dependency => new { Id = (string?)dependency.Attribute("id") ?? string.Empty, Version = (string?)dependency.Attribute("version") ?? string.Empty }).ToArray();
     Require(dependencies.Select(static dependency => dependency.Id).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).SequenceEqual(package.Dependencies.Order(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase), $"{package.Id} dependency set differs from eng/sdk-packages.json.");

@@ -48,7 +48,7 @@
         "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "patchDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "imageId": {
-          "description": "Generated immutable image identity. It may be omitted from a development source lock and is required in a generated release bundle lock.",
+          "description": "Generated immutable image identity. It may be omitted from a source lock and is required in a generated release bundle lock.",
           "type": "string",
           "pattern": "^sha256:[0-9a-f]{64}$"
         },

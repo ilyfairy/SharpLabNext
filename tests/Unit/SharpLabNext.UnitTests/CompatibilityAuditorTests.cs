@@ -6,7 +6,7 @@ namespace SharpLabNext.UnitTests;
 public sealed class CompatibilityAuditorTests
 {
     [Fact]
-    public async Task DevelopmentCatalogPassesFullCompatibilityAudit()
+    public async Task ContentCatalogPassesFullCompatibilityAudit()
     {
         var catalogTask = CatalogLoader.LoadCatalogAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "catalog.json"), TestContext.Current.CancellationToken);
         var lockTask = CatalogLoader.LoadReleaseLockAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "lock.json"), TestContext.Current.CancellationToken);

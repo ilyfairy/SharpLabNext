@@ -32,7 +32,7 @@
     <Authors>SharpLabNext contributors</Authors>
     <Company>SharpLabNext contributors</Company>
     <Copyright>Copyright (c) SharpLabNext contributors</Copyright>
-    <PackageProjectUrl>https://github.com/sharplabnext/SharpLabNext</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/ilyfairy/SharpLabNext</PackageProjectUrl>
     <PackageLicenseExpression>BSD-2-Clause</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageTags>sharplabnext;dotnet;compiler;runtime;worker-sdk</PackageTags>

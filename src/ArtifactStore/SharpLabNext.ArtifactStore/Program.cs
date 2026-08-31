@@ -14,7 +14,7 @@ using SharpLabNext.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 var internalServiceAuthentication = InternalServiceAuthenticationOptions.FromConfiguration(builder.Configuration, builder.Environment);
-var descriptor = new ServiceIdentity("artifact-store", ServiceKind.ArtifactStore, builder.Configuration["ReleaseId"] ?? "development", ProtocolVersion.WorkerV1, ["health", "content-cas-v1", "artifact-cas-v1", "leases-v1"], "local-sqlite-v1");
+var descriptor = new ServiceIdentity("artifact-store", ServiceKind.ArtifactStore, builder.Configuration["ReleaseId"] ?? "content", ProtocolVersion.WorkerV1, ["health", "content-cas-v1", "artifact-cas-v1", "leases-v1"], "local-sqlite-v1");
 builder.AddSharpLabNextObservability(descriptor.Id, descriptor.ReleaseId);
 builder.Services.AddSingleton(descriptor);
 builder.Services.AddOptions<ArtifactStoreOptions>().Bind(builder.Configuration.GetSection(ArtifactStoreOptions.SectionName));

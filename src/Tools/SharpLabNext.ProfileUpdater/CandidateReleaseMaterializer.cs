@@ -604,7 +604,7 @@ public static class CandidateReleaseMaterializer
         var tag = Required(releaseId, "releaseId");
         if (image.Contains('@', StringComparison.Ordinal))
         {
-            throw new ProfileUpdateValidationException("ConstGenerics development runtime profile must use a repository tag, not a digest.");
+            throw new ProfileUpdateValidationException("ConstGenerics source runtime profile must use a repository tag, not a digest.");
         }
         var lastSlash = image.LastIndexOf('/');
         var lastColon = image.LastIndexOf(':');

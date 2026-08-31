@@ -34,7 +34,7 @@ public sealed class GSharpWorkerEndpointTests
             var artifact = GSharpTestSettings.CreateRequest(BuildTarget.Artifact, validSource);
             var sessionWorkspace = GSharpTestSettings.CreateRequest(BuildTarget.CompileCheck, invalidSource).Workspace;
             var scenario = new LanguageWorkerConformanceScenario(
-                new ServiceIdentity(GSharpToolchain.ToolchainId, ServiceKind.ToolchainWorker, "development", ProtocolVersion.WorkerV1, manifest.Capabilities, "ready"),
+                new ServiceIdentity(GSharpToolchain.ToolchainId, ServiceKind.ToolchainWorker, "content", ProtocolVersion.WorkerV1, manifest.Capabilities, "ready"),
                 $"sha256:{new string('0', 64)}",
                 manifest,
                 compileCheck,

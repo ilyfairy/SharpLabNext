@@ -66,7 +66,7 @@ while test "$#" -gt 0; do
             && printf '%s' "$tag" | grep -Eq '^[a-z0-9][a-z0-9._-]*$'; then
             continue
         fi
-        fail "${name} development reference must use a safe explicit local tag"
+        fail "${name} local reference must use a safe explicit tag"
     fi
 
     repository=${value%@sha256:*}

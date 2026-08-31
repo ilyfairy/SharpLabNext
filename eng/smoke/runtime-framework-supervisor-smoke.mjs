@@ -1,4 +1,4 @@
-/** Development-only Framework Supervisor one-shot smoke. No Docker orchestration. */
+/** Validation-only Framework Supervisor one-shot smoke. No Docker orchestration. */
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'

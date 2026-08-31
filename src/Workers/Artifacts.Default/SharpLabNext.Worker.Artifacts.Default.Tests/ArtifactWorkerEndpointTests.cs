@@ -52,7 +52,7 @@ public sealed class ArtifactWorkerEndpointTests
             var typed = Assert.IsType<TypedResultOperationEventPayload>(Assert.Single(events, static item => item.Payload is TypedResultOperationEventPayload).Payload);
             var render = Assert.IsType<RenderArtifactResult>(typed.Result);
             Assert.Equal("artifacts-default", render.Identity?.ProcessorId);
-            Assert.Equal("development", render.Identity?.WorkerImageId);
+            Assert.Equal("content", render.Identity?.WorkerImageId);
             Assert.Equal(1, executor.RenderCount);
         }
         finally

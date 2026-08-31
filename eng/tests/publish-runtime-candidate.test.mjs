@@ -203,7 +203,7 @@ test('publisher rejects source, input and label drift before push', () => {
 test('publisher requires candidate-local committed and promotion-eligible attestations', () => {
   const cases = [
     ['missing source context', labels => { delete labels['io.sharplabnext.source.context'] }],
-    ['development source context', labels => { labels['io.sharplabnext.source.context'] = 'working-tree-development' }],
+    ['content source context', labels => { labels['io.sharplabnext.source.context'] = 'working-tree-content' }],
     ['missing promotion eligibility', labels => { delete labels['com.sharplabnext.runtime-candidate.promotion-eligible'] }],
     ['false promotion eligibility', labels => { labels['com.sharplabnext.runtime-candidate.promotion-eligible'] = 'false' }],
   ]

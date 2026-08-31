@@ -222,7 +222,7 @@ RUN mkdir -p /var/lib/sharplabnext \
 LABEL org.opencontainers.image.title="SharpLabNext Roslyn Main Worker" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
-      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      org.opencontainers.image.source="https://github.com/ilyfairy/SharpLabNext" \
       io.sharplabnext.roslyn.commit="${ROSLYN_MAIN_COMMIT}" \
       io.sharplabnext.reference-set.net10-ref="${NET10_REFERENCE_PACKAGE_CONTENT_HASH}" \
       io.sharplabnext.reference-set.net11-preview-ref="${NET11_REFERENCE_PACKAGE_CONTENT_HASH}"

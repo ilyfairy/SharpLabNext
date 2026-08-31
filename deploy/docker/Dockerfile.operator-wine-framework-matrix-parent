@@ -39,7 +39,7 @@ RUN --mount=type=bind,from=framework-matrix-metadata,source=/,target=/run/sharpl
     rm -rf /usr/lib/x86_64-linux-gnu/wine/i386-windows; \
     [[ "${ROOT_IMAGE}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; \
     [[ "${WINE_IMAGE}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; \
-    [[ "${SOURCE_REVISION}" == development || "${SOURCE_REVISION}" =~ ^[0-9a-f]{40,64}$ ]]; \
+    [[ "${SOURCE_REVISION}" =~ ^[0-9a-f]{40,64}$ ]]; \
     [[ "${FRAMEWORK_MATRIX_INPUT_SHA256}" =~ ^sha256:[0-9a-f]{64}$ ]]; \
     [[ "${FRAMEWORK_MATRIX_SOURCE_URI}" =~ ^docker://[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; \
     chmod 0555 /usr/local/bin/sharplabnext-assemble-framework-prefix-matrix \

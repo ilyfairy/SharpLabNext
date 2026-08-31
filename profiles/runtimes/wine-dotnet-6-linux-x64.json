@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "wine-dotnet-6-linux-x64",
-  "image": "sharplabnext/runtime-wine-dotnet-6-linux-x64:development",
+  "image": "sharplabnext/runtime-wine-dotnet-6-linux-x64:content",
   "family": "coreclr-wine",
   "acceptedRuntimeFamilies": [
     "coreclr-wine",

@@ -212,9 +212,6 @@ public sealed record BundleSourceDocument
 
     public required bool Verified { get; init; }
 
-    public required bool DevelopmentOverrideUsed { get; init; }
-
-    public required bool DevelopmentImageInputsUsed { get; init; }
 }
 
 public sealed record BundleImageDocument

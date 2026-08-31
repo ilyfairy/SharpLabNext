@@ -22,7 +22,7 @@ function fixture(t, version = '7.0.20', options = {}) {
   const command = operation => ({ implementationId: 'sharplabnext-legacy-jit-inspector-v1', pathStyle: 'wine-z', command: { executable: '/usr/lib/wine/wine64', argv: ['Z:\\opt\\wine-dotnet\\drive_c\\dotnet\\dotnet.exe', 'exec', '--fx-version', version, 'Z:\\opt\\sharplabnext\\SharpLabNext.LegacyJitInspector.dll', '--runtime-version', version, operation, operation === 'run' ? '{entryAssembly}' : '{entryAssembly}', ...(operation === 'run' ? ['--', '{arguments}'] : ['{methodFilter}'])] }, ...(operation === 'jit' ? { sourceMappingKind: 'none' } : {}) })
   const profile = { schemaVersion: 1, id, image: `sharplabnext/runtime-${id}:candidate`, family: 'coreclr-wine', runtimeVersion: version, runtimeCommit, jitCommit: runtimeCommit, capabilities: hasJit ? ['run', 'jit-asm'] : ['run'], container: { isolationKind: 'wine', environmentKind: 'wine', executionUser: '1654:1654', winePrefixPath: '/opt/wine-dotnet' }, layout: { runnerKind: 'wine-coreclr', winePrefixPath: '/opt/wine-dotnet', wineHostPath: '/usr/lib/wine/wine64', dotNetHostPath: '/opt/wine-dotnet/drive_c/dotnet/dotnet.exe' }, operations: { run: command('run'), ...(hasJit ? { jit: command('jit') } : {}) }, securityPolicies: [{ id: 'runtime-job-default', memoryBytes: 1024, nanoCpus: 1000000000, pidsLimit: 64, maximumDurationSeconds: 10, maximumOutputBytes: 1024, tmpfsBytes: 1024 }] }
   const bytes = Buffer.from(`${JSON.stringify(profile, null, 2)}\n`); fs.writeFileSync(path.join(profileDirectory, `${id}.json`), bytes)
-  const resultsPath = path.join(directory, 'results.json'), source = options.source ?? '0123456789abcdef0123456789abcdef01234567', context = options.context ?? 'working-tree-development'
+  const resultsPath = path.join(directory, 'results.json'), source = options.source ?? '0123456789abcdef0123456789abcdef01234567', context = options.context ?? 'working-tree-content'
   const result = { schemaVersion: 1, rows: [{
     profileId: id, matrixTargetId: targetId, candidateImage: profile.image,
     profileSha256: `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`,
@@ -42,7 +42,7 @@ function smoke(t, version, options = {}) {
   return { ...value, calls, invoke }
 }
 
-test('Wine CoreCLR smoke binds immutable development source, creates Wine tmpfs/ready state, and records Run plus ABI JIT evidence', t => {
+test('Wine CoreCLR smoke binds immutable content source, creates Wine tmpfs/ready state, and records Run plus ABI JIT evidence', t => {
   const value = smoke(t, '7.0.20'); const summaries = value.invoke(); assert.equal(summaries[0].jitElapsedMilliseconds, 6)
   const inspect = value.calls.filter(call => call.command === 'docker' && call.argv[0] === 'image' && call.argv[1] === 'inspect'); assert.equal(inspect.length, 1); assert.deepEqual(inspect[0].argv, ['image', 'inspect', '--format', '{{.Id}}', `sharplabnext/runtime-${value.id}:candidate`])
   const docker = value.calls.filter(call => call.command === 'docker' && call.argv[0] === 'run'); assert.equal(docker.length, 2)
@@ -52,7 +52,7 @@ test('Wine CoreCLR smoke binds immutable development source, creates Wine tmpfs/
   assert.equal(value.calls.filter(call => call.command === 'docker' && call.argv[0] === 'exec').length, 0)
   assert.equal(value.calls.filter(call => call.command === 'docker' && call.argv[0] === 'rm').length, 2)
   const jitCall = docker.find(call => call.argv.includes('jit')); assert.ok(jitCall.argv.includes('COMPlus_JitDisasm=*SharpLabNext.RuntimeCapabilityProbe.Program:WindowsAbi*')); assert.ok(jitCall.argv.includes('COMPlus_JitDisasmAssemblies=SharpLabNext.RuntimeCapabilityProbe')); assert.ok(jitCall.argv.includes('COMPlus_TieredCompilation=0'))
-  const saved = JSON.parse(fs.readFileSync(value.resultsPath, 'utf8')).rows[0].verification; assert.equal(saved.smoke.mapping, 'not-applicable'); assert.equal(saved.smoke.jit, 'passed'); assert.deepEqual(saved.evidence.wineCoreClr.jit.abi, ['rcx', 'rdx', 'rax/eax']); assert.equal(saved.evidence.wineCoreClr.sourceContext, 'working-tree-development'); assert.equal(saved.evidence.wineCoreClr.sandbox.readyMarker, '/workspace/.sharplabnext/ready'); assert.equal(saved.evidence.wineCoreClr.sandbox.openFilesSoftLimit, 512); assert.equal(saved.evidence.wineCoreClr.sandbox.openFilesHardLimit, 512)
+  const saved = JSON.parse(fs.readFileSync(value.resultsPath, 'utf8')).rows[0].verification; assert.equal(saved.smoke.mapping, 'not-applicable'); assert.equal(saved.smoke.jit, 'passed'); assert.deepEqual(saved.evidence.wineCoreClr.jit.abi, ['rcx', 'rdx', 'rax/eax']); assert.equal(saved.evidence.wineCoreClr.sourceContext, 'working-tree-content'); assert.equal(saved.evidence.wineCoreClr.sandbox.readyMarker, '/workspace/.sharplabnext/ready'); assert.equal(saved.evidence.wineCoreClr.sandbox.openFilesSoftLimit, 512); assert.equal(saved.evidence.wineCoreClr.sandbox.openFilesHardLimit, 512)
 })
 test('Wine CoreCLR smoke rejects a candidate tag that resolves to a stale image before probe build or container run', t => {
   const value = smoke(t, '7.0.20', { inspectedImageId: `sha256:${'d'.repeat(64)}\n` })

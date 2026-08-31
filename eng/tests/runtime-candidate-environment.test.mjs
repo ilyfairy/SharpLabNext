@@ -25,9 +25,9 @@ const runtimeDepsImage = baseImages.images.find(image => image.id === 'dotnet-ru
 assert.ok(wineUserspace)
 assert.ok(runtimeDepsImage)
 const fakeWineImage = pinnedImage('wine-operator', '9')
-const localDevelopmentWineImage = 'registry.example/sharplabnext/operator-wine-coreclr:candidate-test'
-const localDevelopmentWineImageId = `sha256:${'7'.repeat(64)}`
-const historicalFrameworkDevelopmentInput = 'RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_DEVELOPMENT_OPT_IN'
+const localWineImage = 'registry.example/sharplabnext/operator-wine-coreclr:content'
+const localWineImageId = `sha256:${'7'.repeat(64)}`
+const historicalFrameworkInput = 'RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_OPT_IN'
 
 function pinnedImage(name, character) { return `registry.example/${name}@sha256:${character.repeat(64)}`; }
 
@@ -49,7 +49,7 @@ function commonEnvironment() {
 test('outer Bake launcher propagates content source identity without CLI grants', () => {
   const source = fs.readFileSync(path.join(repositoryRoot, 'eng', 'tools', 'run-with-bake-environment.cs'), 'utf8')
   assert.match(source, /SHARPLABNEXT_SOURCE_IDENTITY_MODE/)
-  assert.doesNotMatch(source, /--allow-(?:uncommitted|development)-/)
+  assert.doesNotMatch(source, /--allow-uncommitted/)
   assert.match(source, /case "--emit-environment-json"/)
   assert.match(source, /SHARPLABNEXT_BAKE_ENVIRONMENT_JSON=/)
   assert.match(source, /BakeEnvironmentJsonSerializerContext\.Default\.DictionaryStringString/)
@@ -320,8 +320,8 @@ test('content source identity supports ordinary Linux and Mono candidates locall
     const call = calls.at(-1)
     assert.equal(path.basename(call.arguments_[0]), 'build-runtime-candidate.mjs')
     assert.equal(call.options.env.SHARPLABNEXT_SOURCE_IDENTITY_MODE, 'content')
-    assert.equal(call.options.env.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_DEVELOPMENT_OPT_IN, undefined)
-    assert.equal(call.options.env.WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN, undefined)
+    assert.equal(call.options.env.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_OPT_IN, undefined)
+    assert.equal(call.options.env.WINE_CORECLR_LOCAL_OPERATOR_OPT_IN, undefined)
   }
 
   assert.equal(calls.length, 2)
@@ -340,8 +340,8 @@ test('content source identity binds the exact local Wine CoreCLR operator', () =
       ...commonEnvironment(), SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content',
     },
     inspectDockerImage(reference) {
-      assert.equal(reference, localDevelopmentWineImage)
-      return { imageId: localDevelopmentWineImageId }
+      assert.equal(reference, localWineImage)
+      return { imageId: localWineImageId }
     },
     spawn(command, arguments_, invocation) {
       calls.push({ command, arguments_, invocation })
@@ -351,12 +351,12 @@ test('content source identity binds the exact local Wine CoreCLR operator', () =
 
   assert.equal(runRuntimeCandidateEnvironment([
     'wine-dotnet-9-linux-x64',
-    '--wine-image', localDevelopmentWineImage,
+    '--wine-image', localWineImage,
     '--', '--progress', 'plain',
   ], options), 0, output.errors.join('\n'))
   assert.equal(calls.length, 1)
-  assert.equal(calls[0].invocation.env.RUNTIME_MATRIX_WINE_IMAGE, localDevelopmentWineImageId)
-  assert.equal(calls[0].invocation.env.WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN, 'true')
+  assert.equal(calls[0].invocation.env.RUNTIME_MATRIX_WINE_IMAGE, localWineImageId)
+  assert.equal(calls[0].invocation.env.WINE_CORECLR_LOCAL_OPERATOR_OPT_IN, 'true')
   assert.equal(calls[0].invocation.env.WINE_CORECLR_OPERATOR_RECEIPT, undefined)
   assert.equal(calls[0].invocation.env.WINE_CORECLR_OPERATOR_RECEIPT_SIG, undefined)
 
@@ -371,7 +371,7 @@ test('content source identity binds the exact local Wine CoreCLR operator', () =
 })
 
 test('content source identity accepts current Framework provenance without receipts', t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-framework-development-cli-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-framework-cli-'))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
   const inputPath = path.join(root, 'framework-input.json')
   fs.writeFileSync(inputPath, canonicalFrameworkCandidateInput(frameworkInput(), matrix))
@@ -401,7 +401,7 @@ test('content source identity accepts current Framework provenance without recei
     },
   }), 0, output.errors.join('\n'))
   assert.equal(calls.length, 1)
-  assert.equal(calls[0].options.env[historicalFrameworkDevelopmentInput], undefined)
+  assert.equal(calls[0].options.env[historicalFrameworkInput], undefined)
   assert.equal(calls[0].options.env.WINE_CORECLR_OPERATOR_RECEIPT, undefined)
   assert.equal(calls[0].options.env.WINE_CORECLR_OPERATOR_RECEIPT_SIG, undefined)
 })
@@ -487,8 +487,8 @@ test('content source identity enables a local Wine CoreCLR candidate without a r
   const baseOptions = {
     output,
     inspectDockerImage(reference) {
-      assert.equal(reference, localDevelopmentWineImage)
-      return { imageId: localDevelopmentWineImageId }
+      assert.equal(reference, localWineImage)
+      return { imageId: localWineImageId }
     },
     spawn(command, arguments_, invocation) {
       calls.push({ command, arguments_, invocation })
@@ -498,7 +498,7 @@ test('content source identity enables a local Wine CoreCLR candidate without a r
 
   assert.equal(runRuntimeCandidateEnvironment([
     'wine-dotnet-9-linux-x64',
-    '--wine-image', localDevelopmentWineImage,
+    '--wine-image', localWineImage,
     '--', '--progress', 'plain',
   ], {
     ...baseOptions,
@@ -507,10 +507,10 @@ test('content source identity enables a local Wine CoreCLR candidate without a r
       SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content',
       WINE_CORECLR_OPERATOR_RECEIPT: 'stale-receipt.json',
       WINE_CORECLR_OPERATOR_RECEIPT_SIG: 'stale-receipt.json.sig',
-      WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN: 'stale',
-      WINE_CORECLR_DEVELOPMENT_OPERATOR_TAG: 'stale',
-      WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE_ID: 'stale',
-      WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE: 'true',
+      WINE_CORECLR_LOCAL_OPERATOR_OPT_IN: 'stale',
+      WINE_CORECLR_LOCAL_OPERATOR_TAG: 'stale',
+      WINE_CORECLR_LOCAL_OPERATOR_IMAGE_ID: 'stale',
+      WINE_CORECLR_LOCAL_OPERATOR_IMAGE: 'true',
     },
   }), 0, output.errors.join('\n'))
   assert.equal(calls.length, 1)
@@ -518,17 +518,17 @@ test('content source identity enables a local Wine CoreCLR candidate without a r
     'runtime-wine-dotnet-matrix-candidate',
     '--progress', 'plain',
   ])
-  assert.equal(calls[0].invocation.env.RUNTIME_MATRIX_WINE_IMAGE, localDevelopmentWineImageId)
-  assert.equal(calls[0].invocation.env.WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN, 'true')
-  assert.equal(calls[0].invocation.env.WINE_CORECLR_DEVELOPMENT_OPERATOR_TAG, localDevelopmentWineImage)
-  assert.equal(calls[0].invocation.env.WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE_ID, localDevelopmentWineImageId)
+  assert.equal(calls[0].invocation.env.RUNTIME_MATRIX_WINE_IMAGE, localWineImageId)
+  assert.equal(calls[0].invocation.env.WINE_CORECLR_LOCAL_OPERATOR_OPT_IN, 'true')
+  assert.equal(calls[0].invocation.env.WINE_CORECLR_LOCAL_OPERATOR_TAG, localWineImage)
+  assert.equal(calls[0].invocation.env.WINE_CORECLR_LOCAL_OPERATOR_IMAGE_ID, localWineImageId)
   assert.equal(calls[0].invocation.env.WINE_CORECLR_OPERATOR_RECEIPT, undefined)
   assert.equal(calls[0].invocation.env.WINE_CORECLR_OPERATOR_RECEIPT_SIG, undefined)
-  assert.equal(calls[0].invocation.env.WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE, undefined)
+  assert.equal(calls[0].invocation.env.WINE_CORECLR_LOCAL_OPERATOR_IMAGE, undefined)
 
 })
 
-test('historical Framework development mode is explicit, local-only, and non-receipted', t => {
+test('historical Framework input is explicit, local-only, and non-receipted', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-historical-framework-cli-'))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
   const input = { ...frameworkInput(), sourceRevision: 'e'.repeat(40) }
@@ -538,7 +538,7 @@ test('historical Framework development mode is explicit, local-only, and non-rec
   const calls = []
   const baseValues = {
     ...commonEnvironment(), SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content',
-    [historicalFrameworkDevelopmentInput]: 'forged',
+    [historicalFrameworkInput]: 'forged',
     WINE_CORECLR_OPERATOR_RECEIPT: 'stale-receipt.json',
     WINE_CORECLR_OPERATOR_RECEIPT_SIG: 'stale-receipt.json.sig',
   }
@@ -553,61 +553,61 @@ test('historical Framework development mode is explicit, local-only, and non-rec
 
   assert.equal(runRuntimeCandidateEnvironment([
     ...commonArguments,
-    '--', '--allow-historical-framework-input-for-development', '--progress', 'plain',
+    '--', '--allow-historical-framework-input', '--progress', 'plain',
   ], { output, values: baseValues, spawn }), 0, output.errors.join('\n'))
   assert.equal(calls.length, 1)
   assert.deepEqual(calls[0].arguments_.slice(1), [
     'runtime-wine-framework-matrix-shared-candidate',
-    '--allow-historical-framework-input-for-development', '--progress', 'plain',
+    '--allow-historical-framework-input', '--progress', 'plain',
   ])
-  assert.equal(calls[0].options.env[historicalFrameworkDevelopmentInput], 'true')
+  assert.equal(calls[0].options.env[historicalFrameworkInput], 'true')
   assert.equal(calls[0].options.env.WINE_CORECLR_OPERATOR_RECEIPT, undefined)
   assert.equal(calls[0].options.env.WINE_CORECLR_OPERATOR_RECEIPT_SIG, undefined)
-  assert.equal(calls[0].options.env.WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN, undefined)
+  assert.equal(calls[0].options.env.WINE_CORECLR_LOCAL_OPERATOR_OPT_IN, undefined)
 
   const cases = [
     {
       name: 'non-Framework target',
       argv: [
         'wine-dotnet-9-linux-x64', '--wine-image', fakeWineImage,
-        '--', '--allow-historical-framework-input-for-development', '--progress', 'plain',
+        '--', '--allow-historical-framework-input', '--progress', 'plain',
       ],
       values: baseValues,
       error: /exact Wine operator tag|only for shared Wine Framework candidates/,
     },
     {
       name: 'no content identity',
-      argv: [...commonArguments, '--', '--allow-historical-framework-input-for-development'],
+      argv: [...commonArguments, '--', '--allow-historical-framework-input'],
       values: commonEnvironment(),
       error: /requires content source identity/,
     },
     {
       name: 'same source revision',
-      argv: [...commonArguments, '--', '--allow-historical-framework-input-for-development'],
+      argv: [...commonArguments, '--', '--allow-historical-framework-input'],
       values: { ...baseValues, SOURCE_REVISION: input.sourceRevision },
       error: /distinct valid Framework input and candidate source revisions/,
     },
     {
       name: 'invalid candidate source revision',
-      argv: [...commonArguments, '--', '--allow-historical-framework-input-for-development'],
+      argv: [...commonArguments, '--', '--allow-historical-framework-input'],
       values: { ...baseValues, SOURCE_REVISION: 'not-a-commit' },
       error: /distinct valid Framework input and candidate source revisions/,
     },
     {
       name: 'check invocation',
-      argv: [...commonArguments, '--', '--allow-historical-framework-input-for-development', '--check'],
+      argv: [...commonArguments, '--', '--allow-historical-framework-input', '--check'],
       values: baseValues,
       error: /only for real local candidate builds/,
     },
     {
       name: 'print invocation',
-      argv: [...commonArguments, '--', '--allow-historical-framework-input-for-development', '--print'],
+      argv: [...commonArguments, '--', '--allow-historical-framework-input', '--print'],
       values: baseValues,
       error: /only for real local candidate builds/,
     },
     {
       name: 'call invocation',
-      argv: [...commonArguments, '--', '--allow-historical-framework-input-for-development', '--call', 'outline'],
+      argv: [...commonArguments, '--', '--allow-historical-framework-input', '--call', 'outline'],
       values: baseValues,
       error: /only for real local candidate builds/,
     },
@@ -615,8 +615,8 @@ test('historical Framework development mode is explicit, local-only, and non-rec
       name: 'duplicate flag',
       argv: [
         ...commonArguments,
-        '--', '--allow-historical-framework-input-for-development',
-        '--allow-historical-framework-input-for-development',
+        '--', '--allow-historical-framework-input',
+        '--allow-historical-framework-input',
       ],
       values: baseValues,
       error: /may be supplied once/,
@@ -626,7 +626,7 @@ test('historical Framework development mode is explicit, local-only, and non-rec
       argv: [
         ...commonArguments,
         '--publish-to', 'registry.example/sharplabnext/runtime-wine-netfx48-linux-x64:candidate-test',
-        '--', '--allow-historical-framework-input-for-development',
+        '--', '--allow-historical-framework-input',
       ],
       values: baseValues,
       error: /cannot be combined with candidate build options|only for real local candidate builds/,
@@ -637,7 +637,7 @@ test('historical Framework development mode is explicit, local-only, and non-rec
         ...commonArguments,
         '--wine-operator-receipt', 'C:\\operator\receipt.json',
         '--wine-operator-receipt-signature', 'C:\\operator\receipt.json.sig',
-        '--', '--allow-historical-framework-input-for-development',
+        '--', '--allow-historical-framework-input',
       ],
       values: baseValues,
       error: /must not receive formal operator receipts/,

@@ -86,7 +86,7 @@ function parentLabels(input, revision) {
     'io.sharplabnext.framework.dedupe-policy': 'wine-static-runtime-payload-v1',
     'org.opencontainers.image.revision': revision,
     'io.sharplabnext.source.revision': revision,
-    'org.opencontainers.image.version': 'development',
+    'org.opencontainers.image.version': 'content',
     'io.sharplabnext.framework.matrix-input-sha256': input.FRAMEWORK_MATRIX_INPUT_SHA256,
     'io.sharplabnext.framework.matrix-source-uri': input.FRAMEWORK_MATRIX_SOURCE_URI,
     'io.sharplabnext.operator-image.wine': input.WINE_IMAGE,
@@ -108,14 +108,10 @@ function operatorInspection(row, input) {
       'io.sharplabnext.wine-prefix-layout': 'hardlink-immutable-v1',
       'io.sharplabnext.wine-prefix-layout-manifest': '/opt/sharplabnext/.wine-prefix-layout.json',
       'io.sharplabnext.framework.installer-manifest-sha256': installerManifestSha256,
-      'io.sharplabnext.operator-base': input.WINE_IMAGE.replace('/wine@', '/wine:development@'),
+      'io.sharplabnext.operator-base': input.WINE_IMAGE.replace('/wine@', '/wine:content@'),
       'io.sharplabnext.operator-root': input.ROOT_IMAGE.replace('/root@', '/root:stable@'),
-      'org.opencontainers.image.revision': input.SOURCE_REVISION === 'development'
-        ? 'd'.repeat(40)
-        : input.SOURCE_REVISION,
-      'io.sharplabnext.source.revision': input.SOURCE_REVISION === 'development'
-        ? 'd'.repeat(40)
-        : input.SOURCE_REVISION,
+      'org.opencontainers.image.revision': input.SOURCE_REVISION,
+      'io.sharplabnext.source.revision': input.SOURCE_REVISION,
     } },
   }
 }
@@ -260,8 +256,8 @@ test('shared parent push mode uses immutable metadata and row contexts', () => {
       validateParentInputs(imageOnlyWithLocalRow, localRows).join('\n'),
       /every Framework row operator image must include an explicit registry host/,
     )
-    const development = { ...input, SOURCE_REVISION: 'development' }
-    assert.match(validateParentInputs(development).join('\n'), /full Git commit/)
+    const invalid = { ...input, SOURCE_REVISION: 'invalid' }
+    assert.match(validateParentInputs(invalid).join('\n'), /source identity/)
   } finally {
     fs.rmSync(context.root, { recursive: true, force: true })
   }
@@ -297,8 +293,8 @@ test('immutable metadata rejects a non-canonical row count before copying any ro
           'io.sharplabnext.framework.matrix-strategy': 'shared-framework-prefix-input-v1',
           'io.sharplabnext.framework.matrix-input-sha256': digest,
           'io.sharplabnext.framework.matrix-row-count': '14',
-          'org.opencontainers.image.revision': 'development',
-          'io.sharplabnext.source.revision': 'development',
+          'org.opencontainers.image.revision': 'c'.repeat(64),
+          'io.sharplabnext.source.revision': 'c'.repeat(64),
         } },
       }]) }
     }
@@ -320,7 +316,7 @@ test('immutable metadata rejects a non-canonical row count before copying any ro
       '--wine-image', `registry.example/wine@sha256:${'b'.repeat(64)}`,
       '--framework-matrix-source-uri', `docker://${source}`,
       '--framework-matrix-input-sha256', digest,
-      '--source-revision', 'development',
+      '--source-revision', 'c'.repeat(64),
       '--image', 'sharplabnext/operator-framework-parent:test',
     ], { SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }, spawn, { log() {}, error: value => errors.push(value) })
     assert.equal(status, 1)
@@ -356,7 +352,7 @@ test('operator provenance mismatch fails before BuildKit resolves the parent', (
       '--wine-image', input.WINE_IMAGE,
       '--framework-matrix-source-uri', input.FRAMEWORK_MATRIX_SOURCE_URI,
       '--framework-matrix-input-sha256', context.digest,
-      '--source-revision', 'development',
+      '--source-revision', 'c'.repeat(64),
       '--image', input.IMAGE,
     ], { SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }, spawn, { log() {}, error: value => errors.push(value) })
     assert.equal(status, 1)
@@ -479,15 +475,12 @@ test('shared parent rejects repository-local contexts, raw row payloads, and man
   }
 })
 
-test('content source revision requires content source identity', () => {
+test('content source mode still requires a valid source identity', () => {
   const context = makeContext()
   try {
-    const development = { ...values(context), SOURCE_REVISION: 'development' }
-    assert.match(
-      validateParentInputs(development).join('\n'),
-      /content identity development/,
-    )
-    assert.deepEqual(validateParentInputs({ ...development, allowDirty: true }), [])
+    const invalid = { ...values(context), SOURCE_REVISION: 'invalid' }
+    assert.match(validateParentInputs(invalid).join('\n'), /source identity/)
+    assert.match(validateParentInputs({ ...invalid, allowDirty: true }).join('\n'), /source identity/)
   } finally {
     fs.rmSync(context.root, { recursive: true, force: true })
   }

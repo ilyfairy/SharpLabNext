@@ -132,7 +132,6 @@ test('formal Wine operator build uses an exact committed source context and veri
   assert.equal(bake[2].cwd, committedSource)
   assert.equal(bake[2].env.OPERATOR_SOURCE_CONTEXT, 'committed')
   assert.equal(bake[2].env.OPERATOR_PROMOTION_ELIGIBLE, 'true')
-  assert.equal(bake[2].env.OPERATOR_DEVELOPMENT_ONLY, 'false')
   assert.ok(bake[1].includes('--load'))
   assert.equal(bake[1].includes(`operator-wine-coreclr.context=${committedSource}`), true);
   assert.match(out.logs.join('\n'), /Verified Wine CoreCLR operator/)
@@ -173,8 +172,9 @@ test('content source identity labels the Wine operator as local-only and cannot 
   const bake = docker.calls.find(([command, arguments_]) => command === 'docker' && arguments_[0] === 'buildx')
   assert.equal(bake[2].env.OPERATOR_SOURCE_CONTEXT, 'working-tree-content')
   assert.equal(bake[2].env.OPERATOR_PROMOTION_ELIGIBLE, 'false')
-  assert.equal(bake[2].env.OPERATOR_DEVELOPMENT_ONLY, 'true')
-  assert.match(out.logs.join('\n'), /development-only/)
+  const dockerfile = fs.readFileSync(path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.operator-wine-coreclr'), 'utf8')
+  assert.ok(dockerfile.includes(`"${bake[2].env.OPERATOR_SOURCE_CONTEXT}:${bake[2].env.OPERATOR_PROMOTION_ELIGIBLE}"`))
+  assert.match(out.logs.join('\n'), /not promotion-eligible/)
 })
 
 test('content source identity makes a clean Wine operator local-only', () => {
@@ -185,14 +185,13 @@ test('content source identity makes a clean Wine operator local-only', () => {
   }))
   assert.equal(runWineCoreClrOperatorBuild([], values, docker.spawn, out, {
     createCommittedSourceContext() {
-      throw new Error('development image inputs must not claim a committed source context')
+      throw new Error('local image inputs must not claim a committed source context')
     },
   }), 0, out.errors.join('\n'))
   const bake = docker.calls.find(([command, arguments_]) =>
     command === 'docker' && arguments_[0] === 'buildx')
   assert.equal(bake[2].env.OPERATOR_SOURCE_CONTEXT, 'working-tree-content')
   assert.equal(bake[2].env.OPERATOR_PROMOTION_ELIGIBLE, 'false')
-  assert.equal(bake[2].env.OPERATOR_DEVELOPMENT_ONLY, 'true')
 })
 
 test('Wine operator rejects source drift and incorrect source labels after Bake', () => {
@@ -206,11 +205,11 @@ test('Wine operator rejects source drift and incorrect source labels after Bake'
   assert.equal(drift.calls.filter(([command, arguments_]) => command === 'docker' && arguments_[0] === 'image').length, 0)
 
   const labels = labelsFor(values, { context: 'committed', promotionEligible: true })
-  labels['io.sharplabnext.development-only'] = 'true'
+  labels['com.sharplabnext.operator.promotion-eligible'] = 'false'
   const mismatch = fakeDocker(labels)
   out.errors.length = 0
   assert.equal(runWineCoreClrOperatorBuild([], values, mismatch.spawn, out, contextHook([])), 1)
-  assert.match(out.errors.join('\n'), /development-only/)
+  assert.match(out.errors.join('\n'), /promotion-eligible/)
 })
 
 test('Wine operator wrapper keeps direct Bake overrides and remote publication out of the entry point', () => {
@@ -247,7 +246,6 @@ test('non-build Wine operator inspection supplies required provenance without ar
   assert.ok(bake)
   assert.equal(bake[2].env.OPERATOR_SOURCE_CONTEXT, 'committed')
   assert.equal(bake[2].env.OPERATOR_PROMOTION_ELIGIBLE, 'true')
-  assert.equal(bake[2].env.OPERATOR_DEVELOPMENT_ONLY, 'false')
   assert.equal(docker.calls.some(([command]) => command === 'git'), false)
   assert.equal(docker.calls.some(([command, arguments_]) =>
     command === 'docker' && arguments_[0] === 'image'), false)

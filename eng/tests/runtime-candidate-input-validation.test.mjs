@@ -49,8 +49,8 @@ const releaseLock = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'profil
 const wineUserspace = releaseLock.components['wine-coreclr-userspace']
 const fakeOperatorReceiptSha256 = `sha256:${'8'.repeat(64)}`
 const fakeOperatorReceiptKeyId = 'sha256:8528b0408a4f60a29132610413c90638777a9258f84d1fb5b849ee116445760f'
-const developmentWineOperatorTag = 'registry.example/sharplabnext/operator-wine-coreclr:candidate-test'
-const developmentWineOperatorImageId = `sha256:${'1'.repeat(64)}`
+const localWineOperatorTag = 'registry.example/sharplabnext/operator-wine-coreclr:content'
+const localWineOperatorImageId = `sha256:${'1'.repeat(64)}`
 const sharedMatrixInputSha256 = `sha256:${'c'.repeat(64)}`
 const sharedRowOperatorImage = pinnedImage('operator-netfx48', 'e')
 const sharedRowDigest = `sha256:${'d'.repeat(64)}`
@@ -368,7 +368,7 @@ function candidateLabels(target, environment) {
     ...candidateExpectedLabels(target),
     ...((specification.matrixBindingKind === 'wine-coreclr' ||
       specification.matrixBindingKind === 'wine-framework') &&
-      environment.WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN !== 'true'
+      environment.WINE_CORECLR_LOCAL_OPERATOR_OPT_IN !== 'true'
       ? {
           'io.sharplabnext.operator.receipt-sha256': fakeOperatorReceiptSha256,
           'io.sharplabnext.operator.receipt-key-id': fakeOperatorReceiptKeyId,
@@ -413,10 +413,9 @@ function fakeDocker(labels, fixtureOptions = {}) {
           'org.opencontainers.image.title': 'SharpLabNext Wine CoreCLR Operator',
           'org.opencontainers.image.version': 'wine-9.0-noble-amd64',
           'org.opencontainers.image.revision': labels['org.opencontainers.image.revision'],
-          'org.opencontainers.image.source': 'https://github.com/sharplabnext/SharpLabNext',
+          'org.opencontainers.image.source': 'https://github.com/ilyfairy/SharpLabNext',
           'io.sharplabnext.source.revision': labels['io.sharplabnext.source.revision'],
           'io.sharplabnext.source.context': 'committed',
-          'io.sharplabnext.development-only': 'false',
           'com.sharplabnext.operator.promotion-eligible': 'true',
           'io.sharplabnext.operator-only': 'true',
           'io.sharplabnext.operator.contract': 'wine-coreclr-v1',
@@ -554,10 +553,10 @@ test('Dockerfile image validator accepts pinned pairs and rejects floating or ma
   assert.match(oddArguments.stderr, /NAME VALUE pairs/)
 })
 
-test('Dockerfile image validator gates the development Wine tag and identity independently', {
+test('Dockerfile image validator gates the local Wine tag and identity independently', {
   skip: shell === undefined,
 }, () => {
-  const tag = 'sharplabnext/operator-wine-coreclr:development'
+  const tag = 'sharplabnext/operator-wine-coreclr:content'
   const identity = `sha256:${'c'.repeat(64)}`
   const accepted = runShellValidator(
     '--allow-bare-image-id', 'true',
@@ -777,7 +776,7 @@ test('shared Framework candidate binds parent and selected-row identity before D
   )
 })
 
-test('shared Framework historical development input relaxes only the revision equality rule', () => {
+test('shared Framework historical input relaxes only the revision equality rule', () => {
   const target = 'runtime-wine-framework-matrix-shared-candidate'
   const environment = sharedWineFrameworkCandidateEnvironment()
   const historical = {
@@ -789,14 +788,14 @@ test('shared Framework historical development input relaxes only the revision eq
     /RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION must equal/,
   )
   assert.deepEqual(validateCandidateBuildInputs(target, historical, repositoryRoot, {
-    allowHistoricalFrameworkInputForDevelopment: true,
+    allowHistoricalFrameworkInput: true,
   }), [])
   assert.match(
     validateCandidateBuildInputs(target, {
       ...historical,
       RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION: historical.SOURCE_REVISION,
     }, repositoryRoot, {
-      allowHistoricalFrameworkInputForDevelopment: true,
+      allowHistoricalFrameworkInput: true,
     }).join('\n'),
     /must differ from SOURCE_REVISION/,
   )
@@ -805,19 +804,19 @@ test('shared Framework historical development input relaxes only the revision eq
       ...wineDotnetCandidateEnvironment(),
       RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION: 'e'.repeat(40),
     }, repositoryRoot, {
-      allowHistoricalFrameworkInputForDevelopment: true,
+      allowHistoricalFrameworkInput: true,
     }).join('\n'),
     /supported only for the shared Framework candidate/,
   )
 })
 
-test('shared Framework historical development build is local-only, records both source contexts, and omits current Wine userspace attestations', () => {
+test('shared Framework historical build is local-only, records both source contexts, and omits current Wine userspace attestations', () => {
   const target = 'runtime-wine-framework-matrix-shared-candidate'
   const environment = {
     ...sharedWineFrameworkCandidateEnvironment(),
     SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content',
     RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION: 'e'.repeat(40),
-    RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_DEVELOPMENT_OPT_IN: 'true',
+    RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_OPT_IN: 'true',
   }
   const output = {
     errors: [], logs: [],
@@ -829,7 +828,7 @@ test('shared Framework historical development build is local-only, records both 
       ...environment,
       RUNTIME_CANDIDATE_SOURCE_CONTEXT: context,
       RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE: 'false',
-      RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT: 'true',
+      RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT: 'true',
     })
     for (const label of [
       'io.sharplabnext.operator.receipt-sha256',
@@ -839,24 +838,24 @@ test('shared Framework historical development build is local-only, records both 
     return labels
   }
 
-  const missingFlag = fakeDocker(labelsFor('committed-historical-framework-input-development'))
+  const missingFlag = fakeDocker(labelsFor('committed-historical-framework-input'))
   assert.equal(runCandidateBuild([target], environment, missingFlag.spawn, output), 64)
   assert.match(output.errors.join('\n'), /requires both the wrapper and candidate opt-ins/)
 
   output.errors.length = 0
-  const checkOnly = fakeDocker(labelsFor('committed-historical-framework-input-development'))
+  const checkOnly = fakeDocker(labelsFor('committed-historical-framework-input'))
   assert.equal(runCandidateBuild([
     target,
-    '--allow-historical-framework-input-for-development',
+    '--allow-historical-framework-input',
     '--check',
   ], environment, checkOnly.spawn, output), 64)
   assert.match(output.errors.join('\n'), /accepted only for a real local build/)
 
   output.errors.length = 0
-  const receiptInput = fakeDocker(labelsFor('committed-historical-framework-input-development'))
+  const receiptInput = fakeDocker(labelsFor('committed-historical-framework-input'))
   assert.equal(runCandidateBuild([
     target,
-    '--allow-historical-framework-input-for-development',
+    '--allow-historical-framework-input',
   ], {
     ...environment,
     WINE_CORECLR_OPERATOR_RECEIPT: 'D:\\operator-receipt.json',
@@ -868,15 +867,15 @@ test('shared Framework historical development build is local-only, records both 
   const nonShared = fakeDocker(candidateLabels('runtime-wine-dotnet-matrix-candidate', wineDotnetCandidateEnvironment()))
   assert.equal(runCandidateBuild([
     'runtime-wine-dotnet-matrix-candidate',
-    '--allow-historical-framework-input-for-development',
+    '--allow-historical-framework-input',
   ], {
     ...wineDotnetCandidateEnvironment(),
-    RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_DEVELOPMENT_OPT_IN: 'true',
+    RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_OPT_IN: 'true',
     RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION: 'e'.repeat(40),
   }, nonShared.spawn, output), 64)
   assert.match(output.errors.join('\n'), /supported only for the shared Framework candidate/)
 
-  for (const [dirty, context] of [[true, 'working-tree-historical-framework-input-development']]) {
+  for (const [dirty, context] of [[true, 'working-tree-historical-framework-input']]) {
     output.errors.length = 0
     output.logs.length = 0
     const docker = fakeDocker(labelsFor(context))
@@ -891,7 +890,7 @@ test('shared Framework historical development build is local-only, records both 
     }
     assert.equal(runCandidateBuildProduction([
       target,
-      '--allow-historical-framework-input-for-development',
+      '--allow-historical-framework-input',
     ], environment, spawn, output, {
       createCommittedSourceContext(options) {
         contexts.push(options.revision)
@@ -900,7 +899,7 @@ test('shared Framework historical development build is local-only, records both 
       validateSharedFrameworkCandidateProvenance(values, _spawn, sourceRoot, options) {
         assert.equal(values.RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION, 'e'.repeat(40))
         assert.equal(sourceRoot, repositoryRoot)
-        assert.equal(options.allowHistoricalFrameworkInputForDevelopment, true)
+        assert.equal(options.allowHistoricalFrameworkInput, true)
         assert.equal(options.repositoryRoot, repositoryRoot)
         const historicalContext = options.createCommittedSourceContext({
           revision: values.RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION,
@@ -913,7 +912,7 @@ test('shared Framework historical development build is local-only, records both 
     assert.deepEqual(contexts, ['e'.repeat(40)])
     assert.equal(bakeEnvironment.RUNTIME_CANDIDATE_SOURCE_CONTEXT, context)
     assert.equal(bakeEnvironment.RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE, 'false')
-    assert.equal(bakeEnvironment.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT, 'true')
+    assert.equal(bakeEnvironment.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT, 'true')
     for (const name of [
       'WINE_CORECLR_OPERATOR_RECEIPT',
       'WINE_CORECLR_OPERATOR_RECEIPT_SIG',
@@ -934,18 +933,18 @@ test('shared Framework historical development build is local-only, records both 
   }
 })
 
-test('shared Framework historical development build rejects Wine userspace and receipt labels while formal labels remain valid', () => {
+test('shared Framework historical build rejects Wine userspace and receipt labels while formal labels remain valid', () => {
   const target = 'runtime-wine-framework-matrix-shared-candidate'
   const environment = {
     ...sharedWineFrameworkCandidateEnvironment(),
     RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION: 'e'.repeat(40),
-    RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_DEVELOPMENT_OPT_IN: 'true',
+    RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_OPT_IN: 'true',
   }
   const baseLabels = candidateLabels(target, {
     ...environment,
-    RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'committed-historical-framework-input-development',
+    RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'committed-historical-framework-input',
     RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE: 'false',
-    RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT: 'true',
+    RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT: 'true',
   })
   const output = { errors: [], log() {}, error(message) { this.errors.push(message) } }
   for (const label of [
@@ -960,7 +959,7 @@ test('shared Framework historical development build rejects Wine userspace and r
     const docker = fakeDocker({ ...baseLabels, [label]: 'forbidden' })
     assert.equal(runCandidateBuild([
       target,
-      '--allow-historical-framework-input-for-development',
+      '--allow-historical-framework-input',
     ], environment, docker.spawn, output), 1, label)
     assert.match(output.errors.join('\n'), new RegExp(`${label.replaceAll('.', '\\.') } must be absent`))
   }
@@ -974,7 +973,7 @@ test('shared Framework historical development build rejects Wine userspace and r
     return formalDocker.spawn(command, arguments_, options)
   }
   assert.equal(runCandidateBuild([target], formal, formalSpawn, formalOutput), 0, formalOutput.errors.join('\n'))
-  assert.equal(formalBakeEnvironment.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT, 'false')
+  assert.equal(formalBakeEnvironment.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT, 'false')
   assert.equal(formalBakeEnvironment.WINE_CORECLR_USERSPACE_DIGEST, wineUserspace.digest)
 })
 
@@ -1006,7 +1005,10 @@ test('content source identity keeps Linux and Mono candidates local and non-prom
     ], { ...environment, SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }, spawn, output), 0, `${target}: ${output.errors.join('\n')}`)
     assert.equal(bakeEnvironment.RUNTIME_CANDIDATE_SOURCE_CONTEXT, 'working-tree-content')
     assert.equal(bakeEnvironment.RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE, 'false')
-    assert.equal(bakeEnvironment.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT, 'false')
+    assert.equal(bakeEnvironment.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT, 'false')
+    const dockerfileName = target === 'runtime-dotnet-matrix-candidate' ? 'Dockerfile.runtime-dotnet-matrix' : 'Dockerfile.runtime-mono-matrix'
+    const dockerfile = fs.readFileSync(path.join(repositoryRoot, 'deploy', 'docker', dockerfileName), 'utf8')
+    assert.ok(dockerfile.includes(`"${bakeEnvironment.RUNTIME_CANDIDATE_SOURCE_CONTEXT}:${bakeEnvironment.RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE}"`))
     assert.match(output.logs.join('\n'), /promotion output remains disabled/)
   }
 })
@@ -1030,7 +1032,7 @@ test('content source identity binds current Framework operators without formal r
     ...environment,
     RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-content',
     RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE: 'false',
-    RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT: 'false',
+    RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT: 'false',
   }
   const labels = candidateLabels(target, bound)
   for (const label of [
@@ -1054,7 +1056,7 @@ test('content source identity binds current Framework operators without formal r
     target,
   ], environment, spawn, output, {
     loadWineCoreClrOperatorReceipt() {
-      throw new Error('development Framework build must not load a formal receipt')
+      throw new Error('local Framework build must not load a formal receipt')
     },
   }), 0, output.errors.join('\n'))
   assert.equal(
@@ -1062,7 +1064,9 @@ test('content source identity binds current Framework operators without formal r
     'working-tree-content',
   )
   assert.equal(bakeEnvironment.RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE, 'false')
-  assert.equal(bakeEnvironment.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT, 'false')
+  assert.equal(bakeEnvironment.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT, 'false')
+  const dockerfile = fs.readFileSync(path.join(repositoryRoot, 'deploy', 'docker', 'Dockerfile.runtime-wine-framework-matrix-shared'), 'utf8')
+  assert.ok(dockerfile.includes(`"${bakeEnvironment.RUNTIME_CANDIDATE_SOURCE_CONTEXT}:${bakeEnvironment.RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE}:${bakeEnvironment.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT}"`))
   assert.equal(bakeEnvironment.WINE_CORECLR_OPERATOR_RECEIPT_SHA256, undefined)
   assert.equal(
     labels['io.sharplabnext.component.wine-coreclr-userspace.digest'],
@@ -1681,28 +1685,28 @@ test('candidate build keeps strict Git binding while content source remains non-
 
   output.errors.length = 0
   output.logs.length = 0
-  const development = fakeDocker(candidateLabels(target, {
+  const local = fakeDocker(candidateLabels(target, {
     ...environment,
     SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content',
     RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-content',
     RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE: 'false',
   }))
-  let developmentBakeEnvironment
-  const developmentSpawn = (command, arguments_, options) => {
+  let localBakeEnvironment
+  const localSpawn = (command, arguments_, options) => {
     if (command === 'git' && arguments_[0] === 'status') {
-      development.gitCalls.push([command, arguments_])
+      local.gitCalls.push([command, arguments_])
       return { status: 0, stdout: ' M eng/file.mjs\n', stderr: '' }
     }
     if (command === 'docker' && arguments_[0] === 'buildx') {
-      developmentBakeEnvironment = options.env
+      localBakeEnvironment = options.env
     }
-    return development.spawn(command, arguments_, options)
+    return local.spawn(command, arguments_, options)
   }
-  assert.equal(runCandidateBuild([target], { ...environment, SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }, developmentSpawn, output), 0)
+  assert.equal(runCandidateBuild([target], { ...environment, SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }, localSpawn, output), 0)
   assert.match(output.logs.join('\n'), /not eligible for a promotion receipt/)
   assert.match(output.logs.join('\n'), /promotion output remains disabled/)
-  assert.equal(developmentBakeEnvironment.RUNTIME_CANDIDATE_SOURCE_CONTEXT, 'working-tree-content')
-  assert.equal(developmentBakeEnvironment.RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE, 'false')
+  assert.equal(localBakeEnvironment.RUNTIME_CANDIDATE_SOURCE_CONTEXT, 'working-tree-content')
+  assert.equal(localBakeEnvironment.RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE, 'false')
 
   output.errors.length = 0
   const mismatch = fakeDocker(labels)
@@ -2149,7 +2153,7 @@ test('candidate labels must retain the exact image references used at build time
   ])
 })
 
-test('Wine candidates reject incomplete, development, and drifting userspace operators', () => {
+test('Wine candidates reject incomplete, non-promotable, and drifting userspace operators', () => {
   const target = 'runtime-wine-dotnet-matrix-candidate'
   const environment = wineDotnetCandidateEnvironment()
   const output = {
@@ -2174,15 +2178,15 @@ test('Wine candidates reject incomplete, development, and drifting userspace ope
   assert.match(output.errors.join('\n'), /wine-coreclr-userspace\.digest/)
 
   output.errors.length = 0
-  const developmentOperator = fakeDocker(candidateLabels(target, environment), {
-    wineOperatorLabels: { 'io.sharplabnext.development-only': 'true' },
+  const nonPromotableOperator = fakeDocker(candidateLabels(target, environment), {
+    wineOperatorLabels: { 'com.sharplabnext.operator.promotion-eligible': 'false' },
   })
-  assert.equal(runCandidateBuild([target], environment, developmentOperator.spawn, output), 1)
+  assert.equal(runCandidateBuild([target], environment, nonPromotableOperator.spawn, output), 1)
   assert.equal(
-    developmentOperator.calls.some(([, arguments_]) => arguments_[0] === 'buildx'),
+    nonPromotableOperator.calls.some(([, arguments_]) => arguments_[0] === 'buildx'),
     false,
   )
-  assert.match(output.errors.join('\n'), /development-only/)
+  assert.match(output.errors.join('\n'), /promotion-eligible/)
 
   output.errors.length = 0
   const privateOperator = fakeDocker(candidateLabels(target, environment), {
@@ -2213,12 +2217,12 @@ test('content source Wine CoreCLR build binds the captured local operator withou
   const environment = {
     ...wineDotnetCandidateEnvironment(),
     SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content',
-    RUNTIME_MATRIX_WINE_IMAGE: developmentWineOperatorImageId,
+    RUNTIME_MATRIX_WINE_IMAGE: localWineOperatorImageId,
     RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-content',
     RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE: 'false',
-    WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN: 'true',
-    WINE_CORECLR_DEVELOPMENT_OPERATOR_TAG: developmentWineOperatorTag,
-    WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE_ID: developmentWineOperatorImageId,
+    WINE_CORECLR_LOCAL_OPERATOR_OPT_IN: 'true',
+    WINE_CORECLR_LOCAL_OPERATOR_TAG: localWineOperatorTag,
+    WINE_CORECLR_LOCAL_OPERATOR_IMAGE_ID: localWineOperatorImageId,
   }
   const labels = candidateLabels(target, environment)
   const output = {
@@ -2229,10 +2233,9 @@ test('content source Wine CoreCLR build binds the captured local operator withou
 
   function run(labelsOverride = labels) {
     const docker = fakeDocker(labelsOverride, {
-      wineOperatorReference: developmentWineOperatorTag,
+      wineOperatorReference: localWineOperatorTag,
       wineOperatorLabels: {
         'io.sharplabnext.source.context': 'working-tree-content',
-        'io.sharplabnext.development-only': 'true',
         'com.sharplabnext.operator.promotion-eligible': 'false',
       },
     })
@@ -2245,16 +2248,16 @@ test('content source Wine CoreCLR build binds the captured local operator withou
       return docker.spawn(command, arguments_, options)
     }
     const status = runCandidateBuild([target], environment, spawn, output, {
-      loadWineCoreClrOperatorReceipt() { throw new Error('development build must not load a receipt') },
+      loadWineCoreClrOperatorReceipt() { throw new Error('local build must not load a receipt') },
     })
     return { status, docker, bakeEnvironment }
   }
 
   const accepted = run()
   assert.equal(accepted.status, 0, output.errors.join('\n'))
-  assert.equal(accepted.bakeEnvironment.RUNTIME_MATRIX_WINE_IMAGE, developmentWineOperatorImageId)
-  assert.equal(accepted.bakeEnvironment.WINE_CORECLR_DEVELOPMENT_OPERATOR_TAG, developmentWineOperatorTag)
-  assert.equal(accepted.bakeEnvironment.WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE, 'true')
+  assert.equal(accepted.bakeEnvironment.RUNTIME_MATRIX_WINE_IMAGE, localWineOperatorImageId)
+  assert.equal(accepted.bakeEnvironment.WINE_CORECLR_LOCAL_OPERATOR_TAG, localWineOperatorTag)
+  assert.equal(accepted.bakeEnvironment.WINE_CORECLR_LOCAL_OPERATOR_IMAGE, 'true')
   assert.equal(accepted.bakeEnvironment.WINE_CORECLR_OPERATOR_RECEIPT_SHA256, undefined)
   assert.match(output.logs.join('\n'), /promotion output remains disabled/)
 

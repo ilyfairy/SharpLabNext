@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "const-generics-linux-x64",
-  "image": "sharplabnext/runtime-const-generics:development",
+  "image": "sharplabnext/runtime-const-generics:content",
   "family": "coreclr-const-generics",
   "acceptedRuntimeFamilies": [],
   "acceptedFrameworks": [
@@ -14,7 +14,7 @@
   "runtimeCommit": "79f7f1408b2c811904c983419b45139e654f1e46",
   "jitVersion": "9.0.0-constgenerics.1.23470.1",
   "jitCommit": "79f7f1408b2c811904c983419b45139e654f1e46",
-  "runtimeImageId": "sharplabnext/runtime-const-generics:development",
+    "runtimeImageId": "sharplabnext/runtime-const-generics:content",
   "rid": "linux-x64",
   "architecture": "x64",
   "cpuFeatureProfile": "x64-v2",

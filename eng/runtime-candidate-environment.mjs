@@ -30,12 +30,12 @@ const wineOperatorReceiptInput = 'WINE_CORECLR_OPERATOR_RECEIPT'
 const wineOperatorReceiptSignatureInput = 'WINE_CORECLR_OPERATOR_RECEIPT_SIG'
 const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE'
 const contentSourceIdentityMode = 'content'
-const historicalFrameworkDevelopmentOverride = '--allow-historical-framework-input-for-development'
-const historicalFrameworkDevelopmentInput = 'RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_DEVELOPMENT_OPT_IN'
-const developmentOperatorWrapperInput = 'WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN'
-const developmentOperatorTagInput = 'WINE_CORECLR_DEVELOPMENT_OPERATOR_TAG'
-const developmentOperatorImageIdInput = 'WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE_ID'
-const developmentOperatorBakeInput = 'WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE'
+const historicalFrameworkOverride = '--allow-historical-framework-input'
+const historicalFrameworkInput = 'RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_OPT_IN'
+const localOperatorWrapperInput = 'WINE_CORECLR_LOCAL_OPERATOR_OPT_IN'
+const localOperatorTagInput = 'WINE_CORECLR_LOCAL_OPERATOR_TAG'
+const localOperatorImageIdInput = 'WINE_CORECLR_LOCAL_OPERATOR_IMAGE_ID'
+const localOperatorBakeInput = 'WINE_CORECLR_LOCAL_OPERATOR_IMAGE'
 const sharedWineOperatorContentTag = 'content'
 const localImageTagPattern = /^[a-z0-9][a-z0-9._/-]*(?::[a-z0-9][a-z0-9._-]{0,127})$/
 const imageIdPattern = /^sha256:[0-9a-f]{64}$/
@@ -48,7 +48,7 @@ export const runtimeCandidateEnvironmentUsage = `Usage:
     [--wine-operator-receipt-signature ABSOLUTE_PATH]
     [--framework-input PATH]
     [--publish-to <registry-host>/<repository>:<RELEASE_ID>]
-    [-- [--allow-historical-framework-input-for-development]
+    [-- [--allow-historical-framework-input]
          [build-runtime-candidate options]]`
 
 export class RuntimeCandidateEnvironmentError extends Error {
@@ -98,7 +98,7 @@ function requiredDigest(value, label) {
 }
 
 function requiredImage(value, label, options = {}) {
-  if (options.allowLocalDevelopmentTag === true &&
+  if (options.allowLocalTag === true &&
       typeof value === 'string' && localImageTagPattern.test(value) && !value.includes('@')) {
     return value
   }
@@ -162,7 +162,7 @@ function coreClrEnvironment(profileId, row, platform, wineImage, matrix, options
     environment.RUNTIME_MATRIX_WINE_IMAGE = requiredImage(
       wineImage,
       `explicit Wine operator image for '${profileId}'`,
-      { allowLocalDevelopmentTag: options.allowLocalDevelopmentTag === true },
+      { allowLocalTag: options.allowLocalTag === true },
     )
     environment.RUNTIME_MATRIX_CONTROL_IMAGE = controlImage(matrix)
     return environment
@@ -439,7 +439,7 @@ export function deriveRuntimeCandidateEnvironment(profileId, matrix, options = {
       }
       target = 'runtime-wine-dotnet-matrix-candidate'
       environment = coreClrEnvironment(profileId, coreRow, 'wine', options.wineImage, matrix, {
-        allowLocalDevelopmentTag: options.allowLocalDevelopmentWineOperator === true,
+        allowLocalTag: options.allowLocalWineOperator === true,
       })
     } else if (frameworkRow !== undefined) {
       target = 'runtime-wine-framework-matrix-shared-candidate'
@@ -553,9 +553,9 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
       return 0
     }
     const contentSourceIdentity = String(values[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() === contentSourceIdentityMode
-    const historicalFrameworkOverrideCount = (parsed.buildArguments ?? []).filter(argument => argument === historicalFrameworkDevelopmentOverride).length
+    const historicalFrameworkOverrideCount = (parsed.buildArguments ?? []).filter(argument => argument === historicalFrameworkOverride).length
     if (historicalFrameworkOverrideCount > 1) {
-      fail(`${historicalFrameworkDevelopmentOverride} may be supplied once after --.`)
+      fail(`${historicalFrameworkOverride} may be supplied once after --.`)
     }
     const historicalFrameworkMode = historicalFrameworkOverrideCount === 1
     const matrix = readRuntimeMatrix(parsed.runtimeMatrixPath ?? defaultRuntimeMatrixPath)
@@ -565,7 +565,7 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
     const derived = deriveRuntimeCandidateEnvironment(parsed.profileId, matrix, {
       wineImage: parsed.wineImage,
       frameworkInput,
-      allowLocalDevelopmentWineOperator: contentSourceIdentity,
+      allowLocalWineOperator: contentSourceIdentity,
     })
     if (parsed.publishDestination !== undefined && parsed.buildArguments !== undefined) {
       fail('--publish-to cannot be combined with candidate build options after --.')
@@ -577,7 +577,7 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
       derived.target === 'runtime-wine-framework-matrix-shared-candidate'
     const localWineOperatorMode = wineCoreClrCandidate &&
       contentSourceIdentity
-    const frameworkDevelopmentMode = sharedFrameworkCandidate &&
+    const localFrameworkMode = sharedFrameworkCandidate &&
       (historicalFrameworkMode || contentSourceIdentity)
     const hasWineOperatorReceipt = parsed.wineOperatorReceiptPath !== undefined
     const hasWineOperatorReceiptSignature = parsed.wineOperatorReceiptSignaturePath !== undefined
@@ -589,37 +589,37 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
       const contentTag = `${values.IMAGE_PREFIX}/operator-wine-coreclr:${sharedWineOperatorContentTag}`
       if (parsed.wineImage !== expectedTag && parsed.wineImage !== contentTag) {
         fail(
-          `Local development inputs require the exact Wine operator tag ` +
+          `Local inputs require the exact Wine operator tag ` +
           `'${expectedTag}' or shared content tag '${contentTag}'.`,
         )
       }
     }
     if (historicalFrameworkMode &&
         (!isRealLocalBuild(parsed.buildArguments) || parsed.publishDestination !== undefined)) {
-      fail(`${historicalFrameworkDevelopmentOverride} is accepted only for real local candidate builds.`)
+      fail(`${historicalFrameworkOverride} is accepted only for real local candidate builds.`)
     }
     if (historicalFrameworkMode && !sharedFrameworkCandidate) {
-      fail(`${historicalFrameworkDevelopmentOverride} is supported only for shared Wine Framework candidates.`)
+      fail(`${historicalFrameworkOverride} is supported only for shared Wine Framework candidates.`)
     }
-    if (historicalFrameworkMode && !contentSourceIdentity) fail(`${historicalFrameworkDevelopmentOverride} requires content source identity.`)
+    if (historicalFrameworkMode && !contentSourceIdentity) fail(`${historicalFrameworkOverride} requires content source identity.`)
     if (historicalFrameworkMode &&
         (!isGitCommitIdentity(values.SOURCE_REVISION) ||
          !isGitCommitIdentity(frameworkInput?.sourceRevision) ||
          frameworkInput.sourceRevision === values.SOURCE_REVISION)) {
       fail(
-        `${historicalFrameworkDevelopmentOverride} requires distinct valid Framework input and ` +
+        `${historicalFrameworkOverride} requires distinct valid Framework input and ` +
         'candidate source revisions.',
       )
     }
     if (historicalFrameworkMode && hasWineOperatorReceipt) {
-      fail('Historical Framework development candidates must not receive formal operator receipts.')
+      fail('Historical Framework candidates must not receive formal operator receipts.')
     }
     if (contentSourceIdentity && parsed.publishDestination !== undefined) fail('Content source identity is accepted only for local candidate builds.')
     if (contentSourceIdentity && wineCandidate && hasWineOperatorReceipt) fail('Content source candidates must not receive formal operator receipts.')
-    if (frameworkDevelopmentMode &&
+    if (localFrameworkMode &&
         (!isGitCommitIdentity(values.SOURCE_REVISION) ||
          !isGitCommitIdentity(frameworkInput?.sourceRevision))) {
-      fail('Framework development inputs require valid Framework and candidate source revisions.')
+      fail('Local Framework inputs require valid Framework and candidate source revisions.')
     }
     if (hasWineOperatorReceipt && !commandMode) {
       fail('Wine operator receipt options are only accepted for build or publish commands.')
@@ -628,7 +628,7 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
       fail(`Wine operator receipt options are not applicable to '${parsed.profileId}'.`)
     }
     if (commandMode && wineCandidate && !localWineOperatorMode &&
-        !frameworkDevelopmentMode && !hasWineOperatorReceipt) {
+        !localFrameworkMode && !hasWineOperatorReceipt) {
       fail('Wine candidate build and publish commands require --wine-operator-receipt and --wine-operator-receipt-signature.')
     }
     if (hasWineOperatorReceipt &&
@@ -653,17 +653,17 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
     delete childEnvironment.WINE_CORECLR_OPERATOR_RECEIPT_SHA256
     delete childEnvironment.WINE_CORECLR_OPERATOR_RECEIPT_KEY_ID
     delete childEnvironment.WINE_CORECLR_OPERATOR_REFERENCE
-    delete childEnvironment[developmentOperatorWrapperInput]
-    delete childEnvironment[developmentOperatorTagInput]
-    delete childEnvironment[developmentOperatorImageIdInput]
-    delete childEnvironment[developmentOperatorBakeInput]
-    delete childEnvironment[historicalFrameworkDevelopmentInput]
+    delete childEnvironment[localOperatorWrapperInput]
+    delete childEnvironment[localOperatorTagInput]
+    delete childEnvironment[localOperatorImageIdInput]
+    delete childEnvironment[localOperatorBakeInput]
+    delete childEnvironment[historicalFrameworkInput]
     if (hasWineOperatorReceipt) {
       childEnvironment[wineOperatorReceiptInput] = parsed.wineOperatorReceiptPath
       childEnvironment[wineOperatorReceiptSignatureInput] = parsed.wineOperatorReceiptSignaturePath
     }
     if (historicalFrameworkMode) {
-      childEnvironment[historicalFrameworkDevelopmentInput] = 'true'
+      childEnvironment[historicalFrameworkInput] = 'true'
     }
     if (localWineOperatorMode) {
       const localTag = derived.environment.RUNTIME_MATRIX_WINE_IMAGE
@@ -675,25 +675,25 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
           shell: false,
         })
         if (result?.error !== undefined || result?.status !== 0) {
-          fail(`Could not inspect development Wine operator '${reference}'.`)
+          fail(`Could not inspect local Wine operator '${reference}'.`)
         }
         let document
         try { document = JSON.parse(String(result.stdout ?? '')) } catch {
-          fail(`Development Wine operator '${reference}' returned invalid inspection JSON.`)
+          fail(`Local Wine operator '${reference}' returned invalid inspection JSON.`)
         }
         if (!Array.isArray(document) || document.length !== 1) {
-          fail(`Development Wine operator '${reference}' must resolve to exactly one image.`)
+          fail(`Local Wine operator '${reference}' must resolve to exactly one image.`)
         }
         return { imageId: document[0]?.Id }
       })
       const inspection = inspect(localTag)
       if (!imageIdPattern.test(inspection?.imageId ?? '')) {
-        fail(`Development Wine operator '${localTag}' has no immutable local image ID.`)
+        fail(`Local Wine operator '${localTag}' has no immutable local image ID.`)
       }
       childEnvironment.RUNTIME_MATRIX_WINE_IMAGE = inspection.imageId
-      childEnvironment[developmentOperatorWrapperInput] = 'true'
-      childEnvironment[developmentOperatorTagInput] = localTag
-      childEnvironment[developmentOperatorImageIdInput] = inspection.imageId
+      childEnvironment[localOperatorWrapperInput] = 'true'
+      childEnvironment[localOperatorTagInput] = localTag
+      childEnvironment[localOperatorImageIdInput] = inspection.imageId
     }
     const result = spawn(
       process.execPath,

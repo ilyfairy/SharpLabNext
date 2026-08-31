@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "example-dotnet-linux-x64",
-  "image": "sharplabnext/runtime-example:development",
+  "image": "sharplabnext/runtime-example:content",
   "family": "coreclr",
   "acceptedRuntimeFamilies": [],
   "acceptedFrameworks": [],
@@ -9,7 +9,7 @@
   "runtimeCommit": "replace-with-runtime-commit",
   "jitVersion": "11.0.0-preview.5",
   "jitCommit": "replace-with-jit-commit",
-  "runtimeImageId": "sharplabnext/runtime-example:development",
+  "runtimeImageId": "sharplabnext/runtime-example:content",
   "rid": "linux-x64",
   "architecture": "x64",
   "cpuFeatureProfile": "x64-v2",

@@ -268,13 +268,10 @@ export function validateContextInputs(values, document) {
   }
   if (!isSha256Digest(values?.MATRIX_INPUT_SHA256)) failures.push('MATRIX_INPUT_SHA256 must be sha256:<64 lowercase hex>')
   if (values?.MATRIX_INPUT_SHA256 !== matrixInputDigest(document)) failures.push('MATRIX_INPUT_SHA256 does not match normalized matrix input')
-  if (typeof values?.SOURCE_REVISION !== 'string' ||
-      (!isGitCommitIdentity(values.SOURCE_REVISION) && values.SOURCE_REVISION !== 'development')) {
-    failures.push('SOURCE_REVISION must be a Git commit identity or development')
-  }
+  if (!isGitCommitIdentity(values?.SOURCE_REVISION)) failures.push('SOURCE_REVISION must be a 40- or 64-character source identity')
   if (typeof values?.IMAGE !== 'string' || !imageTag.test(values.IMAGE)) failures.push('IMAGE must be a safe image tag')
   if (values?.push === true && !hasRegistryHost(`${values.IMAGE}@${'0'.repeat(64)}`)) failures.push('IMAGE must include an explicit registry host when --push is used')
-  if (values?.push === true && values.SOURCE_REVISION === 'development') failures.push('--push requires a committed SOURCE_REVISION')
+  if (values?.push === true && values.allowDirty === true) failures.push('--push requires a verified source identity')
   if (values?.push === true && document.rows.some(row => !hasRegistryHost(row.operatorImage))) failures.push('--push requires registry-hosted operator image references')
   if (typeof values?.VERSION !== 'string' || values.VERSION.length === 0 || /[\r\n"\\]/.test(values.VERSION)) failures.push('VERSION must be a non-empty safe value')
   return failures
@@ -355,7 +352,7 @@ function readBuildDigest(filename) {
 }
 
 function parseArguments(arguments_) {
-  const values = { VERSION: 'development', push: false, allowDirty: false }
+  const values = { VERSION: 'content', push: false, allowDirty: false }
   for (let index = 0; index < arguments_.length; index++) {
     const argument = arguments_[index]
     if (argument === '--push') { values.push = true; continue }
@@ -372,7 +369,7 @@ function parseArguments(arguments_) {
 function usage() {
   return `Usage: node eng/build-framework-matrix-context.mjs \\
   --matrix-input <metadata-json> \\
-  --source-revision <40/64-hex|development> \\
+  --source-revision <40/64-hex> \\
   --image <repository:tag> [--version <id>] [--push]\n\n` +
     'The output is a bounded metadata-only image. Prefixes remain in their digest-pinned operator images.'
 }
@@ -392,12 +389,12 @@ export function runContextBuild(argv, environment = process.env, spawn = spawnSy
   if (inputFailures.length > 0) { inputFailures.forEach(failure => output.error(`framework context input error: ${failure}`)); return 1 }
   let before
   try { before = inspectGitSource(spawn, values.SOURCE_REVISION, values) } catch (error) { output.error(`framework context source error: ${error.message}`); return 1 }
-  if (values.SOURCE_REVISION !== 'development' && values.SOURCE_REVISION !== before.headRevision) { output.error('framework context source error: SOURCE_REVISION does not match Git HEAD'); return 1 }
+  if (!values.allowDirty && values.SOURCE_REVISION !== before.headRevision) { output.error('framework context source error: SOURCE_REVISION does not match Git HEAD'); return 1 }
   if (before.isDirty && !values.allowDirty) { output.error('framework context source error: worktree is dirty'); return 1 }
   if (values.push && before.isDirty) { output.error('framework context source error: --push requires a clean worktree'); return 1 }
   const operatorExpectations = {
     installerManifestSha256: installerManifestSha256(),
-    ...(values.SOURCE_REVISION === 'development'
+    ...(values.allowDirty
       ? {}
       : { sourceRevision: values.SOURCE_REVISION }),
   }
@@ -456,7 +453,7 @@ export function runContextBuild(argv, environment = process.env, spawn = spawnSy
       fail(`built context must be a bounded linux/amd64 metadata image no larger than ${maximumMetadataImageBytes} bytes`)
     }
     verifyBuiltMetadata(reference, document, values.MATRIX_INPUT_SHA256, spawn)
-    output.log(JSON.stringify({ image: values.IMAGE, imageId: info.Id, sizeBytes: info.Size, matrixInputSha256: values.MATRIX_INPUT_SHA256, rowCount: document.rows.length, rowIds: document.rows.map(row => row.id), promotionEligible: values.SOURCE_REVISION !== 'development' && !before.isDirty, ...(pushedDigest === undefined ? {} : { registryReference: reference }) }, null, 2))
+    output.log(JSON.stringify({ image: values.IMAGE, imageId: info.Id, sizeBytes: info.Size, matrixInputSha256: values.MATRIX_INPUT_SHA256, rowCount: document.rows.length, rowIds: document.rows.map(row => row.id), promotionEligible: !values.allowDirty && !before.isDirty, ...(pushedDigest === undefined ? {} : { registryReference: reference }) }, null, 2))
     return 0
   } catch (error) {
     output.error(`framework context identity error: ${error.message}`)

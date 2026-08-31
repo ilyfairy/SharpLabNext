@@ -44,7 +44,7 @@ public sealed record CppCliWorkerSettings(CppCliWorkerIdentity Identity, CppCliR
 
         var referenceSetDigest = RequiredSha256(section["ReferenceSetDigest"], "CppCli:ReferenceSetDigest");
         return new CppCliWorkerSettings(
-            new CppCliWorkerIdentity(section["ReleaseId"] ?? "development", RequiredIdentity(section["CompilerVersion"], "CppCli:CompilerVersion"), OptionalCommit(section["CompilerCommit"]), section["WorkerImageId"] ?? $"sha256:{new string('0', 64)}"),
+            new CppCliWorkerIdentity(section["ReleaseId"] ?? "content", RequiredIdentity(section["CompilerVersion"], "CppCli:CompilerVersion"), OptionalCommit(section["CompilerCommit"]), section["WorkerImageId"] ?? $"sha256:{new string('0', 64)}"),
             new CppCliReferenceSetIdentity(referenceSetDigest, RequiredSha256(section["ReferenceSetContentDigest"] ?? referenceSetDigest, "CppCli:ReferenceSetContentDigest"), RequiredSourceUri(section["ReferenceSetSourceUri"])),
             new CppCliProcessLimits(maximumProcessOutputBytes, maximumProcessWorkingSetBytes, maximumDiagnostics),
             Path.GetFullPath(Environment.ExpandEnvironmentVariables(section["WorkRoot"] ?? Path.Combine(Path.GetTempPath(), "sharplabnext-cppcli"))),

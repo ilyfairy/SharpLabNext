@@ -1,8 +1,8 @@
-name: sharplabnext-dev
+name: sharplabnext
 
 x-service-environment: &service-environment
   ASPNETCORE_URLS: http://+:8080
-  ReleaseId: development
+  ReleaseId: content
   InternalServiceAuth__Required: "true"
   InternalServiceAuth__TokenFile: /run/secrets/sharplabnext-internal-service-token
 
@@ -35,12 +35,12 @@ x-worker-build: &worker-build
 services:
   gateway:
     <<: *service-defaults
-    image: sharplabnext/gateway:dev
+    image: sharplabnext/gateway:content
     build:
       context: ..
       dockerfile: deploy/docker/Dockerfile.gateway
       args:
-        VERSION: development
+        VERSION: content
     ports:
       - "${SHARPLABNEXT_BIND_ADDRESS:-0.0.0.0}:${SHARPLABNEXT_HTTP_PORT:-8080}:8080"
     networks:
@@ -87,49 +87,49 @@ services:
       <<: *service-environment
       OperationExecution__WorkerConcurrency: "8"
       Services__LanguageWorkers__roslyn-stable__BaseAddress: http://worker-roslyn-stable:8080
-      Services__LanguageWorkers__roslyn-stable__ExpectedWorkerImageId: sharplabnext/worker-roslyn-stable:dev
+      Services__LanguageWorkers__roslyn-stable__ExpectedWorkerImageId: sharplabnext/worker-roslyn-stable:content
       Services__LanguageWorkers__roslyn-stable-netfx48__BaseAddress: http://worker-roslyn-netfx48:8080
-      Services__LanguageWorkers__roslyn-stable-netfx48__ExpectedWorkerImageId: sharplabnext/worker-roslyn-netfx48:development
+      Services__LanguageWorkers__roslyn-stable-netfx48__ExpectedWorkerImageId: sharplabnext/worker-roslyn-netfx48:content
       Services__LanguageWorkers__roslyn-main__BaseAddress: http://worker-roslyn-main:8080
-      Services__LanguageWorkers__roslyn-main__ExpectedWorkerImageId: sharplabnext/worker-roslyn-main:dev
+      Services__LanguageWorkers__roslyn-main__ExpectedWorkerImageId: sharplabnext/worker-roslyn-main:content
       Services__LanguageWorkers__roslyn-const-generics__BaseAddress: http://worker-roslyn-const-generics:8080
-      Services__LanguageWorkers__roslyn-const-generics__ExpectedWorkerImageId: sharplabnext/worker-roslyn-const-generics:development
+      Services__LanguageWorkers__roslyn-const-generics__ExpectedWorkerImageId: sharplabnext/worker-roslyn-const-generics:content
       Services__LanguageWorkers__fsharp-stable__BaseAddress: http://worker-fsharp:8080
-      Services__LanguageWorkers__fsharp-stable__ExpectedWorkerImageId: sharplabnext/worker-fsharp:dev
+      Services__LanguageWorkers__fsharp-stable__ExpectedWorkerImageId: sharplabnext/worker-fsharp:content
       Services__LanguageWorkers__gsharp-stable__BaseAddress: http://worker-gsharp:8080
-      Services__LanguageWorkers__gsharp-stable__ExpectedWorkerImageId: sharplabnext/worker-gsharp:dev
+      Services__LanguageWorkers__gsharp-stable__ExpectedWorkerImageId: sharplabnext/worker-gsharp:content
       Services__LanguageWorkers__peachpie-stable__BaseAddress: http://worker-peachpie:8080
-      Services__LanguageWorkers__peachpie-stable__ExpectedWorkerImageId: sharplabnext/worker-peachpie:dev
+      Services__LanguageWorkers__peachpie-stable__ExpectedWorkerImageId: sharplabnext/worker-peachpie:content
       Services__LanguageWorkers__msvc-cppcli-netfx48__BaseAddress: http://worker-cppcli:8080
-      Services__LanguageWorkers__msvc-cppcli-netfx48__ExpectedWorkerImageId: sharplabnext/worker-cppcli:dev
+      Services__LanguageWorkers__msvc-cppcli-netfx48__ExpectedWorkerImageId: sharplabnext/worker-cppcli:content
       Services__LanguageWorkers__vjc-jsharp20__BaseAddress: http://worker-jsharp:8080
-      Services__LanguageWorkers__vjc-jsharp20__ExpectedWorkerImageId: sharplabnext/worker-jsharp:development
+      Services__LanguageWorkers__vjc-jsharp20__ExpectedWorkerImageId: sharplabnext/worker-jsharp:content
       Services__LanguageWorkers__mobius-ilasm-stable__BaseAddress: http://worker-il:8080
-      Services__LanguageWorkers__mobius-ilasm-stable__ExpectedWorkerImageId: sharplabnext/worker-il:dev
+      Services__LanguageWorkers__mobius-ilasm-stable__ExpectedWorkerImageId: sharplabnext/worker-il:content
       Services__LanguageWorkers__minilang-stable__BaseAddress: http://worker-minilang:8080
-      Services__LanguageWorkers__minilang-stable__ExpectedWorkerImageId: sharplabnext/worker-minilang:dev
+      Services__LanguageWorkers__minilang-stable__ExpectedWorkerImageId: sharplabnext/worker-minilang:content
       Services__RoslynStableWorker__BaseAddress: http://worker-roslyn-stable:8080
       Services__ArtifactStore__BaseAddress: http://artifact-store:8080
       Services__ArtifactWorkers__artifacts-default__BaseAddress: http://worker-artifacts-default:8080
-      Services__ArtifactWorkers__artifacts-default__ExpectedWorkerImageId: sharplabnext/worker-artifacts-default:dev
+      Services__ArtifactWorkers__artifacts-default__ExpectedWorkerImageId: sharplabnext/worker-artifacts-default:content
       Services__ArtifactWorkers__artifacts-jsil__BaseAddress: http://worker-artifacts-jsil:8080
-      Services__ArtifactWorkers__artifacts-jsil__ExpectedWorkerImageId: sharplabnext/worker-artifacts-jsil:development
+      Services__ArtifactWorkers__artifacts-jsil__ExpectedWorkerImageId: sharplabnext/worker-artifacts-jsil:content
       Services__ArtifactWorkers__artifacts-const-generics__BaseAddress: http://worker-artifacts-const-generics:8080
-      Services__ArtifactWorkers__artifacts-const-generics__ExpectedWorkerImageId: sharplabnext/worker-artifacts-const-generics:development
+      Services__ArtifactWorkers__artifacts-const-generics__ExpectedWorkerImageId: sharplabnext/worker-artifacts-const-generics:content
       Services__ArtifactWorkers__il-assembler__BaseAddress: http://worker-artifacts-il-assembler:8080
-      Services__ArtifactWorkers__il-assembler__ExpectedWorkerImageId: sharplabnext/worker-artifacts-il-assembler:dev
+      Services__ArtifactWorkers__il-assembler__ExpectedWorkerImageId: sharplabnext/worker-artifacts-il-assembler:content
       Services__RuntimeSupervisor__BaseAddress: http://runtime-supervisor:8080
 
   artifact-store:
     <<: *service-defaults
-    image: sharplabnext/artifact-store:dev
+    image: sharplabnext/artifact-store:content
     build:
       <<: *worker-build
       args:
         PROJECT_PATH: src/ArtifactStore/SharpLabNext.ArtifactStore/SharpLabNext.ArtifactStore.csproj
         ASSEMBLY_NAME: SharpLabNext.ArtifactStore.dll
         SERVICE_TITLE: SharpLabNext Artifact Store
-        VERSION: development
+        VERSION: content
     volumes:
       - artifact-data:/var/lib/sharplabnext
     environment:
@@ -138,14 +138,14 @@ services:
 
   runtime-supervisor:
     <<: *service-defaults
-    image: sharplabnext/runtime-supervisor:dev
+    image: sharplabnext/runtime-supervisor:content
     build:
       <<: *worker-build
       args:
         PROJECT_PATH: src/Supervisor/SharpLabNext.RuntimeSupervisor/SharpLabNext.RuntimeSupervisor.csproj
         ASSEMBLY_NAME: SharpLabNext.RuntimeSupervisor.dll
         SERVICE_TITLE: SharpLabNext Runtime Supervisor
-        VERSION: development
+        VERSION: content
     group_add:
       - "${DOCKER_GID:-0}"
     volumes:
@@ -156,59 +156,59 @@ services:
       <<: *service-environment
       RuntimeSupervisor__SessionReuseEnabled: "${SHARPLABNEXT_RUNTIME_SESSION_REUSE_ENABLED:-true}"
       RuntimeSupervisor__SessionMaximumAgeSeconds: "${SHARPLABNEXT_RUNTIME_SESSION_MAXIMUM_AGE_SECONDS:-600}"
-      RuntimeSupervisor__Profiles__2__Image: ${SHARPLABNEXT_CONST_GENERICS_RUNTIME_IMAGE:-sharplabnext/runtime-const-generics:development}
-      RuntimeSupervisor__Profiles__2__RuntimeImageId: ${SHARPLABNEXT_CONST_GENERICS_RUNTIME_IMAGE_ID:-sharplabnext/runtime-const-generics:development}
-      RuntimeSupervisor__Profiles__3__Image: ${SHARPLABNEXT_WINE_NETFX48_RUNTIME_IMAGE:-sharplabnext/runtime-wine-netfx48:development}
-      RuntimeSupervisor__Profiles__3__RuntimeImageId: ${SHARPLABNEXT_WINE_NETFX48_RUNTIME_IMAGE_ID:-sharplabnext/runtime-wine-netfx48:development}
-      RuntimeSupervisor__Profiles__4__Image: ${SHARPLABNEXT_WINE_JSHARP20_RUNTIME_IMAGE:-sharplabnext/runtime-wine-jsharp20:development}
-      RuntimeSupervisor__Profiles__4__RuntimeImageId: ${SHARPLABNEXT_WINE_JSHARP20_RUNTIME_IMAGE_ID:-sharplabnext/runtime-wine-jsharp20:development}
+      RuntimeSupervisor__Profiles__2__Image: ${SHARPLABNEXT_CONST_GENERICS_RUNTIME_IMAGE:-sharplabnext/runtime-const-generics:content}
+      RuntimeSupervisor__Profiles__2__RuntimeImageId: ${SHARPLABNEXT_CONST_GENERICS_RUNTIME_IMAGE_ID:-sharplabnext/runtime-const-generics:content}
+      RuntimeSupervisor__Profiles__3__Image: ${SHARPLABNEXT_WINE_NETFX48_RUNTIME_IMAGE:-sharplabnext/runtime-wine-netfx48:content}
+      RuntimeSupervisor__Profiles__3__RuntimeImageId: ${SHARPLABNEXT_WINE_NETFX48_RUNTIME_IMAGE_ID:-sharplabnext/runtime-wine-netfx48:content}
+      RuntimeSupervisor__Profiles__4__Image: ${SHARPLABNEXT_WINE_JSHARP20_RUNTIME_IMAGE:-sharplabnext/runtime-wine-jsharp20:content}
+      RuntimeSupervisor__Profiles__4__RuntimeImageId: ${SHARPLABNEXT_WINE_JSHARP20_RUNTIME_IMAGE_ID:-sharplabnext/runtime-wine-jsharp20:content}
 
   worker-roslyn-stable:
     <<: *service-defaults
-    image: sharplabnext/worker-roslyn-stable:dev
+    image: sharplabnext/worker-roslyn-stable:content
     pull_policy: never
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      RoslynWorker__ReleaseId: development
-      RoslynWorker__WorkerImageId: sharplabnext/worker-roslyn-stable:dev
+      RoslynWorker__ReleaseId: content
+      RoslynWorker__WorkerImageId: sharplabnext/worker-roslyn-stable:content
       RoslynWorker__BuildProcess__MaximumConcurrentProcesses: "8"
       RoslynWorker__DevelopmentArtifactEnvelope__Enabled: "true"
       RoslynWorker__DevelopmentArtifactEnvelope__MaxBytes: "33554432"
 
   worker-roslyn-netfx48:
     <<: *service-defaults
-    image: sharplabnext/worker-roslyn-netfx48:development
+    image: sharplabnext/worker-roslyn-netfx48:content
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      RoslynWorker__ReleaseId: development
-      RoslynWorker__WorkerImageId: sharplabnext/worker-roslyn-netfx48:development
+      RoslynWorker__ReleaseId: content
+      RoslynWorker__WorkerImageId: sharplabnext/worker-roslyn-netfx48:content
       RoslynWorker__BuildProcess__MaximumConcurrentProcesses: "8"
       RoslynWorker__DevelopmentArtifactEnvelope__Enabled: "true"
       RoslynWorker__DevelopmentArtifactEnvelope__MaxBytes: "33554432"
 
   worker-roslyn-main:
     <<: *service-defaults
-    image: sharplabnext/worker-roslyn-main:dev
+    image: sharplabnext/worker-roslyn-main:content
     pull_policy: never
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      RoslynWorker__ReleaseId: development
-      RoslynWorker__WorkerImageId: sharplabnext/worker-roslyn-main:dev
+      RoslynWorker__ReleaseId: content
+      RoslynWorker__WorkerImageId: sharplabnext/worker-roslyn-main:content
       RoslynWorker__BuildProcess__MaximumConcurrentProcesses: "8"
       RoslynWorker__DevelopmentArtifactEnvelope__Enabled: "true"
       RoslynWorker__DevelopmentArtifactEnvelope__MaxBytes: "33554432"
 
   worker-roslyn-const-generics:
     <<: *service-defaults
-    image: sharplabnext/worker-roslyn-const-generics:development
+    image: sharplabnext/worker-roslyn-const-generics:content
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      RoslynWorker__ReleaseId: development
-      RoslynWorker__WorkerImageId: sharplabnext/worker-roslyn-const-generics:development
+      RoslynWorker__ReleaseId: content
+      RoslynWorker__WorkerImageId: sharplabnext/worker-roslyn-const-generics:content
       RoslynWorker__BuildProcess__MaximumConcurrentProcesses: "8"
       RoslynWorker__DevelopmentArtifactEnvelope__Enabled: "true"
       RoslynWorker__DevelopmentArtifactEnvelope__MaxBytes: "33554432"
@@ -216,22 +216,22 @@ services:
 
   worker-artifacts-default:
     <<: *service-defaults
-    image: sharplabnext/worker-artifacts-default:dev
+    image: sharplabnext/worker-artifacts-default:content
     build:
       <<: *worker-build
       args:
         PROJECT_PATH: src/Workers/Artifacts.Default/SharpLabNext.Worker.Artifacts.Default/SharpLabNext.Worker.Artifacts.Default.csproj
         ASSEMBLY_NAME: SharpLabNext.Worker.Artifacts.Default.dll
         SERVICE_TITLE: SharpLabNext Default Artifact Worker
-        VERSION: development
+        VERSION: content
     environment:
       <<: *service-environment
-      ArtifactWorker__ReleaseId: development
-      ArtifactWorker__WorkerImageId: sharplabnext/worker-artifacts-default:dev
+      ArtifactWorker__ReleaseId: content
+      ArtifactWorker__WorkerImageId: sharplabnext/worker-artifacts-default:content
 
   worker-artifacts-jsil:
     <<: *service-defaults
-    image: sharplabnext/worker-artifacts-jsil:development
+    image: sharplabnext/worker-artifacts-jsil:content
     depends_on:
       artifact-store:
         condition: service_started
@@ -239,13 +239,13 @@ services:
       - /tmp:rw,nosuid,size=768m
     environment:
       <<: *service-environment
-      Jsil__ReleaseId: development
-      Jsil__WorkerImageId: sharplabnext/worker-artifacts-jsil:development
+      Jsil__ReleaseId: content
+      Jsil__WorkerImageId: sharplabnext/worker-artifacts-jsil:content
       ArtifactStore__BaseUrl: http://artifact-store:8080
 
   worker-artifacts-const-generics:
     <<: *service-defaults
-    image: sharplabnext/worker-artifacts-const-generics:development
+    image: sharplabnext/worker-artifacts-const-generics:content
     depends_on:
       artifact-store:
         condition: service_started
@@ -253,8 +253,8 @@ services:
       - /tmp:rw,noexec,nosuid,size=256m
     environment:
       <<: *service-environment
-      ConstGenericsArtifactWorker__ReleaseId: development
-      ConstGenericsArtifactWorker__WorkerImageId: sharplabnext/worker-artifacts-const-generics:development
+      ConstGenericsArtifactWorker__ReleaseId: content
+      ConstGenericsArtifactWorker__WorkerImageId: sharplabnext/worker-artifacts-const-generics:content
       ConstGenericsArtifactWorker__ProcessorDotNetHostPath: /opt/const-runtime/dotnet
       ConstGenericsArtifactWorker__ProcessorAssemblyPath: /app/processor/SharpLabNext.Worker.Artifacts.ConstGenerics.Processor.dll
       ConstGenericsArtifactWorker__ReferenceRoot: /reference-sets/const-generics-ref
@@ -262,38 +262,38 @@ services:
 
   worker-artifacts-il-assembler:
     <<: *service-defaults
-    image: sharplabnext/worker-artifacts-il-assembler:dev
+    image: sharplabnext/worker-artifacts-il-assembler:content
     build:
       <<: *worker-build
       args:
         PROJECT_PATH: src/Workers/Artifacts.ILAssembler/SharpLabNext.Worker.Artifacts.ILAssembler/SharpLabNext.Worker.Artifacts.ILAssembler.csproj
         ASSEMBLY_NAME: SharpLabNext.Worker.Artifacts.ILAssembler.dll
         SERVICE_TITLE: SharpLabNext IL Assembler Artifact Worker
-        VERSION: development
+        VERSION: content
     depends_on:
       artifact-store:
         condition: service_started
     environment:
       <<: *service-environment
-      ArtifactAssembler__ReleaseId: development
-      ArtifactAssembler__WorkerImageId: sharplabnext/worker-artifacts-il-assembler:dev
+      ArtifactAssembler__ReleaseId: content
+      ArtifactAssembler__WorkerImageId: sharplabnext/worker-artifacts-il-assembler:content
       ArtifactStore__BaseUrl: http://artifact-store:8080
 
   worker-fsharp:
     <<: *service-defaults
-    image: sharplabnext/worker-fsharp:dev
+    image: sharplabnext/worker-fsharp:content
     build:
       <<: *worker-build
       args:
         PROJECT_PATH: src/Workers/FSharp/SharpLabNext.Worker.FSharp/SharpLabNext.Worker.FSharp.csproj
         ASSEMBLY_NAME: SharpLabNext.Worker.FSharp.dll
         SERVICE_TITLE: SharpLabNext F# Worker
-        VERSION: development
+        VERSION: content
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      FSharpWorker__ReleaseId: development
-      FSharpWorker__WorkerImageId: sharplabnext/worker-fsharp:dev
+      FSharpWorker__ReleaseId: content
+      FSharpWorker__WorkerImageId: sharplabnext/worker-fsharp:content
       FSharpWorker__BuildProcess__MaximumConcurrentProcesses: "8"
       FSharpWorker__DevelopmentArtifactEnvelope__Enabled: "true"
       FSharpWorker__DevelopmentArtifactEnvelope__MaxBytes: "33554432"
@@ -302,28 +302,28 @@ services:
 
   worker-gsharp:
     <<: *service-defaults
-    image: sharplabnext/worker-gsharp:dev
+    image: sharplabnext/worker-gsharp:content
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      GSharp__ReleaseId: development
-      GSharp__WorkerImageId: sharplabnext/worker-gsharp:dev
+      GSharp__ReleaseId: content
+      GSharp__WorkerImageId: sharplabnext/worker-gsharp:content
       ReferenceSets__net10-ref__Path: /reference-sets/net10-ref
 
   worker-peachpie:
     <<: *service-defaults
-    image: sharplabnext/worker-peachpie:dev
+    image: sharplabnext/worker-peachpie:content
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      PeachPie__ReleaseId: development
-      PeachPie__WorkerImageId: sharplabnext/worker-peachpie:dev
+      PeachPie__ReleaseId: content
+      PeachPie__WorkerImageId: sharplabnext/worker-peachpie:content
       PeachPie__BuildProcess__MaximumConcurrentProcesses: "8"
       ReferenceSets__net10-ref__Path: /reference-sets/net10-ref
 
   worker-cppcli:
     <<: *service-defaults
-    image: sharplabnext/worker-cppcli:dev
+    image: sharplabnext/worker-cppcli:content
     user: "0:0"
     networks:
       - cppcli-control
@@ -336,13 +336,13 @@ services:
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      CppCli__ReleaseId: development
-      CppCli__WorkerImageId: sharplabnext/worker-cppcli:dev
+      CppCli__ReleaseId: content
+      CppCli__WorkerImageId: sharplabnext/worker-cppcli:content
       CppCli__CompilerVersion: "19.51.36248"
 
   worker-jsharp:
     <<: *service-defaults
-    image: sharplabnext/worker-jsharp:development
+    image: sharplabnext/worker-jsharp:content
     user: "0:0"
     networks:
       - jsharp-control
@@ -359,24 +359,24 @@ services:
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      JSharp__ReleaseId: development
-      JSharp__WorkerImageId: sharplabnext/worker-jsharp:development
+      JSharp__ReleaseId: content
+      JSharp__WorkerImageId: sharplabnext/worker-jsharp:content
 
   worker-il:
     <<: *service-defaults
-    image: sharplabnext/worker-il:dev
+    image: sharplabnext/worker-il:content
     build:
       <<: *worker-build
       args:
         PROJECT_PATH: src/Workers/IL/SharpLabNext.Worker.IL/SharpLabNext.Worker.IL.csproj
         ASSEMBLY_NAME: SharpLabNext.Worker.IL.dll
         SERVICE_TITLE: SharpLabNext Mobius IL Worker
-        VERSION: development
+        VERSION: content
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      IlWorker__ReleaseId: development
-      IlWorker__WorkerImageId: sharplabnext/worker-il:dev
+      IlWorker__ReleaseId: content
+      IlWorker__WorkerImageId: sharplabnext/worker-il:content
       IlWorker__DevelopmentArtifactEnvelope__Enabled: "true"
       IlWorker__DevelopmentArtifactEnvelope__MaxBytes: "33554432"
       ReferenceSets__net10-ref__Path: /reference-sets/net10-ref
@@ -384,19 +384,19 @@ services:
 
   worker-minilang:
     <<: *service-defaults
-    image: sharplabnext/worker-minilang:dev
+    image: sharplabnext/worker-minilang:content
     build:
       <<: *worker-build
       args:
         PROJECT_PATH: samples/Languages/SharpLabNext.SampleLanguage.Worker/SharpLabNext.SampleLanguage.Worker.csproj
         ASSEMBLY_NAME: SharpLabNext.SampleLanguage.Worker.dll
         SERVICE_TITLE: SharpLabNext MiniLang SDK Sample Worker
-        VERSION: development
+        VERSION: content
     environment:
       <<: *service-environment
       ReferenceSetAttestation__Required: "true"
-      MINILANG_RELEASE_ID: development
-      MINILANG_WORKER_IMAGE_ID: sharplabnext/worker-minilang:dev
+      MINILANG_RELEASE_ID: content
+      MINILANG_WORKER_IMAGE_ID: sharplabnext/worker-minilang:content
 
 networks:
   public:
@@ -416,4 +416,4 @@ volumes:
 
 secrets:
   internal-service-token:
-    file: ${SHARPLABNEXT_INTERNAL_SERVICE_TOKEN_FILE:-./secrets/internal-service-token.dev}
+    file: ${SHARPLABNEXT_INTERNAL_SERVICE_TOKEN_FILE:-./secrets/internal-service-token}

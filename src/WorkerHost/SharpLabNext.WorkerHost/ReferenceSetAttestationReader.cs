@@ -30,7 +30,7 @@ public static partial class ReferenceSetAttestationReader
         {
             if (requireManifest)
                 throw new InvalidDataException($"Reference set '{referenceSetId}' attestation manifest is missing.");
-            return CreateDevelopmentAttestation(root, referenceSetId, targetFramework, resolvedVersion, expectedDigest);
+            return CreateContentAttestation(root, referenceSetId, targetFramework, resolvedVersion, expectedDigest);
         }
 
         ReferenceSetAttestationDocument document;
@@ -55,12 +55,12 @@ public static partial class ReferenceSetAttestationReader
         return document.ReferenceSet;
     }
 
-    private static ReferenceSetAttestation CreateDevelopmentAttestation(string root, string referenceSetId, string targetFramework, string resolvedVersion, string? developmentDigest)
+    private static ReferenceSetAttestation CreateContentAttestation(string root, string referenceSetId, string targetFramework, string resolvedVersion, string? contentDigest)
     {
         var files = ReadActualFiles(root);
         if (files.Count == 0)
             throw new InvalidDataException($"Reference set '{referenceSetId}' contains no assemblies.");
-        return new ReferenceSetAttestation(referenceSetId, targetFramework, string.IsNullOrWhiteSpace(developmentDigest) ? $"development-{referenceSetId}" : developmentDigest, ComputeContentDigest(files), new ReferenceSetProvenance("development-directory", resolvedVersion));
+        return new ReferenceSetAttestation(referenceSetId, targetFramework, string.IsNullOrWhiteSpace(contentDigest) ? $"content-{referenceSetId}" : contentDigest, ComputeContentDigest(files), new ReferenceSetProvenance("content-directory", resolvedVersion));
     }
 
     private static void ValidateIdentity(ReferenceSetAttestation attestation, string expectedId, string expectedTargetFramework, string expectedResolvedVersion, string? expectedDigest, bool requireExpectedDigest)

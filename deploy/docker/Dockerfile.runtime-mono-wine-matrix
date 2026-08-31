@@ -194,14 +194,14 @@ ARG MONO_WINE_IMAGE
 COPY --from=preflight /runtime-image-preflight /opt/sharplabnext/.image-preflight
 
 RUN test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "committed:true" \
-    || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "working-tree-development:false"
+    || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "working-tree-content:false"
 
 LABEL org.opencontainers.image.title="SharpLabNext Combined Mono/Wine Runtime Candidate" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
       io.sharplabnext.source.context="${CANDIDATE_SOURCE_CONTEXT}" \
       com.sharplabnext.runtime-candidate.promotion-eligible="${CANDIDATE_PROMOTION_ELIGIBLE}" \
-      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      org.opencontainers.image.source="https://github.com/ilyfairy/SharpLabNext" \
       com.sharplabnext.runtime-candidate="true" \
       io.sharplabnext.runtime.matrix.profile-group="${PROFILE_GROUP_ID}" \
       io.sharplabnext.runtime.matrix.digest="${RUNTIME_COMPONENT_DIGEST}" \

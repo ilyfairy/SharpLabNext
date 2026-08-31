@@ -33,7 +33,7 @@ public static class TestReferenceSets
             throw new InvalidOperationException($"Reference set '{id}' at '{path}' has no attestation and its package version cannot be inferred.");
         }
 
-        return new TestReferenceSet(id, targetFramework, path, version, $"development-{id}");
+        return new TestReferenceSet(id, targetFramework, path, version, $"content-{id}");
     }
 
     private static string ResolvePath(string id, string targetFramework, string explicitPathVariable)

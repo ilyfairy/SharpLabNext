@@ -90,7 +90,7 @@ internal sealed record ArtifactWorkerSettings(
     {
         ArgumentNullException.ThrowIfNull(configuration);
         var worker = configuration.GetSection("ArtifactWorker");
-        var identity = new ArtifactWorkerIdentity(Required(worker["ReleaseId"], "ArtifactWorker:ReleaseId", "development"), Required(worker["WorkerImageId"], "ArtifactWorker:WorkerImageId", "development"), "artifacts-default", ProcessorProtocol.IlSpyVersion, ProcessorProtocol.IlVerificationVersion);
+        var identity = new ArtifactWorkerIdentity(Required(worker["ReleaseId"], "ArtifactWorker:ReleaseId", "content"), Required(worker["WorkerImageId"], "ArtifactWorker:WorkerImageId", "content"), "artifacts-default", ProcessorProtocol.IlSpyVersion, ProcessorProtocol.IlVerificationVersion);
 
         var defaults = ArtifactProcessorLimits.Default;
         var limits = worker.GetSection("Limits");

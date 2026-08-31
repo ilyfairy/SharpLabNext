@@ -201,7 +201,7 @@ function validateRoslynCoreReferenceSetConfiguration(services, fileName, isProdu
   for (const serviceName of ['worker-roslyn-stable', 'worker-roslyn-main']) {
     if (!isProduction && services[serviceName]?.pull_policy !== 'never') {
       failures.push(
-        `${fileName}: ${serviceName} must use pull_policy=never for its prebuilt development image`,
+        `${fileName}: ${serviceName} must use pull_policy=never for its prebuilt content image`,
       )
     }
   const overrides = Object.keys(services[serviceName]?.environment ?? {}).filter(key => /^ReferenceSets__/.test(key))
@@ -384,13 +384,13 @@ function validateLocalImageIdentityPolicy(services, fileName, isProduction) {
     }
 
     if (typeof expectedIdentity !== 'string' || expectedIdentity.startsWith('sha256:')) {
-      failures.push(`${fileName}: ${expectedKey} must use the development image tag, not a generated image ID`)
+      failures.push(`${fileName}: ${expectedKey} must use the content image tag, not a generated image ID`)
     }
     if (workerIdentity !== expectedIdentity) {
       failures.push(`${fileName}: ${image.composeService}.${image.imageIdEnvironment} must match ${expectedKey}`)
     }
     if (services[image.composeService]?.image !== expectedIdentity) {
-      failures.push(`${fileName}: ${image.composeService} must report the same development tag that Compose runs`)
+      failures.push(`${fileName}: ${image.composeService} must report the same content tag that Compose runs`)
     }
   }
 
@@ -410,7 +410,7 @@ function validateLocalImageIdentityPolicy(services, fileName, isProduction) {
     if (runtimeIdentity !== supervisorEnvironment[imageKey] ||
         typeof runtimeIdentity !== 'string' ||
         runtimeIdentity.startsWith('sha256:')) {
-      failures.push(`${fileName}: ${key} must match ${imageKey} and use the development image tag`)
+      failures.push(`${fileName}: ${key} must match ${imageKey} and use the content image tag`)
     }
   }
 }

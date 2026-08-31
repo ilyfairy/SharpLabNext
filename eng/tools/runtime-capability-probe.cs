@@ -757,7 +757,7 @@ sealed class ProbeOptions
           --time-to-live-seconds <60..86400>  Default: 3600.
           --timeout-seconds <5..300>           Default: 60.
 
-        Build and development:
+        Build and diagnostics:
           --repository-root <path>
           --configuration <Debug|Release>      Default: Release.
           --self-test

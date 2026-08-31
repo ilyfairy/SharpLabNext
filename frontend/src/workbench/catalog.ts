@@ -395,6 +395,6 @@ export function normalizeSelectionIntent(catalog: CatalogDocument, requested: Se
 
 export function availabilityLabel(health: string): string {
   if (health === 'healthy') return ''
-  if (health === 'skeleton') return ' (development)'
+  if (health === 'skeleton') return ' (unverified)'
   return ' (unavailable)'
 }

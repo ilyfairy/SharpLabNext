@@ -192,7 +192,7 @@ RUN test -n "${VERSION}" \
 LABEL org.opencontainers.image.title="SharpLabNext J# 2.0 x64 Wine Base" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
-      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      org.opencontainers.image.source="https://github.com/ilyfairy/SharpLabNext" \
       io.sharplabnext.operator-only="true" \
       io.sharplabnext.component.jsharp20.version="${JSHARP_TOOLCHAIN_VERSION}" \
       io.sharplabnext.component.jsharp20.digest="${JSHARP_TOOLCHAIN_DIGEST}" \
@@ -254,7 +254,7 @@ RUN test -n "${WINE_JSHARP20_RUNTIME_VERSION}" \
 LABEL org.opencontainers.image.title="SharpLabNext Wine J# 2.0 x64 Runtime" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
-      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      org.opencontainers.image.source="https://github.com/ilyfairy/SharpLabNext" \
       io.sharplabnext.runtime.framework=".NETFramework,Version=v2.0" \
       io.sharplabnext.runtime.framework-version="${WINE_JSHARP20_RUNTIME_VERSION}" \
       io.sharplabnext.component.wine-jsharp20-linux-x64.version="${WINE_JSHARP20_RUNTIME_VERSION}" \

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "wine-netfx45-linux-x64",
-  "image": "sharplabnext/runtime-wine-netfx45-linux-x64:development",
+  "image": "sharplabnext/runtime-wine-netfx45-linux-x64:content",
   "family": "netfx-clr-wine",
   "acceptedRuntimeFamilies": [
     "netfx-clr-wine"

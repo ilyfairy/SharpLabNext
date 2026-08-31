@@ -14,10 +14,6 @@ variable "SOURCE_DATE_EPOCH" {
   default = ""
 }
 
-variable "DEVELOPMENT_IMAGE_INPUTS" {
-  default = ""
-}
-
 function "required" {
   params = [value]
   result = regex(".+", value)
@@ -1022,10 +1018,6 @@ variable "OPERATOR_PROMOTION_ELIGIBLE" {
   default = ""
 }
 
-variable "OPERATOR_DEVELOPMENT_ONLY" {
-  default = ""
-}
-
 group "default" {
   targets = [
     "gateway",
@@ -1076,9 +1068,8 @@ target "common" {
   labels = {
     "org.opencontainers.image.version" = required(RELEASE_ID)
     "org.opencontainers.image.revision" = required(SOURCE_REVISION)
-    "org.opencontainers.image.source" = "https://github.com/sharplabnext/SharpLabNext"
+    "org.opencontainers.image.source" = "https://github.com/ilyfairy/SharpLabNext"
     "io.sharplabnext.source.revision" = required(SOURCE_REVISION)
-    "io.sharplabnext.development-image-inputs" = required(DEVELOPMENT_IMAGE_INPUTS)
   }
 }
 
@@ -1100,20 +1091,17 @@ target "operator-wine-coreclr" {
     WINE_CORECLR_USERSPACE_SOURCE_URI = required(WINE_CORECLR_USERSPACE_SOURCE_URI)
     OPERATOR_SOURCE_CONTEXT = required(OPERATOR_SOURCE_CONTEXT)
     OPERATOR_PROMOTION_ELIGIBLE = required(OPERATOR_PROMOTION_ELIGIBLE)
-    OPERATOR_DEVELOPMENT_ONLY = required(OPERATOR_DEVELOPMENT_ONLY)
   }
   labels = {
     "org.opencontainers.image.version" = "wine-9.0-noble-amd64"
     "org.opencontainers.image.revision" = required(SOURCE_REVISION)
-    "org.opencontainers.image.source" = "https://github.com/sharplabnext/SharpLabNext"
+    "org.opencontainers.image.source" = "https://github.com/ilyfairy/SharpLabNext"
     "io.sharplabnext.source.revision" = required(SOURCE_REVISION)
-    "io.sharplabnext.development-image-inputs" = required(DEVELOPMENT_IMAGE_INPUTS)
     "io.sharplabnext.base-image.dotnet-runtime-deps" = required(BASE_DOTNET_RUNTIME_DEPS_IMAGE)
     "io.sharplabnext.component.wine-coreclr-userspace.version" = required(WINE_CORECLR_USERSPACE_VERSION)
     "io.sharplabnext.component.wine-coreclr-userspace.digest" = required(WINE_CORECLR_USERSPACE_DIGEST)
     "io.sharplabnext.component.wine-coreclr-userspace.source-uri" = required(WINE_CORECLR_USERSPACE_SOURCE_URI)
     "io.sharplabnext.source.context" = required(OPERATOR_SOURCE_CONTEXT)
-    "io.sharplabnext.development-only" = required(OPERATOR_DEVELOPMENT_ONLY)
     "com.sharplabnext.operator.promotion-eligible" = required(OPERATOR_PROMOTION_ELIGIBLE)
   }
 }

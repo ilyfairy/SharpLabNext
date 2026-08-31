@@ -1091,7 +1091,6 @@
 }
 
 .result-error,
-.development-result,
 .result-summary {
   display: flex;
   flex-direction: column;
@@ -1107,13 +1106,11 @@
 }
 
 .result-error strong,
-.development-result strong,
 .result-summary strong {
   font-size: 12px;
 }
 
 .result-error span,
-.development-result span,
 .result-summary span {
   max-width: 70ch;
   font-size: 10px;
@@ -1130,15 +1127,6 @@
   font: inherit;
   font-size: 10px;
   cursor: pointer;
-}
-
-.development-result {
-  color: #4e5964;
-  background: #f1f4f6;
-}
-
-.development-result svg {
-  color: #798692;
 }
 
 .result-document {

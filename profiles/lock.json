@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "releaseId": "development",
+  "releaseId": "content",
   "resolvedAt": "2026-07-20T15:13:59Z",
   "components": {
     "artifacts-const-generics": {

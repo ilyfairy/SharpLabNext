@@ -60,7 +60,7 @@ function fetchFixture(context, options = {}) {
 }
 function live(context, fixture, extra = {}) { return runRuntimeFrameworkSupervisorSmoke({ profileId, resultsPath: context.resultsPath, profileDirectory: context.profiles, overlayPath: path.join(context.directory, 'overlay.json'), tokenFile: context.tokenFile, supervisorUrl: 'http://test/supervisor', roslynWorkerUrl: 'http://test/roslyn', fetch: fixture.fetch, now: fixedNow, sleep: async () => {}, ...extra }) }
 
-test('prepare-only writes a one-profile development overlay without credentials or live URLs', t => {
+test('prepare-only writes a one-profile validation overlay without credentials or live URLs', t => {
   const context = setup(t)
   return runRuntimeFrameworkSupervisorSmoke({ profileId, resultsPath: context.resultsPath, profileDirectory: context.profiles, overlayPath: path.join(context.directory, 'overlay.json'), prepareOnly: true }).then(result => {
     assert.equal(result.overlay.RuntimeSupervisor.SessionReuseEnabled, false); assert.equal(result.overlay.RuntimeSupervisor.RequireDigestPinnedImages, false)

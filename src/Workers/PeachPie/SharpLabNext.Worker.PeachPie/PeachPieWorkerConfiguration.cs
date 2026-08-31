@@ -62,7 +62,7 @@ public sealed record PeachPieWorkerSettings(
         var runtimeAssemblyPath = Path.GetFullPath(Path.Combine(baseDirectory, PeachPieToolchain.RuntimeAssemblyName));
         var libraryAssemblyPath = Path.GetFullPath(Path.Combine(baseDirectory, PeachPieToolchain.LibraryAssemblyName));
         var monoUnixNativeLibraryPath = Path.GetFullPath(Path.Combine(baseDirectory, "runtimes", PeachPieToolchain.NativeRuntimeIdentifier, "native", PeachPieToolchain.MonoUnixNativeLibraryName));
-        return new PeachPieWorkerSettings(new PeachPieWorkerIdentity(worker["ReleaseId"] ?? "development", compilerVersion, compilerCommit, worker["WorkerImageId"] ?? $"sha256:{new string('0', 64)}"), buildProcess, Path.GetFullPath(Environment.ExpandEnvironmentVariables(worker["WorkRoot"] ?? Path.Combine(Path.GetTempPath(), "SharpLabNext", "peachpie-worker"))), runtimeAssemblyPath, libraryAssemblyPath, monoUnixNativeLibraryPath, referenceSets);
+        return new PeachPieWorkerSettings(new PeachPieWorkerIdentity(worker["ReleaseId"] ?? "content", compilerVersion, compilerCommit, worker["WorkerImageId"] ?? $"sha256:{new string('0', 64)}"), buildProcess, Path.GetFullPath(Environment.ExpandEnvironmentVariables(worker["WorkRoot"] ?? Path.Combine(Path.GetTempPath(), "SharpLabNext", "peachpie-worker"))), runtimeAssemblyPath, libraryAssemblyPath, monoUnixNativeLibraryPath, referenceSets);
     }
 
     private static string Pinned(string? configured, string expected, string key)

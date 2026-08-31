@@ -22,7 +22,7 @@ operationStoreOptions.Validate();
 var operationExecutionOptions = new OperationExecutionOptions();
 builder.Configuration.GetSection(OperationExecutionOptions.SectionName).Bind(operationExecutionOptions);
 operationExecutionOptions.Validate();
-var descriptor = new ServiceIdentity("runtime-supervisor", ServiceKind.RuntimeSupervisor, builder.Configuration["ReleaseId"] ?? "development", ProtocolVersion.WorkerV1, RuntimeSupervisorServiceCapabilities.All, "ready");
+var descriptor = new ServiceIdentity("runtime-supervisor", ServiceKind.RuntimeSupervisor, builder.Configuration["ReleaseId"] ?? "content", ProtocolVersion.WorkerV1, RuntimeSupervisorServiceCapabilities.All, "ready");
 builder.AddSharpLabNextObservability(descriptor.Id, descriptor.ReleaseId);
 builder.Services.AddSingleton(descriptor);
 var runtimeProfileOverlay = new RuntimeSupervisorProfileOverlayOptions();

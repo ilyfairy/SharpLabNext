@@ -732,7 +732,7 @@ public sealed class LanguageSessionTests
     }
 
     private static RoslynLanguageSessionManager CreateManager(LspLimits? lspLimits = null) =>
-        new(new ReferenceSetProvider([new ReferenceSetDefinition("net10-ref", CSharpBuildServiceTests.GetNet10ReferencePathForHost(), "net10.0", CSharpBuildServiceTests.GetNet10ReferenceVersionForHost())]), new RoslynWorkerIdentity("development", "roslyn-stable", "5.6.0", null, "development-worker-image"), CompilationLimits.Default, lspLimits ?? LspLimits.Default);
+        new(new ReferenceSetProvider([new ReferenceSetDefinition("net10-ref", CSharpBuildServiceTests.GetNet10ReferencePathForHost(), "net10.0", CSharpBuildServiceTests.GetNet10ReferenceVersionForHost())]), new RoslynWorkerIdentity("content", "roslyn-stable", "5.6.0", null, "content-worker-image"), CompilationLimits.Default, lspLimits ?? LspLimits.Default);
 
     private static string ApplyCompletionEdits(string source, LspCompletionItem completion)
     {

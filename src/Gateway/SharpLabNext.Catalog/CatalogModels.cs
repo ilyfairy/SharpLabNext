@@ -75,7 +75,7 @@ public sealed record RuntimeManifest
     public required IReadOnlyList<string> AcceptedArtifactFormats { get; init; }
     public required IReadOnlyList<string> Capabilities { get; init; }
     // These fields bind the catalog to the exact profile loaded by Runtime
-    // Supervisor. They are optional for development catalogs produced before
+    // Supervisor. They are optional for older source catalogs produced before
     // the runtime identity contract was introduced.
     public string? RuntimeCommit { get; init; }
     public string? JitVersion { get; init; }

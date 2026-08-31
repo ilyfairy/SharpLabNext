@@ -6,7 +6,7 @@ namespace SharpLabNext.BundleBuilder;
 
 public sealed record RepositorySourceState(bool IsGitRepository, string? HeadRevision, bool IsDirty);
 
-public sealed record RepositorySourceProvenance(string Revision, string? HeadRevision, bool IsDirty, bool IsVerified, bool DevelopmentOverrideUsed);
+public sealed record RepositorySourceProvenance(string Revision, string? HeadRevision, bool IsDirty, bool IsVerified);
 
 public interface IRepositorySourceInspector
 {
@@ -179,7 +179,7 @@ public static class RepositorySourceProvenanceResolver
                        state.HeadRevision is not null &&
                        !state.IsDirty &&
                        string.Equals(revision, state.HeadRevision, StringComparison.Ordinal);
-        return new RepositorySourceProvenance(revision, state.HeadRevision, state.IsDirty, verified, !verified);
+        return new RepositorySourceProvenance(revision, state.HeadRevision, state.IsDirty, verified);
     }
 
     private static bool IsReservedUnknown(string value) =>

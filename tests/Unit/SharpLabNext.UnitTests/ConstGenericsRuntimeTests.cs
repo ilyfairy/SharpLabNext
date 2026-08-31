@@ -13,9 +13,9 @@ public sealed class ConstGenericsRuntimeTests
     private const string Commit = "79f7f1408b2c811904c983419b45139e654f1e46";
     private const string ArchiveSha256 = "00f0f9fcfc083e931004ceaa914633990ad7e389ce8d21012b97af5844f501b4";
     private const string ReferenceDigest = "sha256:00f0f9fcfc083e931004ceaa914633990ad7e389ce8d21012b97af5844f501b4";
-    private const string RuntimeImageTag = "sharplabnext/runtime-const-generics:development";
-    private const string RoslynImageTag = "sharplabnext/worker-roslyn-const-generics:development";
-    private const string ArtifactWorkerImageTag = "sharplabnext/worker-artifacts-const-generics:development";
+    private const string RuntimeImageTag = "sharplabnext/runtime-const-generics:content";
+    private const string RoslynImageTag = "sharplabnext/worker-roslyn-const-generics:content";
+    private const string ArtifactWorkerImageTag = "sharplabnext/worker-artifacts-const-generics:content";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [Fact]
@@ -118,7 +118,7 @@ public sealed class ConstGenericsRuntimeTests
     }
 
     [Fact]
-    public async Task RuntimeTemplateUsesADevelopmentTagAndDocumentsGeneratedReleaseIdentity()
+    public async Task RuntimeTemplateUsesAContentTagAndDocumentsGeneratedReleaseIdentity()
     {
         var root = FindRepositoryRoot();
         await using var stream = File.OpenRead(Path.Combine(root, "samples", "Runtimes", "dotnet-runtime-template", "runtime-profile.json"));
@@ -126,7 +126,7 @@ public sealed class ConstGenericsRuntimeTests
         var readme = await File.ReadAllTextAsync(Path.Combine(root, "samples", "Runtimes", "dotnet-runtime-template", "README.md"), TestContext.Current.CancellationToken);
 
         Assert.NotNull(profile);
-        Assert.Equal("sharplabnext/runtime-example:development", profile.Image);
+        Assert.Equal("sharplabnext/runtime-example:content", profile.Image);
         Assert.Equal(profile.Image, profile.RuntimeImageId);
         Assert.Empty(RuntimeProfileValidation.ValidatePackage(profile, requireDigestPinnedImage: false));
         Assert.Contains("bundle generation inspects the built image", readme, StringComparison.Ordinal);
@@ -137,14 +137,14 @@ public sealed class ConstGenericsRuntimeTests
     public async Task ComposeTemplatesDoNotHardCodeLocalBuildOutputDigests()
     {
         var root = FindRepositoryRoot();
-        var developmentCompose = await File.ReadAllTextAsync(Path.Combine(root, "deploy", "compose.dev.yaml"), TestContext.Current.CancellationToken);
+        var localCompose = await File.ReadAllTextAsync(Path.Combine(root, "deploy", "compose.dev.yaml"), TestContext.Current.CancellationToken);
         var productionCompose = await File.ReadAllTextAsync(Path.Combine(root, "deploy", "compose.prod.yaml"), TestContext.Current.CancellationToken);
 
-        Assert.Contains($"Services__LanguageWorkers__roslyn-const-generics__ExpectedWorkerImageId: {RoslynImageTag}", developmentCompose, StringComparison.Ordinal);
-        Assert.Contains($"RoslynWorker__WorkerImageId: {RoslynImageTag}", developmentCompose, StringComparison.Ordinal);
-        Assert.Contains($"Services__ArtifactWorkers__artifacts-const-generics__ExpectedWorkerImageId: {ArtifactWorkerImageTag}", developmentCompose, StringComparison.Ordinal);
-        Assert.Contains($"ConstGenericsArtifactWorker__WorkerImageId: {ArtifactWorkerImageTag}", developmentCompose, StringComparison.Ordinal);
-        Assert.Contains($"RuntimeSupervisor__Profiles__2__RuntimeImageId: ${{SHARPLABNEXT_CONST_GENERICS_RUNTIME_IMAGE_ID:-{RuntimeImageTag}}}", developmentCompose, StringComparison.Ordinal);
+        Assert.Contains($"Services__LanguageWorkers__roslyn-const-generics__ExpectedWorkerImageId: {RoslynImageTag}", localCompose, StringComparison.Ordinal);
+        Assert.Contains($"RoslynWorker__WorkerImageId: {RoslynImageTag}", localCompose, StringComparison.Ordinal);
+        Assert.Contains($"Services__ArtifactWorkers__artifacts-const-generics__ExpectedWorkerImageId: {ArtifactWorkerImageTag}", localCompose, StringComparison.Ordinal);
+        Assert.Contains($"ConstGenericsArtifactWorker__WorkerImageId: {ArtifactWorkerImageTag}", localCompose, StringComparison.Ordinal);
+        Assert.Contains($"RuntimeSupervisor__Profiles__2__RuntimeImageId: ${{SHARPLABNEXT_CONST_GENERICS_RUNTIME_IMAGE_ID:-{RuntimeImageTag}}}", localCompose, StringComparison.Ordinal);
 
         Assert.Contains("Services__LanguageWorkers__roslyn-const-generics__ExpectedWorkerImageId: ${SHARPLABNEXT_ROSLYN_CONST_GENERICS_IMAGE_ID:-bundle-overlay-required}", productionCompose, StringComparison.Ordinal);
         Assert.Contains("RoslynWorker__WorkerImageId: ${SHARPLABNEXT_ROSLYN_CONST_GENERICS_IMAGE_ID:-unverified}", productionCompose, StringComparison.Ordinal);
@@ -152,7 +152,7 @@ public sealed class ConstGenericsRuntimeTests
         Assert.Contains("ConstGenericsArtifactWorker__WorkerImageId: ${SHARPLABNEXT_ARTIFACTS_CONST_GENERICS_IMAGE_ID:-unverified}", productionCompose, StringComparison.Ordinal);
         Assert.Contains("RuntimeSupervisor__Profiles__2__RuntimeImageId: ${SHARPLABNEXT_CONST_GENERICS_RUNTIME_IMAGE_ID:-unverified}", productionCompose, StringComparison.Ordinal);
 
-        Assert.All(ConstGenericsIdentityLines(developmentCompose), AssertNoSha256Identity);
+        Assert.All(ConstGenericsIdentityLines(localCompose), AssertNoSha256Identity);
         Assert.All(ConstGenericsIdentityLines(productionCompose), AssertNoSha256Identity);
     }
 
@@ -228,11 +228,11 @@ public sealed class ConstGenericsRuntimeTests
     private static RuntimeProfileOptions OrdinaryRuntime() => new()
     {
         Id = "dotnet-10-linux-x64",
-        Image = "sharplabnext/runtime-dotnet10:development",
+        Image = "sharplabnext/runtime-dotnet10:content",
         Family = "coreclr",
         RuntimeVersion = "10.0.9",
         JitVersion = "10.0.9",
-        RuntimeImageId = "development-image",
+        RuntimeImageId = "test-image",
         AcceptedArtifactFormats = ["dotnet-managed-pe-v1"],
         Capabilities = ["run", "jit-asm"],
         AllowedSecurityPolicyIds = ["runtime-job-default"]
@@ -241,13 +241,13 @@ public sealed class ConstGenericsRuntimeTests
     private static RuntimeProfileOptions ConstGenericsRuntime() => new()
     {
         Id = "const-generics-linux-x64",
-        Image = "sharplabnext/runtime-const-generics:development",
+        Image = "sharplabnext/runtime-const-generics:content",
         Family = "coreclr-const-generics",
         RuntimeVersion = "9.0.0-const-generics.79f7f140",
         RuntimeCommit = Commit,
         JitVersion = "9.0.0-const-generics.79f7f140",
         JitCommit = Commit,
-        RuntimeImageId = "development-image",
+        RuntimeImageId = "test-image",
         AcceptedArtifactFormats = ["dotnet-managed-pe-v1"],
         Capabilities = ["run", "jit-asm"],
         ProvidedRuntimeFeatureTags = ["runtime.const-generics.v1"],
@@ -265,7 +265,7 @@ public sealed class ConstGenericsRuntimeTests
         return new ArtifactManifest(
             1,
             artifactRef,
-            new ArtifactProducer("development", "csharp", family == "coreclr-const-generics" ? "roslyn-const-generics" : "roslyn-stable", "test", null, "test-image"),
+            new ArtifactProducer("content", "csharp", family == "coreclr-const-generics" ? "roslyn-const-generics" : "roslyn-stable", "test", null, "test-image"),
             family == "coreclr-const-generics" ? "const-generics-ref" : "net10-ref",
             family == "coreclr-const-generics" ? "net9.0-const-generics" : "net10.0",
             "dotnet-managed-pe-v1",

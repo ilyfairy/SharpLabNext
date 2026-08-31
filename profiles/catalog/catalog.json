@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "revision": "runtime-promotion-d90b7e86bd264ffa",
-  "releaseId": "development",
+  "releaseId": "content",
   "languages": [
     {
       "id": "csharp",

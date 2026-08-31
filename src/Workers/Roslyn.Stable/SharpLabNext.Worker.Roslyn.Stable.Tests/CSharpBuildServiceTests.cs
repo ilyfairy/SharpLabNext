@@ -27,9 +27,9 @@ public sealed class CSharpBuildServiceTests
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["RoslynWorker:ReleaseId"] = "development",
+                ["RoslynWorker:ReleaseId"] = "content",
                 ["RoslynWorker:ToolchainId"] = "roslyn-stable-netfx48",
-                ["RoslynWorker:WorkerImageId"] = "development-netfx-worker-image",
+                ["RoslynWorker:WorkerImageId"] = "content-netfx-worker-image",
                 ["RoslynWorker:CompilerVersion"] = "__pinned__",
                 ["RoslynWorker:ArtifactContract:Format"] = "dotnet-framework-managed-pe-v1",
                 ["RoslynWorker:ArtifactContract:RuntimeFamily"] = "netfx-clr-wine",
@@ -91,9 +91,9 @@ public sealed class CSharpBuildServiceTests
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["RoslynWorker:ReleaseId"] = "development",
+                ["RoslynWorker:ReleaseId"] = "content",
                 ["RoslynWorker:ToolchainId"] = "roslyn-stable",
-                ["RoslynWorker:WorkerImageId"] = "development-worker-image",
+                ["RoslynWorker:WorkerImageId"] = "content-worker-image",
                 ["RoslynWorker:ArtifactContract:RuntimeFamily"] = "legacy-family",
                 ["RoslynWorker:ArtifactContract:MetadataFeatureTags:0"] = "metadata.legacy",
                 ["ReferenceSets:custom-ref:Path"] = "custom-path",
@@ -130,9 +130,9 @@ public sealed class CSharpBuildServiceTests
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["RoslynWorker:ReleaseId"] = "development",
+                ["RoslynWorker:ReleaseId"] = "content",
                 ["RoslynWorker:ToolchainId"] = "roslyn-stable-netfx48",
-                ["RoslynWorker:WorkerImageId"] = "development-netfx-worker-image",
+                ["RoslynWorker:WorkerImageId"] = "content-netfx-worker-image",
                 ["RoslynWorker:ArtifactContract:Format"] = "dotnet-framework-managed-pe-v1",
                 ["RoslynWorker:ArtifactContract:RuntimeFamily"] = "netfx-clr-wine",
                 ["RoslynWorker:ArtifactContract:FrameworkName"] = ".NETFramework",
@@ -276,7 +276,7 @@ public sealed class CSharpBuildServiceTests
         Assert.Equal(23, result.Document.WorkspaceRevision);
         Assert.Equal("5.6.0", result.Identity?.CompilerVersion);
         Assert.Equal("net10-ref", result.Identity?.ReferenceSetId);
-        Assert.Equal("development-worker-image", result.Identity?.WorkerImageId);
+        Assert.Equal("content-worker-image", result.Identity?.WorkerImageId);
         Assert.True(result.Document.Truncated);
         Assert.Equal(["First.cs", "Second.cs"], result.Document.Root.Children.Select(static child => child.Properties["path"]));
         Assert.Contains(Flatten(result.Document.Root), static node => node.Properties.ContainsKey("rawKind"));
@@ -429,7 +429,7 @@ public sealed class CSharpBuildServiceTests
     [Fact]
     public async Task OneWorkerBuildsUnsafeCoreClrAndFrameworkArtifactsWithIndependentContracts()
     {
-        var identity = new RoslynWorkerIdentity("development", "roslyn-stable", "5.6.0", null, "development-worker-image");
+        var identity = new RoslynWorkerIdentity("content", "roslyn-stable", "5.6.0", null, "content-worker-image");
         using var references = new ReferenceSetProvider(
             [
                 new ReferenceSetDefinition("net10-ref", GetNet10ReferencePathForHost(), "net10.0", GetNet10ReferenceVersionForHost()),
@@ -486,7 +486,7 @@ public sealed class CSharpBuildServiceTests
     private static CSharpBuildService CreateService(AstLimits? astLimits = null)
     {
         var references = new ReferenceSetProvider([new ReferenceSetDefinition("net10-ref", GetNet10ReferencePathForHost(), "net10.0", GetNet10ReferenceVersionForHost())]);
-        return new CSharpBuildService(references, new RoslynWorkerIdentity("development", "roslyn-stable", "5.6.0", null, "development-worker-image"), CompilationLimits.Default, astLimits ?? AstLimits.Default);
+        return new CSharpBuildService(references, new RoslynWorkerIdentity("content", "roslyn-stable", "5.6.0", null, "content-worker-image"), CompilationLimits.Default, astLimits ?? AstLimits.Default);
     }
 
     private static BuildRequest CreateRequest(BuildTarget target, IReadOnlyList<WorkspaceFile> files, long revision = 1, long selectionRevision = 1, string? activeFile = null, BuildOutputKind outputKind = BuildOutputKind.Console)

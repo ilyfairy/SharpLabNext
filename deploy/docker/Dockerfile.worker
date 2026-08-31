@@ -296,7 +296,7 @@ RUN --mount=type=bind,source=deploy/docker/runtime-measurement-helper.sh,target=
 LABEL org.opencontainers.image.title="${SERVICE_TITLE}" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
-      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext"
+      org.opencontainers.image.source="https://github.com/ilyfairy/SharpLabNext"
 WORKDIR /app
 ENV ASPNETCORE_URLS=http://+:8080 \
     DOTNET_EnableDiagnostics=0 \

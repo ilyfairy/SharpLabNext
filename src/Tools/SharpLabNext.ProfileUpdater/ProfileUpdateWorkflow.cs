@@ -875,9 +875,8 @@ public static class BakeEnvironmentResolver
     // source binding, so it must never supply release-looking operator labels.
     // The dedicated operator wrapper replaces this complete tuple only after
     // it has bound the build to a clean committed Git context.
-    private const string DevelopmentOperatorSourceContext = "working-tree-development";
-    private const string DevelopmentOperatorPromotionEligible = "false";
-    private const string DevelopmentOperatorDevelopmentOnly = "true";
+    private const string ContentOperatorSourceContext = "working-tree-content";
+    private const string ContentOperatorPromotionEligible = "false";
     private static readonly CoreClrReferenceSetDescriptor[] CoreClrReferenceSets =
     [
         new("netcoreapp2.0-ref", "NETCOREAPP20", "NETCOREAPP20_REFERENCE_VERSION", null),
@@ -927,15 +926,13 @@ public static class BakeEnvironmentResolver
             ["IMAGE_PREFIX"] = RequiredValue(imagePrefix, "imagePrefix"),
             ["SOURCE_REVISION"] = RequiredValue(sourceRevision, "sourceRevision"),
             ["SOURCE_DATE_EPOCH"] = SourceDateEpochResolver.Validate(sourceDateEpoch),
-            ["DEVELOPMENT_IMAGE_INPUTS"] = "false",
             // The Wine images use the same shared control-plane bridge as the
             // rest of the runtime fleet.  Keep this selection in the Bake
             // environment rather than in a Dockerfile ARG default so a
             // release cannot silently switch frameworks.
             ["WINE_CONTROL_TFM"] = ValidateControlRuntimeTargetFramework(controlRuntimeTargetFramework ?? "net10.0"),
-            ["OPERATOR_SOURCE_CONTEXT"] = DevelopmentOperatorSourceContext,
-            ["OPERATOR_PROMOTION_ELIGIBLE"] = DevelopmentOperatorPromotionEligible,
-            ["OPERATOR_DEVELOPMENT_ONLY"] = DevelopmentOperatorDevelopmentOnly
+            ["OPERATOR_SOURCE_CONTEXT"] = ContentOperatorSourceContext,
+            ["OPERATOR_PROMOTION_ELIGIBLE"] = ContentOperatorPromotionEligible
         };
 
         var roslynStable = RequiredComponent(releaseLock, "roslyn-stable");

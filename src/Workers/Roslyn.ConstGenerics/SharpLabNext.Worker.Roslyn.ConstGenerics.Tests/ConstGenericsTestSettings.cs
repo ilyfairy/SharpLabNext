@@ -17,7 +17,7 @@ internal static class ConstGenericsTestSettings
     public static bool IsSourceBuild => false;
 #endif
 
-    public static RoslynWorkerIdentity CreateIdentity() => new("development", "roslyn-const-generics", CompilerVersion, IsSourceBuild ? ExpectedCompilerCommit : null, "test-worker-image")
+    public static RoslynWorkerIdentity CreateIdentity() => new("content", "roslyn-const-generics", CompilerVersion, IsSourceBuild ? ExpectedCompilerCommit : null, "test-worker-image")
     {
         SupportedLanguageIds = ["csharp"],
         ArtifactRuntimeFamily = "coreclr-const-generics",

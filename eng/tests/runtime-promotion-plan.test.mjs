@@ -788,10 +788,9 @@ test('helper substitution between capture and commit is rejected', t => {
   assert.equal(fs.existsSync(fixture.outputPath), false)
 })
 
-test('dirty source cannot produce a plan, including a development candidate override', t => {
+test('dirty source cannot produce a promotion plan', t => {
   const fixture = createFixture()
   t.after(() => fixture.dispose())
-  fixture.environment.ALLOW_UNCOMMITTED_SOURCE_FOR_DEVELOPMENT = 'true'
   assert.throws(() => produceRuntimePromotionPlan(input(fixture), options(fixture, {
     inspectGit: () => ({ headRevision: sourceRevision, isDirty: true }),
   })), /clean source revision|worktree is dirty/)
@@ -820,8 +819,8 @@ test('image size and required image labels are fail-closed', t => {
 
   for (const [name, mutate] of [
     ['missing source context', labels => { delete labels['io.sharplabnext.source.context'] }],
-    ['development source context', labels => {
-      labels['io.sharplabnext.source.context'] = 'working-tree-development'
+    ['content source context', labels => {
+      labels['io.sharplabnext.source.context'] = 'working-tree-content'
     }],
     ['missing promotion eligibility', labels => {
       delete labels['com.sharplabnext.runtime-candidate.promotion-eligible']

@@ -29,7 +29,7 @@
       "id": "jsharp",
       "dependencies": ["framework"],
       "operator": {
-        "imageId": "jsharp20-development-base",
+        "imageId": "jsharp20-toolchain-base",
         "buildKind": "jsharp20",
         "script": "eng/tools/prepare-jsharp-toolchain.cs",
         "frameworkSeedGeneration": "clr2",

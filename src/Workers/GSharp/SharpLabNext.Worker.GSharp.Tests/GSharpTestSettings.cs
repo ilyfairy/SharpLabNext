@@ -70,7 +70,7 @@ internal static class GSharpTestSettings
     public static IReadOnlyDictionary<string, string?> WebHostConfiguration(string root) =>
         new Dictionary<string, string?>(StringComparer.Ordinal)
         {
-            ["GSharp:ReleaseId"] = "development",
+            ["GSharp:ReleaseId"] = "content",
             ["GSharp:WorkerImageId"] = $"sha256:{new string('0', 64)}",
             ["GSharp:DotNetHostPath"] = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet",
             [$"GSharp:Toolchains:{StableToolchain.ToolchainId}:CompilerVersion"] = StableToolchain.CompilerVersion,

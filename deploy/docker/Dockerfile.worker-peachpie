@@ -126,7 +126,7 @@ ARG NET10_REFERENCE_PACKAGE_CONTENT_HASH
 LABEL org.opencontainers.image.title="SharpLabNext PeachPie Worker" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
-      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      org.opencontainers.image.source="https://github.com/ilyfairy/SharpLabNext" \
       org.opencontainers.image.licenses="BSD-2-Clause" \
       io.sharplabnext.peachpie.commit="${PEACHPIE_COMMIT}" \
       io.sharplabnext.peachpie.codeanalysis.version="${PEACHPIE_CODEANALYSIS_VERSION}" \

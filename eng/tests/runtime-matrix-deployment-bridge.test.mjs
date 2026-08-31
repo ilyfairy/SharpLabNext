@@ -326,7 +326,7 @@ test('CLI reports help, invalid arguments and a successful 34-profile bridge', t
   assert.equal(runRuntimeMatrixDeploymentBridgeCli([], { ...fixture.options, output }), 0)
   assert.equal(messages.some(([, message]) => message.includes('Usage:')), true)
   assert.equal(messages.some(([kind, message]) => kind === 'error' && message.includes('Invalid or duplicate option')), true)
-  assert.match(messages.at(-1)[1], /Prepared 34-profile development runtime-matrix bridge/)
+  assert.match(messages.at(-1)[1], /Prepared 34-profile validation runtime-matrix bridge/)
 })
 
 test('generated bridge merges with production Compose using its release environment', t => {

@@ -9,23 +9,23 @@ ARG SDK_IMAGE
 ARG CONTROL_IMAGE
 ARG WINE_IMAGE
 ARG WINE_IDENTITY
-ARG ALLOW_DEVELOPMENT_IMAGE_ID
-ARG ALLOW_DEVELOPMENT_LOCAL_TAG
+ARG ALLOW_LOCAL_IMAGE_ID
+ARG ALLOW_LOCAL_IMAGE_TAG
 
 FROM ${SDK_IMAGE} AS publish
 ARG SDK_IMAGE
 ARG CONTROL_IMAGE
 ARG WINE_IMAGE
 ARG WINE_IDENTITY
-ARG ALLOW_DEVELOPMENT_IMAGE_ID
-ARG ALLOW_DEVELOPMENT_LOCAL_TAG
+ARG ALLOW_LOCAL_IMAGE_ID
+ARG ALLOW_LOCAL_IMAGE_TAG
 ARG SOURCE_REVISION
 WORKDIR /source
 COPY deploy/docker/validate-digest-pinned-image.sh /usr/local/bin/sharplabnext-validate-image
 RUN chmod 0555 /usr/local/bin/sharplabnext-validate-image \
     && /usr/local/bin/sharplabnext-validate-image \
-         --allow-bare-image-id "${ALLOW_DEVELOPMENT_IMAGE_ID}" \
-         --allow-local-image-tag "${ALLOW_DEVELOPMENT_LOCAL_TAG}" \
+         --allow-bare-image-id "${ALLOW_LOCAL_IMAGE_ID}" \
+         --allow-local-image-tag "${ALLOW_LOCAL_IMAGE_TAG}" \
          SDK_IMAGE "${SDK_IMAGE}" \
          CONTROL_IMAGE "${CONTROL_IMAGE}" \
          WINE_IMAGE "${WINE_IMAGE}" \
@@ -177,14 +177,14 @@ ARG WINE_IMAGE
 COPY --from=preflight --chown=0:0 /tmp/runtime-image-preflight /opt/sharplabnext/.image-preflight
 
 RUN test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "committed:true" \
-    || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "working-tree-development:false"
+    || test "${CANDIDATE_SOURCE_CONTEXT}:${CANDIDATE_PROMOTION_ELIGIBLE}" = "working-tree-content:false"
 
 LABEL org.opencontainers.image.title="SharpLabNext Wine CoreCLR Matrix Runtime Candidate" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
       io.sharplabnext.source.context="${CANDIDATE_SOURCE_CONTEXT}" \
       com.sharplabnext.runtime-candidate.promotion-eligible="${CANDIDATE_PROMOTION_ELIGIBLE}" \
-      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      org.opencontainers.image.source="https://github.com/ilyfairy/SharpLabNext" \
       com.sharplabnext.runtime-candidate="true" \
       com.sharplabnext.runtime-profile="${PROFILE_ID}" \
       io.sharplabnext.runtime.environment="wine-coreclr" \

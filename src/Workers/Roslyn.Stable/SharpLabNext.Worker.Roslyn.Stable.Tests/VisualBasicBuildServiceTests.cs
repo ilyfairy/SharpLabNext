@@ -62,7 +62,7 @@ public sealed class VisualBasicBuildServiceTests
             {
                 RequiredRuntimeFeatureTags = ["runtime.netfx48-wine"]
             }]);
-        var identity = new RoslynWorkerIdentity("development", "roslyn-stable", "5.6.0", null, "development-worker-image");
+        var identity = new RoslynWorkerIdentity("content", "roslyn-stable", "5.6.0", null, "content-worker-image");
         var service = new VisualBasicBuildService(references, identity, CompilationLimits.Default, AstLimits.Default);
         var request = CreateRequest(BuildTarget.Artifact, [new WorkspaceFile("Program.vb", 1, "Imports System\nImports Microsoft.VisualBasic\nModule Program\n    Sub Main()\n        Console.WriteLine(Strings.UCase(\"net48\"))\n    End Sub\nEnd Module")]);
         var frameworkOptions = request.EffectiveOptions with { OutputKind = BuildOutputKind.Console };
@@ -121,7 +121,7 @@ public sealed class VisualBasicBuildServiceTests
     }
 
     private static VisualBasicBuildService CreateService() =>
-        new(new ReferenceSetProvider([new ReferenceSetDefinition("net10-ref", CSharpBuildServiceTests.GetNet10ReferencePathForHost(), "net10.0", CSharpBuildServiceTests.GetNet10ReferenceVersionForHost())]), new RoslynWorkerIdentity("development", "roslyn-stable", "5.6.0", null, "development-worker-image"), CompilationLimits.Default, AstLimits.Default);
+        new(new ReferenceSetProvider([new ReferenceSetDefinition("net10-ref", CSharpBuildServiceTests.GetNet10ReferencePathForHost(), "net10.0", CSharpBuildServiceTests.GetNet10ReferenceVersionForHost())]), new RoslynWorkerIdentity("content", "roslyn-stable", "5.6.0", null, "content-worker-image"), CompilationLimits.Default, AstLimits.Default);
 
     internal static BuildRequest CreateRequest(BuildTarget target, IReadOnlyList<WorkspaceFile> files, long revision = 1, long selectionRevision = 1, BuildOutputKind outputKind = BuildOutputKind.Console)
     {

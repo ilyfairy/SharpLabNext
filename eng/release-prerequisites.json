@@ -97,7 +97,7 @@
   ],
   "generatedImages": [
     {
-      "id": "jsharp20-development-base",
+      "id": "jsharp20-toolchain-base",
       "reference": "sharplabnext/operator-jsharp20:source-v2",
       "buildKind": "jsharp20",
       "license": "Microsoft Visual J# 2.0 and .NET Framework operator-only inputs"

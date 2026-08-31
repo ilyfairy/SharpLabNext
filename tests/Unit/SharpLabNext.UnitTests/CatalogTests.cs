@@ -30,7 +30,7 @@ public sealed class CatalogTests
         var catalog = await CatalogLoader.LoadCatalogAsync(path, TestContext.Current.CancellationToken);
 
         Assert.StartsWith("runtime-promotion-", catalog.Revision, StringComparison.Ordinal);
-        Assert.Equal("development", catalog.ReleaseId);
+        Assert.Equal("content", catalog.ReleaseId);
         Assert.Contains(catalog.Languages, static language => language.Id == "csharp" && language.DefaultToolchainId == "roslyn-main");
         Assert.Contains(catalog.Toolchains, static toolchain => toolchain.Id == "roslyn-main" && toolchain.DefaultReferenceSetId == "net11-preview-ref");
         Assert.Contains(catalog.Presets, static preset => preset.Id == "csharp-main-net11-preview" && preset.LanguageId == "csharp" && preset.ToolchainId == "roslyn-main" && preset.ReferenceSetId == "net11-preview-ref" && preset.DefaultOutputId == "decompiled-csharp" && preset.DefaultRuntimeId == "dotnet-11-preview-linux-x64");
@@ -110,7 +110,7 @@ public sealed class CatalogTests
     }
 
     [Fact]
-    public async Task DevelopmentReleaseLockUsesExactInputsWithoutLocalImageIds()
+    public async Task ContentReleaseLockUsesExactInputsWithoutLocalImageIds()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "lock.json");
 

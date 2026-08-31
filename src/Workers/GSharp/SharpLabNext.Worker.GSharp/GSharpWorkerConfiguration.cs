@@ -55,7 +55,7 @@ public sealed record GSharpWorkerSettings(
             throw new InvalidOperationException("G# process limits must be positive.");
 
         return new GSharpWorkerSettings(
-            new GSharpWorkerIdentity(section["ReleaseId"] ?? "development", section["WorkerImageId"] ?? $"sha256:{new string('0', 64)}"),
+            new GSharpWorkerIdentity(section["ReleaseId"] ?? "content", section["WorkerImageId"] ?? $"sha256:{new string('0', 64)}"),
             new GSharpProcessLimits(maximumProcessOutputBytes, maximumProcessWorkingSetBytes, TimeSpan.FromMinutes(sessionTtlMinutes)),
             Path.GetFullPath(Environment.ExpandEnvironmentVariables(section["WorkRoot"] ?? Path.Combine(Path.GetTempPath(), "sharplabnext-gsharp"))),
             section["DotNetHostPath"] ?? Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet",

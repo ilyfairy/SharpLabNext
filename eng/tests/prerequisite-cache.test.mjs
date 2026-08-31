@@ -50,7 +50,7 @@ function writeFixture(root) {
     }],
     generatedImages: [
       {
-        id: 'jsharp20-development-base',
+        id: 'jsharp20-toolchain-base',
         reference: 'example/jsharp:test',
         buildKind: 'jsharp20',
         license: 'Private test license',

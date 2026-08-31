@@ -27,7 +27,6 @@ const contentSourceIdentityMode = 'content';
 const imageIdPattern = /^sha256:[0-9a-f]{64}$/;
 const digestReferencePattern = /^[^@\s]+@sha256:[0-9a-f]{64}$/;
 const capabilityIdPattern = /^[a-z0-9][a-z0-9._-]*$/;
-const developmentInputsLabel = 'io.sharplabnext.development-image-inputs';
 const sourceRevisionLabel = 'io.sharplabnext.source.revision';
 const versionLabel = 'org.opencontainers.image.version';
 const bakeEnvironmentJsonPrefix = 'SHARPLABNEXT_BAKE_ENVIRONMENT_JSON=';
@@ -428,7 +427,7 @@ function operatorEnvironmentInputs(operatorImages, capabilityDefinitions) {
 
 function appendOperatorEnvironmentArguments(arguments_, operatorImages, capabilityDefinitions) {
   for (const [name, reference] of Object.entries(operatorEnvironmentInputs(operatorImages, capabilityDefinitions))) {
-    arguments_.push('--development-image-input', `${name}=${reference}`);
+    arguments_.push('--image-input', `${name}=${reference}`);
   }
 }
 
@@ -698,7 +697,7 @@ function tryInspectImage(reference, repositoryRoot) {
 
 // BuildKit owns layer reuse. This probe only looks in Docker's local image
 // store; it never turns a cache miss into a registry pull or a second cache
-// repository. Development images remain reusable across source revisions;
+// repository. Content images remain reusable across source revisions;
 // explicit rebuild selectors are the opt-in invalidation mechanism.
 function tryReuseLocalImage(reference, expectedLabels, repositoryRoot, enabled = true, allowDifferentSourceRevision = true) {
   if (!enabled) return undefined;
@@ -758,11 +757,9 @@ function buildWineOperator(options, sourceRevision, snapshot = undefined, requir
     'org.opencontainers.image.revision': sourceRevision,
     [sourceRevisionLabel]: sourceRevision,
     'io.sharplabnext.base-image.dotnet-runtime-deps': values.BASE_DOTNET_RUNTIME_DEPS_IMAGE,
-    [developmentInputsLabel]: 'true',
   };
-  // Keep one content tag across development and release identities. The
-  // release-scoped tag is applied by the operator wrapper and remains only a
-  // user-facing alias.
+  // Keep one content tag across build and release identities. The release-scoped
+  // tag is applied by the operator wrapper and remains only a user-facing alias.
   const localTag = `${options.imagePrefix}/operator-wine-coreclr:content`;
   const releaseTag = `${options.imagePrefix}/operator-wine-coreclr:${options.releaseId}`;
   const cached = tryReuseLocalImage(
@@ -1279,7 +1276,6 @@ function ordinaryImageExpectedLabels(sourceRevision, releaseId) {
   return {
     [versionLabel]: releaseId,
     [sourceRevisionLabel]: sourceRevision,
-    [developmentInputsLabel]: 'true',
   };
 }
 
@@ -1369,7 +1365,6 @@ function validateFinalImageInspection(planned, image, plan, sourceRevision, allo
   }
   if (planned.producer.kind !== 'pull') {
     if (!sourceRevisionPattern.test(labels[sourceRevisionLabel] ?? '') || (!allowDifferentSourceRevision && labels[sourceRevisionLabel] !== sourceRevision)) fail(`Final image '${planned.id}' does not carry a valid source revision${allowDifferentSourceRevision ? '' : ` '${sourceRevision}'`}`);
-    if (labels[developmentInputsLabel] !== 'true') fail(`Final image '${planned.id}' is missing the development image-input marker`);
   }
   return labels;
 }

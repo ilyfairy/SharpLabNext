@@ -6,9 +6,10 @@
 # dotenv files
 .env
 
-# Local development secrets
+# Local secret overrides
 deploy/secrets/*
 !deploy/secrets/README.md
+!deploy/secrets/internal-service-token
 
 # User-specific files
 *.rsuser

@@ -64,7 +64,7 @@ internal sealed class JSharpWebApplicationFactory : WebApplicationFactory<Progra
         var settings = JSharpTestSettings.CreateSettings(root);
         var configuration = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
-            ["JSharp:ReleaseId"] = "development",
+            ["JSharp:ReleaseId"] = "content",
             ["JSharp:CompilerVersion"] = JSharpTestSettings.CompilerVersion,
             ["JSharp:WorkerImageId"] = $"sha256:{new string('0', 64)}",
             ["JSharp:ReferenceSetDigest"] = $"sha256:{new string('b', 64)}",

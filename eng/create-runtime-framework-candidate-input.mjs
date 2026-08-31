@@ -286,13 +286,13 @@ function workingTreeSourceContext(sourceRevision, spawn, environment = process.e
     cwd: repositoryRoot, encoding: 'utf8', shell: false,
   });
   if (revision?.error !== undefined || revision?.status !== 0) {
-    if (isGitCommitIdentity(sourceRevision) || sourceRevision === 'development') {
+    if (isGitCommitIdentity(sourceRevision)) {
       return Object.freeze({ directory: repositoryRoot, dispose() {} });
     }
-    fail('development Framework input source revision is invalid');
+    fail('Framework input source revision is invalid');
   }
   if (String(revision.stdout ?? '').trim() !== sourceRevision) {
-    fail('development Framework input source revision must match Git HEAD');
+    fail('Framework input source revision must match Git HEAD');
   }
   return Object.freeze({ directory: repositoryRoot, dispose() {} });
 }

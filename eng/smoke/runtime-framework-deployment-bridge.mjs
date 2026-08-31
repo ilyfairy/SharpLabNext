@@ -1,4 +1,4 @@
-/** Build ignored, development-only Catalog/Compose inputs from verified Framework evidence. */
+/** Build ignored, validation-only Catalog/Compose inputs from verified Framework evidence. */
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -112,12 +112,12 @@ function requireSupervisorEvidence(binding) {
 function composeOverride(outputDirectory) {
   const catalogMount = path.resolve(outputDirectory)
   const supervisorMount = path.join(catalogMount, 'runtime-supervisor-overlay.json')
-  return `# Generated development-only Framework validation bridge. Do not deploy as a release.\nservices:\n  gateway:\n    environment:\n      Catalog__Path: /app/runtime-framework/catalog.json\n      Catalog__LockPath: /app/runtime-framework/lock.json\n      DependencyHealth__Enabled: \"false\"\n    volumes:\n      - type: bind\n        source: ${yamlString(catalogMount)}\n        target: /app/runtime-framework\n        read_only: true\n  runtime-supervisor:\n    environment:\n      ASPNETCORE_ENVIRONMENT: RuntimeFramework\n      RuntimeSupervisor__SessionReuseEnabled: \"false\"\n    volumes:\n      - type: bind\n        source: ${yamlString(supervisorMount)}\n        target: /app/appsettings.RuntimeFramework.json\n        read_only: true\n`
+  return `# Generated validation-only Framework bridge. Do not deploy as a release.\nservices:\n  gateway:\n    environment:\n      Catalog__Path: /app/runtime-framework/catalog.json\n      Catalog__LockPath: /app/runtime-framework/lock.json\n      DependencyHealth__Enabled: \"false\"\n    volumes:\n      - type: bind\n        source: ${yamlString(catalogMount)}\n        target: /app/runtime-framework\n        read_only: true\n  runtime-supervisor:\n    environment:\n      ASPNETCORE_ENVIRONMENT: RuntimeFramework\n      RuntimeSupervisor__SessionReuseEnabled: \"false\"\n    volumes:\n      - type: bind\n        source: ${yamlString(supervisorMount)}\n        target: /app/appsettings.RuntimeFramework.json\n        read_only: true\n`
 }
 
 export function buildRuntimeFrameworkDeploymentBridge(options = {}) {
   const profileId = safeId(options.profileId, 'Framework profile ID')
-  const releaseId = safeId(options.releaseId ?? 'runtime-matrix-current', 'Development release ID')
+  const releaseId = safeId(options.releaseId ?? 'runtime-matrix-current', 'Validation release ID')
   const resultsPath = options.resultsPath ?? defaultResults
   const profiles = options.profileDirectory ?? defaultProfiles
   const prepared = prepareRuntimeFrameworkSupervisorSmoke({ profileId, resultsPath, profileDirectory: profiles, overlayPath: false, prepareOnly: true })
@@ -137,7 +137,7 @@ export function buildRuntimeFrameworkDeploymentBridge(options = {}) {
   writeAtomic(path.join(outputDirectory, 'compose.override.yaml'), outputs.compose)
   const manifest = {
     schemaVersion: 1,
-    developmentOnly: true,
+    validationOnly: true,
     releaseId,
     profileId,
     profileSha256: prepared.binding.row.profileSha256,
@@ -158,7 +158,7 @@ function parseArguments(argv) {
 
 export function runRuntimeFrameworkDeploymentBridgeCli(argv, options = {}) {
   const output = options.output ?? console
-  try { const parsed = parseArguments(argv); if (parsed.help) { output.log(runtimeFrameworkDeploymentBridgeUsage); return 0 }; const result = buildRuntimeFrameworkDeploymentBridge({ ...options, ...parsed }); output.log(`Prepared development Framework deployment bridge at ${result.outputDirectory}.`); return 0 } catch (error) { output.error(`runtime Framework deployment bridge error: ${error.message}`); return 1 }
+  try { const parsed = parseArguments(argv); if (parsed.help) { output.log(runtimeFrameworkDeploymentBridgeUsage); return 0 }; const result = buildRuntimeFrameworkDeploymentBridge({ ...options, ...parsed }); output.log(`Prepared validation Framework deployment bridge at ${result.outputDirectory}.`); return 0 } catch (error) { output.error(`runtime Framework deployment bridge error: ${error.message}`); return 1 }
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = runRuntimeFrameworkDeploymentBridgeCli(process.argv.slice(2))

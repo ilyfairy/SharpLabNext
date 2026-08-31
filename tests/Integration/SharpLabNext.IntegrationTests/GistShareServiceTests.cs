@@ -136,7 +136,7 @@ public sealed class GistShareServiceTests
         Assert.Empty(github.CreatedRequests);
     }
 
-    internal static GistWorkspaceState Workspace(IReadOnlyList<GistSourceFile> files, string activeFile) => new(ContractSchemaVersions.WorkspaceSnapshot, "csharp", "roslyn-stable", "net10-ref", "il", null, BuildConfiguration.Release, "development", activeFile, files.Select(static file => file.Path).ToArray(), files);
+    internal static GistWorkspaceState Workspace(IReadOnlyList<GistSourceFile> files, string activeFile) => new(ContractSchemaVersions.WorkspaceSnapshot, "csharp", "roslyn-stable", "net10-ref", "il", null, BuildConfiguration.Release, "content", activeFile, files.Select(static file => file.Path).ToArray(), files);
 
     internal static GitHubOAuthSession Session(string login) => new($"session-{login}", $"token-{login}", login, $"csrf-{login}", DateTimeOffset.UtcNow.AddHours(1));
 

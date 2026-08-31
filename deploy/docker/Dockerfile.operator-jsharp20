@@ -226,7 +226,7 @@ SH
 LABEL org.opencontainers.image.title="SharpLabNext Source-Built Visual J# 2.0 SE x64 Toolchain" \
       io.sharplabnext.operator-build.strategy="source-built-operator-image-v1" \
       io.sharplabnext.operator-build.input-sha256="${OPERATOR_BUILD_INPUT_SHA256}" \
-      io.sharplabnext.operator-build.image-id="jsharp20-development-base" \
+      io.sharplabnext.operator-build.image-id="jsharp20-toolchain-base" \
       io.sharplabnext.operator-build.build-kind="jsharp20" \
       io.sharplabnext.operator-build.framework-seed-image="${FRAMEWORK_SEED_IMAGE}" \
       io.sharplabnext.operator-only="true" \

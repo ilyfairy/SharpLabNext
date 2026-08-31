@@ -24,7 +24,7 @@
     "jitVersion": { "$ref": "#/$defs/nonEmpty" },
     "jitCommit": { "$ref": "#/$defs/nonEmpty" },
     "runtimeImageId": {
-      "description": "Development profiles may use the local image tag. Generated release configuration replaces it with the inspected immutable image ID.",
+      "description": "Source profiles may use the content image tag. Generated bundle configuration replaces it with the inspected immutable image ID.",
       "$ref": "#/$defs/nonEmpty"
     },
     "rid": { "enum": ["linux-x64", "linux-arm64"] },

@@ -12,7 +12,7 @@ const workspace: GistWorkspaceState = {
   outputId: 'ast',
   runtimeId: null,
   buildMode: 'release',
-  releaseId: 'development',
+  releaseId: 'content',
   activeFile: 'Program.cs',
   sourceOrder: ['Program.cs'],
   files: [{ path: 'Program.cs', text: 'class Program {}' }],

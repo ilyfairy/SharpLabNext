@@ -12,7 +12,7 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
-    <RepositoryUrl>https://github.com/sharplabnext/SharpLabNext</RepositoryUrl>
+    <RepositoryUrl>https://github.com/ilyfairy/SharpLabNext</RepositoryUrl>
     <SharpLabNextPackageVersion Condition="'$(SharpLabNextPackageVersion)' == ''">0.1.0</SharpLabNextPackageVersion>
   </PropertyGroup>
 

@@ -20,7 +20,7 @@ Content-Type: application/json
   "OutputId": "compile-check",
   "RuntimeId": null,
   "BuildMode": "release",
-  "CatalogRevision": "20260712.3-dev",
+  "CatalogRevision": "runtime-promotion-d90b7e86bd264ffa",
   "WorkspaceRevision": 1
 }
 

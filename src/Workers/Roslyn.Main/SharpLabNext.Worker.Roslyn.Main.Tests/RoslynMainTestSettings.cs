@@ -5,7 +5,7 @@ namespace SharpLabNext.Worker.Roslyn.Main.Tests;
 internal static class RoslynMainTestSettings
 {
     public const string LockedCommit = "708c0a9669c6c996b7e13ea4b161d841bbfdf8b2";
-    public const string InternalServiceToken = "sharplabnext-development-internal-token-only-2026";
+    public const string InternalServiceToken = "sharplabnext-default-internal-service-token";
 #if ROSLYN_MAIN_SOURCE_BUILD
     public const string LocalValidationCommit = LockedCommit;
     public static bool IsSourceBuild => true;
@@ -23,7 +23,7 @@ internal static class RoslynMainTestSettings
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            var candidate = Path.Combine(directory.FullName, "deploy", "secrets", "internal-service-token.dev");
+            var candidate = Path.Combine(directory.FullName, "deploy", "secrets", "internal-service-token");
             if (File.Exists(candidate))
                 return candidate;
             directory = directory.Parent;

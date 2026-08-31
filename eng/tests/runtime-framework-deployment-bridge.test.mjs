@@ -31,7 +31,7 @@ test('bridge binds verified Framework identity into ignored Catalog, lock, Super
   const lock = JSON.parse(fs.readFileSync(path.join(value.output, 'lock.json'))); assert.equal(lock.releaseId, 'runtime-matrix-current'); assert.equal(lock.components[profileId].imageId, value.imageId)
   const overlay = JSON.parse(fs.readFileSync(path.join(value.output, 'runtime-supervisor-overlay.json'))); assert.equal(overlay.RuntimeSupervisorProfileOverlay.Profiles[0].runtimeImageId, value.imageId); assert.equal(overlay.RuntimeSupervisorProfileOverlay.Profiles[0].securityPolicies, undefined)
   const compose = fs.readFileSync(path.join(value.output, 'compose.override.yaml'), 'utf8'); assert.match(compose, /appsettings\.RuntimeFramework\.json/); assert.match(compose, /DependencyHealth__Enabled: "false"/)
-  assert.equal(result.manifest.developmentOnly, true); assert.equal(Object.keys(result.manifest.files).length, 4)
+  assert.equal(result.manifest.validationOnly, true); assert.equal(Object.keys(result.manifest.files).length, 4)
 })
 
 test('stale Supervisor evidence rejects before any bridge file is written', t => {
@@ -43,5 +43,5 @@ test('CLI requires a profile and reports a successful bridge without mutating so
   const value = fixture(t); const messages = []; const output = { log: message => messages.push(message), error: message => messages.push(message) }
   assert.equal(runRuntimeFrameworkDeploymentBridgeCli([], { output }), 1)
   assert.equal(runRuntimeFrameworkDeploymentBridgeCli(['--profile', profileId], { ...value.options, output }), 0)
-  assert.match(messages.at(-1), /Prepared development Framework deployment bridge/)
+  assert.match(messages.at(-1), /Prepared validation Framework deployment bridge/)
 })

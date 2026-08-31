@@ -14,7 +14,6 @@ ARG WINE_CORECLR_USERSPACE_DIGEST
 ARG WINE_CORECLR_USERSPACE_SOURCE_URI
 ARG OPERATOR_SOURCE_CONTEXT
 ARG OPERATOR_PROMOTION_ELIGIBLE
-ARG OPERATOR_DEVELOPMENT_ONLY
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -151,16 +150,15 @@ RUN set -euo pipefail; \
 RUN set -euo pipefail; \
     test -n "${VERSION}"; \
     test -n "${SOURCE_REVISION}"; \
-    { test "${OPERATOR_SOURCE_CONTEXT}:${OPERATOR_PROMOTION_ELIGIBLE}:${OPERATOR_DEVELOPMENT_ONLY}" = "committed:true:false" \
-      || test "${OPERATOR_SOURCE_CONTEXT}:${OPERATOR_PROMOTION_ELIGIBLE}:${OPERATOR_DEVELOPMENT_ONLY}" = "working-tree-development:false:true"; }
+    { test "${OPERATOR_SOURCE_CONTEXT}:${OPERATOR_PROMOTION_ELIGIBLE}" = "committed:true" \
+      || test "${OPERATOR_SOURCE_CONTEXT}:${OPERATOR_PROMOTION_ELIGIBLE}" = "working-tree-content:false"; }
 
 LABEL org.opencontainers.image.title="SharpLabNext Wine CoreCLR Operator" \
       org.opencontainers.image.version="wine-9.0-noble-amd64" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
-      org.opencontainers.image.source="https://github.com/sharplabnext/SharpLabNext" \
+      org.opencontainers.image.source="https://github.com/ilyfairy/SharpLabNext" \
       io.sharplabnext.source.revision="${SOURCE_REVISION}" \
       io.sharplabnext.source.context="${OPERATOR_SOURCE_CONTEXT}" \
-      io.sharplabnext.development-only="${OPERATOR_DEVELOPMENT_ONLY}" \
       com.sharplabnext.operator.promotion-eligible="${OPERATOR_PROMOTION_ELIGIBLE}" \
       io.sharplabnext.operator-only="true" \
       io.sharplabnext.operator.contract="wine-coreclr-v1" \

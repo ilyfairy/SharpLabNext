@@ -3,7 +3,7 @@
   "status": "unknown",
   "checked": false,
   "active": {
-    "releaseId": "development",
+    "releaseId": "content",
     "lockDigest": null
   },
   "lastKnownGood": null,

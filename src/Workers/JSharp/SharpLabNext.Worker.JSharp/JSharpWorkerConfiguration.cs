@@ -48,7 +48,7 @@ public sealed record JSharpWorkerSettings(JSharpWorkerIdentity Identity, JSharpR
 
         var referenceSetDigest = RequiredSha256(section["ReferenceSetDigest"], "JSharp:ReferenceSetDigest");
         return new JSharpWorkerSettings(
-            new JSharpWorkerIdentity(RequiredIdentity(section["ReleaseId"] ?? "development", "JSharp:ReleaseId"), RequiredIdentity(section["CompilerVersion"], "JSharp:CompilerVersion"), OptionalCommit(section["CompilerCommit"]), RequiredSha256(section["WorkerImageId"] ?? $"sha256:{new string('0', 64)}", "JSharp:WorkerImageId")),
+            new JSharpWorkerIdentity(RequiredIdentity(section["ReleaseId"] ?? "content", "JSharp:ReleaseId"), RequiredIdentity(section["CompilerVersion"], "JSharp:CompilerVersion"), OptionalCommit(section["CompilerCommit"]), RequiredSha256(section["WorkerImageId"] ?? $"sha256:{new string('0', 64)}", "JSharp:WorkerImageId")),
             new JSharpReferenceSetIdentity(referenceSetDigest, RequiredSha256(section["ReferenceSetContentDigest"] ?? referenceSetDigest, "JSharp:ReferenceSetContentDigest"), RequiredSourceUri(section["ReferenceSetSourceUri"])),
             new JSharpProcessLimits(maximumProcessOutputBytes, maximumProcessWorkingSetBytes, maximumDiagnostics, memoryPollIntervalMilliseconds),
             Path.GetFullPath(Environment.ExpandEnvironmentVariables(section["WorkRoot"] ?? Path.Combine(Path.GetTempPath(), "sharplabnext-jsharp"))),

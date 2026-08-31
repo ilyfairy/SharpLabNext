@@ -1,6 +1,6 @@
 {
   "RoslynWorker": {
-    "ReleaseId": "development",
+    "ReleaseId": "content",
     "ToolchainId": "roslyn-stable-netfx48",
     "WorkerImageId": "unverified",
     "CompilerVersion": "__pinned__",

@@ -25,7 +25,7 @@ public sealed class CSharpExplainServiceTests
         Assert.Equal(9, result.Document.SelectionRevision);
         Assert.Equal("5.6.0", result.Identity?.CompilerVersion);
         Assert.Equal("net10-ref", result.Identity?.ReferenceSetId);
-        Assert.Equal("development-worker-image", result.Identity?.WorkerImageId);
+        Assert.Equal("content-worker-image", result.Identity?.WorkerImageId);
         Assert.Equal(["Program.cs", "Helper.cs"], result.Document.Files.Select(static file => file.Path));
         Assert.Contains(result.Document.Files.SelectMany(static file => file.Nodes), static node => node.Kind == "ClassDeclaration" && node.Title.Contains("Program", StringComparison.Ordinal));
         Assert.Contains(result.Document.Files.SelectMany(static file => file.Nodes), static node => node.Kind == "ReturnStatement" && node.Description.Contains("result", StringComparison.OrdinalIgnoreCase));
@@ -62,5 +62,5 @@ public sealed class CSharpExplainServiceTests
     }
 
     private static CSharpExplainService CreateService(AstLimits? limits = null) =>
-        new(new RoslynWorkerIdentity("development", "roslyn-stable", "5.6.0", null, "development-worker-image"), CompilationLimits.Default, limits ?? AstLimits.Default);
+        new(new RoslynWorkerIdentity("content", "roslyn-stable", "5.6.0", null, "content-worker-image"), CompilationLimits.Default, limits ?? AstLimits.Default);
 }

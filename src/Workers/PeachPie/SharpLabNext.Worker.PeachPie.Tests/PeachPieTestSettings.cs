@@ -74,7 +74,7 @@ internal static class PeachPieTestSettings
     public static IReadOnlyDictionary<string, string?> WebHostConfiguration(string root) =>
         new Dictionary<string, string?>(StringComparer.Ordinal)
         {
-            ["PeachPie:ReleaseId"] = "development",
+            ["PeachPie:ReleaseId"] = "content",
             ["PeachPie:CompilerVersion"] = PeachPieToolchain.CompilerVersion,
             ["PeachPie:CompilerCommit"] = PeachPieToolchain.CompilerCommit,
             ["PeachPie:WorkerImageId"] = $"sha256:{new string('0', 64)}",

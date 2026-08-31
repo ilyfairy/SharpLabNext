@@ -288,7 +288,7 @@ test('CLI validates matrix and installer provenance from the requested committed
 
 test('content source identity uses the current worktree without Git metadata', t => {
   const state = prepare(t)
-  const outputPath = path.join(state.root, 'development-candidate.json')
+  const outputPath = path.join(state.root, 'content-candidate.json')
   const messages = {
     logs: [], errors: [],
     log(value) { this.logs.push(value) },

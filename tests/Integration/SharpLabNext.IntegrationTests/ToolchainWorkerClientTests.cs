@@ -32,7 +32,7 @@ public sealed class ToolchainWorkerClientTests
         {
             BaseAddress = new Uri("http://worker.test", UriKind.Absolute)
         };
-        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "content", "worker-image"));
 
         var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(CreateRequest(), TestContext.Current.CancellationToken));
         Assert.Equal("unavailable", exception.Error.Code);
@@ -61,7 +61,7 @@ public sealed class ToolchainWorkerClientTests
         {
             BaseAddress = new Uri("http://worker.test", UriKind.Absolute)
         };
-        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "content", "worker-image"));
 
         var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(CreateRequest(), TestContext.Current.CancellationToken));
         Assert.Equal("worker-protocol-invalid", exception.Error.Code);
@@ -88,7 +88,7 @@ public sealed class ToolchainWorkerClientTests
             httpClient,
             new ToolchainWorkerClientSettings(
                 "roslyn-stable",
-                "development",
+                "content",
                 "worker-image",
                 new Dictionary<string, string> { ["net10-ref"] = "sha512-expected" }));
 
@@ -121,7 +121,7 @@ public sealed class ToolchainWorkerClientTests
             httpClient,
             new ToolchainWorkerClientSettings(
                 "roslyn-stable",
-                "development",
+                "content",
                 "worker-image",
                 new Dictionary<string, string> { ["net10-ref"] = "sha512-expected" }));
 
@@ -168,7 +168,7 @@ public sealed class ToolchainWorkerClientTests
         {
             BaseAddress = new Uri("http://worker.test", UriKind.Absolute)
         };
-        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("minilang-stable", "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("minilang-stable", "content", "worker-image"));
         var request = CreateRequest() with { ToolchainId = "minilang-stable", Target = BuildTarget.Artifact };
 
         _ = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(request, TestContext.Current.CancellationToken));
@@ -221,7 +221,7 @@ public sealed class ToolchainWorkerClientTests
         {
             BaseAddress = new Uri("http://worker.test", UriKind.Absolute)
         };
-        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings(workerId, "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings(workerId, "content", "worker-image"));
 
         var response = await client.BuildAsync(request, TestContext.Current.CancellationToken);
 
@@ -258,7 +258,7 @@ public sealed class ToolchainWorkerClientTests
         {
             BaseAddress = new Uri("http://worker.test", UriKind.Absolute)
         };
-        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings(workerId, "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings(workerId, "content", "worker-image"));
 
         var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(request, TestContext.Current.CancellationToken));
 
@@ -272,7 +272,7 @@ public sealed class ToolchainWorkerClientTests
         var request = CreateRequest() with { Target = BuildTarget.Artifact };
         var artifactRef = new ArtifactRef($"sha256:{new string('a', 64)}");
         using var httpClient = CreateArtifactWorkerHttpClient(request, new BuildResult(BuildOutcome.Succeeded, artifactRef, [], CreateBuildIdentity(), request.Workspace.Revision, request.Workspace.SelectionRevision));
-        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "content", "worker-image"));
 
         var response = await client.BuildAsync(request, TestContext.Current.CancellationToken);
 
@@ -286,7 +286,7 @@ public sealed class ToolchainWorkerClientTests
     {
         var request = CreateRequest() with { Target = BuildTarget.Artifact };
         using var httpClient = CreateArtifactWorkerHttpClient(request, new BuildResult(BuildOutcome.Succeeded, null, [], CreateBuildIdentity(), request.Workspace.Revision, request.Workspace.SelectionRevision));
-        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "content", "worker-image"));
 
         var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(request, TestContext.Current.CancellationToken));
 
@@ -306,7 +306,7 @@ public sealed class ToolchainWorkerClientTests
             CreateBuildIdentity() with { ReferenceSetId = "another-reference-set" },
             request.Workspace.Revision,
             request.Workspace.SelectionRevision));
-        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings("roslyn-stable", "content", "worker-image"));
 
         var exception = await Assert.ThrowsAsync<ToolchainWorkerException>(() => client.BuildAsync(request, TestContext.Current.CancellationToken));
 
@@ -342,13 +342,13 @@ public sealed class ToolchainWorkerClientTests
 
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = JsonContent.Create(new ToolchainExplainResponse(request.RequestId, new ExplainResult(new ExplanationDocument("csharp", "roslyn-stable", request.Workspace.Revision, request.Workspace.SelectionRevision, [new ExplanationFile("Program.cs", [])], false), new BuildIdentity("development", "csharp", "roslyn-stable", "5.6.0", null, request.Workspace.ReferenceSetId, "worker-image"))), options: ContractJson.CreateSerializerOptions())
+                Content = JsonContent.Create(new ToolchainExplainResponse(request.RequestId, new ExplainResult(new ExplanationDocument("csharp", "roslyn-stable", request.Workspace.Revision, request.Workspace.SelectionRevision, [new ExplanationFile("Program.cs", [])], false), new BuildIdentity("content", "csharp", "roslyn-stable", "5.6.0", null, request.Workspace.ReferenceSetId, "worker-image"))), options: ContractJson.CreateSerializerOptions())
             };
         }))
         {
             BaseAddress = new Uri("http://worker.test", UriKind.Absolute)
         };
-        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings(workerId, "development", "worker-image"));
+        var client = new ToolchainWorkerClient(httpClient, new ToolchainWorkerClientSettings(workerId, "content", "worker-image"));
 
         var response = await client.ExplainAsync(request, TestContext.Current.CancellationToken);
 
@@ -356,7 +356,7 @@ public sealed class ToolchainWorkerClientTests
         Assert.Equal(request.Workspace.Revision, response.Result.Document.WorkspaceRevision);
     }
 
-    private static WorkerDescriptor CreateDescriptor() => new(new ServiceIdentity("roslyn-stable", ServiceKind.ToolchainWorker, "development", ProtocolVersion.WorkerV1, ["compile-check"], "ready"), "instance", WorkerKind.Toolchain, "worker-image", ProtocolVersion.WorkerV1, [ProtocolVersion.WorkerV1], [new WorkerCapabilityDescriptor("compile-check", 1, true, ["roslyn-stable"])], ["roslyn-stable"], DateTimeOffset.UtcNow);
+    private static WorkerDescriptor CreateDescriptor() => new(new ServiceIdentity("roslyn-stable", ServiceKind.ToolchainWorker, "content", ProtocolVersion.WorkerV1, ["compile-check"], "ready"), "instance", WorkerKind.Toolchain, "worker-image", ProtocolVersion.WorkerV1, [ProtocolVersion.WorkerV1], [new WorkerCapabilityDescriptor("compile-check", 1, true, ["roslyn-stable"])], ["roslyn-stable"], DateTimeOffset.UtcNow);
 
     private static ReferenceSetAttestation CreateReferenceSetAttestation(string digest) => new("net10-ref", "net10.0", digest, $"sha256:{new string('a', 64)}", new ReferenceSetProvenance("nuget-package", "10.0.9", "Microsoft.NETCore.App.Ref"));
 
@@ -391,7 +391,7 @@ public sealed class ToolchainWorkerClientTests
         BaseAddress = new Uri("http://worker.test", UriKind.Absolute)
     };
 
-    private static BuildIdentity CreateBuildIdentity() => new("development", "csharp", "roslyn-stable", "5.6.0", null, "net10-ref", "worker-image");
+    private static BuildIdentity CreateBuildIdentity() => new("content", "csharp", "roslyn-stable", "5.6.0", null, "net10-ref", "worker-image");
 
     private static ExplainRequest CreateExplainRequest()
     {

@@ -1239,7 +1239,7 @@ function App() {
     healthLabel = 'Selection unavailable'
     healthState = 'error'
   } else if (profileUnavailable) {
-    healthLabel = 'Development profile'
+    healthLabel = 'Unverified profile'
     healthState = 'warning'
   }
 

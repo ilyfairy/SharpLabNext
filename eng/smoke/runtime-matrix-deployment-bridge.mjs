@@ -1,4 +1,4 @@
-/** Build ignored, development-only deployment inputs for the verified runtime matrix. */
+/** Build ignored, validation-only deployment inputs for the verified runtime matrix. */
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -36,7 +36,7 @@ export const runtimeMatrixDeploymentBridgeUsage = `Usage:
     [--catalog PATH] [--lock PATH] [--profiles PATH] [--output DIRECTORY]
 
 Use the generated compose.env with Docker Compose so every service uses the
-same development release ID.`
+same validation release ID.`
 
 export class RuntimeMatrixDeploymentBridgeError extends Error {
   constructor(message, options) { super(message, options); this.name = 'RuntimeMatrixDeploymentBridgeError' }
@@ -337,13 +337,13 @@ function createSupervisorOverlay(bindings) {
 function composeOverride(outputDirectory) {
   const mount = path.resolve(outputDirectory)
   const supervisor = path.join(mount, 'runtime-supervisor-overlay.json')
-  return `# Generated development-only runtime-matrix bridge. Do not deploy as a release.\n# Apply with --env-file ${yamlString(path.join(mount, outputNames.environment))}.\nservices:\n  gateway:\n    environment:\n      Catalog__Path: /app/runtime-matrix/catalog.json\n      Catalog__LockPath: /app/runtime-matrix/lock.json\n      DependencyHealth__Enabled: "false"\n    volumes:\n      - type: bind\n        source: ${yamlString(mount)}\n        target: /app/runtime-matrix\n        read_only: true\n  runtime-supervisor:\n    environment:\n      ASPNETCORE_ENVIRONMENT: RuntimeMatrix\n      RuntimeSupervisor__SessionReuseEnabled: "false"\n    volumes:\n      - type: bind\n        source: ${yamlString(supervisor)}\n        target: /app/appsettings.RuntimeMatrix.json\n        read_only: true\n`
+  return `# Generated validation-only runtime-matrix bridge. Do not deploy as a release.\n# Apply with --env-file ${yamlString(path.join(mount, outputNames.environment))}.\nservices:\n  gateway:\n    environment:\n      Catalog__Path: /app/runtime-matrix/catalog.json\n      Catalog__LockPath: /app/runtime-matrix/lock.json\n      DependencyHealth__Enabled: "false"\n    volumes:\n      - type: bind\n        source: ${yamlString(mount)}\n        target: /app/runtime-matrix\n        read_only: true\n  runtime-supervisor:\n    environment:\n      ASPNETCORE_ENVIRONMENT: RuntimeMatrix\n      RuntimeSupervisor__SessionReuseEnabled: "false"\n    volumes:\n      - type: bind\n        source: ${yamlString(supervisor)}\n        target: /app/appsettings.RuntimeMatrix.json\n        read_only: true\n`
 }
 
 const composeEnvironment = releaseId => Buffer.from(`SHARPLABNEXT_RELEASE_ID=${releaseId}\n`)
 
 export function buildRuntimeMatrixDeploymentBridge(options = {}) {
-  const releaseId = safeId(options.releaseId ?? 'runtime-matrix-current', 'Development release ID')
+  const releaseId = safeId(options.releaseId ?? 'runtime-matrix-current', 'Validation release ID')
   const matrixPath = options.matrixPath ?? defaultMatrix
   const resultsPath = options.resultsPath ?? defaultResults
   const catalogPath = options.catalogPath ?? defaultCatalog
@@ -374,7 +374,7 @@ export function buildRuntimeMatrixDeploymentBridge(options = {}) {
   }
   const manifest = {
     schemaVersion: 1,
-    developmentOnly: true,
+    validationOnly: true,
     releaseId,
     profileCount: bindings.length,
     profiles: bindings.map(binding => ({
@@ -414,7 +414,7 @@ export function runRuntimeMatrixDeploymentBridgeCli(argv, options = {}) {
     const parsed = parseArguments(argv)
     if (parsed.help) { output.log(runtimeMatrixDeploymentBridgeUsage); return 0 }
     const result = buildRuntimeMatrixDeploymentBridge({ ...options, ...parsed })
-    output.log(`Prepared ${result.manifest.profileCount}-profile development runtime-matrix bridge at ${result.outputDirectory}.`)
+    output.log(`Prepared ${result.manifest.profileCount}-profile validation runtime-matrix bridge at ${result.outputDirectory}.`)
     return 0
   } catch (error) {
     output.error(`runtime matrix deployment bridge error: ${error.message}`)
