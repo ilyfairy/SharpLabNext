@@ -375,6 +375,26 @@ function resolveSourceRevision(options) {
   return revision;
 }
 
+export function validateReleaseImagePlan(plan) {
+  if (plan?.schemaVersion !== 1 || typeof plan.releaseId !== 'string' ||
+      !Array.isArray(plan.images) || plan.images.length === 0) fail('Release image plan is invalid');
+  const capabilityDefinitions = plan.capabilityDefinitions ?? [];
+  const definitionsById = capabilityDefinitionsById(capabilityDefinitions);
+  const ids = new Set();
+  const references = new Set();
+  for (const image of plan.images) {
+    if (typeof image?.id !== 'string' || ids.has(image.id) ||
+        typeof image?.reference !== 'string' || references.has(image.reference) ||
+        !validPlanProducer(image) ||
+        (image.buildCapabilities !== undefined && !Array.isArray(image.buildCapabilities)) ||
+        (image.buildCapabilities ?? []).some(capability => typeof capability !== 'string' || !definitionsById.has(capability)) ||
+        new Set(image.buildCapabilities ?? []).size !== (image.buildCapabilities ?? []).length) fail('Release image plan contains an invalid or duplicate entry');
+    ids.add(image.id);
+    references.add(image.reference);
+  }
+  return capabilityDefinitions;
+}
+
 function generateImagePlan(options, sourceRevision) {
   const output = path.join(options.repositoryRoot, 'artifacts', 'release-image-plan.json');
   run('dotnet', [
@@ -386,21 +406,7 @@ function generateImagePlan(options, sourceRevision) {
     '--source-revision', sourceRevision,
   ], { cwd: options.repositoryRoot });
   const plan = readJson(output, 'release image plan');
-  if (plan?.schemaVersion !== 1 || typeof plan.releaseId !== 'string' ||
-      !Array.isArray(plan.images) || plan.images.length === 0) fail('Release image plan is invalid');
-  const capabilityDefinitions = capabilityDefinitionsById(plan.capabilityDefinitions ?? []);
-  const ids = new Set();
-  const references = new Set();
-  for (const image of plan.images) {
-    if (typeof image?.id !== 'string' || ids.has(image.id) ||
-        typeof image?.reference !== 'string' || references.has(image.reference) ||
-        !validPlanProducer(image) ||
-        (image.buildCapabilities !== undefined && !Array.isArray(image.buildCapabilities)) ||
-        (image.buildCapabilities ?? []).some(capability => typeof capability !== 'string' || !capabilityDefinitions.has(capability)) ||
-        new Set(image.buildCapabilities ?? []).size !== (image.buildCapabilities ?? []).length) fail('Release image plan contains an invalid or duplicate entry');
-    ids.add(image.id);
-    references.add(image.reference);
-  }
+  const capabilityDefinitions = validateReleaseImagePlan(plan);
   const digest = `sha256:${crypto.createHash('sha256').update(JSON.stringify(plan)).digest('hex')}`;
   return { plan, path: output, digest, capabilityDefinitions };
 }

@@ -16,6 +16,7 @@ import {
   resolveBuildCapabilities,
   resolveRuntimeArguments,
   runParallel,
+  validateReleaseImagePlan,
   validateLocalImageBuildDriverInspection,
   validateRegistryContainer,
   validateReusableImageInspection,
@@ -24,6 +25,13 @@ import {
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const configuration = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'eng', 'release-prerequisites.json'), 'utf8')).localRegistry;
 const capabilityDefinitions = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'deploy', 'images.json'), 'utf8')).capabilityDefinitions;
+
+test('validated release image plans retain capability definitions as an array', () => {
+  const plan = { schemaVersion: 1, releaseId: 'test', capabilityDefinitions: [{ id: 'base' }], images: [{ id: 'service', reference: 'example/service:test', producer: { kind: 'bake', id: 'service' }, buildCapabilities: ['base'] }] };
+  const validatedDefinitions = validateReleaseImagePlan(plan);
+  assert.ok(Array.isArray(validatedDefinitions));
+  assert.deepEqual([...resolveBuildCapabilities(plan.images, validatedDefinitions)], ['base']);
+});
 
 test('release image caching is Docker-owned and target selection is generic', () => {
   const orchestrator = fs.readFileSync(path.join(repositoryRoot, 'eng', 'build-images.mjs'), 'utf8');
