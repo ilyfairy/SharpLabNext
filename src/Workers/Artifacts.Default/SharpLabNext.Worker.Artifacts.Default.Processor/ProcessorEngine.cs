@@ -102,7 +102,7 @@ internal static class ProcessorEngine
                 ? DecompileCppCliUserSurface(decompiler, request.AssemblyPath) : decompiler.DecompileWholeModuleAsSingleFile();
         if (!request.IncludeCompilerGeneratedMembers)
             RemoveCompilerGeneratedMembers(syntaxTree);
-        var source = syntaxTree.ToString(CreateCSharpFormattingOptions());
+        var source = FormatCSharp(syntaxTree);
         cancellationToken.ThrowIfCancellationRequested();
 
         var header = $"// Decompiled with ICSharpCode.Decompiler {ProcessorProtocol.IlSpyVersion}\n";
@@ -274,6 +274,23 @@ internal static class ProcessorEngine
         formatting.SpaceBeforeMethodCallParentheses = false;
         formatting.SpaceBetweenEmptyMethodCallParentheses = false;
         return formatting;
+    }
+
+    private static string FormatCSharp(SyntaxTree syntaxTree)
+    {
+        using var writer = new StringWriter();
+        syntaxTree.AcceptVisitor(new DecompiledCSharpOutputVisitor(writer, CreateCSharpFormattingOptions()));
+        return writer.ToString();
+    }
+
+    private sealed class DecompiledCSharpOutputVisitor(TextWriter writer, CSharpFormattingOptions formatting) : CSharpOutputVisitor(writer, formatting)
+    {
+        protected override void StartNode(AstNode node)
+        {
+            if (node is NamespaceDeclaration or EntityDeclaration && node.Parent is SyntaxTree or NamespaceDeclaration && node.PrevSibling is NamespaceDeclaration or EntityDeclaration)
+                NewLine();
+            base.StartNode(node);
+        }
     }
 
     private static void RemoveCompilerGeneratedMembers(SyntaxTree syntaxTree)

@@ -59,6 +59,9 @@ public sealed class ConstGenericsArtifactProcessorTests
             Assert.Contains("GeneratedHelper", csharpContent, StringComparison.Ordinal);
             Assert.Equal(1, CountOccurrences(csharpContent, "GeneratedHelper"));
             Assert.DoesNotContain("Explicit compiler-generated members", csharpContent, StringComparison.Ordinal);
+            Assert.Contains("public sealed class FirstSpacingType\n    {\n    }\n\n    public sealed class SecondSpacingType", csharpContent, StringComparison.Ordinal);
+            Assert.Contains("}\n\nnamespace SharpLabNext.ArtifactProcessing.Fixture.Spacing.Secondary", csharpContent, StringComparison.Ordinal);
+            Assert.Contains("internal sealed class GlobalSpacingType\n{\n}\n\nnamespace SharpLabNext.ArtifactProcessing.Fixture", csharpContent, StringComparison.Ordinal);
             Assert.DoesNotContain('\t', csharpContent);
 
             var verification = await processor.VerifyAsync(ConstGenericsTestInfrastructure.VerifyRequest(handler.ArtifactRef), "op_verify", TestContext.Current.CancellationToken);

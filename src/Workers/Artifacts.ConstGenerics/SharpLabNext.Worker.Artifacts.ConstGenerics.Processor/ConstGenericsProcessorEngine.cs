@@ -91,7 +91,7 @@ internal static class ConstGenericsProcessorEngine
         var syntaxTree = decompiler.DecompileWholeModuleAsSingleFile();
         if (!request.IncludeCompilerGeneratedMembers)
             RemoveCompilerGeneratedMembers(syntaxTree);
-        var source = syntaxTree.ToString(CreateCSharpFormattingOptions());
+        var source = FormatCSharp(syntaxTree);
         cancellationToken.ThrowIfCancellationRequested();
         var header = $"// Decompiled with ConstGenerics ILSpy {ConstGenericsProcessorProtocol.IlSpyCommit}\n";
         source = source.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
@@ -124,6 +124,23 @@ internal static class ConstGenericsProcessorEngine
         formatting.SpaceBeforeMethodCallParentheses = false;
         formatting.SpaceBetweenEmptyMethodCallParentheses = false;
         return formatting;
+    }
+
+    private static string FormatCSharp(SyntaxTree syntaxTree)
+    {
+        using var writer = new StringWriter();
+        syntaxTree.AcceptVisitor(new DecompiledCSharpOutputVisitor(writer, CreateCSharpFormattingOptions()));
+        return writer.ToString();
+    }
+
+    private sealed class DecompiledCSharpOutputVisitor(TextWriter writer, CSharpFormattingOptions formatting) : CSharpOutputVisitor(writer, formatting)
+    {
+        protected override void StartNode(AstNode node)
+        {
+            if (node is NamespaceDeclaration or EntityDeclaration && node.Parent is SyntaxTree or NamespaceDeclaration && node.PrevSibling is NamespaceDeclaration or EntityDeclaration)
+                NewLine();
+            base.StartNode(node);
+        }
     }
 
     private static bool IsCompilerGenerated(EntityDeclaration declaration) =>
