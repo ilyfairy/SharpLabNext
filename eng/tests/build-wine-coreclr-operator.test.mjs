@@ -154,7 +154,7 @@ test('formal Wine operator derives omitted userspace inputs from the committed l
   assert.equal(bake[2].env.WINE_CORECLR_USERSPACE_SOURCE_URI, complete.WINE_CORECLR_USERSPACE_SOURCE_URI)
 })
 
-test('dirty Wine operator source is rejected without the explicit development override', () => {
+test('dirty Wine operator source is rejected for a strict source identity', () => {
   const values = environment()
   const out = output()
   const docker = fakeDocker(labelsFor(values, { context: 'committed', promotionEligible: true }), { dirty: true })
@@ -163,57 +163,36 @@ test('dirty Wine operator source is rejected without the explicit development ov
   assert.equal(docker.calls.some(([command]) => command === 'docker'), false)
 })
 
-test('explicit dirty override labels the Wine operator as development-only and cannot look promotable', () => {
-  const values = environment()
+test('content source identity labels the Wine operator as local-only and cannot look promotable', () => {
+  const values = { ...environment(), SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }
   const out = output()
   const docker = fakeDocker(labelsFor(values, {
-    context: 'working-tree-development', promotionEligible: false,
+    context: 'working-tree-content', promotionEligible: false,
   }), { dirty: true })
-  assert.equal(runWineCoreClrOperatorBuild([
-    '--allow-uncommitted-source-for-development',
-  ], values, docker.spawn, out), 0)
+  assert.equal(runWineCoreClrOperatorBuild([], values, docker.spawn, out), 0)
   const bake = docker.calls.find(([command, arguments_]) => command === 'docker' && arguments_[0] === 'buildx')
-  assert.equal(bake[2].env.OPERATOR_SOURCE_CONTEXT, 'working-tree-development')
+  assert.equal(bake[2].env.OPERATOR_SOURCE_CONTEXT, 'working-tree-content')
   assert.equal(bake[2].env.OPERATOR_PROMOTION_ELIGIBLE, 'false')
   assert.equal(bake[2].env.OPERATOR_DEVELOPMENT_ONLY, 'true')
   assert.match(out.logs.join('\n'), /development-only/)
 })
 
-test('development image-input grant makes a clean Wine operator local-only', () => {
-  const values = {
-    ...environment(),
-    SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS: 'true',
-  }
+test('content source identity makes a clean Wine operator local-only', () => {
+  const values = { ...environment(), SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }
   const out = output()
   const docker = fakeDocker(labelsFor(values, {
-    context: 'working-tree-development', promotionEligible: false,
+    context: 'working-tree-content', promotionEligible: false,
   }))
-  assert.equal(runWineCoreClrOperatorBuild([
-    '--allow-development-image-inputs',
-  ], values, docker.spawn, out, {
+  assert.equal(runWineCoreClrOperatorBuild([], values, docker.spawn, out, {
     createCommittedSourceContext() {
       throw new Error('development image inputs must not claim a committed source context')
     },
   }), 0, out.errors.join('\n'))
   const bake = docker.calls.find(([command, arguments_]) =>
     command === 'docker' && arguments_[0] === 'buildx')
-  assert.equal(bake[2].env.OPERATOR_SOURCE_CONTEXT, 'working-tree-development')
+  assert.equal(bake[2].env.OPERATOR_SOURCE_CONTEXT, 'working-tree-content')
   assert.equal(bake[2].env.OPERATOR_PROMOTION_ELIGIBLE, 'false')
   assert.equal(bake[2].env.OPERATOR_DEVELOPMENT_ONLY, 'true')
-  assert.equal(
-    bake[2].env.SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS,
-    undefined,
-  )
-
-  out.errors.length = 0
-  const missingGrant = fakeDocker(labelsFor(values, {
-    context: 'working-tree-development', promotionEligible: false,
-  }))
-  assert.equal(runWineCoreClrOperatorBuild([
-    '--allow-development-image-inputs',
-  ], environment(), missingGrant.spawn, out), 64)
-  assert.match(out.errors.join('\n'), /requires the outer development image-input grant/)
-  assert.equal(missingGrant.calls.some(([command]) => command === 'docker'), false)
 })
 
 test('Wine operator rejects source drift and incorrect source labels after Bake', () => {

@@ -23,18 +23,6 @@ const frameworkInputFiles = Object.freeze([
   'eng/prerequisites/dotnet-framework-2.0/NetFx64.exe',
 ])
 
-const operatorInputFiles = Object.freeze([
-  '.dockerignore',
-  '.gitattributes',
-  'deploy/docker/Dockerfile.operator-jsharp20',
-  'deploy/docker/Dockerfile.operator-cppcli-base',
-  'deploy/docker/cppcli-netfx-env.sh',
-  'deploy/docker/extract-netfx48-sdk.py',
-  'eng/tools/prepare-jsharp-toolchain.cs',
-  'eng/tools/prepare-cppcli-toolchain.cs',
-  'eng/release-prerequisites.json',
-])
-
 export const frameworkSeedDefinitions = Object.freeze([
   Object.freeze({
     id: 'clr2-3.5',
@@ -136,32 +124,76 @@ function requireSeedReference(value, name) {
   return value
 }
 
-export async function createOperatorImageBuildSpec(repositoryRoot, prerequisiteManifest, frameworkSeeds) {
+function operatorInputFiles(definitions) {
+  const files = new Set(['.dockerignore', '.gitattributes', 'eng/release-prerequisites.json'])
+  for (const definition of definitions) {
+    const operator = definition.operator
+    for (const filename of [operator.script, ...(operator.inputFiles ?? [])]) {
+      if (typeof filename === 'string' && filename.length > 0) files.add(filename)
+    }
+  }
+  return [...files]
+}
+
+function defaultCapabilityDefinitions(repositoryRoot) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'deploy', 'images.json'), 'utf8')).capabilityDefinitions ?? []
+  } catch {
+    return []
+  }
+}
+
+function validateOperatorDefinition(definition) {
+  const operator = definition?.operator
+  if (!isObject(operator) || typeof operator.imageId !== 'string' || typeof operator.buildKind !== 'string' || typeof operator.script !== 'string' || operator.frameworkSeedGeneration !== undefined && typeof operator.frameworkSeedGeneration !== 'string') {
+    fail(`Capability '${definition?.id ?? '<unknown>'}' has an incomplete operator definition`)
+  }
+  const inputFiles = operator.inputFiles ?? []
+  const downloadArguments = operator.downloadArguments ?? []
+  const licenseArguments = operator.licenseArguments ?? []
+  if (!Array.isArray(inputFiles) || !Array.isArray(downloadArguments) || !Array.isArray(licenseArguments)) fail(`Capability '${definition.id}' operator metadata arrays are invalid`)
+  if ([operator.script, ...inputFiles].some(filename => typeof filename !== 'string' || filename.length === 0 || path.isAbsolute(filename) || filename.includes('\\') || filename.split('/').some(segment => segment.length === 0 || segment === '.' || segment === '..'))) {
+    fail(`Capability '${definition.id}' operator input paths are invalid`)
+  }
+  if (operator.environmentVariable !== undefined && !/^[A-Z][A-Z0-9_]*$/.test(operator.environmentVariable)) fail(`Capability '${definition.id}' operator environment variable is invalid`)
+  if (downloadArguments.some(argument => !isObject(argument) || typeof argument.option !== 'string' || !/^--[A-Za-z0-9][A-Za-z0-9-]*$/.test(argument.option) || typeof argument.downloadId !== 'string')) fail(`Capability '${definition.id}' operator download arguments are invalid`)
+  if (licenseArguments.some(argument => typeof argument !== 'string' || !/^--[A-Za-z0-9][A-Za-z0-9-]*$/.test(argument))) fail(`Capability '${definition.id}' operator license arguments are invalid`)
+}
+
+export async function createOperatorImageBuildSpec(repositoryRoot, prerequisiteManifest, frameworkSeeds, capabilityDefinitions = defaultCapabilityDefinitions(repositoryRoot)) {
   const manifest = prerequisiteManifest?.value
   if (!isObject(manifest) || !sha256Pattern.test(prerequisiteManifest?.sha256 ?? '') ||
       !Array.isArray(manifest.generatedImages)) {
     fail('Operator image build requires one validated prerequisite manifest')
   }
-  const seeds = Object.freeze({
-    clr2: requireSeedReference(frameworkSeeds?.clr2, 'CLR2'),
-    clr4: requireSeedReference(frameworkSeeds?.clr4, 'CLR4'),
-  })
-  const images = manifest.generatedImages.map(item => Object.freeze({
+  if (!Array.isArray(capabilityDefinitions)) fail('Operator image build capability definitions must be an array')
+  const definitions = capabilityDefinitions.filter(definition => definition?.operator !== undefined)
+  definitions.forEach(validateOperatorDefinition)
+  const downloadIds = new Set((manifest.downloads ?? []).map(item => item?.id).filter(value => typeof value === 'string'))
+  for (const definition of definitions) {
+    for (const argument of definition.operator.downloadArguments ?? []) {
+      if (!downloadIds.has(argument.downloadId)) fail(`Capability '${definition.id}' references missing prerequisite download '${argument.downloadId}'`)
+    }
+  }
+  const seeds = Object.freeze(Object.fromEntries(Object.entries(frameworkSeeds ?? {}).map(([name, reference]) => [name, requireSeedReference(reference, name)])))
+  const allImages = manifest.generatedImages.map(item => Object.freeze({
     id: item.id,
     reference: item.reference,
     buildKind: item.buildKind,
   }))
-  if (JSON.stringify(images.map(({ id, buildKind }) => ({ id, buildKind }))) !==
-      JSON.stringify([
-        { id: 'jsharp20-development-base', buildKind: 'jsharp20' },
-        { id: 'cppcli-prepared-base', buildKind: 'cppcli' },
-      ])) {
-    fail('Operator image manifest does not contain the canonical generated images')
+  const imageById = new Map(allImages.map(image => [image.id, image]))
+  const selectedImageIds = new Set()
+  const images = []
+  for (const definition of definitions) {
+    const image = imageById.get(definition.operator.imageId)
+    if (image === undefined || !selectedImageIds.add(image.id) || image.buildKind !== definition.operator.buildKind || definition.operator.frameworkSeedGeneration !== undefined && seeds[definition.operator.frameworkSeedGeneration] === undefined) {
+      fail(`Capability '${definition.id}' does not match a unique generated operator image and framework seed`)
+    }
+    images.push(image)
   }
-
   const files = await collectInputFiles(
     repositoryRoot,
-    operatorInputFiles,
+    operatorInputFiles(definitions),
     4 * 1024 * 1024,
     'Operator image build input',
   )
@@ -171,6 +203,7 @@ export async function createOperatorImageBuildSpec(repositoryRoot, prerequisiteM
     prerequisiteManifestSha256: prerequisiteManifest.sha256,
     files,
     frameworkSeeds: seeds,
+    operators: definitions,
     images,
   }
   const inputSha256 = crypto.createHash('sha256').update(JSON.stringify(descriptor)).digest('hex')

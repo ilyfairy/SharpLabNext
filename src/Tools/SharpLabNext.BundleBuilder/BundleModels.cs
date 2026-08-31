@@ -6,7 +6,68 @@ public sealed record DeploymentImageManifest
 {
     public required int SchemaVersion { get; init; }
 
+    public IReadOnlyList<CapabilityDefinition> CapabilityDefinitions { get; init; } = [];
+
     public required IReadOnlyList<DeploymentImageDefinition> Images { get; init; }
+}
+
+public sealed record CapabilityDefinition
+{
+    public required string Id { get; init; }
+
+    public IReadOnlyList<string> Dependencies { get; init; } = [];
+
+    public CapabilityProvisioner? Provisioner { get; init; }
+
+    public IReadOnlyList<CapabilityRuntimeArgument> RuntimeArguments { get; init; } = [];
+
+    public CapabilityOperator? Operator { get; init; }
+}
+
+public sealed record CapabilityProvisioner
+{
+    public required string Kind { get; init; }
+
+    public bool RequiresPrerequisites { get; init; }
+
+    public bool RequiresRegistry { get; init; }
+
+    public IReadOnlyList<string> SeedGenerations { get; init; } = [];
+}
+
+public sealed record CapabilityRuntimeArgument
+{
+    public required string Option { get; init; }
+
+    public required string SourceCapability { get; init; }
+
+    public required string Output { get; init; }
+}
+
+public sealed record CapabilityOperator
+{
+    public string? ImageId { get; init; }
+
+    public string? BuildKind { get; init; }
+
+    public string? Script { get; init; }
+
+    public string? FrameworkSeedGeneration { get; init; }
+
+    public string? EnvironmentVariable { get; init; }
+
+    public IReadOnlyList<CapabilityDownloadArgument> DownloadArguments { get; init; } = [];
+
+    public IReadOnlyList<string> LicenseArguments { get; init; } = [];
+
+    public IReadOnlyList<string> InputFiles { get; init; } = [];
+}
+
+public sealed record CapabilityDownloadArgument
+{
+    public required string Option { get; init; }
+
+    public required string DownloadId { get; init; }
 }
 
 public sealed record BaseImageManifest
@@ -31,6 +92,8 @@ public sealed record DeploymentImageDefinition
 
     public required string Repository { get; init; }
 
+    public string? OrdinaryBakeTarget { get; init; }
+
     public string? ImmutableReference { get; init; }
 
     public bool Always { get; init; }
@@ -42,6 +105,10 @@ public sealed record DeploymentImageDefinition
     public string? RuntimeId { get; init; }
 
     public string? ArtifactProcessorId { get; init; }
+
+    public ReleaseImageProducer? Producer { get; init; }
+
+    public IReadOnlyList<string> BuildCapabilities { get; init; } = [];
 
     public string? LockComponentId { get; init; }
 
@@ -60,6 +127,8 @@ public sealed record ReleaseImagePlan
 
     public required string ImagePrefix { get; init; }
 
+    public IReadOnlyList<CapabilityDefinition> CapabilityDefinitions { get; init; } = [];
+
     public required IReadOnlyList<ReleaseImagePlanEntry> Images { get; init; }
 }
 
@@ -70,6 +139,12 @@ public sealed record ReleaseImagePlanEntry
     public required string Reference { get; init; }
 
     public required ReleaseImageProducer Producer { get; init; }
+
+    public IReadOnlyList<string>? BuildCapabilities { get; init; }
+
+    public string? ToolchainId { get; init; }
+
+    public string? ArtifactProcessorId { get; init; }
 
     public string? RuntimeId { get; init; }
 }

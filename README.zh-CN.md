@@ -16,6 +16,9 @@ reference set、运行时和已批准兼容路径的事实来源。精确的上�
   以及一个 MiniLang SDK 示例。
 - 提供 Roslyn Stable、从源码构建的 Roslyn Main，以及原子绑定的实验性 C# 常量泛型
   工具链、运行时和 ILSpy 组合。
+- 运行时覆盖 .NET Core 2.0 到 .NET 11 Preview、Wine 下的 Windows .NET 5-11、Wine
+  下从 2.0 到 4.8 的全部 .NET Framework 版本、Mono 6.12、J# CLR 2.0 和常量泛型
+  runtime。
 - 根据所选 pipeline 的能力提供 Decompiled C#、IL、IL Verify、通过源码构建 JSIL
   生成的 JavaScript、AST、Explain、Run、带源码导航的紧凑型全用户方法 JIT 汇编、
   Execution Flow 和重写后的 Run IL。默认结果为 Decompiled C#。
@@ -28,52 +31,119 @@ reference set、运行时和已批准兼容路径的事实来源。精确的上�
   Signature Help 和 Code Action 由各语言 capability manifest 决定。
 - 使用规范的 SharpLabNext v3 分享格式，并只读导入 SharpLab v1/v2 与旧 Gist。
   GitHub OAuth 和已认证 Gist 写入为可选功能。
-- 可生成带精确镜像身份、SBOM、checksum、SLSA provenance、部署脚本和回滚支持的
-  签名离线 bundle。
+- 可生成带精确镜像身份、SBOM、checksum 和 SLSA provenance 的签名离线 bundle。
 
-## 已支持语言
+## 支持的语言与运行时
 
-| 语言 | 当前工具链 | 说明 |
+这里列出当前 Catalog 实际提供的精确版本。新旧运行时都是 playground 有意保留的正式
+能力，用于比较行为、验证兼容性和测试回归，不会因为版本较旧而降低支持等级。更新
+[profiles/lock.json](profiles/lock.json) 后，精确补丁版本也会随之变化。
+
+当前范围从 .NET Core 2.0 和 .NET Framework 2.0 开始，到 .NET 11 Preview 和
+.NET Framework 4.8 为止。当前 Catalog 尚未定义 .NET Core/.NET Framework 1.x 或
+.NET Framework 4.8.1 profile。
+
+### 语言与工具链
+
+| 语言 | 工具链 | 当前版本与范围 |
 | --- | --- | --- |
-| C# | `roslyn-stable`、`roslyn-stable-netfx48`、`roslyn-main`、`roslyn-const-generics` | 已声明的 Roslyn LSP 能力、AST、Explain、managed PE、.NET Framework 4.8，以及实验性常量泛型 profile。 |
-| Visual Basic | `roslyn-stable`、`roslyn-stable-netfx48`、`roslyn-main` | Roslyn LSP、AST、managed PE，以及 .NET 10/.NET 11 Preview/.NET Framework 4.8 路径。 |
-| F# | `fsharp-stable` | FSharp.Compiler.Service LSP/Build、AST、源码顺序和 managed PE。 |
-| G# | `gsharp-stable`、`gsharp-legacy-0.3.8` | 默认使用 G# 0.3.33，并保留固定的 0.3.8 兼容 profile；两个编译器/LSP profile 共用一个 Worker 镜像，均生成 managed PE/PDB。 |
-| PHP | `peachpie-stable` | PeachPie 1.1.13 diagnostics 与 managed PE pipeline；目前不声明完整 PHP LSP 能力。 |
-| IL | `mobius-ilasm-stable` | 固定版本 ILSense Core 提供上下文感知的语义语言服务，隔离的 Mobius.ILasm 负责编译为 managed PE。 |
-| C++/CLI | `msvc-cppcli-netfx48` | 实验性 x64 MSVC 19.51/`/clr`，生成真实的 .NET Framework 4.8 mixed PE。支持词法编辑、Compile Check、聚焦后的 IL/Decompiled C# 与 Wine Run；不声明 LSP、IL Verify、JIT、instrumentation 或 Execution Flow。 |
-| J# | `vjc-jsharp20` | 实验性 Visual J# 2.0 Second Edition 编译，生成 AMD64 CLR 2.0 managed executable。支持词法编辑、Compile Check、IL、Decompiled C# 和专用 Wine/CLR2 Run；不声明 LSP、AST、IL Verify、JIT、instrumentation 或 Execution Flow。 |
-| MiniLang | `minilang-stable` | 生成 CIL 的 SDK/conformance 示例，用于演示第三方语言 Worker。 |
+| C# | `roslyn-stable`、`roslyn-main`、`roslyn-stable-netfx48`、`roslyn-const-generics` | Roslyn Stable 5.6.0、Roslyn Main 5.10.0（`708c0a9669c6`）、下列全部 .NET/.NET Framework reference set，以及原子绑定的实验性常量泛型 profile。 |
+| Visual Basic | `roslyn-stable`、`roslyn-main`、`roslyn-stable-netfx48` | Roslyn Stable/Main LSP、AST，以及面向下列 .NET 和 .NET Framework reference set 的 managed PE。 |
+| F# | `fsharp-stable` | FSharp.Compiler.Service 43.12.204、LSP/Build、AST、源码顺序与 managed PE。 |
+| G# | `gsharp-stable`、`gsharp-legacy-0.3.8` | 默认 G# 0.3.33，并保留固定的 0.3.8 兼容 profile；两者均生成 managed PE/PDB。 |
+| PHP | `peachpie-stable` | PeachPie 1.1.13 diagnostics 与 managed PE；目前不声明完整 PHP LSP 能力。 |
+| IL | `mobius-ilasm-stable` | ILSense 0.1.0 语义服务和隔离的 Mobius.ILasm 0.1.0 managed PE 编译。 |
+| C++/CLI | `msvc-cppcli-netfx48` | 实验性 x64 MSVC 19.51 `/clr`，生成真实 .NET Framework 4.8 mixed PE；支持 Compile Check、聚焦后的 IL/Decompiled C# 与 Wine Run。 |
+| J# | `vjc-jsharp20` | Visual J# 2.0 Second Edition（2.0.50727.937），生成 AMD64 CLR 2.0 managed executable，提供聚焦后的 IL/Decompiled C# 和专用 Wine Run。 |
+| MiniLang | `minilang-stable` | 1.0.0 SDK/conformance 示例，输出 CIL。 |
 
-当前可以路由的输出包括：
+### 原生 .NET 运行时 - Linux x64
 
-- 所有已安装语言的 Compile Check。
-- C#、Visual Basic 和 F# 的 AST；C# 的 Explain。
-- MiniLang 的 Generated IL。
-- managed assembly 的 IL、Decompiled C# 和 IL Verify。
-- 普通 .NET 10/.NET Main managed assembly 通过独立源码构建 JSIL processor 生成的
-  JavaScript。
-- 兼容 .NET 运行时上的 Run 与紧凑型全用户方法 JIT ASM。
-- 兼容标准运行时上的 C#、Visual Basic、F# 和 G# Execution Flow。
-- 标准 managed pipeline 的 Rewritten Run IL。
+下列每一行都已安装且健康；每个标准 .NET 版本也有对应的编译 reference set。
 
-可用性由语言、工具链、reference set、artifact processor、输出和运行时共同解析。
-工作台不会展示 Catalog 无法证明兼容的路径。当前运行时包括 .NET 10.0.9、
-.NET 11 Preview 5、专用的常量泛型运行时、run-only 的 .NET Framework 4.8/Wine
-9.0 profile，以及独立的 x64 CLR 2.0/J# Wine profile。
+| 运行时 | 精确版本 | 运行时能力 |
+| --- | --- | --- |
+| .NET Core 2.0 | 2.0.9 | Run |
+| .NET Core 2.1 | 2.1.30 | Run |
+| .NET Core 2.2 | 2.2.8 | Run |
+| .NET Core 3.0 | 3.0.3 | Run |
+| .NET Core 3.1 | 3.1.32 | Run |
+| .NET 5 | 5.0.17 | Run |
+| .NET 6 | 6.0.36 | Run、JIT ASM |
+| .NET 7 | 7.0.20 | Run、JIT ASM |
+| .NET 8 | 8.0.29 | Run、JIT ASM |
+| .NET 9 | 9.0.18 | Run、JIT ASM |
+| .NET 10 | 10.0.10 | Run、JIT ASM、Inspection、Execution Flow |
+| .NET 11 Preview | 11.0.0-preview.6.26359.118 | Run、JIT ASM、Inspection、Execution Flow |
 
-`roslyn-stable-netfx48` 为 C# 和 Visual Basic 提供可选择的 .NET Framework 4.8
-路径。它复用唯一一份锁定的 Roslyn Stable 版本，使用独立校验摘要的
-`Microsoft.NETFramework.ReferenceAssemblies.net48` 包编译，发布 IL-only framework
-PE，并把 Run 路由到单独的 Wine runtime 容器。
+### Wine 9.0 下的 .NET 运行时 - Linux x64
 
-J# 路径只支持 x64，其私有基础镜像由可复用的 CLR 2/3.5 seed 与 Git LFS 中固定的
-Visual J# 2.0 Second Edition `vjredist64.exe` 从源码构建。Worker 固定调用
-Framework64 `vjc.exe /platform:x64`；用户产物必须是 AMD64 PE32+、IL-only，且不得带
-`Requires32Bit` 或 `Prefers32Bit`。编译与 Run 使用两个共享精简层但职责分离的镜像，
-并使用独立 win64 prefix。该 Microsoft 二进制使用独立许可，不属于仓库 BSD 许可范围，
-也不会进入公共镜像或 bundle。operator 必须接受相应许可，并把最终 release 保持在其
-获许可的部署边界内。
+这些 profile 在 Wine 中运行 Windows x64 runtime。.NET Core 2.x 和 3.x 的
+Windows/Wine 定义作为历史版本保留，但目前没有安装，也不会出现在可选择列表中；对应的
+原生 Linux runtime 仍可用。
+
+| 运行时 | 精确版本 | 运行时能力 |
+| --- | --- | --- |
+| .NET 5 / Wine | 5.0.17 | Run |
+| .NET 6 / Wine | 6.0.36 | Run |
+| .NET 7 / Wine | 7.0.20 | Run、JIT ASM |
+| .NET 8 / Wine | 8.0.29 | Run、JIT ASM |
+| .NET 9 / Wine | 9.0.18 | Run、JIT ASM |
+| .NET 10 / Wine | 10.0.10 | Run、JIT ASM |
+| .NET 11 Preview / Wine | 11.0.0-preview.6.26359.118 | Run、JIT ASM |
+
+### Wine 9.0 下的 .NET Framework - Linux x64
+
+C# 和 Visual Basic 为表中的每个版本提供对应的 managed reference set。C++/CLI 仅支持
+.NET Framework 4.8；J# 使用下方单独列出的 CLR 2.0 runtime。
+
+| .NET Framework | CLR 代际 | 运行时能力 |
+| --- | --- | --- |
+| 2.0 | CLR 2 | Run、JIT ASM |
+| 3.0 | CLR 2 | Run、JIT ASM |
+| 3.5 | CLR 2 | Run、JIT ASM |
+| 4.0 | CLR 4 | Run、JIT ASM |
+| 4.5 | CLR 4 | Run、JIT ASM |
+| 4.5.1 | CLR 4 | Run、JIT ASM |
+| 4.5.2 | CLR 4 | Run、JIT ASM |
+| 4.6 | CLR 4 | Run、JIT ASM |
+| 4.6.1 | CLR 4 | Run、JIT ASM |
+| 4.6.2 | CLR 4 | Run、JIT ASM |
+| 4.7 | CLR 4 | Run、JIT ASM |
+| 4.7.1 | CLR 4 | Run、JIT ASM |
+| 4.7.2 | CLR 4 | Run、JIT ASM |
+| 4.8 | CLR 4 | Run、JIT ASM |
+
+### 其他运行时
+
+| 运行时 | 版本 | 能力 | 说明 |
+| --- | --- | --- | --- |
+| Mono / Linux x64 | 6.12.0.182 | Run、JIT ASM | 使用 .NET Framework 4.8 managed reference set。 |
+| Const Generics Runtime | 锁定的原子 profile | Run、JIT ASM、Inspection | 必须与常量泛型编译器、reference set 和 artifact processor 匹配。 |
+| Visual J# / CLR 2.0 / Wine 9.0 | J# 2.0.50727.937 | Run | 专用 x64 J# runtime，不等同于通用 .NET Framework 2.0 profile。 |
+
+### 输出与兼容性
+
+当前可路由输出包括：所有已安装语言的 Compile Check；C#、Visual Basic 和 F# 的 AST；
+C# 的 Explain；MiniLang 的 Generated IL；兼容 managed assembly 的 IL、Decompiled C#
+和 IL Verify；通过源码构建 JSIL processor 生成的 JavaScript；Run；紧凑型全用户方法
+JIT ASM；Execution Flow；以及 pipeline 声明所需能力时的 Rewritten Run IL。默认输出为
+Decompiled C#。
+
+可用性由完整的语言、工具链、reference set、artifact processor、输出和运行时选择共同
+解析。运行时具备某项能力，不代表每个 producer 都能使用它。例如 Framework 4.8 runtime
+可以为兼容 managed artifact 提供 JIT ASM，但 C++/CLI 本身不声明 JIT ASM 或
+instrumentation。
+
+`roslyn-stable-netfx48` 复用唯一锁定的 Roslyn Stable 版本，让 C# 和 Visual Basic 针对
+2.0 到 4.8 的独立校验 Framework reference assembly 编译，并输出 IL-only framework
+PE；Run/JIT 由单独的 Wine runtime 容器负责。
+
+J# 路径只支持 x64，固定调用 Framework64 `vjc.exe /platform:x64`；用户程序集必须是
+AMD64 PE32+、IL-only，且不能带 32-bit-required/preferred 标志。Visual J#、.NET
+Framework 安装器和 MSVC/C++ build 资产使用独立许可，不属于本仓库 BSD 许可范围。
+接受许可后生成的私有 bundle 并不会自动获得公开再分发权；把 bundle 或镜像发布到
+GitHub Release 前，必须逐项确认适用许可。
 
 ## 工作台与传输
 
@@ -125,6 +195,8 @@ Cancel、State 和可恢复的事件订阅。LSP session 同样使用 WebSocket�
 
 ## 快速启动
 
+### 构建入口
+
 构建与打包入口按职责分开：
 
 | 入口 | 职责 |
@@ -134,15 +206,19 @@ Cancel、State 和可恢复的事件订阅。LSP session 同样使用 WebSocket�
 | `eng/bundle.ps1` / `eng/bundle.sh` | 只检查并打包已经存在的完整镜像集合，不做 restore 或镜像构建。缺少或身份不匹配时立即失败。 |
 | `eng/release.ps1` / `eng/release.sh` | 完整入口：预检输出和所有静态合同、构建并校验全部计划镜像，全部成功后才生成离线 bundle。 |
 
+### 构建单个镜像
+
 最简单的本地构建直接执行：
 
 ```powershell
 .\eng\build-images.ps1
 ```
 
-命令会把镜像加载到本机 Docker，默认标签为
-`sharplabnext/gateway:development`。传入 `-Target <名称>` 可以换成其他独立 Bake 目标；需要
-完整发布图时才使用 `-All` 或 `release.ps1`。
+命令会把镜像加载到本机 Docker，并使用当前 lock 的 release ID 作为标签。传入
+`-Target <名称>` 可以换成其他独立 Bake 目标；需要完整发布图时才使用 `-All` 或
+`release.ps1`。
+
+### 需要许可的构建输入
 
 完整环境还需要受 Microsoft 许可约束的输入。以下两份原始下载路径不能作为可靠的首次
 构建来源，因此精确文件通过 Git LFS 保存：
@@ -173,7 +249,8 @@ BuildKit 私有输入，在隔离的 Linux/Wine 构建阶段用静默参数安�
 CLR 2 + .NET Framework 3.5，以及 CLR 4 + .NET Framework 4.8。每个精确 Framework
 operator 从另一代 CLR 的 seed 开始，只安装自己选择的目标版本；之后仍会预检两份
 prefix、禁用对应 NGen 服务、删除安装器残留、记录 seed 镜像 digest，并执行现有的
-不可变文件去重。Framework operator 的并发上限继续保持为 2。
+不可变文件去重。Framework operator 使用与整个 release 图相同的
+`--max-parallel`，默认并发数为 5。
 
 构建脚本不会再通过 `docker image save` 额外封存这些 seed。每次构建都会把同一个锁定
 构建图交给 BuildKit；Docker 自身复用未变化的镜像层，输入摘要变化则使对应层自然失效。
@@ -189,85 +266,67 @@ J# 和 C++/CLI 基础镜像同样始终交给 BuildKit 构建，不再另存 `pr
 普通增量构建由 Docker 层缓存加速；清空 Docker 后则从上述锁定输入重新构建。
 `artifacts/prerequisites/downloads` 只缓存校验过的原始下载字节，不保存 Docker 镜像。
 
+### 构建完整 Bundle
+
 在仓库根目录一键构建全部镜像并打包：
 
 ```powershell
 .\eng\release.ps1 -AcceptMicrosoftLicenses
 ```
 
-该完整本地入口会构建私有基础镜像，再把实际检查得到的 digest-pinned 引用
-注入其余镜像图。因此即使 Git 干净，生成的镜像和 bundle 也会明确标记为 development
-image inputs，只能生成可部署的 unsigned 开发产物。正式签名/晋级仍要求通过独立
-operator receipt 和 promotion 流程得到的不可变镜像，再由
-`bundle.ps1` 单独打包；开发输入授权不会弱化这条边界。
+该完整入口会构建私有基础镜像，把实际检查得到的 digest-pinned 引用注入其余镜像图，
+并生成一个可直接部署的完整 bundle。普通命令默认生成 unsigned bundle；正式签名仍要求
+源码和镜像输入具备可独立验证的来源。
 
 普通构建入口直接根据源码文件计算内容身份，不读取 Git 元数据或工作树状态；没有 `.git`
-的导出源码树与 checkout 使用相同流程。生成的本地镜像是普通开发镜像，bundle 也是
-unsigned。正式签名/晋级是独立操作，届时才可能要求独立、可验证的 Git provenance。
+的导出源码树与 checkout 使用相同流程。生成的镜像是普通本地构建产物，bundle 默认
+unsigned。正式签名是独立操作，届时才要求独立、可验证的 provenance。
 
-旧版本的开发开关仍接受，但只为兼容旧脚本保留：
-
-```powershell
-.\eng\release.ps1 `
-  -AcceptMicrosoftLicenses `
-  -AllowUncommittedSourceForDevelopment
-```
-
-默认输出目录是 `artifacts/sharplabnext-<release-id>`，且 bundle 输出不可变、不能覆盖。
-需要重复生成或指定位置时传入一个尚不存在的目录：
+默认输出目录是 `artifacts/releases/sharplabnext-yyyy-MM-dd-HH-mm-ss`。每个时间戳子目录
+都是完整部署单元，可以直接复制到生产主机，也可以改成 GitHub Release 名称后压缩为 ZIP。
+bundle 不会覆盖已有目录；需要指定发布名时传入一个尚不存在的目录：
 
 ```powershell
 .\eng\release.ps1 `
   -AcceptMicrosoftLicenses `
-  -OutputDirectory D:\Bundles\SharpLabNext-20260824
+  -OutputDirectory D:\Bundles\sharplabnext-2026-08-24
 ```
 
-只重建普通镜像或只打包现有镜像时分别调用 `build-images.ps1` 与 `bundle.ps1`。普通的
-`release.ps1`/`release.sh` 会先复用所有身份匹配的本地镜像，再让 BuildKit 只重建发生
-变化的输入，因此打包阶段失败后再次执行通常不会全量重建。`-BundleOnly`（或
-`--bundle-only`）只是可选的直接打包快捷方式。`-Offline`
+### 镜像复用与指定重建
+
+构建普通镜像或只打包现有镜像时分别调用 `build-images.ps1` 与 `bundle.ps1`。普通的
+`release.ps1`/`release.sh` 会先复用所有有效的本地镜像；源码或包装脚本变化不会使缓存
+失效。需要时传入重复的 `-RebuildTarget`/`--rebuild-target` 只重建指定镜像，或显式传入
+`-RebuildImages`/`--rebuild-images` 全量重建。`-BundleOnly`（或 `--bundle-only`）只是
+可选的直接打包快捷方式。`-Offline`
 只禁止前置缓存联网补齐；从完全空的 BuildKit 缓存构建上游源码仍可能需要访问清单锁定的
 Docker、NuGet、npm 或源码地址。
 
-生成的 `.env` 会按正确顺序选择 `compose.prod.yaml` 和
-`compose.generated.yaml`，并固定 Compose 项目名。它只包含非敏感默认配置；部署入口会在
-每次调用时传入真实的宿主机令牌路径和 Docker socket group。不要修改不可变或已签名
-bundle 内的文件。
+重建选择器支持 `image:`、`runtime:`、`toolchain:`、`processor:`、`producer:` 和
+`capability:` 命名空间。不带命名空间时会检查所有这些身份，也支持 `*` 通配符，例如
+`-RebuildTarget "image:worker-gsharp"` 或 `-RebuildTarget "*const-generics*"`。
 
-在 Windows 上测试 unsigned 开发 bundle 时，传入 Git 忽略的本地开发令牌并运行产物
-自带的安装器：
+### 部署 Bundle
 
-```powershell
-$bundleRoot = (Resolve-Path .\artifacts\sharplabnext-development).Path
-$env:SHARPLABNEXT_INTERNAL_SERVICE_TOKEN_FILE = `
-  (Resolve-Path .\deploy\secrets\internal-service-token.dev).Path
-& (Join-Path $bundleRoot "install.ps1") `
-  -AllowUnsigned `
-  -InstallRoot (Join-Path (Resolve-Path .\artifacts) "local-install") `
-  -SmokeBaseAddress "http://127.0.0.1:8080"
-```
+生成的 `.env` 会自动组合 `compose.prod.yaml` 与 `compose.generated.yaml`，并固定
+Compose 项目名。所有 bundle 都在 `secrets/internal-service-token` 中包含同一个可编辑的
+默认令牌，不需要按环境执行初始化；需要自定义时直接修改该文件。Runtime Supervisor
+需要访问宿主 Docker socket 时，在 `.env` 中将 `DOCKER_GID` 设为该 socket 的 group ID。
 
-在 Linux 上，每个新传入的 bundle 只需调用一个部署入口；它会加载镜像归档、启动不可变
-Compose 集合、检查就绪状态，并在失败时回滚：
-
-```bash
-sudo env SHARPLABNEXT_HOME=/opt/sharplabnext \
-  sh ./deploy.sh --allow-unsigned
-```
-
-正式签名 bundle 应改用 `install.sh` 说明中的信任参数，而不是
-`--allow-unsigned`。第一次完整构建会比较耗时，因为需要校验并构建锁定的上游源码树与
-reference pack。
-
-生成的 bundle 已包含离线部署所需的签名元数据、安装脚本和回滚脚本。
-`deploy/compose.dev.yaml` 适合所有 development tag 都已经存在的环境，但不是干净机器
-的 bootstrap 入口。
-
-对已就绪的环境运行外部 smoke：
+在 bundle 目录中加载随附镜像并启动 Compose：
 
 ```powershell
-dotnet run eng/smoke/gateway-compose.cs -- http://127.0.0.1:8080 --full
+docker load -i images.tar
+docker compose up -d
 ```
+
+默认访问地址为 `http://127.0.0.1:8080/`。使用 `docker compose port gateway 8080`
+可以查看实际映射到宿主机的端口。Docker Compose 会让当前 shell 的环境变量覆盖 bundle
+中的 `.env`；复用旧部署使用过的 shell 时，应先删除过期的 `SHARPLABNEXT_*` 覆盖，或
+明确更新为本次部署需要的值，再创建容器。
+
+所有支持的宿主机都使用相同命令。第一次完整构建会比较耗时，因为需要校验并构建锁定的
+上游源码树与 reference pack。
 
 在当前部署目录停止环境，但保留 Artifact Store volume：
 
@@ -276,6 +335,8 @@ docker compose down --remove-orphans
 ```
 
 需要保留本地 Artifact Store 数据时，不要添加 `--volumes`。
+
+### 前端开发
 
 只迭代前端时，可以把 Vite 指向已部署的后端：
 
@@ -324,9 +385,10 @@ dotnet run --project src/Tools/SharpLabNext.CompatibilityCli -- validate
 
 `eng/release.ps1` 与 `eng/release.sh` 会构建完整 Linux 镜像集合并生成离线 bundle；
 `eng/bundle.ps1` 与 `eng/bundle.sh` 只负责打包已经构建并验证的镜像集合。
-生产 bundle 必须来自干净 Git worktree，使用带外可信签名密钥，并通过身份、安全、
-smoke、性能与浏览器门禁。不要单独部署 `deploy/compose.prod.yaml`；生成的 bundle
-overlay 会写入生产启动所需的不可变镜像和 Worker 身份。
+普通 unsigned bundle 可以直接部署。正式签名 release 还需要可验证的源码与镜像来源、
+带外可信签名密钥，以及身份、安全、smoke、性能和浏览器门禁。不要单独部署
+`deploy/compose.prod.yaml`；生成的 bundle overlay 会写入启动所需的不可变镜像与
+Worker 身份。
 
 ## 扩展 SharpLabNext
 
@@ -348,10 +410,10 @@ conformance、compatibility、security 和浏览器测试。不得在 Runtime Su
 
 ## 安全
 
-生产部署必须使用外部 secret、生成的不可变 Compose overlay，以及通过带外公钥或
-fingerprint 验证的签名 bundle。Gateway 应放在可信反向代理之后，不要暴露内部 Worker
-网络，并保留随项目提供的 seccomp/AppArmor 和资源限制。正式发布前，应在非生产环境
-验证加固、升级、回滚与事故处理流程。
+每个 bundle 都包含一份可编辑的默认内部服务令牌，便于直接启动；将部署暴露给其他机器
+或不可信网络前必须替换它。GitHub OAuth 在配置外部 client secret 前保持禁用。Gateway
+应放在可信反向代理之后，不要暴露内部 Worker 网络，并保留项目提供的 seccomp/AppArmor
+与资源限制。正式签名 release 应通过带外公钥或 fingerprint 验证。
 
 仓库目前没有公布专用漏洞报告地址。在正式安全策略发布前，请不要在公开 issue 中提交
 凭据或可直接利用的漏洞细节；应通过私有渠道联系仓库所有者。

@@ -815,6 +815,7 @@ test('shared Framework historical development build is local-only, records both 
   const target = 'runtime-wine-framework-matrix-shared-candidate'
   const environment = {
     ...sharedWineFrameworkCandidateEnvironment(),
+    SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content',
     RUNTIME_MATRIX_FRAMEWORK_SOURCE_REVISION: 'e'.repeat(40),
     RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_DEVELOPMENT_OPT_IN: 'true',
   }
@@ -875,10 +876,7 @@ test('shared Framework historical development build is local-only, records both 
   }, nonShared.spawn, output), 64)
   assert.match(output.errors.join('\n'), /supported only for the shared Framework candidate/)
 
-  for (const [dirty, context] of [
-    [false, 'committed-historical-framework-input-development'],
-    [true, 'working-tree-historical-framework-input-development'],
-  ]) {
+  for (const [dirty, context] of [[true, 'working-tree-historical-framework-input-development']]) {
     output.errors.length = 0
     output.logs.length = 0
     const docker = fakeDocker(labelsFor(context))
@@ -893,7 +891,6 @@ test('shared Framework historical development build is local-only, records both 
     }
     assert.equal(runCandidateBuildProduction([
       target,
-      '--allow-uncommitted-source-for-development',
       '--allow-historical-framework-input-for-development',
     ], environment, spawn, output, {
       createCommittedSourceContext(options) {
@@ -913,7 +910,7 @@ test('shared Framework historical development build is local-only, records both 
       },
       loadWineCoreClrOperatorReceipt() { throw new Error('historical Framework mode must not load a receipt') },
     }), 0, output.errors.join('\n'))
-    assert.deepEqual(contexts, dirty ? ['e'.repeat(40)] : ['f'.repeat(40), 'e'.repeat(40)])
+    assert.deepEqual(contexts, ['e'.repeat(40)])
     assert.equal(bakeEnvironment.RUNTIME_CANDIDATE_SOURCE_CONTEXT, context)
     assert.equal(bakeEnvironment.RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE, 'false')
     assert.equal(bakeEnvironment.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT, 'true')
@@ -981,14 +978,15 @@ test('shared Framework historical development build rejects Wine userspace and r
   assert.equal(formalBakeEnvironment.WINE_CORECLR_USERSPACE_DIGEST, wineUserspace.digest)
 })
 
-test('development image inputs keep Linux and Mono candidates local and non-promotable', () => {
+test('content source identity keeps Linux and Mono candidates local and non-promotable', () => {
   for (const [target, environment] of [
     ['runtime-dotnet-matrix-candidate', dotnetCandidateEnvironment('dotnet-5')],
     ['runtime-mono-matrix-candidate', monoCandidateEnvironment()],
   ]) {
     const bound = {
       ...environment,
-      RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-development',
+      SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content',
+      RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-content',
       RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE: 'false',
     }
     const docker = fakeDocker(candidateLabels(target, bound))
@@ -1005,16 +1003,15 @@ test('development image inputs keep Linux and Mono candidates local and non-prom
 
     assert.equal(runCandidateBuild([
       target,
-      '--allow-development-image-inputs',
-    ], environment, spawn, output), 0, `${target}: ${output.errors.join('\n')}`)
-    assert.equal(bakeEnvironment.RUNTIME_CANDIDATE_SOURCE_CONTEXT, 'working-tree-development')
+    ], { ...environment, SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }, spawn, output), 0, `${target}: ${output.errors.join('\n')}`)
+    assert.equal(bakeEnvironment.RUNTIME_CANDIDATE_SOURCE_CONTEXT, 'working-tree-content')
     assert.equal(bakeEnvironment.RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE, 'false')
     assert.equal(bakeEnvironment.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT, 'false')
     assert.match(output.logs.join('\n'), /promotion output remains disabled/)
   }
 })
 
-test('development image inputs bind current Framework operators without formal receipt labels', () => {
+test('content source identity binds current Framework operators without formal receipt labels', () => {
   const target = 'runtime-wine-framework-matrix-shared-candidate'
   const bake = fs.readFileSync(
     path.join(repositoryRoot, 'eng', 'bake.runtime-candidates.hcl'),
@@ -1028,10 +1025,10 @@ test('development image inputs bind current Framework operators without formal r
     targetText,
     /WINE_CORECLR_OPERATOR_RECEIPT_SHA256 != "" \? \{\s+"io\.sharplabnext\.operator\.receipt-sha256"/,
   )
-  const environment = sharedWineFrameworkCandidateEnvironment()
+  const environment = { ...sharedWineFrameworkCandidateEnvironment(), SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }
   const bound = {
     ...environment,
-    RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-development',
+    RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-content',
     RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE: 'false',
     RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT: 'false',
   }
@@ -1055,7 +1052,6 @@ test('development image inputs bind current Framework operators without formal r
 
   assert.equal(runCandidateBuild([
     target,
-    '--allow-development-image-inputs',
   ], environment, spawn, output, {
     loadWineCoreClrOperatorReceipt() {
       throw new Error('development Framework build must not load a formal receipt')
@@ -1063,7 +1059,7 @@ test('development image inputs bind current Framework operators without formal r
   }), 0, output.errors.join('\n'))
   assert.equal(
     bakeEnvironment.RUNTIME_CANDIDATE_SOURCE_CONTEXT,
-    'working-tree-development',
+    'working-tree-content',
   )
   assert.equal(bakeEnvironment.RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE, 'false')
   assert.equal(bakeEnvironment.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_INPUT_FOR_DEVELOPMENT, 'false')
@@ -1652,7 +1648,7 @@ test('every candidate target verifies its complete built-image identity', () => 
   }
 })
 
-test('candidate build binds SOURCE_REVISION to Git and dirty override remains non-promotable', () => {
+test('candidate build keeps strict Git binding while content source remains non-promotable', () => {
   const target = 'runtime-mono-matrix-candidate'
   const environment = monoCandidateEnvironment()
   const labels = candidateLabels(target, environment)
@@ -1662,7 +1658,7 @@ test('candidate build binds SOURCE_REVISION to Git and dirty override remains no
     'true',
   )
   // These are internal values: inherited caller input must never decide them.
-  environment.RUNTIME_CANDIDATE_SOURCE_CONTEXT = 'working-tree-development'
+  environment.RUNTIME_CANDIDATE_SOURCE_CONTEXT = 'working-tree-content'
   environment.RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE = 'true'
   const output = {
     errors: [],
@@ -1687,7 +1683,8 @@ test('candidate build binds SOURCE_REVISION to Git and dirty override remains no
   output.logs.length = 0
   const development = fakeDocker(candidateLabels(target, {
     ...environment,
-    RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-development',
+    SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content',
+    RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-content',
     RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE: 'false',
   }))
   let developmentBakeEnvironment
@@ -1701,13 +1698,10 @@ test('candidate build binds SOURCE_REVISION to Git and dirty override remains no
     }
     return development.spawn(command, arguments_, options)
   }
-  assert.equal(runCandidateBuild([
-    target,
-    '--allow-uncommitted-source-for-development',
-  ], environment, developmentSpawn, output), 0)
+  assert.equal(runCandidateBuild([target], { ...environment, SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }, developmentSpawn, output), 0)
   assert.match(output.logs.join('\n'), /not eligible for a promotion receipt/)
   assert.match(output.logs.join('\n'), /promotion output remains disabled/)
-  assert.equal(developmentBakeEnvironment.RUNTIME_CANDIDATE_SOURCE_CONTEXT, 'working-tree-development')
+  assert.equal(developmentBakeEnvironment.RUNTIME_CANDIDATE_SOURCE_CONTEXT, 'working-tree-content')
   assert.equal(developmentBakeEnvironment.RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE, 'false')
 
   output.errors.length = 0
@@ -1719,10 +1713,7 @@ test('candidate build binds SOURCE_REVISION to Git and dirty override remains no
     }
     return mismatch.spawn(command, arguments_, options)
   }
-  assert.equal(runCandidateBuild([
-    target,
-    '--allow-uncommitted-source-for-development',
-  ], environment, mismatchSpawn, output), 1)
+  assert.equal(runCandidateBuild([target], environment, mismatchSpawn, output), 1)
   assert.match(output.errors.join('\n'), /does not match Git HEAD/)
   assert.equal(mismatch.calls.length, 0, 'source mismatch must fail before Docker starts')
 
@@ -2217,12 +2208,13 @@ test('Wine candidates reject incomplete, development, and drifting userspace ope
   assert.match(output.errors.join('\n'), /operator image changed during Bake/)
 })
 
-test('Wine CoreCLR development build binds the captured local operator without receipt evidence', () => {
+test('content source Wine CoreCLR build binds the captured local operator without receipt evidence', () => {
   const target = 'runtime-wine-dotnet-matrix-candidate'
   const environment = {
     ...wineDotnetCandidateEnvironment(),
+    SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content',
     RUNTIME_MATRIX_WINE_IMAGE: developmentWineOperatorImageId,
-    RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-development',
+    RUNTIME_CANDIDATE_SOURCE_CONTEXT: 'working-tree-content',
     RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE: 'false',
     WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN: 'true',
     WINE_CORECLR_DEVELOPMENT_OPERATOR_TAG: developmentWineOperatorTag,
@@ -2239,7 +2231,7 @@ test('Wine CoreCLR development build binds the captured local operator without r
     const docker = fakeDocker(labelsOverride, {
       wineOperatorReference: developmentWineOperatorTag,
       wineOperatorLabels: {
-        'io.sharplabnext.source.context': 'working-tree-development',
+        'io.sharplabnext.source.context': 'working-tree-content',
         'io.sharplabnext.development-only': 'true',
         'com.sharplabnext.operator.promotion-eligible': 'false',
       },
@@ -2252,10 +2244,7 @@ test('Wine CoreCLR development build binds the captured local operator without r
       if (command === 'docker' && arguments_[0] === 'buildx') bakeEnvironment = options.env
       return docker.spawn(command, arguments_, options)
     }
-    const status = runCandidateBuild([
-      target,
-      '--allow-uncommitted-source-for-development',
-    ], environment, spawn, output, {
+    const status = runCandidateBuild([target], environment, spawn, output, {
       loadWineCoreClrOperatorReceipt() { throw new Error('development build must not load a receipt') },
     })
     return { status, docker, bakeEnvironment }

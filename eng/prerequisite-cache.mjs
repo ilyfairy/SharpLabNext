@@ -14,9 +14,7 @@ const sha256Pattern = /^[0-9a-f]{64}$/;
 const imageIdPattern = /^sha256:[0-9a-f]{64}$/;
 const maximumRedirects = 5;
 const maximumAttempts = 4;
-const constGenericsFeed =
-  'https://pkgs.dev.azure.com/hez2010/20ccb654-b3c8-4f40-9c42-7d84d39993fd/' +
-  '_packaging/c52a6fa0-f11c-489f-bb91-743b56cf080f/nuget/v3/flat2'
+const approvedDownloadHosts = new Set(['pkgs.dev.azure.com', 'download.microsoft.com', 'download.visualstudio.microsoft.com', 'codeload.github.com'])
 const httpsAgent = new https.Agent({
   ca: [...tls.getCACertificates('default'), ...tls.getCACertificates('system')],
 })
@@ -50,16 +48,16 @@ function validDownloadUrl(item) {
   if (item.kind === 'nuget-package') {
     const packageName = item.package.toLowerCase()
     const version = item.version.toLowerCase()
-    return item.url ===
-      `${constGenericsFeed}/${packageName}/${version}/${packageName}.${version}.nupkg`
+    let parsed
+    try { parsed = new URL(item.url) } catch { return false }
+    let segments
+    try { segments = parsed.pathname.split('/').filter(Boolean).map(segment => decodeURIComponent(segment).toLowerCase()) } catch { return false }
+    return parsed.protocol === 'https:' && approvedDownloadHosts.has(parsed.hostname) && segments.at(-3) === packageName && segments.at(-2) === version && segments.at(-1) === `${packageName}.${version}.nupkg`
   }
   if (item.kind !== 'file') return false
-  if (item.url.startsWith('https://download.microsoft.com/') ||
-      item.url.startsWith('https://download.visualstudio.microsoft.com/')) {
-    return true
-  }
-  return item.id === 'msvc-wine-source' &&
-    item.url.startsWith('https://codeload.github.com/mstorsjo/msvc-wine/tar.gz/')
+  let parsed
+  try { parsed = new URL(item.url) } catch { return false }
+  return parsed.protocol === 'https:' && approvedDownloadHosts.has(parsed.hostname)
 }
 
 export function readPrerequisiteManifest(filename = defaultManifestPath) {
@@ -90,8 +88,8 @@ export function readPrerequisiteManifest(filename = defaultManifestPath) {
   }
   if (!Array.isArray(value.downloads) || value.downloads.length === 0 ||
       !Array.isArray(value.repositoryFiles) ||
-      !Array.isArray(value.generatedImages) || value.generatedImages.length !== 2) {
-    fail('prerequisite manifest must declare downloads, repositoryFiles, and two generatedImages')
+      !Array.isArray(value.generatedImages) || value.generatedImages.length === 0) {
+    fail('prerequisite manifest must declare downloads, repositoryFiles, and generatedImages')
   }
 
   const ids = new Set()
@@ -118,10 +116,8 @@ export function readPrerequisiteManifest(filename = defaultManifestPath) {
           !/^[A-Za-z0-9][A-Za-z0-9.]{0,127}$/.test(item.package) ||
           typeof item.version !== 'string' ||
           !/^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$/.test(item.version) ||
-          item.path !==
-            `downloads/const-generics-fork-packages/${item.package.toLowerCase()}.${item.version.toLowerCase()}.nupkg` ||
-          item.license !== 'MIT') {
-        fail(`download '${item.id}' has an invalid ConstGenerics NuGet identity`)
+          path.basename(item.path).toLowerCase() !== `${item.package.toLowerCase()}.${item.version.toLowerCase()}.nupkg`) {
+        fail(`download '${item.id}' has an invalid NuGet package identity`)
       }
     }
     if (typeof item.url !== 'string' || !validDownloadUrl(item)) {
@@ -158,7 +154,6 @@ export function readPrerequisiteManifest(filename = defaultManifestPath) {
     }
   }
 
-  const buildKinds = []
   for (const item of value.generatedImages) {
     exactKeys(
       item,
@@ -174,16 +169,12 @@ export function readPrerequisiteManifest(filename = defaultManifestPath) {
         /\s|@/.test(item.reference) || !item.reference.includes(':')) {
       fail(`generated image '${item.id}' has an invalid tagged reference`)
     }
-    if (!['jsharp20', 'cppcli'].includes(item.buildKind)) {
-      fail(`generated image '${item.id}' has an unsupported buildKind`)
+    if (typeof item.buildKind !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(item.buildKind)) {
+      fail(`generated image '${item.id}' has an invalid buildKind`)
     }
-    buildKinds.push(item.buildKind)
     if (typeof item.license !== 'string' || item.license.length === 0) {
       fail(`generated image '${item.id}' has no license description`)
     }
-  }
-  if (JSON.stringify(buildKinds.sort()) !== JSON.stringify(['cppcli', 'jsharp20'])) {
-    fail('generatedImages must contain exactly one J# and one C++/CLI source build')
   }
 
   return Object.freeze({

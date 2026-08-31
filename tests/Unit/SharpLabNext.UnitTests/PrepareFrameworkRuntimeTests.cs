@@ -250,7 +250,7 @@ public sealed class PrepareFrameworkRuntimeTests
         var arguments = ValidArguments("netfx48", secrets, includeInstallerSource: false);
         arguments[Array.IndexOf(arguments, "--source-revision") + 1] = new string('0', 40);
 
-        var result = await RunAsync(arguments);
+        var result = await RunAsync(arguments, contentIdentity: false);
 
         Assert.Equal(1, result.ExitCode);
         Assert.Contains("does not match Git HEAD", result.StandardError, StringComparison.Ordinal);
@@ -287,7 +287,6 @@ public sealed class PrepareFrameworkRuntimeTests
             "--output-image", $"sharplabnext/operator-{targetId}:test",
             "--source-revision", sourceRevision,
             "--accept-microsoft-dotnet-framework-eula",
-            "--allow-uncommitted-source-for-development",
         };
         if (includeInstallerSource)
         {
@@ -308,11 +307,10 @@ public sealed class PrepareFrameworkRuntimeTests
         "--output-image", $"sharplabnext/framework-{buildKind}:test",
         "--source-revision", RepositoryRevision,
         "--accept-microsoft-dotnet-framework-eula",
-        "--allow-uncommitted-source-for-development",
         "--dry-run",
     ];
 
-    private static async Task<ProcessResult> RunAsync(IEnumerable<string> arguments)
+    private static async Task<ProcessResult> RunAsync(IEnumerable<string> arguments, bool contentIdentity = true)
     {
         var startInfo = new ProcessStartInfo("dotnet")
         {
@@ -323,6 +321,8 @@ public sealed class PrepareFrameworkRuntimeTests
         };
         startInfo.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         startInfo.Environment["DOTNET_NOLOGO"] = "1";
+        if (contentIdentity) startInfo.Environment["SHARPLABNEXT_SOURCE_IDENTITY_MODE"] = "content";
+        else startInfo.Environment.Remove("SHARPLABNEXT_SOURCE_IDENTITY_MODE");
         startInfo.ArgumentList.Add("run");
         startInfo.ArgumentList.Add(ScriptPath);
         startInfo.ArgumentList.Add("--");

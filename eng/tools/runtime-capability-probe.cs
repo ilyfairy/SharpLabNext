@@ -107,7 +107,7 @@ static class RuntimeCapabilityProbeApplication
             RepositoryRelativePath(root, preflightProfilePath),
             RepositoryRelativePath(root, planPath)
         };
-        var source = InspectSource(root, options.SourceRevision!, options.AllowUncommittedSourceForDevelopment, allowedGeneratedPaths);
+        var source = InspectSource(root, options.SourceRevision!, allowedGeneratedPaths);
         var target = SelectTarget(preflightProfile);
         var requiresExecutionFlow = preflightProfile.Capabilities.Contains("execution-flow", StringComparer.Ordinal);
         if (requiresExecutionFlow != !string.IsNullOrWhiteSpace(options.ArtifactWorkerBaseAddress))
@@ -117,7 +117,7 @@ static class RuntimeCapabilityProbeApplication
 
         await BuildProbeAsync(root, target.TargetFramework, options.Configuration!).ConfigureAwait(false);
         VerifyInputs(inputFiles);
-        RequireSameSourceState(source, InspectSource(root, options.SourceRevision!, options.AllowUncommittedSourceForDevelopment, allowedGeneratedPaths));
+        RequireSameSourceState(source, InspectSource(root, options.SourceRevision!, allowedGeneratedPaths));
         var outputDirectory = Path.Combine(root, "tests", "Fixtures", "SharpLabNext.RuntimeCapabilityProbe", "bin", options.Configuration!, target.TargetFramework);
         var assemblyPath = Path.Combine(outputDirectory, target.EntryAssembly);
         var pdbPath = Path.Combine(outputDirectory, "SharpLabNext.RuntimeCapabilityProbe.pdb");
@@ -155,7 +155,7 @@ static class RuntimeCapabilityProbeApplication
         }
 
         VerifyInputs(inputFiles);
-        RequireSameSourceState(source, InspectSource(root, options.SourceRevision!, options.AllowUncommittedSourceForDevelopment, allowedGeneratedPaths));
+        RequireSameSourceState(source, InspectSource(root, options.SourceRevision!, allowedGeneratedPaths));
 
         var result = new JsonObject
         {
@@ -421,14 +421,14 @@ static class RuntimeCapabilityProbeApplication
         return new ProbeFile(bytes, new ArtifactFileDescriptor(role, name, bytes.LongLength, $"sha256:{Convert.ToHexStringLower(SHA256.HashData(bytes))}"));
     }
 
-    private static SourceState InspectSource(string root, string expectedRevision, bool allowDirty, HashSet<string> allowedGeneratedPaths)
+    private static SourceState InspectSource(string root, string expectedRevision, HashSet<string> allowedGeneratedPaths)
     {
         if (!IsCommit(expectedRevision)) throw new ProbeFailureException("Source revision must be a full lowercase Git commit.");
         var revision = RunGit(root, "rev-parse", "HEAD").Trim();
         if (!StringComparer.Ordinal.Equals(revision, expectedRevision)) throw new ProbeFailureException("Source revision does not match the repository HEAD.");
         var status = RunGit(root, "status", "--porcelain=v1", "-z", "--untracked-files=all");
         var unexpected = ParseGitStatus(status).Where(path => !allowedGeneratedPaths.Contains(path)).ToArray();
-        if (unexpected.Length > 0 && !allowDirty)
+        if (unexpected.Length > 0)
         {
             throw new ProbeFailureException($"A promotable probe artifact requires an exact source tree; unexpected change " + $"'{unexpected[0]}'.");
         }
@@ -760,14 +760,12 @@ sealed class ProbeOptions
         Build and development:
           --repository-root <path>
           --configuration <Debug|Release>      Default: Release.
-          --allow-uncommitted-source-for-development
           --self-test
           --help
         """;
 
     public bool ShowHelp { get; private set; }
     public bool SelfTest { get; private set; }
-    public bool AllowUncommittedSourceForDevelopment { get; private set; }
     public string? RepositoryRoot { get; private set; }
     public string? ProfilePath { get; private set; }
     public string? PreflightProfilePath { get; private set; }
@@ -794,9 +792,6 @@ sealed class ProbeOptions
             {
                 case "--help" or "-h": options.ShowHelp = true; break;
                 case "--self-test": options.SelfTest = true; break;
-                case "--allow-uncommitted-source-for-development":
-                    options.AllowUncommittedSourceForDevelopment = true;
-                    break;
                 case "--repository-root": options.RepositoryRoot = Value(); break;
                 case "--profile": options.ProfilePath = Value(); break;
                 case "--preflight-profile": options.PreflightProfilePath = Value(); break;

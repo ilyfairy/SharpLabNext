@@ -5,12 +5,12 @@ param(
     [string]$Target,
     [ValidateRange(1, 8)]
     [int]$MaxParallel = 5,
-    [switch]$AllowUncommittedSourceForDevelopment,
     [switch]$AcceptMicrosoftLicenses,
     [switch]$Offline,
     [switch]$PlanOnly,
     [switch]$CacheProbe,
     [switch]$NoReuseExisting,
+    [string[]]$RebuildTarget,
     [switch]$All
 )
 
@@ -26,12 +26,12 @@ if (-not [string]::IsNullOrWhiteSpace($SourceRevision)) {
     $arguments += @("--source-revision", $SourceRevision)
 }
 if (-not [string]::IsNullOrWhiteSpace($Target)) { $arguments += @("--target", $Target) }
-if ($AllowUncommittedSourceForDevelopment) { $arguments += "--allow-uncommitted-source-for-development" }
 if ($AcceptMicrosoftLicenses) { $arguments += "--accept-microsoft-licenses" }
 if ($Offline) { $arguments += "--offline" }
 if ($PlanOnly) { $arguments += "--plan-only" }
 if ($CacheProbe) { $arguments += "--cache-probe" }
 if ($NoReuseExisting) { $arguments += "--no-reuse-existing" }
+foreach ($value in $RebuildTarget) { $arguments += @("--rebuild-target", $value) }
 if ($All) { $arguments += "--all" }
 
 & node @arguments

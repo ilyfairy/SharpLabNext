@@ -15,6 +15,7 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const wineImage = `localhost:5000/wine@sha256:${'a'.repeat(64)}`
 const rootImage = `mcr.microsoft.com/dotnet/runtime-deps@sha256:${'b'.repeat(64)}`
 const manifest = readPrerequisiteManifest(path.join(repositoryRoot, 'eng', 'release-prerequisites.json'));
+const capabilityDefinitions = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'deploy', 'images.json'), 'utf8')).capabilityDefinitions;
 const frameworkSeeds = Object.freeze({
   clr2: `localhost:5000/framework-clr2@sha256:${'a'.repeat(64)}`,
   clr4: `localhost:5000/framework-clr4@sha256:${'b'.repeat(64)}`,
@@ -56,8 +57,8 @@ test('Framework seed build input closes exactly two shared companion identities'
   assert.notEqual(changed.inputSha256, spec.inputSha256)
 })
 
-test('operator image build input binds source recipes and both Framework seeds', async () => {
-  const spec = await createOperatorImageBuildSpec(repositoryRoot, manifest, frameworkSeeds)
+test('operator image build input binds declared recipes and Framework seeds', async () => {
+  const spec = await createOperatorImageBuildSpec(repositoryRoot, manifest, frameworkSeeds, capabilityDefinitions)
 
   assert.match(spec.inputSha256, /^[0-9a-f]{64}$/)
   assert.equal(spec.descriptor.strategy, 'source-built-operator-image-v1')
@@ -66,20 +67,31 @@ test('operator image build input binds source recipes and both Framework seeds',
     { id: 'cppcli-prepared-base', buildKind: 'cppcli' },
   ])
   assert.deepEqual(spec.descriptor.files.map(file => file.path), [
-    '.dockerignore',
-    '.gitattributes',
-    'deploy/docker/Dockerfile.operator-jsharp20',
-    'deploy/docker/Dockerfile.operator-cppcli-base',
-    'deploy/docker/cppcli-netfx-env.sh',
-    'deploy/docker/extract-netfx48-sdk.py',
-    'eng/tools/prepare-jsharp-toolchain.cs',
-    'eng/tools/prepare-cppcli-toolchain.cs',
-    'eng/release-prerequisites.json',
+    '.dockerignore', '.gitattributes', 'eng/release-prerequisites.json',
+    'eng/tools/prepare-jsharp-toolchain.cs', 'deploy/docker/Dockerfile.operator-jsharp20',
+    'eng/tools/prepare-cppcli-toolchain.cs', 'deploy/docker/Dockerfile.operator-cppcli-base',
+    'deploy/docker/cppcli-netfx-env.sh', 'deploy/docker/extract-netfx48-sdk.py',
   ])
 
   const changed = await createOperatorImageBuildSpec(repositoryRoot, manifest, {
     ...frameworkSeeds,
     clr2: `localhost:5000/framework-clr2@sha256:${'c'.repeat(64)}`,
-  })
+  }, capabilityDefinitions)
   assert.notEqual(changed.inputSha256, spec.inputSha256)
+})
+
+test('operator metadata must reference declared prerequisite downloads', async () => {
+  await assert.rejects(
+    createOperatorImageBuildSpec(repositoryRoot, manifest, frameworkSeeds, [{
+      id: 'sample',
+      operator: {
+        imageId: 'cppcli-prepared-base',
+        buildKind: 'cppcli',
+        script: 'eng/tools/prepare-cppcli-toolchain.cs',
+        frameworkSeedGeneration: 'clr4',
+        downloadArguments: [{ option: '--missing', downloadId: 'unknown-download' }],
+      },
+    }]),
+    /references missing prerequisite download/,
+  )
 })

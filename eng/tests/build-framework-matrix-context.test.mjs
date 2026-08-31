@@ -146,7 +146,7 @@ test('push validation rejects local-only operator references and mutable source 
   assert.match(localFailures.join('\n'), /registry-hosted operator/)
 })
 
-test('development build emits only the mocked metadata boundary', () => {
+test('content identity build emits only the mocked metadata boundary', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-context-test-'))
   const input = path.join(root, 'matrix-input.json')
   const document = normalizeMatrixInput(matrix())
@@ -200,8 +200,7 @@ test('development build emits only the mocked metadata boundary', () => {
       '--matrix-input', input,
       '--source-revision', 'development',
       '--image', 'sharplabnext/framework-context:development',
-      '--allow-uncommitted-source-for-development',
-    ], {}, spawn, output)
+    ], { SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }, spawn, output)
     assert.equal(status, 0, output.errors.join('\n'))
     assert.deepEqual(output.errors, [])
     assert.match(output.logs.at(-1), /matrixInputSha256/)

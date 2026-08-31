@@ -7,6 +7,11 @@
   "required": ["schemaVersion", "images"],
   "properties": {
     "schemaVersion": { "const": 1 },
+    "capabilityDefinitions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/capabilityDefinition" }
+    },
     "images": {
       "type": "array",
       "minItems": 1,
@@ -20,6 +25,104 @@
       "maxLength": 128,
       "pattern": "^[a-z0-9][a-z0-9._-]*$"
     },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "immutableReference": {
+      "type": "string",
+      "maxLength": 512,
+      "pattern": "^[^@\\s]+@sha256:[0-9a-f]{64}$"
+    },
+    "environmentVariable": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+    },
+    "capabilityDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "dependencies"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "dependencies": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "provisioner": { "$ref": "#/$defs/capabilityProvisioner" },
+        "runtimeArguments": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/capabilityRuntimeArgument" }
+        },
+        "operator": { "$ref": "#/$defs/capabilityOperator" }
+      }
+    },
+    "capabilityProvisioner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/id" },
+        "requiresPrerequisites": { "type": "boolean" },
+        "requiresRegistry": { "type": "boolean" },
+        "seedGenerations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        }
+      }
+    },
+    "capabilityRuntimeArgument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["option", "sourceCapability", "output"],
+      "properties": {
+        "option": { "type": "string", "minLength": 3, "maxLength": 160, "pattern": "^--[A-Za-z0-9][A-Za-z0-9-]*$" },
+        "sourceCapability": { "$ref": "#/$defs/id" },
+        "output": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z][A-Za-z0-9._-]*$" }
+      }
+    },
+    "capabilityOperator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["imageId", "buildKind", "script"],
+      "properties": {
+        "imageId": { "$ref": "#/$defs/id" },
+        "buildKind": { "$ref": "#/$defs/id" },
+        "script": { "$ref": "#/$defs/relativePath" },
+        "frameworkSeedGeneration": { "$ref": "#/$defs/id" },
+        "environmentVariable": { "$ref": "#/$defs/environmentVariable" },
+        "downloadArguments": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/downloadArgument" }
+        },
+        "licenseArguments": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^--[A-Za-z0-9][A-Za-z0-9-]*$" }
+        },
+        "inputFiles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        }
+      }
+    },
+    "downloadArgument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["option", "downloadId"],
+      "properties": {
+        "option": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^--[A-Za-z0-9][A-Za-z0-9-]*$" },
+        "downloadId": { "$ref": "#/$defs/id" }
+      }
+    },
     "image": {
       "type": "object",
       "additionalProperties": false,
@@ -32,16 +135,19 @@
           "maxLength": 255,
           "pattern": "^[a-z0-9][a-z0-9.-]*(?::(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(?:/[a-z0-9][a-z0-9._-]*)*$"
         },
-        "immutableReference": {
-          "type": "string",
-          "maxLength": 512,
-          "pattern": "^[^@\\s]+@sha256:[0-9a-f]{64}$"
-        },
+        "ordinaryBakeTarget": { "$ref": "#/$defs/id" },
+        "immutableReference": { "$ref": "#/$defs/immutableReference" },
         "always": { "type": "boolean" },
         "composeService": { "$ref": "#/$defs/id" },
         "toolchainId": { "$ref": "#/$defs/id" },
         "runtimeId": { "$ref": "#/$defs/id" },
         "artifactProcessorId": { "$ref": "#/$defs/id" },
+        "producer": { "$ref": "#/$defs/producer" },
+        "buildCapabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
         "lockComponentId": { "$ref": "#/$defs/id" },
         "lockComponentIds": {
           "type": "array",
@@ -60,6 +166,30 @@
           "maxLength": 160,
           "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
         }
+      }
+    },
+    "producer": {
+      "oneOf": [
+        { "$ref": "#/$defs/generatedProducer" },
+        { "$ref": "#/$defs/pullProducer" }
+      ]
+    },
+    "generatedProducer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["bake", "runtime-candidate"] },
+        "id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "pullProducer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "const": "pull" },
+        "id": { "$ref": "#/$defs/immutableReference" }
       }
     }
   }

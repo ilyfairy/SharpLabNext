@@ -125,9 +125,12 @@ public sealed class BundleBuilderTests
             Assert.Contains("COMPOSE_FILE=compose.prod.yaml:compose.generated.yaml\n", composeEnvironment, StringComparison.Ordinal);
             Assert.Contains($"SHARPLABNEXT_RELEASE_ID={activeReleaseId}\n", composeEnvironment, StringComparison.Ordinal);
             Assert.Contains("SHARPLABNEXT_INTERNAL_SERVICE_TOKEN_FILE=./secrets/internal-service-token\n", composeEnvironment, StringComparison.Ordinal);
+            var defaultTokenPath = Path.Combine(output, ReleaseBundleBuilder.InternalServiceTokenRelativePath.Replace('/', Path.DirectorySeparatorChar));
+            Assert.Equal(ReleaseBundleBuilder.DefaultInternalServiceToken + "\n", await File.ReadAllTextAsync(defaultTokenPath, TestContext.Current.CancellationToken));
             Assert.False(File.Exists(Path.Combine(output, "deploy.env")));
             Assert.False(File.Exists(Path.Combine(output, "deploy.env.example")));
             Assert.Contains("  .env\n", await File.ReadAllTextAsync(Path.Combine(output, "checksums.sha256"), TestContext.Current.CancellationToken), StringComparison.Ordinal);
+            Assert.Contains($"  {ReleaseBundleBuilder.InternalServiceTokenRelativePath}\n", await File.ReadAllTextAsync(Path.Combine(output, "checksums.sha256"), TestContext.Current.CancellationToken), StringComparison.Ordinal);
             Assert.True(File.Exists(Path.Combine(output, "sbom", "release.spdx.json")));
             Assert.True(File.Exists(Path.Combine(output, "sbom", "release.cdx.json")));
             Assert.True(File.Exists(Path.Combine(output, "sbom", "dependencies.json")));
@@ -177,15 +180,6 @@ public sealed class BundleBuilderTests
             Assert.True(File.Exists(Path.Combine(output, "provenance", "maintained", "jsharp.json")));
             Assert.True(File.Exists(Path.Combine(output, "provenance", "maintained", "jsil.json")));
             Assert.True(File.Exists(Path.Combine(output, "base-images.json")));
-            Assert.True(File.Exists(Path.Combine(output, "install.ps1")));
-            Assert.True(File.Exists(Path.Combine(output, "install.sh")));
-            Assert.True(File.Exists(Path.Combine(output, "rollback.ps1")));
-            Assert.True(File.Exists(Path.Combine(output, "rollback.sh")));
-            Assert.True(File.Exists(Path.Combine(output, "smoke.ps1")));
-            Assert.True(File.Exists(Path.Combine(output, "smoke.sh")));
-            Assert.True(File.Exists(Path.Combine(output, "deployment-common.ps1")));
-            Assert.True(File.Exists(Path.Combine(output, "deployment-common.sh")));
-            Assert.True(File.Exists(Path.Combine(output, "deploy.sh")));
             Assert.True(File.Exists(Path.Combine(output, "profile-update-status.json")));
             foreach (var jsonPath in Directory.EnumerateFiles(output, "*.json", SearchOption.AllDirectories))
             {
@@ -317,55 +311,6 @@ public sealed class BundleBuilderTests
                 Assert.False(string.IsNullOrWhiteSpace(materialPath));
                 Assert.True(Directory.Exists(Path.Combine(output, materialPath!.Replace('/', Path.DirectorySeparatorChar))));
             }
-
-            var installShell = await File.ReadAllTextAsync(Path.Combine(output, "install.sh"), TestContext.Current.CancellationToken);
-            var deployShell = await File.ReadAllTextAsync(Path.Combine(output, "deploy.sh"), TestContext.Current.CancellationToken);
-            var installPowerShell = await File.ReadAllTextAsync(Path.Combine(output, "install.ps1"), TestContext.Current.CancellationToken);
-            var commonShell = await File.ReadAllTextAsync(Path.Combine(output, "deployment-common.sh"), TestContext.Current.CancellationToken);
-            var rollbackPowerShell = await File.ReadAllTextAsync(Path.Combine(output, "rollback.ps1"), TestContext.Current.CancellationToken);
-            var commonPowerShell = await File.ReadAllTextAsync(Path.Combine(output, "deployment-common.ps1"), TestContext.Current.CancellationToken);
-            var verifyPowerShell = await File.ReadAllTextAsync(Path.Combine(output, "verify.ps1"), TestContext.Current.CancellationToken);
-            Assert.Contains("--pull never --no-build", commonShell, StringComparison.Ordinal);
-            Assert.Contains("${HOME:?HOME is required}/sharplabnext", deployShell, StringComparison.Ordinal);
-            Assert.Contains("$install_root/secrets/internal-service-token", deployShell, StringComparison.Ordinal);
-            Assert.Contains("openssl rand -base64 48", deployShell, StringComparison.Ordinal);
-            Assert.Contains("DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)", deployShell, StringComparison.Ordinal);
-            Assert.Contains("--skip-artifact-backup", deployShell, StringComparison.Ordinal);
-            Assert.Contains("--current-only", deployShell, StringComparison.Ordinal);
-            Assert.Contains("$install_root/$deploy_pointer_name", deployShell, StringComparison.Ordinal);
-            Assert.Contains("docker ps -aq --filter", deployShell, StringComparison.Ordinal);
-            Assert.Contains("docker image rm", deployShell, StringComparison.Ordinal);
-            Assert.DoesNotContain("docker system prune", deployShell, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("ssh", deployShell, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("scp", deployShell, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("readiness checks", installShell, StringComparison.Ordinal);
-            Assert.Contains("install_release_assets", installShell, StringComparison.Ordinal);
-            Assert.Contains("validate_container_secret_file", installShell, StringComparison.Ordinal);
-            Assert.Contains("SHARPLABNEXT_INTERNAL_SERVICE_TOKEN_FILE", installShell, StringComparison.Ordinal);
-            Assert.Contains("Resolve-ContainerSecretFile", installPowerShell, StringComparison.Ordinal);
-            Assert.Contains("SHARPLABNEXT_INTERNAL_SERVICE_TOKEN_FILE", installPowerShell, StringComparison.Ordinal);
-            Assert.Contains("Internal service token", installPowerShell, StringComparison.Ordinal);
-            Assert.Contains("GitHub OAuth client secret", installPowerShell, StringComparison.Ordinal);
-            Assert.Contains("must be readable by container UID/GID 1654", commonShell, StringComparison.Ordinal);
-            Assert.Contains("must not be readable by other host users", commonShell, StringComparison.Ordinal);
-            Assert.Contains("does not exist", commonPowerShell, StringComparison.Ordinal);
-            Assert.Contains("is not readable", commonPowerShell, StringComparison.Ordinal);
-            Assert.Contains("deployment.sha256", commonPowerShell, StringComparison.Ordinal);
-            Assert.Contains("Restore-InstalledRelease", rollbackPowerShell, StringComparison.Ordinal);
-            Assert.Contains("TrustedPublicKeySha256", verifyPowerShell, StringComparison.Ordinal);
-            Assert.Contains("ExpectedSigningKeyId", verifyPowerShell, StringComparison.Ordinal);
-            Assert.Contains("Backup-ArtifactStore", commonPowerShell, StringComparison.Ordinal);
-            Assert.Contains("Restore-ArtifactStoreBackup", commonPowerShell, StringComparison.Ordinal);
-            Assert.Contains("--network none", commonPowerShell, StringComparison.Ordinal);
-            Assert.Contains("images.expected", commonPowerShell, StringComparison.Ordinal);
-            Assert.Contains("profile-update-status.json", commonShell, StringComparison.Ordinal);
-            Assert.Contains("profile-update-status.json", commonPowerShell, StringComparison.Ordinal);
-            Assert.Contains(ReleaseBundleBuilder.DisabledGitHubOAuthSecretFileName, commonShell, StringComparison.Ordinal);
-            Assert.Contains(ReleaseBundleBuilder.DisabledGitHubOAuthSecretFileName, commonPowerShell, StringComparison.Ordinal);
-            Assert.Contains("security/sharplabnext-runtime-job-v1.apparmor", commonShell, StringComparison.Ordinal);
-            Assert.Contains("security/sharplabnext-runtime-job-v1.apparmor", commonPowerShell, StringComparison.Ordinal);
-            Assert.Contains("security/licenses/moby-profiles-Apache-2.0.txt", commonShell, StringComparison.Ordinal);
-            Assert.Contains("security/licenses/moby-profiles-Apache-2.0.txt", commonPowerShell, StringComparison.Ordinal);
 
             var productionCompose = await File.ReadAllTextAsync(Path.Combine(output, "compose.prod.yaml"), TestContext.Current.CancellationToken);
             Assert.Contains("source: ./profile-update-status.json", productionCompose, StringComparison.Ordinal);
@@ -551,340 +496,9 @@ public sealed class BundleBuilderTests
         }
     }
 
-    [Fact]
-    public async Task PowerShellVerifierRejectsMissingAndUnchecksummedPromotionEvidence()
-    {
-        if (!OperatingSystem.IsWindows())
-            return;
 
-        var repositoryRoot = FindRepositoryRoot();
-        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-promotion-evidence-verify-{Guid.NewGuid():N}");
-        var bundle = Path.Combine(testRoot, "bundle");
-        var fakeBin = Path.Combine(testRoot, "bin");
-        Directory.CreateDirectory(fakeBin);
-        try
-        {
-            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundle, "promotion-evidence");
-            await File.WriteAllTextAsync(Path.Combine(fakeBin, "docker.cmd"), "@echo off\r\n" + "setlocal EnableDelayedExpansion\r\n" + "set last=\r\n" + "for %%a in (%*) do set last=%%~a\r\n" + "echo %* | %SystemRoot%\\System32\\findstr.exe /C:\"image inspect\" >nul && (echo !last!& exit /b 0)\r\n" + "echo %* | %SystemRoot%\\System32\\findstr.exe /C:\"compose\" >nul && exit /b 0\r\n" + "exit /b 0\r\n", TestContext.Current.CancellationToken);
-            await File.WriteAllTextAsync(Path.Combine(fakeBin, "openssl.cmd"), "@echo off\r\nexit /b 0\r\n", TestContext.Current.CancellationToken);
-            var environment = new Dictionary<string, string>
-            {
-                ["PATH"] = string.Concat(fakeBin, ";", Environment.GetEnvironmentVariable("PATH"))
-            };
-            var verify = Path.Combine(bundle, "verify.ps1");
-            var initial = await RunAsync("pwsh", ["-NoProfile", "-File", verify, "-AllowUnsigned"], environment);
-            Assert.True(initial.ExitCode == 0, $"Initial offline verification failed. stdout: {initial.StandardOutput}{Environment.NewLine}stderr: {initial.StandardError}");
 
-            var materializeScript = Path.Combine(testRoot, "materialize-installed.ps1");
-            await File.WriteAllTextAsync(materializeScript, "param([string]$Bundle, [string]$InstallRoot, [string]$ReleaseId)\n" + ". (Join-Path $Bundle 'deployment-common.ps1')\n" + "Install-ReleaseAssets $Bundle $InstallRoot $ReleaseId | Out-Null\n", TestContext.Current.CancellationToken);
-            var installedRoot = Path.Combine(testRoot, "installed", "releases", "promotion-evidence");
-            var materializeInstalled = await RunAsync(
-                "pwsh",
-                [
-                    "-NoProfile",
-                    "-File",
-                    materializeScript,
-                    bundle,
-                    Path.Combine(testRoot, "installed"),
-                    "promotion-evidence"
-                ],
-                environment);
-            Assert.True(materializeInstalled.ExitCode == 0, $"Installed-copy materialization failed. stdout: {materializeInstalled.StandardOutput}{Environment.NewLine}stderr: {materializeInstalled.StandardError}");
-            var installedUnsigned = await RunAsync("pwsh", ["-NoProfile", "-File", Path.Combine(installedRoot, "verify.ps1"), "-AllowUnsigned", "-InstalledCopy"], environment);
-            Assert.True(installedUnsigned.ExitCode == 0, $"Unsigned installed-copy verification failed. stdout: {installedUnsigned.StandardOutput}{Environment.NewLine}stderr: {installedUnsigned.StandardError}");
 
-            var deploymentChecksumPath = Path.Combine(installedRoot, "deployment.sha256");
-            var deploymentChecksumBytes = await File.ReadAllBytesAsync(deploymentChecksumPath, TestContext.Current.CancellationToken);
-            await File.AppendAllTextAsync(deploymentChecksumPath, "invalid installed deployment line\n", TestContext.Current.CancellationToken);
-            var tamperedDeploymentManifest = await RunAsync("pwsh", ["-NoProfile", "-File", Path.Combine(installedRoot, "verify.ps1"), "-AllowUnsigned", "-InstalledCopy"], environment);
-            Assert.NotEqual(0, tamperedDeploymentManifest.ExitCode);
-            Assert.Contains("deployment checksum manifest", tamperedDeploymentManifest.StandardOutput + tamperedDeploymentManifest.StandardError, StringComparison.OrdinalIgnoreCase);
-            await File.WriteAllBytesAsync(deploymentChecksumPath, deploymentChecksumBytes, TestContext.Current.CancellationToken);
-
-            var incomingDeploymentChecksum = Path.Combine(bundle, "deployment.sha256");
-            File.Copy(deploymentChecksumPath, incomingDeploymentChecksum);
-            var incomingWithDeploymentManifest = await RunAsync("pwsh", ["-NoProfile", "-File", verify, "-AllowUnsigned"], environment);
-            Assert.NotEqual(0, incomingWithDeploymentManifest.ExitCode);
-            Assert.Contains("unchecksummed", incomingWithDeploymentManifest.StandardOutput + incomingWithDeploymentManifest.StandardError, StringComparison.OrdinalIgnoreCase);
-            File.Delete(incomingDeploymentChecksum);
-
-            var originalBundleBytes = await File.ReadAllBytesAsync(Path.Combine(bundle, "bundle.json"), TestContext.Current.CancellationToken);
-            var originalChecksumBytes = await File.ReadAllBytesAsync(Path.Combine(bundle, "checksums.sha256"), TestContext.Current.CancellationToken);
-            var publicKeyBytes = "installed-copy test public key"u8.ToArray();
-            await File.WriteAllBytesAsync(Path.Combine(bundle, "signing-public-key.pem"), publicKeyBytes, TestContext.Current.CancellationToken);
-            var signedBundle = JsonNode.Parse(originalBundleBytes) ?? throw new InvalidOperationException("Installed-copy test bundle is empty.");
-            signedBundle["hasSignature"] = true;
-            signedBundle["signatureAlgorithm"] = "ed25519";
-            signedBundle["signatureKeyId"] = "installed-copy-test";
-            signedBundle["signingPublicKeySha256"] = Convert.ToHexStringLower(SHA256.HashData(publicKeyBytes));
-            await File.WriteAllTextAsync(Path.Combine(bundle, "bundle.json"), signedBundle.ToJsonString(new JsonSerializerOptions { WriteIndented = true }), TestContext.Current.CancellationToken);
-            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
-            await File.WriteAllTextAsync(Path.Combine(bundle, "checksums.sha256.sig"), "test signature", TestContext.Current.CancellationToken);
-            var signedInstallBase = Path.Combine(testRoot, "installed-signed");
-            var signedInstalledRoot = Path.Combine(signedInstallBase, "releases", "promotion-evidence");
-            var materializeSigned = await RunAsync(
-                "pwsh",
-                [
-                    "-NoProfile",
-                    "-File",
-                    materializeScript,
-                    bundle,
-                    signedInstallBase,
-                    "promotion-evidence"
-                ],
-                environment);
-            Assert.True(materializeSigned.ExitCode == 0, $"Signed installed-copy materialization failed. stdout: {materializeSigned.StandardOutput}{Environment.NewLine}stderr: {materializeSigned.StandardError}");
-            var installedSigned = await RunAsync("pwsh", ["-NoProfile", "-File", Path.Combine(signedInstalledRoot, "verify.ps1"), "-TrustBundledPublicKey", "-InstalledCopy"], environment);
-            Assert.True(installedSigned.ExitCode == 0, $"Signed installed-copy verification failed. stdout: {installedSigned.StandardOutput}{Environment.NewLine}stderr: {installedSigned.StandardError}");
-            File.Delete(Path.Combine(bundle, "checksums.sha256.sig"));
-            File.Delete(Path.Combine(bundle, "signing-public-key.pem"));
-            await File.WriteAllBytesAsync(Path.Combine(bundle, "bundle.json"), originalBundleBytes, TestContext.Current.CancellationToken);
-            await File.WriteAllBytesAsync(Path.Combine(bundle, "checksums.sha256"), originalChecksumBytes, TestContext.Current.CancellationToken);
-
-            using var document = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, "manifest.json"), TestContext.Current.CancellationToken));
-            var entryPath = document.RootElement.GetProperty("entries")[0].GetProperty("bundlePath").GetString() ?? throw new InvalidOperationException("Promotion evidence fixture has no bundle path.");
-            var evidencePath = Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, entryPath.Replace('/', Path.DirectorySeparatorChar));
-            var original = await File.ReadAllBytesAsync(evidencePath, TestContext.Current.CancellationToken);
-            File.Delete(evidencePath);
-            var missing = await RunAsync("pwsh", ["-NoProfile", "-File", verify, "-AllowUnsigned"], environment);
-            Assert.NotEqual(0, missing.ExitCode);
-            Assert.Contains("Missing bundle file", missing.StandardOutput + missing.StandardError, StringComparison.Ordinal);
-
-            await File.WriteAllBytesAsync(evidencePath, original, TestContext.Current.CancellationToken);
-            foreach (var requiredKind in new[] { "performance-policy", "active-profile" })
-            {
-                var requiredPath = document.RootElement.GetProperty("entries").EnumerateArray().First(entry => entry.GetProperty("kind").GetString() == requiredKind).GetProperty("bundlePath").GetString() ?? throw new InvalidOperationException($"Promotion evidence fixture has no {requiredKind} path.");
-                var requiredFile = Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, requiredPath.Replace('/', Path.DirectorySeparatorChar));
-                var requiredBytes = await File.ReadAllBytesAsync(requiredFile, TestContext.Current.CancellationToken);
-                File.Delete(requiredFile);
-                var requiredMissing = await RunAsync("pwsh", ["-NoProfile", "-File", verify, "-AllowUnsigned"], environment);
-                Assert.NotEqual(0, requiredMissing.ExitCode);
-                Assert.Contains("Missing bundle file", requiredMissing.StandardOutput + requiredMissing.StandardError, StringComparison.Ordinal);
-                await File.WriteAllBytesAsync(requiredFile, requiredBytes, TestContext.Current.CancellationToken);
-            }
-
-            var tsvPath = Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, "manifest.tsv");
-            var tsv = await File.ReadAllTextAsync(tsvPath, TestContext.Current.CancellationToken);
-            var promotedLine = tsv.Split('\n')[4];
-            var firstRuntimeId = promotedLine.Split('\t')[1].Split(',')[0];
-            await File.WriteAllTextAsync(tsvPath, tsv.Replace(promotedLine, promotedLine + "," + firstRuntimeId, StringComparison.Ordinal), TestContext.Current.CancellationToken);
-            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
-            var duplicated = await RunAsync("pwsh", ["-NoProfile", "-File", verify, "-AllowUnsigned"], environment);
-            Assert.NotEqual(0, duplicated.ExitCode);
-            Assert.Contains("verification manifests disagree", duplicated.StandardOutput + duplicated.StandardError, StringComparison.OrdinalIgnoreCase);
-            await File.WriteAllTextAsync(tsvPath, tsv, TestContext.Current.CancellationToken);
-
-            var reorderedLines = tsv.Split('\n');
-            (reorderedLines[5], reorderedLines[6]) = (reorderedLines[6], reorderedLines[5]);
-            await File.WriteAllTextAsync(tsvPath, string.Join('\n', reorderedLines), TestContext.Current.CancellationToken);
-            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
-            var reordered = await RunAsync("pwsh", ["-NoProfile", "-File", verify, "-AllowUnsigned"], environment);
-            Assert.NotEqual(0, reordered.ExitCode);
-            Assert.Contains("verification manifests disagree", reordered.StandardOutput + reordered.StandardError, StringComparison.OrdinalIgnoreCase);
-            await File.WriteAllTextAsync(tsvPath, tsv, TestContext.Current.CancellationToken);
-
-            await File.WriteAllTextAsync(tsvPath, tsv.TrimEnd('\n'), TestContext.Current.CancellationToken);
-            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
-            var missingTerminalLf = await RunAsync("pwsh", ["-NoProfile", "-File", verify, "-AllowUnsigned"], environment);
-            Assert.NotEqual(0, missingTerminalLf.ExitCode);
-            Assert.Contains("verification manifests disagree", missingTerminalLf.StandardOutput + missingTerminalLf.StandardError, StringComparison.OrdinalIgnoreCase);
-            await File.WriteAllTextAsync(tsvPath, tsv, TestContext.Current.CancellationToken);
-
-            var manifestPath = Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, "manifest.json");
-            var manifestBytes = await File.ReadAllBytesAsync(manifestPath, TestContext.Current.CancellationToken);
-            var originalManifest = JsonNode.Parse(manifestBytes)?.AsObject() ?? throw new InvalidOperationException("Promotion evidence fixture manifest is invalid.");
-            Assert.Equal(tsv, CreatePromotionEvidenceVerificationManifest(originalManifest, manifestBytes));
-            const string retainedMatrixPath = "profiles/runtime-matrix.json";
-            var retainedMatrixFile = Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, "source", retainedMatrixPath.Replace('/', Path.DirectorySeparatorChar));
-            var retainedMatrixBytes = await File.ReadAllBytesAsync(retainedMatrixFile, TestContext.Current.CancellationToken);
-            var forgedMatrix = JsonNode.Parse(retainedMatrixBytes)?.AsObject() ?? throw new InvalidOperationException("Promotion runtime matrix fixture is invalid.");
-            var forgedTarget = forgedMatrix["coreClr"]?.AsArray().Select(static item => item!.AsObject()).Single(static item => item["id"]!.GetValue<string>() == "dotnet-10") ?? throw new InvalidOperationException("Promotion runtime matrix fixture has no dotnet-10 row.");
-            var forgedCapability = forgedTarget["linuxCapability"]!.AsObject();
-            forgedCapability["promotionState"] = "blocked";
-            forgedCapability.Remove("promotionReceipt");
-            var forgedMatrixBytes = Encoding.UTF8.GetBytes((forgedMatrix.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n").ReplaceLineEndings("\n"));
-            await ReplacePromotionEvidenceSourcesAndRechecksumAsync(
-                bundle,
-                new Dictionary<string, byte[]>(StringComparer.Ordinal)
-                {
-                    [retainedMatrixPath] = forgedMatrixBytes
-                });
-            var matrixForgery = await RunAsync("pwsh", ["-NoProfile", "-File", verify, "-AllowUnsigned"], environment);
-            Assert.NotEqual(0, matrixForgery.ExitCode);
-            var matrixForgeryOutput = matrixForgery.StandardOutput + matrixForgery.StandardError;
-            Assert.True(matrixForgeryOutput.Contains("derived from runtime matrix", StringComparison.OrdinalIgnoreCase), matrixForgeryOutput);
-            await ReplacePromotionEvidenceSourcesAndRechecksumAsync(
-                bundle,
-                new Dictionary<string, byte[]>(StringComparer.Ordinal)
-                {
-                    [retainedMatrixPath] = retainedMatrixBytes
-                });
-            await File.WriteAllBytesAsync(manifestPath, manifestBytes, TestContext.Current.CancellationToken);
-            await File.WriteAllTextAsync(tsvPath, tsv, TestContext.Current.CancellationToken);
-            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
-
-            await File.WriteAllBytesAsync(manifestPath, [0xEF, 0xBB, 0xBF, ..manifestBytes], TestContext.Current.CancellationToken);
-            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
-            var bom = await RunAsync("pwsh", ["-NoProfile", "-File", verify, "-AllowUnsigned"], environment);
-            Assert.NotEqual(0, bom.ExitCode);
-            Assert.Contains("without BOM", bom.StandardOutput + bom.StandardError, StringComparison.OrdinalIgnoreCase);
-            await File.WriteAllBytesAsync(manifestPath, manifestBytes, TestContext.Current.CancellationToken);
-
-            await File.WriteAllTextAsync(tsvPath, tsv.Replace("manifestJsonSha256\tsha256:", "manifestJsonSha256\tsha256:0", StringComparison.Ordinal), TestContext.Current.CancellationToken);
-            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
-            var mismatched = await RunAsync("pwsh", ["-NoProfile", "-File", verify, "-AllowUnsigned"], environment);
-            Assert.NotEqual(0, mismatched.ExitCode);
-            Assert.Contains("verification manifests disagree", mismatched.StandardOutput + mismatched.StandardError, StringComparison.OrdinalIgnoreCase);
-            await File.WriteAllTextAsync(tsvPath, tsv, TestContext.Current.CancellationToken);
-            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
-
-            var tsvBytes = await File.ReadAllBytesAsync(tsvPath, TestContext.Current.CancellationToken);
-            await File.WriteAllBytesAsync(tsvPath, [0xEF, 0xBB, 0xBF, ..tsvBytes], TestContext.Current.CancellationToken);
-            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
-            var tsvBom = await RunAsync("pwsh", ["-NoProfile", "-File", verify, "-AllowUnsigned"], environment);
-            Assert.NotEqual(0, tsvBom.ExitCode);
-            Assert.Contains("without BOM", tsvBom.StandardOutput + tsvBom.StandardError, StringComparison.OrdinalIgnoreCase);
-            await File.WriteAllBytesAsync(tsvPath, tsvBytes, TestContext.Current.CancellationToken);
-            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
-
-            await File.WriteAllTextAsync(Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, "unexpected.txt"), "unexpected", TestContext.Current.CancellationToken);
-            var extra = await RunAsync("pwsh", ["-NoProfile", "-File", verify, "-AllowUnsigned"], environment);
-            Assert.NotEqual(0, extra.ExitCode);
-            Assert.Contains("unchecksummed", extra.StandardOutput + extra.StandardError, StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-                Directory.Delete(testRoot, recursive: true);
-        }
-    }
-
-    [Fact]
-    public async Task PosixVerifierVerifiesInstalledBundleAndRejectsRechecksummedPromotionTrustMutations()
-    {
-        if (!OperatingSystem.IsLinux() || !await HasPosixVerifierPrerequisitesAsync())
-            return;
-
-        var repositoryRoot = FindRepositoryRoot();
-        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-posix-promotion-verify-{Guid.NewGuid():N}");
-        var bundle = Path.Combine(testRoot, "bundle");
-        var fakeBin = Path.Combine(testRoot, "bin");
-        var environment = new Dictionary<string, string>
-        {
-            ["PATH"] = string.Concat(fakeBin, ":", Environment.GetEnvironmentVariable("PATH"))
-        };
-        Directory.CreateDirectory(fakeBin);
-        try
-        {
-            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundle, "promotion-evidence");
-            await WriteExecutableAsync(
-                Path.Combine(fakeBin, "docker"),
-                """
-                #!/usr/bin/env sh
-                set -eu
-                if [ "${1:-}" = image ] && [ "${2:-}" = inspect ]; then
-                  for argument in "$@"; do
-                    case "$argument" in sha256:*) printf '%s\n' "$argument"; exit 0;; esac
-                  done
-                fi
-                if [ "${1:-}" = compose ]; then exit 0; fi
-                exit 0
-                """);
-
-            await ReleaseBundleBuilder.WriteChecksumsAsync(bundle, TestContext.Current.CancellationToken);
-            var initial = await RunAsync("sh", [Path.Combine(bundle, "verify.sh"), "--allow-unsigned"], environment);
-            Assert.True(initial.ExitCode == 0, $"Initial POSIX offline verification failed. stdout: {initial.StandardOutput}{Environment.NewLine}stderr: {initial.StandardError}");
-
-            var installer = Path.Combine(testRoot, "install.sh");
-            await WriteExecutableAsync(
-                installer,
-                """
-                #!/usr/bin/env sh
-                set -eu
-                . "$1"
-                install_release_assets "$2" "$3" "$4" >/dev/null
-                """);
-            var installRoot = Path.Combine(testRoot, "installed");
-            var materialize = await RunAsync("sh", [installer, Path.Combine(bundle, "deployment-common.sh"), bundle, installRoot, "promotion-evidence"], environment);
-            Assert.True(materialize.ExitCode == 0, $"POSIX installed-copy materialization failed. stdout: {materialize.StandardOutput}{Environment.NewLine}stderr: {materialize.StandardError}");
-            var installed = await RunAsync("sh", [Path.Combine(installRoot, "releases", "promotion-evidence", "verify.sh"), "--allow-unsigned", "--installed-copy"], environment);
-            Assert.True(installed.ExitCode == 0, $"POSIX installed-copy verification failed. stdout: {installed.StandardOutput}{Environment.NewLine}stderr: {installed.StandardError}");
-
-            var promotionRoot = Path.Combine(bundle, ReleaseBundleBuilder.PromotionEvidenceDirectoryName, "source");
-            var candidatePath = "profiles/runtimes/candidates/dotnet-10-linux-x64.json";
-            var candidateBundle = Path.Combine(testRoot, "candidate-tampered");
-            CopyDirectory(bundle, candidateBundle);
-            var candidateBytes = await File.ReadAllBytesAsync(Path.Combine(promotionRoot, candidatePath.Replace('/', Path.DirectorySeparatorChar)), TestContext.Current.CancellationToken);
-            await ReplacePromotionEvidenceSourcesAndRechecksumAsync(
-                candidateBundle,
-                new Dictionary<string, byte[]>(StringComparer.Ordinal)
-                {
-                    [candidatePath] = [..candidateBytes, (byte)' ']
-                });
-            var candidateTampered = await RunAsync("sh", [Path.Combine(candidateBundle, "verify.sh"), "--allow-unsigned"], environment);
-            Assert.NotEqual(0, candidateTampered.ExitCode);
-            Assert.Contains("Promotion retained source digest mismatch", candidateTampered.StandardOutput + candidateTampered.StandardError, StringComparison.Ordinal);
-
-            var signatureBundle = Path.Combine(testRoot, "signature-tampered");
-            CopyDirectory(bundle, signatureBundle);
-            await CreateRechecksummedPlanSignatureMutationAsync(signatureBundle);
-            var signatureTampered = await RunAsync("sh", [Path.Combine(signatureBundle, "verify.sh"), "--allow-unsigned"], environment);
-            Assert.NotEqual(0, signatureTampered.ExitCode);
-            Assert.Contains("Promotion plan dotnet-10-linux-x64 signature verification failed", signatureTampered.StandardOutput + signatureTampered.StandardError, StringComparison.Ordinal);
-
-            var familyBundle = Path.Combine(testRoot, "family-tampered");
-            CopyDirectory(bundle, familyBundle);
-            await CreateRechecksummedPlanFamilyMutationAsync(familyBundle);
-            var familyTampered = await RunAsync("sh", [Path.Combine(familyBundle, "verify.sh"), "--allow-unsigned"], environment);
-            Assert.NotEqual(0, familyTampered.ExitCode);
-            Assert.Contains("missing its required Wine operator binding", familyTampered.StandardOutput + familyTampered.StandardError, StringComparison.Ordinal);
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-                Directory.Delete(testRoot, recursive: true);
-        }
-    }
-
-    [Fact]
-    public async Task PosixVerifierDoesNotMaskPromotionJsonFailuresInPipelines()
-    {
-        var repositoryRoot = FindRepositoryRoot();
-        var script = await File.ReadAllTextAsync(Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "verify.sh"), TestContext.Current.CancellationToken);
-
-        Assert.Contains("jq -se", script, StringComparison.Ordinal);
-        Assert.Contains("\"$receipt_file\" > \"$promotion_checks\"", script, StringComparison.Ordinal);
-        Assert.Contains("done < \"$promotion_checks\"", script, StringComparison.Ordinal);
-        Assert.Contains("promotion-evidence/manifest.json > \"$promotion_actual_triples_unsorted\"", script, StringComparison.Ordinal);
-        Assert.Contains("verify_canonical_ed25519_signature", script, StringComparison.Ordinal);
-        Assert.Contains("plan-signature-public-key", script, StringComparison.Ordinal);
-        Assert.Contains("operator-receipt-signature", script, StringComparison.Ordinal);
-        Assert.Contains("candidate-profile", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("\"$receipt_file\" | while", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("promotion-evidence/manifest.json | sort", script, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task OfflineVerifiersDeriveWineOperatorRequirementsFromTheSignedPlanFamily()
-    {
-        var repositoryRoot = FindRepositoryRoot();
-        var deploymentScripts = Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts");
-        var powerShell = await File.ReadAllTextAsync(Path.Combine(deploymentScripts, "verify.ps1"), TestContext.Current.CancellationToken);
-        var posix = await File.ReadAllTextAsync(Path.Combine(deploymentScripts, "verify.sh"), TestContext.Current.CancellationToken);
-
-        foreach (var script in new[] { powerShell, posix })
-        {
-            Assert.Contains("coreclr-wine", script, StringComparison.Ordinal);
-            Assert.Contains("netfx-clr-wine", script, StringComparison.Ordinal);
-            Assert.Contains("missing its required Wine operator binding", script, StringComparison.Ordinal);
-            Assert.Contains("missing required Wine operator evidence", script, StringComparison.Ordinal);
-            Assert.Contains("must not declare a Wine operator binding", script, StringComparison.Ordinal);
-            Assert.Contains("must not retain Wine operator evidence", script, StringComparison.Ordinal);
-        }
-
-        Assert.True(powerShell.IndexOf("$requiresWineOperator = switch", StringComparison.Ordinal) < powerShell.IndexOf("if ($requiresWineOperator)", StringComparison.Ordinal));
-        Assert.True(posix.IndexOf("family=$(jq -er '.family' \"$plan_file\")", StringComparison.Ordinal) < posix.IndexOf("if [ \"$requires_wine_operator\" = true ]", StringComparison.Ordinal));
-    }
 
     [Fact]
     public void ImagePrefixUsesTheDeploymentImageName()
@@ -898,27 +512,27 @@ public sealed class BundleBuilderTests
     [Fact]
     public void SourceProvenanceUsesAnUnverifiedIdentityForMissingHeadAndDirtyTrees()
     {
-        var noHead = RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(true, null, true), requestedRevision: null, allowUncommittedSourceForDevelopment: false);
+        var noHead = RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(true, null, true), requestedRevision: null);
         Assert.Equal(RepositorySourceProvenanceResolver.LocalUncommittedRevision, noHead.Revision);
         Assert.False(noHead.IsVerified);
         Assert.True(noHead.DevelopmentOverrideUsed);
 
-        var dirty = RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(true, TestSourceRevision, true), requestedRevision: null, allowUncommittedSourceForDevelopment: false);
+        var dirty = RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(true, TestSourceRevision, true), requestedRevision: null);
         Assert.Equal(TestSourceRevision, dirty.Revision);
         Assert.False(dirty.IsVerified);
         Assert.True(dirty.DevelopmentOverrideUsed);
 
-        var unknown = Assert.Throws<BundleValidationException>(() => RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(false, null, true), requestedRevision: "unknown", allowUncommittedSourceForDevelopment: true));
+        var unknown = Assert.Throws<BundleValidationException>(() => RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(false, null, true), requestedRevision: "unknown"));
         Assert.Contains("cannot be 'unknown'", unknown.Message, StringComparison.Ordinal);
 
-        var mismatch = Assert.Throws<BundleValidationException>(() => RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(true, TestSourceRevision, false), requestedRevision: "cccccccccccccccccccccccccccccccccccccccc", allowUncommittedSourceForDevelopment: false));
+        var mismatch = Assert.Throws<BundleValidationException>(() => RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(true, TestSourceRevision, false), requestedRevision: "cccccccccccccccccccccccccccccccccccccccc"));
         Assert.Contains("does not match Git HEAD", mismatch.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void SourceProvenanceAllowsExplicitDevelopmentOnlyOverride()
+    public void SourceProvenanceUsesFallbackIdentityWithoutGit()
     {
-        var source = RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(false, null, true), requestedRevision: null, allowUncommittedSourceForDevelopment: true);
+        var source = RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(false, null, true), requestedRevision: null);
 
         Assert.Equal(RepositorySourceProvenanceResolver.LocalUncommittedRevision, source.Revision);
         Assert.False(source.IsVerified);
@@ -927,9 +541,9 @@ public sealed class BundleBuilderTests
     }
 
     [Fact]
-    public void CleanGitSourceRemainsVerifiedEvenWhenTheLegacyDevelopmentSwitchIsPresent()
+    public void CleanGitSourceRemainsVerified()
     {
-        var source = RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(true, TestSourceRevision, false), requestedRevision: TestSourceRevision, allowUncommittedSourceForDevelopment: true);
+        var source = RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(true, TestSourceRevision, false), requestedRevision: TestSourceRevision);
 
         Assert.True(source.IsVerified);
         Assert.False(source.DevelopmentOverrideUsed);
@@ -969,7 +583,8 @@ public sealed class BundleBuilderTests
         var repositoryRoot = FindRepositoryRoot();
         var defaultCommand = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot]);
 
-        Assert.Equal(Path.Combine(repositoryRoot, "artifacts", "sharplabnext-candidate"), defaultCommand.OutputDirectory);
+        Assert.Equal(Path.Combine(repositoryRoot, "artifacts", "releases"), Path.GetDirectoryName(defaultCommand.OutputDirectory));
+        Assert.Matches("^sharplabnext-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}$", Path.GetFileName(defaultCommand.OutputDirectory));
 
         var customOutput = Path.Combine(Path.GetTempPath(), $"sharplabnext-custom-{Guid.NewGuid():N}");
         var customCommand = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot, "--output", customOutput]);
@@ -977,10 +592,10 @@ public sealed class BundleBuilderTests
     }
 
     [Fact]
-    public async Task BuilderRejectsSigningWhenDevelopmentSourceOverrideIsUsed()
+    public async Task BuilderRejectsSigningUnverifiedSource()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var command = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot]) with { SigningKeyPath = Path.Combine(repositoryRoot, "local-private.pem"), SigningPublicKeyPath = Path.Combine(repositoryRoot, "local-public.pem"), SourceRevision = "local-test", AllowUncommittedSourceForDevelopment = true };
+        var command = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot]) with { SigningKeyPath = Path.Combine(repositoryRoot, "local-private.pem"), SigningPublicKeyPath = Path.Combine(repositoryRoot, "local-public.pem"), SourceRevision = "local-test" };
         var builder = new ReleaseBundleBuilder(new FakeDockerCli("local-test"), new FakeBundleSigner(), new FakeRepositorySourceInspector(new RepositorySourceState(false, null, true)));
 
         var exception = await Assert.ThrowsAsync<BundleValidationException>(() => builder.BuildAsync(command, TestContext.Current.CancellationToken));
@@ -989,15 +604,16 @@ public sealed class BundleBuilderTests
     }
 
     [Fact]
-    public async Task BuilderRejectsSigningWhenDevelopmentImageInputsAreAllowed()
+    public async Task BuilderRejectsSigningImagesWithLocalInputs()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var command = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot]) with { SigningKeyPath = Path.Combine(repositoryRoot, "local-private.pem"), SigningPublicKeyPath = Path.Combine(repositoryRoot, "local-public.pem"), AllowDevelopmentImageInputs = true };
-        var builder = CreateBuilder(new FakeDockerCli(), new FakeBundleSigner());
+        var existingKey = Path.Combine(repositoryRoot, "eng", "profiles", "trust", "runtime-promotion-plan-public.pem");
+        var command = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot]) with { SigningKeyPath = existingKey, SigningPublicKeyPath = existingKey };
+        var builder = CreateBuilder(new FakeDockerCli(developmentImageInputsLabel: "true"), new FakeBundleSigner());
 
         var exception = await Assert.ThrowsAsync<BundleValidationException>(() => builder.BuildAsync(command, TestContext.Current.CancellationToken));
 
-        Assert.Contains("cannot be used to create a signed", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("cannot be included in a signed bundle", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1018,26 +634,13 @@ public sealed class BundleBuilderTests
     }
 
     [Fact]
-    public async Task BuilderRequiresExplicitOptInForDevelopmentImageInputs()
-    {
-        var repositoryRoot = FindRepositoryRoot();
-        var output = Path.Combine(Path.GetTempPath(), $"sharplabnext-development-image-rejected-{Guid.NewGuid():N}");
-        var command = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot, "--output", output, "--metadata-only"]);
-
-        var exception = await Assert.ThrowsAsync<BundleValidationException>(() => CreateBuilder(new FakeDockerCli(developmentImageInputsLabel: "true")).BuildAsync(command, TestContext.Current.CancellationToken));
-
-        Assert.Contains("--allow-development-image-inputs", exception.Message, StringComparison.Ordinal);
-        Assert.False(Directory.Exists(output));
-    }
-
-    [Fact]
-    public async Task UnsignedBundleRecordsAcceptedDevelopmentImageInputs()
+    public async Task UnsignedBundleAcceptsAndRecordsLocalImageInputs()
     {
         var repositoryRoot = FindRepositoryRoot();
         var output = Path.Combine(Path.GetTempPath(), $"sharplabnext-development-image-accepted-{Guid.NewGuid():N}");
         try
         {
-            var command = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot, "--output", output, "--metadata-only", "--allow-development-image-inputs"]);
+            var command = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot, "--output", output, "--metadata-only"]);
 
             await CreateBuilder(new FakeDockerCli(developmentImageInputsLabel: "true")).BuildAsync(command, TestContext.Current.CancellationToken);
 
@@ -1062,7 +665,7 @@ public sealed class BundleBuilderTests
             "sha256:2121212121212121212121212121212121212121212121212121212121212121";
         try
         {
-            var command = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot, "--output", output, "--metadata-only", "--allow-development-image-inputs"]);
+            var command = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot, "--output", output, "--metadata-only"]);
 
             await CreateBuilder(new FakeDockerCli(developmentImageInputsLabel: "true", frameworkDevelopmentOperatorImage: operatorImage)).BuildAsync(command, TestContext.Current.CancellationToken);
 
@@ -1088,7 +691,7 @@ public sealed class BundleBuilderTests
         const string operatorImage =
             "localhost:5000/sharplabnext-development/operator-netfx20@" +
             "sha256:2121212121212121212121212121212121212121212121212121212121212121";
-        var command = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot, "--output", output, "--metadata-only", "--allow-development-image-inputs"]);
+        var command = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot, "--output", output, "--metadata-only"]);
 
         var exception = await Assert.ThrowsAsync<BundleValidationException>(() => CreateBuilder(new FakeDockerCli(developmentImageInputsLabel: "true", frameworkDevelopmentOperatorImage: operatorImage, tamperFrameworkDevelopmentComponentDigest: true)).BuildAsync(command, TestContext.Current.CancellationToken));
 
@@ -1098,14 +701,14 @@ public sealed class BundleBuilderTests
     }
 
     [Fact]
-    public async Task DevelopmentOptInDoesNotOverrideFrameworkIdentityWithoutImageMarker()
+    public async Task LocalImageInputAcceptanceDoesNotOverrideFrameworkIdentityWithoutImageMarker()
     {
         var repositoryRoot = FindRepositoryRoot();
         var output = Path.Combine(Path.GetTempPath(), $"sharplabnext-framework-development-unmarked-{Guid.NewGuid():N}");
         const string operatorImage =
             "localhost:5000/sharplabnext-development/operator-netfx20@" +
             "sha256:2121212121212121212121212121212121212121212121212121212121212121";
-        var command = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot, "--output", output, "--metadata-only", "--allow-development-image-inputs"]);
+        var command = BundleBuilderCommand.Parse(["--repository-root", repositoryRoot, "--output", output, "--metadata-only"]);
 
         var exception = await Assert.ThrowsAsync<BundleValidationException>(() => CreateBuilder(new FakeDockerCli(frameworkDevelopmentOperatorImage: operatorImage)).BuildAsync(command, TestContext.Current.CancellationToken));
 
@@ -1115,32 +718,23 @@ public sealed class BundleBuilderTests
     }
 
     [Fact]
-    public async Task BuilderRejectsImageBuiltFromAnotherSourceRevision()
+    public void ReusedImageSourceRevisionMayDiffer()
     {
-        var repositoryRoot = FindRepositoryRoot();
-        var output = Path.Combine(Path.GetTempPath(), $"sharplabnext-source-mismatch-{Guid.NewGuid():N}");
-        var command = new BundleBuilderCommand(
-            repositoryRoot,
-            Path.Combine(repositoryRoot, "profiles", "catalog", "catalog.json"),
-            Path.Combine(repositoryRoot, "profiles", "lock.json"),
-            Path.Combine(repositoryRoot, "deploy", "images.json"),
-            Path.Combine(repositoryRoot, "profiles", "license-policy.json"),
-            Path.Combine(repositoryRoot, "deploy", "compose.prod.yaml"),
-            Path.Combine(repositoryRoot, "THIRD-PARTY-NOTICES.md"),
-            output,
-            "docker",
-            "openssl",
-            null,
-            null,
-            null,
-            null,
-            MetadataOnly: true,
-            new Dictionary<string, string>());
+        var definition = new DeploymentImageDefinition { Id = "gateway", Repository = "registry.example/gateway" };
+        var labels = new Dictionary<string, string>(StringComparer.Ordinal) { [RepositorySourceProvenanceResolver.ImageLabel] = new string('b', 40) };
 
-        var exception = await Assert.ThrowsAsync<BundleValidationException>(() => CreateBuilder(new FakeDockerCli("cccccccccccccccccccccccccccccccccccccccc")).BuildAsync(command, TestContext.Current.CancellationToken));
+        ReleaseBundleBuilder.ValidateInspectionSourceRevision(definition, labels, new string('c', 40), promotionBoundRuntime: false, allowDifferentSourceRevision: true);
+    }
 
-        Assert.Contains("source revision label", exception.Message, StringComparison.Ordinal);
-        Assert.False(Directory.Exists(output));
+    [Fact]
+    public void ReusedImageSourceRevisionMustRemainACommitIdentity()
+    {
+        var definition = new DeploymentImageDefinition { Id = "gateway", Repository = "registry.example/gateway" };
+        var labels = new Dictionary<string, string>(StringComparer.Ordinal) { [RepositorySourceProvenanceResolver.ImageLabel] = "invalid" };
+
+        var exception = Assert.Throws<BundleValidationException>(() => ReleaseBundleBuilder.ValidateInspectionSourceRevision(definition, labels, new string('c', 40), promotionBoundRuntime: false, allowDifferentSourceRevision: true));
+
+        Assert.Contains("valid source revision", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1381,934 +975,15 @@ public sealed class BundleBuilderTests
         Assert.DoesNotContain(options.Profiles, static profile => profile.Id.StartsWith("stale-", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public void CommandParsesDevelopmentSourceOptions()
-    {
-        var repositoryRoot = FindRepositoryRoot();
-        var command = BundleBuilderCommand.Parse(
-        [
-            "--repository-root", repositoryRoot,
-            "--source-revision", "local-test",
-            "--allow-uncommitted-source-for-development",
-            "--runtime-profiles", Path.Combine(repositoryRoot, "profiles", "runtimes")
-        ]);
 
-        Assert.Equal("local-test", command.SourceRevision);
-        Assert.True(command.AllowUncommittedSourceForDevelopment);
-        Assert.Equal(Path.Combine(repositoryRoot, "profiles", "runtimes"), command.RuntimeProfilesPath);
-    }
 
-    [Fact]
-    public async Task DeploymentSmokeTemplatesUsePascalCaseApiIdentityAndLowercaseBundleMetadata()
-    {
-        var scriptsRoot = Path.Combine(FindRepositoryRoot(), "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts");
-        var powerShell = await File.ReadAllTextAsync(Path.Combine(scriptsRoot, "smoke.ps1"), TestContext.Current.CancellationToken);
-        var shell = await File.ReadAllTextAsync(Path.Combine(scriptsRoot, "smoke.sh"), TestContext.Current.CancellationToken);
 
-        Assert.Contains("$system.PSObject.Properties.Name -cnotcontains 'ReleaseId'", powerShell, StringComparison.Ordinal);
-        Assert.Contains("$catalog.PSObject.Properties.Name -cnotcontains 'ReleaseId'", powerShell, StringComparison.Ordinal);
-        Assert.Contains("[string]$system.ReleaseId", powerShell, StringComparison.Ordinal);
-        Assert.Contains("[string]$catalog.ReleaseId", powerShell, StringComparison.Ordinal);
-        Assert.Contains("ConvertFrom-Json).releaseId", powerShell, StringComparison.Ordinal);
-        Assert.Contains("\\\"ReleaseId\\\":\\\"$expected_release_id\\\"", shell, StringComparison.Ordinal);
-        Assert.Contains("\"releaseId\"[[:space:]]*:", shell, StringComparison.Ordinal);
-    }
 
-    [Fact]
-    public async Task PowerShellSmokeAcceptsOnlyPascalCaseApiIdentity()
-    {
-        if (!OperatingSystem.IsWindows())
-            return;
 
-        var repositoryRoot = FindRepositoryRoot();
-        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-smoke-ps-{Guid.NewGuid():N}");
-        var fakeBin = Path.Combine(testRoot, "bin");
-        var statePath = Path.Combine(testRoot, "active-release.txt");
-        var failPath = Path.Combine(testRoot, "fail-release.txt");
-        Directory.CreateDirectory(fakeBin);
-        try
-        {
-            await File.WriteAllTextAsync(Path.Combine(testRoot, "bundle.json"), "{\"releaseId\":\"candidate\"}", TestContext.Current.CancellationToken);
-            await File.WriteAllTextAsync(Path.Combine(testRoot, "compose.prod.yaml"), "services: {}", TestContext.Current.CancellationToken);
-            await File.WriteAllTextAsync(Path.Combine(testRoot, "compose.generated.yaml"), "services: {}", TestContext.Current.CancellationToken);
-            await File.WriteAllTextAsync(statePath, "candidate", TestContext.Current.CancellationToken);
-            await File.WriteAllTextAsync(
-                Path.Combine(fakeBin, "docker.cmd"),
-                """
-                @echo off
-                echo %* | %SystemRoot%\System32\findstr.exe /C:"config --services" >nul && (
-                  echo gateway
-                  exit /b 0
-                )
-                echo %* | %SystemRoot%\System32\findstr.exe /C:"ps --status running --services" >nul && (
-                  echo gateway
-                  exit /b 0
-                )
-                exit /b 1
-                """.ReplaceLineEndings("\r\n"),
-                TestContext.Current.CancellationToken);
 
-            var environment = new Dictionary<string, string>
-            {
-                ["PATH"] = $"{fakeBin};{Environment.GetEnvironmentVariable("PATH")}"
-            };
-            var smokeScript = Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "smoke.ps1");
 
-            await using (var server = new FakeReleaseHttpServer(statePath, failPath))
-            {
-                var result = await RunAsync(
-                    "pwsh",
-                    ["-NoProfile", "-File", smokeScript, "-ReleaseRoot", testRoot, "-TimeoutSeconds", "3", "-BaseAddress", $"http://127.0.0.1:{server.Port}"],
-                    environment);
-                Assert.Equal(0, result.ExitCode);
-            }
 
-            await using (var server = new FakeReleaseHttpServer(statePath, failPath, usePascalCase: false))
-            {
-                var result = await RunAsync(
-                    "pwsh",
-                    ["-NoProfile", "-File", smokeScript, "-ReleaseRoot", testRoot, "-TimeoutSeconds", "1", "-BaseAddress", $"http://127.0.0.1:{server.Port}"],
-                    environment);
-                Assert.NotEqual(0, result.ExitCode);
-                Assert.Contains("Gateway release identity does not match.", result.StandardOutput + result.StandardError, StringComparison.Ordinal);
-            }
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-            {
-                Directory.Delete(testRoot, recursive: true);
-            }
-        }
-    }
 
-    [Fact]
-    public async Task CurrentOnlyRetentionRejectsNestedLinksBeforeAnyDeletion()
-    {
-        var repositoryRoot = FindRepositoryRoot();
-        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-current-only-links-{Guid.NewGuid():N}");
-        var installRoot = Path.Combine(testRoot, "installed");
-        var releasesRoot = Path.Combine(installRoot, "releases");
-        var candidateRoot = Path.Combine(releasesRoot, "candidate");
-        var rollbackRoot = Path.Combine(candidateRoot, "rollback");
-        var previousRoot = Path.Combine(releasesRoot, "previous");
-        var additionalPreviousRoot = Path.Combine(releasesRoot, "additional");
-        var outsideRoot = Path.Combine(testRoot, "outside");
-        var nestedLink = Path.Combine(additionalPreviousRoot, "nested-link");
-        Directory.CreateDirectory(rollbackRoot);
-        Directory.CreateDirectory(previousRoot);
-        Directory.CreateDirectory(additionalPreviousRoot);
-        Directory.CreateDirectory(outsideRoot);
-        await File.WriteAllTextAsync(Path.Combine(rollbackRoot, "artifact.txt"), "retained", TestContext.Current.CancellationToken);
-        await File.WriteAllTextAsync(Path.Combine(previousRoot, "bundle.json"), "retained", TestContext.Current.CancellationToken);
-        await File.WriteAllTextAsync(Path.Combine(installRoot, "current-release"), "candidate\n", TestContext.Current.CancellationToken);
-        await File.WriteAllTextAsync(Path.Combine(installRoot, "previous-release"), "previous\n", TestContext.Current.CancellationToken);
-
-        try
-        {
-            ProcessResult result;
-            if (OperatingSystem.IsWindows())
-            {
-                var junction = await RunAsync("cmd.exe", ["/d", "/c", "mklink", "/J", nestedLink, outsideRoot], new Dictionary<string, string>());
-                Assert.True(junction.ExitCode == 0, $"Could not create the test junction. stdout: {junction.StandardOutput}{Environment.NewLine}stderr: {junction.StandardError}");
-                var wrapper = Path.Combine(testRoot, "current-only-link-test.ps1");
-                await File.WriteAllTextAsync(wrapper, "param([string]$Common, [string]$Root)\n" + ". $Common\n" + "Remove-CurrentOnlyPreviousRelease $Root 'candidate' 'previous' 'additional'\n", TestContext.Current.CancellationToken);
-                result = await RunAsync(
-                    "pwsh",
-                    [
-                        "-NoProfile",
-                        "-File",
-                        wrapper,
-                        Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "deployment-common.ps1"),
-                        installRoot
-                    ],
-                    new Dictionary<string, string>());
-            }
-            else if (OperatingSystem.IsLinux())
-            {
-                Directory.CreateSymbolicLink(nestedLink, outsideRoot);
-                var wrapper = Path.Combine(testRoot, "current-only-link-test.sh");
-                await WriteExecutableAsync(
-                    wrapper,
-                    """
-                    #!/usr/bin/env sh
-                    set -eu
-                    . "$1"
-                    remove_current_only_previous_release "$2" candidate previous additional
-                    """);
-                result = await RunAsync(
-                    "sh",
-                    [
-                        wrapper,
-                        Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "deployment-common.sh"),
-                        installRoot
-                    ],
-                    new Dictionary<string, string>());
-            }
-            else
-            {
-                return;
-            }
-
-            Assert.NotEqual(0, result.ExitCode);
-            Assert.Contains(OperatingSystem.IsWindows() ? "reparse point" : "symlink", result.StandardError, StringComparison.OrdinalIgnoreCase);
-            Assert.Equal("candidate", ReadPointer(installRoot, "current-release"));
-            Assert.Equal("previous", ReadPointer(installRoot, "previous-release"));
-            Assert.True(Directory.Exists(rollbackRoot));
-            Assert.True(Directory.Exists(previousRoot));
-            Assert.True(Directory.Exists(additionalPreviousRoot));
-        }
-        finally
-        {
-            if (Directory.Exists(nestedLink))
-            {
-                Directory.Delete(nestedLink);
-            }
-            if (Directory.Exists(testRoot))
-            {
-                Directory.Delete(testRoot, recursive: true);
-            }
-        }
-    }
-
-    [Fact]
-    public async Task CurrentOnlyRetentionRejectsLinkedCurrentPointerBeforeAnyDeletion()
-    {
-        var repositoryRoot = FindRepositoryRoot();
-        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-current-only-pointer-{Guid.NewGuid():N}");
-        var installRoot = Path.Combine(testRoot, "installed");
-        var releasesRoot = Path.Combine(installRoot, "releases");
-        var candidateRoot = Path.Combine(releasesRoot, "candidate");
-        var rollbackRoot = Path.Combine(candidateRoot, "rollback");
-        var previousRoot = Path.Combine(releasesRoot, "previous");
-        var additionalPreviousRoot = Path.Combine(releasesRoot, "additional");
-        var currentPointer = Path.Combine(installRoot, "current-release");
-        var outsideRoot = Path.Combine(testRoot, "outside-pointer");
-        Directory.CreateDirectory(rollbackRoot);
-        Directory.CreateDirectory(previousRoot);
-        Directory.CreateDirectory(additionalPreviousRoot);
-        Directory.CreateDirectory(outsideRoot);
-        await File.WriteAllTextAsync(Path.Combine(installRoot, "previous-release"), "previous\n", TestContext.Current.CancellationToken);
-
-        try
-        {
-            ProcessResult result;
-            if (OperatingSystem.IsWindows())
-            {
-                var junction = await RunAsync("cmd.exe", ["/d", "/c", "mklink", "/J", currentPointer, outsideRoot], new Dictionary<string, string>());
-                Assert.True(junction.ExitCode == 0, $"Could not create the current-pointer junction. stdout: {junction.StandardOutput}{Environment.NewLine}stderr: {junction.StandardError}");
-                var wrapper = Path.Combine(testRoot, "current-only-pointer-test.ps1");
-                await File.WriteAllTextAsync(wrapper, "param([string]$Common, [string]$Root)\n" + ". $Common\n" + "Remove-CurrentOnlyPreviousRelease $Root 'candidate' 'previous' 'additional'\n", TestContext.Current.CancellationToken);
-                result = await RunAsync(
-                    "pwsh",
-                    [
-                        "-NoProfile",
-                        "-File",
-                        wrapper,
-                        Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "deployment-common.ps1"),
-                        installRoot
-                    ],
-                    new Dictionary<string, string>());
-            }
-            else if (OperatingSystem.IsLinux())
-            {
-                Directory.CreateSymbolicLink(currentPointer, outsideRoot);
-                var wrapper = Path.Combine(testRoot, "current-only-pointer-test.sh");
-                await WriteExecutableAsync(
-                    wrapper,
-                    """
-                    #!/usr/bin/env sh
-                    set -eu
-                    . "$1"
-                    remove_current_only_previous_release "$2" candidate previous additional
-                    """);
-                result = await RunAsync(
-                    "sh",
-                    [
-                        wrapper,
-                        Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "deployment-common.sh"),
-                        installRoot
-                    ],
-                    new Dictionary<string, string>());
-            }
-            else
-            {
-                return;
-            }
-
-            Assert.NotEqual(0, result.ExitCode);
-            Assert.Contains("regular non-link file", result.StandardError, StringComparison.OrdinalIgnoreCase);
-            Assert.True(Directory.Exists(currentPointer));
-            Assert.True(Directory.Exists(outsideRoot));
-            Assert.Equal("previous", ReadPointer(installRoot, "previous-release"));
-            Assert.True(Directory.Exists(rollbackRoot));
-            Assert.True(Directory.Exists(previousRoot));
-            Assert.True(Directory.Exists(additionalPreviousRoot));
-        }
-        finally
-        {
-            if (Directory.Exists(currentPointer))
-                Directory.Delete(currentPointer);
-            if (Directory.Exists(testRoot))
-                Directory.Delete(testRoot, recursive: true);
-        }
-    }
-
-    [Fact]
-    public async Task PosixCurrentOnlyRetentionRejectsMountPointBeforePointerSwitchOrDeletion()
-    {
-        if (!OperatingSystem.IsLinux())
-            return;
-
-        var repositoryRoot = FindRepositoryRoot();
-        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext current-only mount {Guid.NewGuid():N}");
-        var installRoot = Path.Combine(testRoot, "installed");
-        var releasesRoot = Path.Combine(installRoot, "releases");
-        var candidateRoot = Path.Combine(releasesRoot, "candidate");
-        var rollbackRoot = Path.Combine(candidateRoot, "rollback");
-        var previousRoot = Path.Combine(releasesRoot, "previous");
-        var additionalPreviousRoot = Path.Combine(releasesRoot, "additional");
-        var nestedMount = Path.Combine(additionalPreviousRoot, "nested-mount");
-        var mountInfo = Path.Combine(testRoot, "mountinfo");
-        Directory.CreateDirectory(rollbackRoot);
-        Directory.CreateDirectory(previousRoot);
-        Directory.CreateDirectory(nestedMount);
-        await File.WriteAllTextAsync(Path.Combine(installRoot, "current-release"), "previous\n", TestContext.Current.CancellationToken);
-        await File.WriteAllTextAsync(Path.Combine(installRoot, "previous-release"), "additional\n", TestContext.Current.CancellationToken);
-        var encodedMount = nestedMount.Replace("\\", "\\134", StringComparison.Ordinal).Replace(" ", "\\040", StringComparison.Ordinal).Replace("\t", "\\011", StringComparison.Ordinal).Replace("\n", "\\012", StringComparison.Ordinal);
-        await File.WriteAllTextAsync(mountInfo, $"1 0 0:1 / / rw - rootfs rootfs rw\n2 1 0:1 / {encodedMount} rw - none none rw\n", TestContext.Current.CancellationToken);
-        var wrapper = Path.Combine(testRoot, "current-only-mount-test.sh");
-        await WriteExecutableAsync(
-            wrapper,
-            """
-            #!/usr/bin/env sh
-            set -eu
-            . "$1"
-            assert_current_only_retention_plan "$2" candidate previous additional previous additional "$3"
-            atomic_pointer "$2/previous-release" previous
-            atomic_pointer "$2/current-release" candidate
-            remove_current_only_previous_release "$2" candidate previous additional "$3"
-            """);
-
-        try
-        {
-            var result = await RunAsync(
-                "sh",
-                [
-                    wrapper,
-                    Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "deployment-common.sh"),
-                    installRoot,
-                    mountInfo
-                ],
-                new Dictionary<string, string>());
-
-            Assert.NotEqual(0, result.ExitCode);
-            Assert.Contains("mount point", result.StandardError, StringComparison.OrdinalIgnoreCase);
-            Assert.Equal("previous", ReadPointer(installRoot, "current-release"));
-            Assert.Equal("additional", ReadPointer(installRoot, "previous-release"));
-            Assert.True(Directory.Exists(rollbackRoot));
-            Assert.True(Directory.Exists(previousRoot));
-            Assert.True(Directory.Exists(additionalPreviousRoot));
-            Assert.True(Directory.Exists(nestedMount));
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-                Directory.Delete(testRoot, recursive: true);
-        }
-    }
-
-    [Fact]
-    public async Task ReleasePointerPairRestoresOriginalPreviousWhenCurrentUpdateFails()
-    {
-        var repositoryRoot = FindRepositoryRoot();
-        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-pointer-pair-{Guid.NewGuid():N}");
-        var installRoot = Path.Combine(testRoot, "installed");
-        Directory.CreateDirectory(installRoot);
-        await File.WriteAllTextAsync(Path.Combine(installRoot, "current-release"), "old-current\n", TestContext.Current.CancellationToken);
-        await File.WriteAllTextAsync(Path.Combine(installRoot, "previous-release"), "old-previous\n", TestContext.Current.CancellationToken);
-
-        try
-        {
-            ProcessResult result;
-            if (OperatingSystem.IsWindows())
-            {
-                var wrapper = Path.Combine(testRoot, "pointer-pair-failure.ps1");
-                await File.WriteAllTextAsync(
-                    wrapper,
-                    "param([string]$Common, [string]$Root)\n" +
-                    ". $Common\n" +
-                    "$script:OriginalSetReleasePointer = ${function:Set-ReleasePointer}\n" +
-                    "function Set-ReleasePointer([string]$InstallRoot, [string]$Name, [string]$Value) {\n" +
-                    "  if ($Name -ceq 'current-release') { throw 'Injected current pointer failure.' }\n" +
-                    "  & $script:OriginalSetReleasePointer $InstallRoot $Name $Value\n" +
-                    "}\n" +
-                    "Set-ReleasePointerPair $Root 'candidate' 'old-current' 'old-previous'\n",
-                    TestContext.Current.CancellationToken);
-                result = await RunAsync(
-                    "pwsh",
-                    [
-                        "-NoProfile",
-                        "-File",
-                        wrapper,
-                        Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "deployment-common.ps1"),
-                        installRoot
-                    ],
-                    new Dictionary<string, string>());
-            }
-            else if (OperatingSystem.IsLinux())
-            {
-                var wrapper = Path.Combine(testRoot, "pointer-pair-failure.sh");
-                await WriteExecutableAsync(
-                    wrapper,
-                    """
-                    #!/usr/bin/env sh
-                    set -eu
-                    . "$1"
-                    atomic_pointer() {
-                      target=$1
-                      value=$2
-                      case "$target" in */current-release) echo 'Injected current pointer failure.' >&2; return 73;; esac
-                      printf '%s\n' "$value" > "$target"
-                    }
-                    set_release_pointer_pair "$2" candidate old-current old-previous
-                    """);
-                result = await RunAsync(
-                    "sh",
-                    [
-                        wrapper,
-                        Path.Combine(repositoryRoot, "src", "Tools", "SharpLabNext.BundleBuilder", "DeploymentScripts", "deployment-common.sh"),
-                        installRoot
-                    ],
-                    new Dictionary<string, string>());
-            }
-            else
-            {
-                return;
-            }
-
-            Assert.NotEqual(0, result.ExitCode);
-            Assert.Contains("Injected current pointer failure", result.StandardError, StringComparison.OrdinalIgnoreCase);
-            Assert.Equal("old-current", ReadPointer(installRoot, "current-release"));
-            Assert.Equal("old-previous", ReadPointer(installRoot, "previous-release"));
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-                Directory.Delete(testRoot, recursive: true);
-        }
-    }
-
-    [Fact]
-    public async Task ShellInstallerRestoresFailedCandidateAndRollsBackSuccessfulUpgrade()
-    {
-        if (!OperatingSystem.IsLinux())
-            return;
-
-        var repositoryRoot = FindRepositoryRoot();
-        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-install-{Guid.NewGuid():N}");
-        var bundleA = Path.Combine(testRoot, "bundle-a");
-        var bundleB = Path.Combine(testRoot, "bundle-b");
-        var bundleC = Path.Combine(testRoot, "bundle-c");
-        var bundleD = Path.Combine(testRoot, "bundle-d");
-        var installRoot = Path.Combine(testRoot, "installed");
-        var fakeBin = Path.Combine(testRoot, "bin");
-        var internalServiceToken = Path.Combine(testRoot, "internal-service-token");
-        Directory.CreateDirectory(fakeBin);
-        try
-        {
-            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleA, "development");
-            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleB, "candidate");
-            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleC, "current-only");
-            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleD, "stale");
-            await File.WriteAllTextAsync(internalServiceToken, "test-internal-service-token", TestContext.Current.CancellationToken);
-            await WriteExecutableAsync(
-                Path.Combine(fakeBin, "stat"),
-                """
-                #!/usr/bin/env sh
-                set -eu
-                printf '640 0 1654\n'
-                """);
-            await WriteExecutableAsync(
-                Path.Combine(fakeBin, "docker"),
-                $$"""
-                #!/usr/bin/env sh
-                set -eu
-                if [ "${1:-}" = image ] && [ "${2:-}" = inspect ]; then
-                  case " $* " in *"Config.User"*) echo 1654:1654; exit 0;; esac
-                  for argument in "$@"; do
-                    case "$argument" in
-                      sha256:*) printf '%s\n' "$argument"; exit 0;;
-                      *@sha256:*) printf 'sha256:%s\n' "${argument##*@sha256:}"; exit 0;;
-                    esac
-                  done
-                  case " $* " in
-                    *" {{FakeDockerCli.RoslynNetFx48ImageId}} "*) echo {{FakeDockerCli.RoslynNetFx48ImageId}} ;;
-                    *" {{FakeDockerCli.RoslynStableImageId}} "*) echo {{FakeDockerCli.RoslynStableImageId}} ;;
-                    *" {{FakeDockerCli.RoslynMainImageId}} "*) echo {{FakeDockerCli.RoslynMainImageId}} ;;
-                    *" {{FakeDockerCli.RoslynConstGenericsImageId}} "*) echo {{FakeDockerCli.RoslynConstGenericsImageId}} ;;
-                    *" {{FakeDockerCli.FSharpImageId}} "*) echo {{FakeDockerCli.FSharpImageId}} ;;
-                    *" {{FakeDockerCli.GSharpImageId}} "*) echo {{FakeDockerCli.GSharpImageId}} ;;
-                    *" {{FakeDockerCli.PeachPieImageId}} "*) echo {{FakeDockerCli.PeachPieImageId}} ;;
-                    *" {{FakeDockerCli.CppCliImageId}} "*) echo {{FakeDockerCli.CppCliImageId}} ;;
-                    *" {{FakeDockerCli.WineNetFxRuntimeImageId}} "*) echo {{FakeDockerCli.WineNetFxRuntimeImageId}} ;;
-                    *" {{FakeDockerCli.JSharpImageId}} "*) echo {{FakeDockerCli.JSharpImageId}} ;;
-                    *" {{FakeDockerCli.WineJSharpRuntimeImageId}} "*) echo {{FakeDockerCli.WineJSharpRuntimeImageId}} ;;
-                    *" {{FakeDockerCli.IlImageId}} "*) echo {{FakeDockerCli.IlImageId}} ;;
-                    *" {{FakeDockerCli.MinilangImageId}} "*) echo {{FakeDockerCli.MinilangImageId}} ;;
-                    *" {{FakeDockerCli.ArtifactsDefaultImageId}} "*) echo {{FakeDockerCli.ArtifactsDefaultImageId}} ;;
-                    *" {{FakeDockerCli.ArtifactsJsilImageId}} "*) echo {{FakeDockerCli.ArtifactsJsilImageId}} ;;
-                    *" {{FakeDockerCli.ArtifactsConstGenericsImageId}} "*) echo {{FakeDockerCli.ArtifactsConstGenericsImageId}} ;;
-                    *" {{FakeDockerCli.ArtifactsIlAssemblerImageId}} "*) echo {{FakeDockerCli.ArtifactsIlAssemblerImageId}} ;;
-                    *) echo {{FakeDockerCli.ImageId}} ;;
-                  esac
-                  exit 0
-                fi
-                if [ "${1:-}" = image ] && [ "${2:-}" = load ]; then exit 0; fi
-                if [ "${1:-}" = cp ]; then
-                  mkdir -p "$3"
-                  printf 'artifact-data\n' > "$3/artifact.txt"
-                  exit 0
-                fi
-                if [ "${1:-}" = volume ] && [ "${2:-}" = ls ]; then
-                  echo sharplabnext_artifact-data
-                  exit 0
-                fi
-                case " $* " in
-                  *" up -d "*)
-                    if [ "${SHARPLABNEXT_FAKE_TAMPER_ROLLBACK:-}" = "${SHARPLABNEXT_RELEASE_ID:-}" ]; then
-                      printf 'tampered\n' >> "$SHARPLABNEXT_HOME/releases/$SHARPLABNEXT_RELEASE_ID/rollback/artifact-data/artifact.txt"
-                    fi
-                    ;;
-                  *" config --services "*) echo gateway ;;
-                  *" ps --status running --services "*) echo gateway ;;
-                  *" ps --all -q artifact-store "*) echo fake-artifact-store ;;
-                  *) ;;
-                esac
-                exit 0
-                """);
-            await WriteExecutableAsync(
-                Path.Combine(fakeBin, "curl"),
-                """
-                #!/usr/bin/env sh
-                set -eu
-                if [ "${SHARPLABNEXT_FAKE_FAIL_RELEASE:-}" = "${SHARPLABNEXT_RELEASE_ID:-}" ]; then exit 22; fi
-                printf '{"ReleaseId":"%s"}\n' "${SHARPLABNEXT_RELEASE_ID:-}"
-                """);
-
-            var environment = new Dictionary<string, string>
-            {
-                ["PATH"] = $"{fakeBin}:{Environment.GetEnvironmentVariable("PATH")}",
-                ["SHARPLABNEXT_HOME"] = installRoot,
-                ["SHARPLABNEXT_INTERNAL_SERVICE_TOKEN_FILE"] = internalServiceToken
-            };
-            var first = await RunAsync("sh", [Path.Combine(bundleA, "deploy.sh"), "--allow-unsigned", "--ready-timeout-seconds", "3"], environment);
-            Assert.True(first.ExitCode == 0, $"First install failed. stdout: {first.StandardOutput}{Environment.NewLine}stderr: {first.StandardError}");
-            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
-            Assert.True(File.Exists(Path.Combine(installRoot, "releases", "development", "images.tar")));
-            Assert.True(File.Exists(Path.Combine(installRoot, "releases", "development", "sbom", "release.spdx.json")));
-            Assert.True(File.Exists(Path.Combine(installRoot, "releases", "development", "security", "sharplabnext-runtime-job-v1.apparmor")));
-            Assert.Contains("security/sharplabnext-runtime-job-v1.apparmor", await File.ReadAllTextAsync(Path.Combine(installRoot, "releases", "development", "deployment.sha256"), TestContext.Current.CancellationToken), StringComparison.Ordinal);
-
-            environment["SHARPLABNEXT_FAKE_FAIL_RELEASE"] = "candidate";
-            var failedUpgrade = await RunAsync("sh", [Path.Combine(bundleB, "install.sh"), "--allow-unsigned", "--skip-artifact-backup", "--ready-timeout-seconds", "1"], environment);
-            Assert.NotEqual(0, failedUpgrade.ExitCode);
-            Assert.Contains("was restored", failedUpgrade.StandardError, StringComparison.Ordinal);
-            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
-            Assert.False(File.Exists(Path.Combine(installRoot, "previous-release")));
-
-            environment.Remove("SHARPLABNEXT_FAKE_FAIL_RELEASE");
-            var upgrade = await RunAsync("sh", [Path.Combine(bundleB, "install.sh"), "--allow-unsigned", "--ready-timeout-seconds", "3"], environment);
-            Assert.Equal(0, upgrade.ExitCode);
-            Assert.Contains("Installed SharpLabNext release candidate", upgrade.StandardOutput, StringComparison.Ordinal);
-            Assert.Equal("candidate", ReadPointer(installRoot, "current-release"));
-            Assert.Equal("development", ReadPointer(installRoot, "previous-release"));
-            Assert.Equal("development", ReadPointer(Path.Combine(installRoot, "releases", "candidate", "rollback"), "predecessor-release"));
-            Assert.True(File.Exists(Path.Combine(installRoot, "releases", "candidate", "rollback", "artifact-data", "artifact.txt")));
-
-            var rollback = await RunAsync("sh", [Path.Combine(bundleB, "rollback.sh"), "--install-root", installRoot, "--ready-timeout-seconds", "3"], environment);
-            Assert.Equal(0, rollback.ExitCode);
-            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
-            Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
-
-            environment["SHARPLABNEXT_FAKE_FAIL_RELEASE"] = "current-only";
-            var failedCurrentOnly = await RunAsync("sh", [Path.Combine(bundleC, "install.sh"), "--allow-unsigned", "--skip-artifact-backup", "--current-only", "--ready-timeout-seconds", "1"], environment);
-            Assert.NotEqual(0, failedCurrentOnly.ExitCode);
-            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
-            Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
-            Assert.True(Directory.Exists(Path.Combine(installRoot, "releases", "development")));
-            Assert.True(Directory.Exists(Path.Combine(installRoot, "releases", "candidate")));
-            Assert.True(Directory.Exists(Path.Combine(installRoot, "releases", "candidate", "rollback")));
-
-            environment.Remove("SHARPLABNEXT_FAKE_FAIL_RELEASE");
-            var releaseDirectoriesBeforeRetention = Directory.GetDirectories(Path.Combine(installRoot, "releases")).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
-            var tamperedPredecessorPath = Path.Combine(installRoot, "releases", "candidate", "compose.generated.yaml");
-            var predecessorBytes = await File.ReadAllBytesAsync(tamperedPredecessorPath, TestContext.Current.CancellationToken);
-            await File.AppendAllTextAsync(tamperedPredecessorPath, "\n# tampered predecessor\n", TestContext.Current.CancellationToken);
-            var tamperedPredecessor = await RunAsync("sh", [Path.Combine(bundleC, "install.sh"), "--allow-unsigned", "--skip-artifact-backup", "--current-only", "--ready-timeout-seconds", "3"], environment);
-            Assert.NotEqual(0, tamperedPredecessor.ExitCode);
-            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
-            Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
-            Assert.Equal(releaseDirectoriesBeforeRetention, Directory.GetDirectories(Path.Combine(installRoot, "releases")).Select(Path.GetFileName).Order(StringComparer.Ordinal));
-            await File.WriteAllBytesAsync(tamperedPredecessorPath, predecessorBytes, TestContext.Current.CancellationToken);
-
-            environment["SHARPLABNEXT_FAKE_TAMPER_ROLLBACK"] = "current-only";
-            var tamperedRollback = await RunAsync("sh", [Path.Combine(bundleC, "install.sh"), "--allow-unsigned", "--current-only", "--ready-timeout-seconds", "3"], environment);
-            Assert.NotEqual(0, tamperedRollback.ExitCode);
-            Assert.Contains("checksum", tamperedRollback.StandardError, StringComparison.OrdinalIgnoreCase);
-            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
-            Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
-            Assert.Equal(releaseDirectoriesBeforeRetention, Directory.GetDirectories(Path.Combine(installRoot, "releases")).Select(Path.GetFileName).Order(StringComparer.Ordinal));
-            var currentOnlyRollbackArtifact = Path.Combine(installRoot, "releases", "current-only", "rollback", "artifact-data", "artifact.txt");
-            Assert.True(File.Exists(currentOnlyRollbackArtifact));
-            await File.WriteAllTextAsync(currentOnlyRollbackArtifact, "artifact-data\n", TestContext.Current.CancellationToken);
-            environment.Remove("SHARPLABNEXT_FAKE_TAMPER_ROLLBACK");
-
-            var currentOnlyUpgrade = await RunAsync("sh", [Path.Combine(bundleC, "install.sh"), "--allow-unsigned", "--current-only", "--ready-timeout-seconds", "3"], environment);
-            Assert.Equal(0, currentOnlyUpgrade.ExitCode);
-            Assert.Equal("current-only", ReadPointer(installRoot, "current-release"));
-            Assert.False(File.Exists(Path.Combine(installRoot, "previous-release")));
-            Assert.False(Directory.Exists(Path.Combine(installRoot, "releases", "development")));
-            Assert.False(Directory.Exists(Path.Combine(installRoot, "releases", "candidate")));
-            Assert.False(Directory.Exists(Path.Combine(installRoot, "releases", "current-only", "rollback")));
-
-            var materializeStale = await RunAsync(
-                "sh",
-                [
-                    "-c",
-                    ". \"$1/deployment-common.sh\"; install_release_assets \"$1\" \"$2\" stale >/dev/null",
-                    "sh",
-                    bundleD,
-                    installRoot
-                ],
-                environment);
-            Assert.Equal(0, materializeStale.ExitCode);
-            var staleRelease = Path.Combine(installRoot, "releases", "stale");
-            await File.WriteAllTextAsync(Path.Combine(installRoot, "previous-release"), "stale\n", TestContext.Current.CancellationToken);
-            var currentOnlyReinstall = await RunAsync("sh", [Path.Combine(bundleC, "install.sh"), "--allow-unsigned", "--skip-artifact-backup", "--current-only", "--ready-timeout-seconds", "3"], environment);
-            Assert.Equal(0, currentOnlyReinstall.ExitCode);
-            Assert.Equal("current-only", ReadPointer(installRoot, "current-release"));
-            Assert.False(File.Exists(Path.Combine(installRoot, "previous-release")));
-            Assert.False(Directory.Exists(staleRelease));
-            Assert.Equal(["current-only"], Directory.GetDirectories(Path.Combine(installRoot, "releases")).Select(Path.GetFileName).Order(StringComparer.Ordinal));
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-            {
-                Directory.Delete(testRoot, recursive: true);
-            }
-        }
-    }
-
-    [Fact]
-    public async Task PowerShellInstallerRestoresFailedCandidateAndRollsBackSuccessfulUpgrade()
-    {
-        if (!OperatingSystem.IsWindows())
-            return;
-
-        var repositoryRoot = FindRepositoryRoot();
-        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-install-ps-{Guid.NewGuid():N}");
-        var bundleA = Path.Combine(testRoot, "bundle-a");
-        var bundleB = Path.Combine(testRoot, "bundle-b");
-        var bundleC = Path.Combine(testRoot, "bundle-c");
-        var bundleD = Path.Combine(testRoot, "bundle-d");
-        var installRoot = Path.Combine(testRoot, "installed");
-        var fakeBin = Path.Combine(testRoot, "bin");
-        var statePath = Path.Combine(testRoot, "active-release.txt");
-        var failPath = Path.Combine(testRoot, "fail-release.txt");
-        var internalServiceToken = Path.Combine(testRoot, "internal-service-token");
-        Directory.CreateDirectory(fakeBin);
-        try
-        {
-            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleA, "development");
-            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleB, "candidate");
-            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleC, "current-only");
-            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundleD, "stale");
-            await File.WriteAllTextAsync(internalServiceToken, "test-internal-service-token", TestContext.Current.CancellationToken);
-            await File.WriteAllTextAsync(
-                Path.Combine(fakeBin, "docker.cmd"),
-                $$"""
-                @echo off
-                setlocal EnableExtensions EnableDelayedExpansion
-                if "%1"=="image" if "%2"=="inspect" (
-                  set "imageReference=%~5"
-                  if /I "!imageReference:~0,7!"=="sha256:" (
-                    echo !imageReference!
-                    exit /b 0
-                  )
-                  set "arguments=%*"
-                  set "immutableDigest=%arguments:*@sha256:=%"
-                  if not "%immutableDigest%"=="%arguments%" (
-                    echo sha256:%immutableDigest%
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.RoslynNetFx48ImageId}}" >nul && (
-                    echo {{FakeDockerCli.RoslynNetFx48ImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.RoslynStableImageId}}" >nul && (
-                    echo {{FakeDockerCli.RoslynStableImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.RoslynMainImageId}}" >nul && (
-                    echo {{FakeDockerCli.RoslynMainImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.RoslynConstGenericsImageId}}" >nul && (
-                    echo {{FakeDockerCli.RoslynConstGenericsImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.FSharpImageId}}" >nul && (
-                    echo {{FakeDockerCli.FSharpImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.GSharpImageId}}" >nul && (
-                    echo {{FakeDockerCli.GSharpImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.PeachPieImageId}}" >nul && (
-                    echo {{FakeDockerCli.PeachPieImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.CppCliImageId}}" >nul && (
-                    echo {{FakeDockerCli.CppCliImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.WineNetFxRuntimeImageId}}" >nul && (
-                    echo {{FakeDockerCli.WineNetFxRuntimeImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.JSharpImageId}}" >nul && (
-                    echo {{FakeDockerCli.JSharpImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.WineJSharpRuntimeImageId}}" >nul && (
-                    echo {{FakeDockerCli.WineJSharpRuntimeImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.IlImageId}}" >nul && (
-                    echo {{FakeDockerCli.IlImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.MinilangImageId}}" >nul && (
-                    echo {{FakeDockerCli.MinilangImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.ArtifactsDefaultImageId}}" >nul && (
-                    echo {{FakeDockerCli.ArtifactsDefaultImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.ArtifactsJsilImageId}}" >nul && (
-                    echo {{FakeDockerCli.ArtifactsJsilImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.ArtifactsConstGenericsImageId}}" >nul && (
-                    echo {{FakeDockerCli.ArtifactsConstGenericsImageId}}
-                    exit /b 0
-                  )
-                  echo %* | %SystemRoot%\System32\findstr.exe /C:"{{FakeDockerCli.ArtifactsIlAssemblerImageId}}" >nul && (
-                    echo {{FakeDockerCli.ArtifactsIlAssemblerImageId}}
-                    exit /b 0
-                  )
-                  echo {{FakeDockerCli.ImageId}}
-                  exit /b 0
-                )
-                if "%1"=="cp" (
-                  if not exist "%~3" mkdir "%~3"
-                  > "%~3\artifact.txt" echo artifact-data
-                  exit /b 0
-                )
-                echo %* | %SystemRoot%\System32\findstr.exe /C:"config --services" >nul && (
-                  echo gateway
-                  exit /b 0
-                )
-                echo %* | %SystemRoot%\System32\findstr.exe /C:"ps --status running --services" >nul && (
-                  echo gateway
-                  exit /b 0
-                )
-                echo %* | %SystemRoot%\System32\findstr.exe /C:"ps --all -q artifact-store" >nul && (
-                  echo fake-artifact-store
-                  exit /b 0
-                )
-                echo %* | %SystemRoot%\System32\findstr.exe /C:" up -d " >nul && (
-                  > "%SHARPLABNEXT_FAKE_STATE%" echo %SHARPLABNEXT_RELEASE_ID%
-                  if /I "%SHARPLABNEXT_FAKE_TAMPER_ROLLBACK%"=="%SHARPLABNEXT_RELEASE_ID%" (
-                    >> "%SHARPLABNEXT_HOME%\releases\%SHARPLABNEXT_RELEASE_ID%\rollback\artifact-data\artifact.txt" echo tampered
-                  )
-                  exit /b 0
-                )
-                echo %* | %SystemRoot%\System32\findstr.exe /C:" down --remove-orphans" >nul && (
-                  if exist "%SHARPLABNEXT_FAKE_STATE%" del /q "%SHARPLABNEXT_FAKE_STATE%"
-                  exit /b 0
-                )
-                exit /b 0
-                """.ReplaceLineEndings("\r\n"),
-                TestContext.Current.CancellationToken);
-            await File.WriteAllTextAsync(Path.Combine(fakeBin, "openssl.cmd"), "@echo off\r\n\"C:\\Program Files\\Git\\mingw64\\bin\\openssl.exe\" %*\r\n", TestContext.Current.CancellationToken);
-
-            await using var server = new FakeReleaseHttpServer(statePath, failPath);
-            var environment = new Dictionary<string, string>
-            {
-                ["PATH"] = $"{fakeBin};{Environment.GetEnvironmentVariable("PATH")}",
-                ["SHARPLABNEXT_HOME"] = installRoot,
-                ["SHARPLABNEXT_FAKE_STATE"] = statePath,
-                ["SHARPLABNEXT_INTERNAL_SERVICE_TOKEN_FILE"] = internalServiceToken
-            };
-            var smokeAddress = $"http://127.0.0.1:{server.Port}";
-            var first = await RunAsync("pwsh", ["-NoProfile", "-File", Path.Combine(bundleA, "install.ps1"), "-AllowUnsigned", "-SkipArtifactBackup", "-ReadyTimeoutSeconds", "3", "-SmokeBaseAddress", smokeAddress], environment);
-            Assert.True(first.ExitCode == 0, $"First PowerShell install failed. stdout: {first.StandardOutput}{Environment.NewLine}stderr: {first.StandardError}");
-            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
-            var directSmoke = await RunAsync("pwsh", ["-NoProfile", "-File", Path.Combine(bundleA, "smoke.ps1"), "-ExpectedReleaseId", "development", "-TimeoutSeconds", "3", "-BaseAddress", smokeAddress], environment);
-            Assert.Equal(0, directSmoke.ExitCode);
-            Assert.True(File.Exists(Path.Combine(installRoot, "releases", "development", "security", "sharplabnext-runtime-job-v1.apparmor")));
-            Assert.Contains("security/sharplabnext-runtime-job-v1.apparmor", await File.ReadAllTextAsync(Path.Combine(installRoot, "releases", "development", "deployment.sha256"), TestContext.Current.CancellationToken), StringComparison.Ordinal);
-
-            await File.WriteAllTextAsync(failPath, "candidate", TestContext.Current.CancellationToken);
-            var failedUpgrade = await RunAsync("pwsh", ["-NoProfile", "-File", Path.Combine(bundleB, "install.ps1"), "-AllowUnsigned", "-SkipArtifactBackup", "-ReadyTimeoutSeconds", "1", "-SmokeBaseAddress", smokeAddress], environment);
-            Assert.NotEqual(0, failedUpgrade.ExitCode);
-            Assert.True(failedUpgrade.StandardError.Contains("was restored", StringComparison.OrdinalIgnoreCase), $"Failed upgrade did not restore its predecessor. stdout: {failedUpgrade.StandardOutput}" + $"{Environment.NewLine}stderr: {failedUpgrade.StandardError}");
-            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
-
-            File.Delete(failPath);
-            var upgrade = await RunAsync("pwsh", ["-NoProfile", "-File", Path.Combine(bundleB, "install.ps1"), "-AllowUnsigned", "-SkipArtifactBackup", "-ReadyTimeoutSeconds", "3", "-SmokeBaseAddress", smokeAddress], environment);
-            Assert.Equal(0, upgrade.ExitCode);
-            Assert.Equal("candidate", ReadPointer(installRoot, "current-release"));
-            Assert.Equal("development", ReadPointer(installRoot, "previous-release"));
-
-            var rollback = await RunAsync("pwsh", ["-NoProfile", "-File", Path.Combine(bundleB, "rollback.ps1"), "-InstallRoot", installRoot, "-ReadyTimeoutSeconds", "3", "-SmokeBaseAddress", smokeAddress], environment);
-            Assert.Equal(0, rollback.ExitCode);
-            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
-            Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
-
-            var previousRollbackRoot = Path.Combine(installRoot, "releases", "candidate", "rollback");
-            var previousRollbackExisted = Directory.Exists(previousRollbackRoot);
-            await File.WriteAllTextAsync(failPath, "current-only", TestContext.Current.CancellationToken);
-            var failedCurrentOnly = await RunAsync("pwsh", ["-NoProfile", "-File", Path.Combine(bundleC, "install.ps1"), "-AllowUnsigned", "-SkipArtifactBackup", "-CurrentOnly", "-ReadyTimeoutSeconds", "1", "-SmokeBaseAddress", smokeAddress], environment);
-            Assert.NotEqual(0, failedCurrentOnly.ExitCode);
-            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
-            Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
-            Assert.True(Directory.Exists(Path.Combine(installRoot, "releases", "development")));
-            Assert.True(Directory.Exists(Path.Combine(installRoot, "releases", "candidate")));
-            Assert.Equal(previousRollbackExisted, Directory.Exists(previousRollbackRoot));
-
-            File.Delete(failPath);
-            var releaseDirectoriesBeforeRetention = Directory.GetDirectories(Path.Combine(installRoot, "releases")).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
-            var tamperedPredecessorPath = Path.Combine(installRoot, "releases", "candidate", "compose.generated.yaml");
-            var predecessorBytes = await File.ReadAllBytesAsync(tamperedPredecessorPath, TestContext.Current.CancellationToken);
-            await File.AppendAllTextAsync(tamperedPredecessorPath, "\n# tampered predecessor\n", TestContext.Current.CancellationToken);
-            var tamperedPredecessor = await RunAsync("pwsh", ["-NoProfile", "-File", Path.Combine(bundleC, "install.ps1"), "-AllowUnsigned", "-SkipArtifactBackup", "-CurrentOnly", "-ReadyTimeoutSeconds", "3", "-SmokeBaseAddress", smokeAddress], environment);
-            Assert.NotEqual(0, tamperedPredecessor.ExitCode);
-            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
-            Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
-            Assert.Equal(releaseDirectoriesBeforeRetention, Directory.GetDirectories(Path.Combine(installRoot, "releases")).Select(Path.GetFileName).Order(StringComparer.Ordinal));
-            await File.WriteAllBytesAsync(tamperedPredecessorPath, predecessorBytes, TestContext.Current.CancellationToken);
-
-            environment["SHARPLABNEXT_FAKE_TAMPER_ROLLBACK"] = "current-only";
-            var tamperedRollback = await RunAsync("pwsh", ["-NoProfile", "-File", Path.Combine(bundleC, "install.ps1"), "-AllowUnsigned", "-CurrentOnly", "-ReadyTimeoutSeconds", "3", "-SmokeBaseAddress", smokeAddress], environment);
-            Assert.NotEqual(0, tamperedRollback.ExitCode);
-            Assert.Contains("checksum", tamperedRollback.StandardError, StringComparison.OrdinalIgnoreCase);
-            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
-            Assert.Equal("candidate", ReadPointer(installRoot, "previous-release"));
-            Assert.Equal(releaseDirectoriesBeforeRetention, Directory.GetDirectories(Path.Combine(installRoot, "releases")).Select(Path.GetFileName).Order(StringComparer.Ordinal));
-            var currentOnlyRollbackArtifact = Path.Combine(installRoot, "releases", "current-only", "rollback", "artifact-data", "artifact.txt");
-            Assert.True(File.Exists(currentOnlyRollbackArtifact));
-            await File.WriteAllTextAsync(currentOnlyRollbackArtifact, "artifact-data\r\n", TestContext.Current.CancellationToken);
-            environment.Remove("SHARPLABNEXT_FAKE_TAMPER_ROLLBACK");
-
-            var currentOnlyUpgrade = await RunAsync("pwsh", ["-NoProfile", "-File", Path.Combine(bundleC, "install.ps1"), "-AllowUnsigned", "-CurrentOnly", "-ReadyTimeoutSeconds", "3", "-SmokeBaseAddress", smokeAddress], environment);
-            Assert.Equal(0, currentOnlyUpgrade.ExitCode);
-            Assert.Equal("current-only", ReadPointer(installRoot, "current-release"));
-            Assert.False(File.Exists(Path.Combine(installRoot, "previous-release")));
-            Assert.False(Directory.Exists(Path.Combine(installRoot, "releases", "development")));
-            Assert.False(Directory.Exists(Path.Combine(installRoot, "releases", "candidate")));
-            Assert.False(Directory.Exists(Path.Combine(installRoot, "releases", "current-only", "rollback")));
-
-            var materializeStaleScript = Path.Combine(testRoot, "materialize-stale.ps1");
-            await File.WriteAllTextAsync(materializeStaleScript, "param([string]$Bundle, [string]$InstallRoot)\n" + ". (Join-Path $Bundle 'deployment-common.ps1')\n" + "Install-ReleaseAssets $Bundle $InstallRoot 'stale' | Out-Null\n", TestContext.Current.CancellationToken);
-            var materializeStale = await RunAsync(
-                "pwsh",
-                [
-                    "-NoProfile",
-                    "-File",
-                    materializeStaleScript,
-                    bundleD,
-                    installRoot
-                ],
-                environment);
-            Assert.Equal(0, materializeStale.ExitCode);
-            var staleRelease = Path.Combine(installRoot, "releases", "stale");
-            await File.WriteAllTextAsync(Path.Combine(installRoot, "previous-release"), "stale\n", TestContext.Current.CancellationToken);
-            var currentOnlyReinstall = await RunAsync("pwsh", ["-NoProfile", "-File", Path.Combine(bundleC, "install.ps1"), "-AllowUnsigned", "-SkipArtifactBackup", "-CurrentOnly", "-ReadyTimeoutSeconds", "3", "-SmokeBaseAddress", smokeAddress], environment);
-            Assert.Equal(0, currentOnlyReinstall.ExitCode);
-            Assert.Equal("current-only", ReadPointer(installRoot, "current-release"));
-            Assert.False(File.Exists(Path.Combine(installRoot, "previous-release")));
-            Assert.False(Directory.Exists(staleRelease));
-            Assert.Equal(["current-only"], Directory.GetDirectories(Path.Combine(installRoot, "releases")).Select(Path.GetFileName).Order(StringComparer.Ordinal));
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-            {
-                Directory.Delete(testRoot, recursive: true);
-            }
-        }
-    }
-
-    [Fact]
-    public async Task PowerShellInstallerRejectsMissingInternalServiceTokenBeforeDeploymentMutation()
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
-        var repositoryRoot = FindRepositoryRoot();
-        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-install-ps-secret-{Guid.NewGuid():N}");
-        var bundle = Path.Combine(testRoot, "bundle");
-        var installRoot = Path.Combine(testRoot, "installed");
-        var fakeBin = Path.Combine(testRoot, "bin");
-        var dockerCallMarker = Path.Combine(testRoot, "docker-called.txt");
-        var missingToken = Path.Combine(testRoot, "missing-internal-service-token");
-        Directory.CreateDirectory(fakeBin);
-        Directory.CreateDirectory(installRoot);
-        try
-        {
-            await BuildBundleForReleaseAsync(repositoryRoot, testRoot, bundle, "candidate");
-            await File.WriteAllTextAsync(Path.Combine(installRoot, "current-release"), "development\n", TestContext.Current.CancellationToken);
-            await File.WriteAllTextAsync(
-                Path.Combine(fakeBin, "docker.cmd"),
-                """
-                @echo off
-                > "%SHARPLABNEXT_FAKE_DOCKER_CALLED%" echo called
-                exit /b 99
-                """.ReplaceLineEndings("\r\n"),
-                TestContext.Current.CancellationToken);
-
-            var environment = new Dictionary<string, string>
-            {
-                ["PATH"] = $"{fakeBin};{Environment.GetEnvironmentVariable("PATH")}",
-                ["SHARPLABNEXT_HOME"] = installRoot,
-                ["SHARPLABNEXT_INTERNAL_SERVICE_TOKEN_FILE"] = missingToken,
-                ["SHARPLABNEXT_FAKE_DOCKER_CALLED"] = dockerCallMarker
-            };
-            var result = await RunAsync("pwsh", ["-NoProfile", "-File", Path.Combine(bundle, "install.ps1"), "-AllowUnsigned"], environment);
-
-            Assert.NotEqual(0, result.ExitCode);
-            Assert.Contains("Internal service token does not exist", result.StandardError, StringComparison.OrdinalIgnoreCase);
-            Assert.False(File.Exists(dockerCallMarker));
-            Assert.Equal("development", ReadPointer(installRoot, "current-release"));
-            Assert.False(Directory.Exists(Path.Combine(installRoot, "releases")));
-            Assert.False(File.Exists(Path.Combine(installRoot, "previous-release")));
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-            {
-                Directory.Delete(testRoot, recursive: true);
-            }
-        }
-    }
 
     [Fact]
     public void SelectionExcludesUnavailableAtomicProfiles()
@@ -2411,10 +1086,62 @@ public sealed class BundleBuilderTests
             plan.Images,
             static image => image.Id == "const-generics-linux-x64" &&
                 image.Producer == new ReleaseImageProducer { Kind = "bake", Id = "runtime-const-generics" });
+        Assert.Contains(plan.Images, static image => image.Id == "const-generics-linux-x64" && (image.BuildCapabilities is null || image.BuildCapabilities.Count == 0));
         Assert.Contains(
             plan.Images,
             static image => image.Id == "wine-jsharp20-linux-x64" &&
-                image.Producer == new ReleaseImageProducer { Kind = "bake", Id = "runtime-wine-jsharp20" });
+                image.Producer == new ReleaseImageProducer { Kind = "bake", Id = "runtime-wine-jsharp20" } &&
+                (image.BuildCapabilities ?? []).SequenceEqual(["jsharp"]));
+        Assert.Contains(plan.Images, static image => image.Id == "wine-netfx20-linux-x64" && (image.BuildCapabilities ?? []).SequenceEqual(["framework"]));
+    }
+
+    [Fact]
+    public async Task ImagePlanUsesDeclaredProducerForAnyRuntime()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var catalog = await CatalogLoader.LoadCatalogAsync(Path.Combine(repositoryRoot, "profiles", "catalog", "catalog.json"), TestContext.Current.CancellationToken);
+        var runtime = catalog.Runtimes.First(static item => item.Availability.IsSelectable);
+        var deployment = new DeploymentImageManifest
+        {
+            SchemaVersion = 1,
+            CapabilityDefinitions = [new CapabilityDefinition { Id = "wine", Provisioner = new CapabilityProvisioner { Kind = "wine-operator" }, RuntimeArguments = [new CapabilityRuntimeArgument { Option = "--wine-image", SourceCapability = "wine", Output = "digest" }] }, new CapabilityDefinition { Id = "framework", Dependencies = ["wine"], RuntimeArguments = [new CapabilityRuntimeArgument { Option = "--framework-input", SourceCapability = "framework", Output = "candidateInput" }] }],
+            Images = [new DeploymentImageDefinition { Id = "runtime-custom-image", Repository = "test/runtime-custom", RuntimeId = runtime.Id, Producer = new ReleaseImageProducer { Kind = "bake", Id = "runtime-custom-bake" }, BuildCapabilities = ["framework"] }]
+        };
+
+        var image = Assert.Single(ReleaseBundleBuilder.CreateImagePlan(catalog, deployment, "example").Images);
+        Assert.Equal(new ReleaseImageProducer { Kind = "bake", Id = "runtime-custom-bake" }, image.Producer);
+        Assert.Equal(["framework"], image.BuildCapabilities ?? []);
+        Assert.Equal("wine-operator", deployment.CapabilityDefinitions[0].Provisioner?.Kind);
+    }
+
+    [Fact]
+    public void ImagePlanRejectsIncompatibleDeclaredProducer()
+    {
+        var catalog = new CatalogDocument { SchemaVersion = 1, Revision = "test", ReleaseId = "test", Languages = [], Toolchains = [], ReferenceSets = [], Runtimes = [], ArtifactProcessors = [], Outputs = [], Compatibility = [], Presets = [] };
+        var deployment = new DeploymentImageManifest { SchemaVersion = 1, Images = [new DeploymentImageDefinition { Id = "service", Repository = "test/service", Always = true, Producer = new ReleaseImageProducer { Kind = "pull", Id = "test/service@sha256:" + new string('a', 64) } }] };
+
+        Assert.Throws<BundleValidationException>(() => ReleaseBundleBuilder.CreateImagePlan(catalog, deployment, "example"));
+
+        var unsafeBake = deployment with { Images = [new DeploymentImageDefinition { Id = "service", Repository = "test/service", Always = true, Producer = new ReleaseImageProducer { Kind = "bake", Id = "unsafe/target" } }] };
+        Assert.Throws<BundleValidationException>(() => ReleaseBundleBuilder.CreateImagePlan(catalog, unsafeBake, "example"));
+    }
+
+    [Fact]
+    public void ImagePlanRejectsUnknownBuildCapability()
+    {
+        var catalog = new CatalogDocument { SchemaVersion = 1, Revision = "test", ReleaseId = "test", Languages = [], Toolchains = [], ReferenceSets = [], Runtimes = [], ArtifactProcessors = [], Outputs = [], Compatibility = [], Presets = [] };
+        var deployment = new DeploymentImageManifest { SchemaVersion = 1, Images = [new DeploymentImageDefinition { Id = "service", Repository = "test/service", Always = true, BuildCapabilities = ["unregistered"] }] };
+
+        Assert.Throws<BundleValidationException>(() => ReleaseBundleBuilder.CreateImagePlan(catalog, deployment, "example"));
+    }
+
+    [Fact]
+    public void ImagePlanRejectsCapabilityDependencyCycle()
+    {
+        var catalog = new CatalogDocument { SchemaVersion = 1, Revision = "test", ReleaseId = "test", Languages = [], Toolchains = [], ReferenceSets = [], Runtimes = [], ArtifactProcessors = [], Outputs = [], Compatibility = [], Presets = [] };
+        var deployment = new DeploymentImageManifest { SchemaVersion = 1, CapabilityDefinitions = [new CapabilityDefinition { Id = "cycle-a", Dependencies = ["cycle-b"] }, new CapabilityDefinition { Id = "cycle-b", Dependencies = ["cycle-a"] }], Images = [new DeploymentImageDefinition { Id = "service", Repository = "test/service", Always = true, BuildCapabilities = ["cycle-a"] }] };
+
+        Assert.Throws<BundleValidationException>(() => ReleaseBundleBuilder.CreateImagePlan(catalog, deployment, "example"));
     }
 
     [Fact]

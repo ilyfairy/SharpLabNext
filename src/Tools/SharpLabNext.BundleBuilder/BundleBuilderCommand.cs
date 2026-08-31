@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace SharpLabNext.BundleBuilder;
 
 public sealed record BundleBuilderCommand(
@@ -18,20 +20,17 @@ public sealed record BundleBuilderCommand(
     bool MetadataOnly,
     IReadOnlyDictionary<string, string> ImageOverrides,
     string? SourceRevision = null,
-    bool AllowUncommittedSourceForDevelopment = false,
     string? ProfileUpdateStatusPath = null,
     string? RuntimeProfilesPath = null,
-    string? ImagePlanPath = null,
-    bool AllowDevelopmentImageInputs = false)
+    string? ImagePlanPath = null)
 {
     public const string Usage =
         "Usage: SharpLabNext.BundleBuilder [--repository-root PATH] [--catalog PATH] [--lock PATH] " +
         "[--deployment-images PATH] [--license-policy PATH] [--compose PATH] [--notices PATH] [--output PATH] " +
         "[--docker COMMAND] [--openssl COMMAND] [--signing-key PATH --signing-public-key PATH] " +
         "[--signing-key-id ID] [--image-prefix PREFIX] [--image ID=REFERENCE] [--metadata-only] " +
-        "[--source-revision REVISION] [--allow-uncommitted-source-for-development] " +
-        "[--profile-update-status PATH] [--runtime-profiles PATH] [--write-image-plan PATH] " +
-        "[--allow-development-image-inputs]";
+        "[--source-revision REVISION] " +
+        "[--profile-update-status PATH] [--runtime-profiles PATH] [--write-image-plan PATH]";
 
     public static BundleBuilderCommand Parse(string[] args)
     {
@@ -54,8 +53,6 @@ public sealed record BundleBuilderCommand(
         string? profileUpdateStatusPath = null;
         string? runtimeProfilesPath = null;
         string? imagePlanPath = null;
-        var allowUncommittedSourceForDevelopment = false;
-        var allowDevelopmentImageInputs = false;
         var imageOverrides = new Dictionary<string, string>(StringComparer.Ordinal);
 
         for (var index = 0; index < args.Length; index++)
@@ -113,9 +110,6 @@ public sealed record BundleBuilderCommand(
                 case "--source-revision":
                     sourceRevision = RequiredValue(args, ref index);
                     break;
-                case "--allow-uncommitted-source-for-development":
-                    allowUncommittedSourceForDevelopment = true;
-                    break;
                 case "--profile-update-status":
                     profileUpdateStatusPath = Path.GetFullPath(RequiredValue(args, ref index));
                     break;
@@ -124,9 +118,6 @@ public sealed record BundleBuilderCommand(
                     break;
                 case "--write-image-plan":
                     imagePlanPath = Path.GetFullPath(RequiredValue(args, ref index));
-                    break;
-                case "--allow-development-image-inputs":
-                    allowDevelopmentImageInputs = true;
                     break;
                 case "--help" or "-h":
                     throw new BundleBuilderUsageException(Usage);
@@ -164,7 +155,7 @@ public sealed record BundleBuilderCommand(
         licensePolicyPath ??= Path.Combine(repositoryRoot, "profiles", "license-policy.json");
         composePath ??= Path.Combine(repositoryRoot, "deploy", "compose.prod.yaml");
         noticesPath ??= Path.Combine(repositoryRoot, "THIRD-PARTY-NOTICES.md");
-        outputDirectory ??= Path.Combine(repositoryRoot, "artifacts", "sharplabnext-candidate");
+        outputDirectory ??= Path.Combine(repositoryRoot, "artifacts", "releases", $"sharplabnext-{DateTimeOffset.Now.ToString("yyyy-MM-dd-HH-mm-ss", CultureInfo.InvariantCulture)}");
         runtimeProfilesPath ??= Path.Combine(repositoryRoot, "profiles", "runtimes");
 
         return new BundleBuilderCommand(
@@ -185,11 +176,9 @@ public sealed record BundleBuilderCommand(
             metadataOnly,
             imageOverrides,
             sourceRevision,
-            allowUncommittedSourceForDevelopment,
             profileUpdateStatusPath,
             Path.GetFullPath(runtimeProfilesPath),
-            imagePlanPath,
-            allowDevelopmentImageInputs);
+            imagePlanPath);
     }
 
     private static void AddImageOverride(Dictionary<string, string> overrides, string value)

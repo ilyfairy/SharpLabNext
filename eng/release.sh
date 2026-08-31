@@ -2,26 +2,31 @@
 set -euo pipefail
 
 repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-bundle_arguments=(--allow-development-image-inputs)
+bundle_arguments=()
 build_arguments=(--all)
 output_directory=""
+source_revision=""
 accept_microsoft_licenses=false
 rebuild_images=false
 bundle_only=false
+rebuild_targets=()
 
 while (($# > 0)); do
   case "$1" in
     --output) output_directory="${2:?--output requires a value}"; shift 2 ;;
     --metadata-only) bundle_arguments+=(--metadata-only); shift ;;
-    --image-prefix|--source-revision)
+    --image-prefix)
       build_arguments+=("$1" "$2")
       bundle_arguments+=("$1" "$2")
       shift 2
       ;;
-    --allow-uncommitted-source-for-development)
-      build_arguments+=("$1")
-      bundle_arguments+=("$1")
-      shift
+    --source-revision)
+      source_revision="$2"
+      shift 2
+      ;;
+    --rebuild-target)
+      rebuild_targets+=("${2:?--rebuild-target requires a value}")
+      shift 2
       ;;
     --max-parallel)
       build_arguments+=("$1" "$2")
@@ -45,7 +50,7 @@ while (($# > 0)); do
       shift
       ;;
     -h|--help)
-      echo "Usage: eng/release.sh [--output PATH] [--image-prefix PREFIX] [--source-revision COMMIT] [--max-parallel 1..8 (default 5)] [--offline] [--rebuild-images] [--bundle-only] [--metadata-only] [--allow-uncommitted-source-for-development] --accept-microsoft-licenses"
+      echo "Usage: eng/release.sh [--output PATH] [--image-prefix PREFIX] [--source-revision COMMIT] [--rebuild-target TARGET ...] [--max-parallel 1..8 (default 5)] [--offline] [--rebuild-images] [--bundle-only] [--metadata-only] --accept-microsoft-licenses"
       exit 0
       ;;
     *) echo "Unknown argument: $1" >&2; exit 64 ;;
@@ -56,17 +61,25 @@ if [[ "$accept_microsoft_licenses" != true ]]; then
   echo "--accept-microsoft-licenses is required because the complete image set contains Microsoft proprietary inputs" >&2
   exit 64
 fi
-if [[ -z "$output_directory" ]]; then
-  release_id="$(dotnet run "$repository_root/eng/tools/read-release-id.cs" -- "$repository_root/profiles/lock.json")"
-  output_directory="$repository_root/artifacts/sharplabnext-$release_id"
-else
+if [[ -n "$output_directory" ]]; then
   output_directory="$(realpath -m -- "$output_directory")"
+  if [[ -e "$output_directory" ]]; then
+    echo "Bundle output already exists: $output_directory" >&2
+    exit 1
+  fi
+  bundle_arguments+=(--output "$output_directory")
 fi
-if [[ -e "$output_directory" ]]; then
-  echo "Bundle output already exists: $output_directory" >&2
+
+source_arguments=(run "$repository_root/eng/tools/resolve-source-provenance.cs" -- --repository-root "$repository_root")
+if [[ -n "$source_revision" ]]; then source_arguments+=(--source-revision "$source_revision"); fi
+source_revision="$(dotnet "${source_arguments[@]}" | sed -n 's/^SHARPLABNEXT_SOURCE_REVISION=//p' | tail -n 1)"
+if [[ -z "$source_revision" ]]; then
+  echo "Source provenance resolver did not return a revision" >&2
   exit 1
 fi
-bundle_arguments+=(--output "$output_directory")
+build_arguments+=(--source-revision "$source_revision")
+for target in "${rebuild_targets[@]}"; do build_arguments+=(--rebuild-target "$target"); done
+bundle_arguments+=(--source-revision "$source_revision")
 if [[ "$rebuild_images" == true ]]; then build_arguments+=(--no-reuse-existing); fi
 
 if [[ "$bundle_only" == false ]]; then

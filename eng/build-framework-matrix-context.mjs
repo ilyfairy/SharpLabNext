@@ -359,7 +359,6 @@ function parseArguments(arguments_) {
   for (let index = 0; index < arguments_.length; index++) {
     const argument = arguments_[index]
     if (argument === '--push') { values.push = true; continue }
-    if (argument === '--allow-uncommitted-source-for-development') { values.allowDirty = true; continue }
     if (argument === '--help') return { help: true }
     if (!argument.startsWith('--') || index + 1 >= arguments_.length) fail(`unknown or incomplete argument '${argument}'`)
     const name = argument.slice(2).replaceAll('-', '_').toUpperCase()
@@ -374,8 +373,7 @@ function usage() {
   return `Usage: node eng/build-framework-matrix-context.mjs \\
   --matrix-input <metadata-json> \\
   --source-revision <40/64-hex|development> \\
-  --image <repository:tag> [--version <id>] [--push] \\
-  [--allow-uncommitted-source-for-development]\n\n` +
+  --image <repository:tag> [--version <id>] [--push]\n\n` +
     'The output is a bounded metadata-only image. Prefixes remain in their digest-pinned operator images.'
 }
 
@@ -395,7 +393,7 @@ export function runContextBuild(argv, environment = process.env, spawn = spawnSy
   let before
   try { before = inspectGitSource(spawn, values.SOURCE_REVISION, values) } catch (error) { output.error(`framework context source error: ${error.message}`); return 1 }
   if (values.SOURCE_REVISION !== 'development' && values.SOURCE_REVISION !== before.headRevision) { output.error('framework context source error: SOURCE_REVISION does not match Git HEAD'); return 1 }
-  if (before.isDirty && !values.allowDirty) { output.error('framework context source error: worktree is dirty; use the explicit development override'); return 1 }
+  if (before.isDirty && !values.allowDirty) { output.error('framework context source error: worktree is dirty'); return 1 }
   if (values.push && before.isDirty) { output.error('framework context source error: --push requires a clean worktree'); return 1 }
   const operatorExpectations = {
     installerManifestSha256: installerManifestSha256(),

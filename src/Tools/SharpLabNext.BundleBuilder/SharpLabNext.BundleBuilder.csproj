@@ -6,7 +6,6 @@
     <ProjectReference Include="..\..\Contracts\SharpLabNext.Artifacts.Contracts\SharpLabNext.Artifacts.Contracts.csproj" />
     <ProjectReference Include="..\..\Contracts\SharpLabNext.Contracts\SharpLabNext.Contracts.csproj" />
     <ProjectReference Include="..\..\WorkerHost\SharpLabNext.RuntimeProfile.Sdk\SharpLabNext.RuntimeProfile.Sdk.csproj" />
-    <EmbeddedResource Include="DeploymentScripts\*" />
   </ItemGroup>
 
   <ItemGroup>

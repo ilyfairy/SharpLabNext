@@ -767,7 +767,7 @@ public sealed class ProfileUpdaterTests
         Assert.StartsWith("mcr.microsoft.com/dotnet/sdk:", bake.Environment["BASE_DOTNET_SDK_IMAGE"], StringComparison.Ordinal);
         Assert.Equal(candidate.Receipt.ReleaseId, bake.Environment["RELEASE_ID"]);
         Assert.StartsWith("candidate-", bake.Environment["SOURCE_REVISION"], StringComparison.Ordinal);
-        Assert.Equal(SourceDateEpochResolver.DevelopmentFallbackUnixSeconds, bake.Environment["SOURCE_DATE_EPOCH"]);
+        Assert.Equal(SourceDateEpochResolver.ContentFallbackUnixSeconds, bake.Environment["SOURCE_DATE_EPOCH"]);
         Assert.Equal(ProfileUpdateStageStatus.Succeeded, result.Stage.Status);
     }
 
@@ -1130,7 +1130,6 @@ public sealed class ProfileUpdaterTests
         var imageBuilder = await File.ReadAllTextAsync(Path.Combine(repositoryRoot, "eng", "build-images.mjs"), TestContext.Current.CancellationToken);
         Assert.Contains("run-with-bake-environment.cs", imageBuilder, StringComparison.Ordinal);
         Assert.Contains("--repository-root", imageBuilder, StringComparison.Ordinal);
-        Assert.Contains("--allow-uncommitted-source-for-development", imageBuilder, StringComparison.Ordinal);
         Assert.DoesNotContain("--load", imageBuilder, StringComparison.Ordinal);
 
         foreach (var script in new[] { "bundle.ps1", "bundle.sh" })
@@ -1239,27 +1238,25 @@ public sealed class ProfileUpdaterTests
     }
 
     [Fact]
-    public async Task SourceDateEpochUsesSourceRevisionForReleaseAndHeadForDevelopment()
+    public async Task SourceDateEpochUsesVerifiedRevisionUnlessContentIdentityIsExplicit()
     {
         var reader = new RecordingSourceDateEpochReader("001700000000");
 
-        var releaseEpoch = await SourceDateEpochResolver.ResolveAsync(".", "verified-revision", allowUncommittedSourceForDevelopment: false, reader, TestContext.Current.CancellationToken);
-        var developmentEpoch = await SourceDateEpochResolver.ResolveAsync(".", "local-uncommitted", allowUncommittedSourceForDevelopment: true, reader, TestContext.Current.CancellationToken);
+        var releaseEpoch = await SourceDateEpochResolver.ResolveAsync(".", "verified-revision", SourceIdentityMode.VerifiedRevision, reader, TestContext.Current.CancellationToken);
+        var contentEpoch = await SourceDateEpochResolver.ResolveAsync(".", "content-addressed-source", SourceIdentityMode.Content, reader, TestContext.Current.CancellationToken);
 
         Assert.Equal("1700000000", releaseEpoch);
-        Assert.Equal("1700000000", developmentEpoch);
-        Assert.Equal(["verified-revision", "HEAD"], reader.Revisions);
+        Assert.Equal(SourceDateEpochResolver.ContentFallbackUnixSeconds, contentEpoch);
+        Assert.Equal(["verified-revision"], reader.Revisions);
     }
 
     [Fact]
-    public async Task SourceDateEpochFallbackIsDevelopmentOnly()
+    public async Task SourceDateEpochRejectsMissingVerifiedRevision()
     {
         var reader = new RecordingSourceDateEpochReader(epoch: null);
 
-        var developmentEpoch = await SourceDateEpochResolver.ResolveAsync(".", "local-uncommitted", allowUncommittedSourceForDevelopment: true, reader, TestContext.Current.CancellationToken);
-        var exception = await Assert.ThrowsAsync<BakeEnvironmentValidationException>(() => SourceDateEpochResolver.ResolveAsync(".", "verified-revision", allowUncommittedSourceForDevelopment: false, reader, TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<BakeEnvironmentValidationException>(() => SourceDateEpochResolver.ResolveAsync(".", "verified-revision", SourceIdentityMode.VerifiedRevision, reader, TestContext.Current.CancellationToken));
 
-        Assert.Equal(SourceDateEpochResolver.DevelopmentFallbackUnixSeconds, developmentEpoch);
         Assert.Contains("verified source revision", exception.Message, StringComparison.Ordinal);
     }
 
@@ -1386,7 +1383,6 @@ public sealed class ProfileUpdaterTests
         Assert.Contains(Path.Combine(compatibility.WorkingDirectory, "profiles", "lock.json"), compatibility.Arguments);
         var bundle = Assert.Single(runner.Commands, static command => command.Arguments.Contains("src/Tools/SharpLabNext.BundleBuilder"));
         Assert.Contains("--metadata-only", bundle.Arguments);
-        Assert.Contains("--allow-uncommitted-source-for-development", bundle.Arguments);
         var composeUp = Assert.Single(runner.Commands, static command => command.FileName == "docker" && command.Arguments.Contains("up"));
         Assert.Contains("--pull", composeUp.Arguments);
         Assert.Contains("never", composeUp.Arguments);

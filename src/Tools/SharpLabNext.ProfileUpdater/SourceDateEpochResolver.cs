@@ -40,30 +40,25 @@ public sealed class GitSourceDateEpochReader : ISourceDateEpochReader
 
 public static class SourceDateEpochResolver
 {
-    public const string DevelopmentFallbackUnixSeconds = "0";
+    public const string ContentFallbackUnixSeconds = "0";
     private const string SourceIdentityModeEnvironmentVariable = "SHARPLABNEXT_SOURCE_IDENTITY_MODE";
     private const string ContentSourceIdentityMode = "content";
 
-    public static async Task<string> ResolveAsync(string repositoryRoot, string sourceRevision, bool allowUncommittedSourceForDevelopment, ISourceDateEpochReader? reader = null, CancellationToken cancellationToken = default)
+    public static async Task<string> ResolveAsync(string repositoryRoot, string sourceRevision, SourceIdentityMode sourceIdentityMode = SourceIdentityMode.VerifiedRevision, ISourceDateEpochReader? reader = null, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceRevision);
         var useDefaultReader = reader is null;
         reader ??= new GitSourceDateEpochReader();
 
-        if (useDefaultReader && string.Equals(Environment.GetEnvironmentVariable(SourceIdentityModeEnvironmentVariable), ContentSourceIdentityMode, StringComparison.OrdinalIgnoreCase))
+        if (sourceIdentityMode == SourceIdentityMode.Content || useDefaultReader && string.Equals(Environment.GetEnvironmentVariable(SourceIdentityModeEnvironmentVariable), ContentSourceIdentityMode, StringComparison.OrdinalIgnoreCase))
         {
-            return DevelopmentFallbackUnixSeconds;
+            return ContentFallbackUnixSeconds;
         }
 
-        var revision = allowUncommittedSourceForDevelopment ? "HEAD" : sourceRevision;
-        var epoch = await reader.ReadAsync(repositoryRoot, revision, cancellationToken);
+        var epoch = await reader.ReadAsync(repositoryRoot, sourceRevision, cancellationToken);
         if (epoch is null)
-        {
-            if (allowUncommittedSourceForDevelopment)
-                return DevelopmentFallbackUnixSeconds;
             throw new BakeEnvironmentValidationException($"Could not resolve SOURCE_DATE_EPOCH from verified source revision '{sourceRevision}'.");
-        }
 
         return Validate(epoch);
     }
@@ -77,4 +72,10 @@ public static class SourceDateEpochResolver
 
         return epoch.ToString(CultureInfo.InvariantCulture);
     }
+}
+
+public enum SourceIdentityMode
+{
+    VerifiedRevision,
+    Content
 }

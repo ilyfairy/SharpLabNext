@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace SharpLabNext.BundleBuilder;
 
@@ -6,7 +7,8 @@ public static class BundleBuilderProgram
 {
     private static readonly JsonSerializerOptions OutputJsonOptions = new(JsonSerializerDefaults.Web)
     {
-        WriteIndented = true
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
     public static async Task<int> RunAsync(string[] args)

@@ -322,8 +322,7 @@ test('immutable metadata rejects a non-canonical row count before copying any ro
       '--framework-matrix-input-sha256', digest,
       '--source-revision', 'development',
       '--image', 'sharplabnext/operator-framework-parent:test',
-      '--allow-uncommitted-source-for-development',
-    ], {}, spawn, { log() {}, error: value => errors.push(value) })
+    ], { SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }, spawn, { log() {}, error: value => errors.push(value) })
     assert.equal(status, 1)
     assert.equal(copied.length, 1)
     assert.match(errors.join('\n'), /exact 14-row Framework set/)
@@ -359,8 +358,7 @@ test('operator provenance mismatch fails before BuildKit resolves the parent', (
       '--framework-matrix-input-sha256', context.digest,
       '--source-revision', 'development',
       '--image', input.IMAGE,
-      '--allow-uncommitted-source-for-development',
-    ], {}, spawn, { log() {}, error: value => errors.push(value) })
+    ], { SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }, spawn, { log() {}, error: value => errors.push(value) })
     assert.equal(status, 1)
     assert.match(errors.join('\n'), /netfx20 operator Wine\/base identity.*must equal/)
     assert.equal(calls.some(([, args]) => args[0] === 'buildx'), false)
@@ -481,13 +479,13 @@ test('shared parent rejects repository-local contexts, raw row payloads, and man
   }
 })
 
-test('development source revision requires the explicit uncommitted-source override', () => {
+test('content source revision requires content source identity', () => {
   const context = makeContext()
   try {
     const development = { ...values(context), SOURCE_REVISION: 'development' }
     assert.match(
       validateParentInputs(development).join('\n'),
-      /development with --allow-uncommitted-source-for-development/,
+      /content identity development/,
     )
     assert.deepEqual(validateParentInputs({ ...development, allowDirty: true }), [])
   } finally {

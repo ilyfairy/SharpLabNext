@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+
+import { validateJsonSchemaInstance } from '../release/json-schema-instance-validation.mjs';
 
 import {
   buildRuntimeCandidates,
@@ -11,41 +12,70 @@ import {
   createBakeChildEnvironment,
   parseBakeEnvironmentSnapshot,
   resolveOrdinaryBakeTarget,
+  matchesRebuildTarget,
+  resolveBuildCapabilities,
+  resolveRuntimeArguments,
   runParallel,
   validateLocalImageBuildDriverInspection,
   validateRegistryContainer,
   validateReusableImageInspection,
 } from '../build-images.mjs';
-import { computeBuildCacheInputFingerprintSync } from '../build-cache-inputs.mjs';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const configuration = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'eng', 'release-prerequisites.json'), 'utf8')).localRegistry;
+const capabilityDefinitions = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'deploy', 'images.json'), 'utf8')).capabilityDefinitions;
 
-test('ordinary cache identity ignores Git metadata and tracks source bytes', t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-cache-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  fs.writeFileSync(path.join(root, 'source.txt'), 'one');
-  fs.mkdirSync(path.join(root, '.git'));
-  fs.writeFileSync(path.join(root, '.git', 'HEAD'), 'first');
-
-  const initial = computeBuildCacheInputFingerprintSync(root);
-  fs.writeFileSync(path.join(root, '.git', 'HEAD'), 'second');
-  assert.equal(computeBuildCacheInputFingerprintSync(root), initial);
-  fs.writeFileSync(path.join(root, 'source.txt'), 'two');
-  assert.notEqual(computeBuildCacheInputFingerprintSync(root), initial);
+test('release image caching is Docker-owned and target selection is generic', () => {
+  const orchestrator = fs.readFileSync(path.join(repositoryRoot, 'eng', 'build-images.mjs'), 'utf8');
+  assert.doesNotMatch(orchestrator, /compute(?:Product)?BuildInputFingerprint|build-images-state/);
+  assert.doesNotMatch(orchestrator, /const.?generics|jsharpBuildTargets|cppcliBuildTargets/i);
+  assert.doesNotMatch(orchestrator, /ordinaryBakeTargetImageNames|ordinaryBakeTargetAliases/);
+  assert.match(orchestrator, /explicit rebuild selectors are the opt-in invalidation mechanism/);
+  const image = { id: 'runtime-special-linux-x64', runtimeId: 'runtime-special-linux-x64', toolchainId: 'compiler-special', artifactProcessorId: 'processor-special', producer: { id: 'runtime-special' }, buildCapabilities: ['framework'] };
+  assert.equal(matchesRebuildTarget(image, 'runtime-special-linux-x64'), true);
+  assert.equal(matchesRebuildTarget(image, 'feature:framework'), true);
+  assert.equal(matchesRebuildTarget(image, 'capability:framework'), true);
+  assert.equal(matchesRebuildTarget(image, 'compiler-special'), true);
+  assert.equal(matchesRebuildTarget(image, 'processor:processor-special'), true);
+  assert.equal(matchesRebuildTarget(image, 'runtime:dotnet'), false);
+  assert.equal(matchesRebuildTarget(image, '*special*'), true);
+  assert.deepEqual([...resolveBuildCapabilities([image], capabilityDefinitions)].sort(), ['framework', 'wine']);
+  assert.deepEqual([...resolveBuildCapabilities([{ buildCapabilities: ['custom-output'] }], [{ id: 'base' }, { id: 'custom-output', dependencies: ['base'] }])].sort(), ['base', 'custom-output']);
+  assert.throws(() => resolveBuildCapabilities([{ buildCapabilities: ['unknown'] }], capabilityDefinitions), /Unknown build capability/);
+  assert.throws(() => resolveBuildCapabilities([{ buildCapabilities: ['cycle-a'] }], [{ id: 'cycle-a', dependencies: ['cycle-b'] }, { id: 'cycle-b', dependencies: ['cycle-a'] }]), /dependency cycle/);
+  const genericDefinitions = [
+    { id: 'base', dependencies: [], runtimeArguments: [{ option: '--base-image', sourceCapability: 'base', output: 'image' }] },
+    { id: 'combined', dependencies: ['base'], runtimeArguments: [{ option: '--extra-image', sourceCapability: 'base', output: 'image' }] },
+  ];
+  assert.deepEqual(resolveRuntimeArguments({ id: 'sample', buildCapabilities: ['base', 'combined'] }, genericDefinitions, { base: { image: 'registry.example/base@sha256:' + 'a'.repeat(64) } }), ['--base-image', 'registry.example/base@sha256:' + 'a'.repeat(64), '--extra-image', 'registry.example/base@sha256:' + 'a'.repeat(64)]);
+  assert.throws(() => resolveRuntimeArguments({ id: 'sample', buildCapabilities: ['combined'] }, genericDefinitions, {}), /requires output/);
+  assert.deepEqual(resolveRuntimeArguments({ id: 'sample', buildCapabilities: ['combined'] }, genericDefinitions, { base: { image: 'value' } }), ['--base-image', 'value', '--extra-image', 'value']);
+  assert.throws(() => resolveRuntimeArguments({ id: 'sample', buildCapabilities: ['left', 'right'] }, [{ id: 'left', runtimeArguments: [{ option: '--same', sourceCapability: 'left', output: 'image' }] }, { id: 'right', runtimeArguments: [{ option: '--same', sourceCapability: 'right', output: 'image' }] }], { left: { image: 'one' }, right: { image: 'two' } }), /duplicate runtime option/);
+  assert.deepEqual(resolveRuntimeArguments({ id: 'sample', buildCapabilities: ['combined', 'base'] }, genericDefinitions, { base: { image: 'value' } }), ['--base-image', 'value', '--extra-image', 'value']);
 });
 
 test('ordinary image mode resolves one standalone Bake target without a release plan', () => {
-  assert.deepEqual(resolveOrdinaryBakeTarget('gateway'), {
-    bakeTarget: 'gateway',
-    imageName: 'gateway',
-  });
-  assert.deepEqual(resolveOrdinaryBakeTarget('dotnet-10-linux-x64'), {
-    bakeTarget: 'runtime-dotnet10',
-    imageName: 'runtime-dotnet10',
-  });
+  const gateway = resolveOrdinaryBakeTarget('gateway');
+  assert.deepEqual({ bakeTarget: gateway.bakeTarget, imageName: gateway.imageName, id: gateway.id }, { bakeTarget: 'gateway', imageName: 'gateway', id: 'gateway' });
+  const dotnet = resolveOrdinaryBakeTarget('dotnet-10-linux-x64');
+  assert.deepEqual({ bakeTarget: dotnet.bakeTarget, imageName: dotnet.imageName, id: dotnet.id, runtimeId: dotnet.runtimeId }, { bakeTarget: 'runtime-dotnet10', imageName: 'runtime-dotnet10', id: 'dotnet-10-linux-x64', runtimeId: 'dotnet-10-linux-x64' });
+  assert.equal(matchesRebuildTarget({ ...dotnet, producer: { id: dotnet.bakeTarget } }, 'runtime:dotnet-10-linux-x64'), true);
   assert.throws(() => resolveOrdinaryBakeTarget('worker-cppcli'), /not a standalone ordinary image target/);
   assert.throws(() => resolveOrdinaryBakeTarget('toString'), /not a standalone ordinary image target/);
+  const deployment = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'deploy', 'images.json'), 'utf8'));
+  assert.equal(deployment.images.find(image => image.id === 'dotnet-10-linux-x64').ordinaryBakeTarget, 'runtime-dotnet10');
+  const frameworkRuntimes = deployment.images.filter(image => image.id.startsWith('wine-netfx'));
+  assert.ok(frameworkRuntimes.length > 0);
+  for (const image of frameworkRuntimes) assert.deepEqual(image.buildCapabilities, ['framework'], `framework capability for ${image.id}`);
+});
+
+test('deployment image schema distinguishes generated and immutable pull producers', () => {
+  const schema = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'schemas', 'deployment-images.schema.json'), 'utf8'));
+  const immutableReference = `registry.example/runtime@sha256:${'a'.repeat(64)}`;
+  const pull = { schemaVersion: 1, images: [{ id: 'promoted-runtime', repository: 'registry.example/runtime', runtimeId: 'promoted-runtime', immutableReference, producer: { kind: 'pull', id: immutableReference } }] };
+  const unsafeBake = { schemaVersion: 1, images: [{ id: 'service', repository: 'registry.example/service', always: true, producer: { kind: 'bake', id: 'unsafe/target' } }] };
+  assert.deepEqual(validateJsonSchemaInstance(pull, schema), []);
+  assert.notDeepEqual(validateJsonSchemaInstance(unsafeBake, schema), []);
 });
 
 function container() {
@@ -125,7 +155,7 @@ test('parallel image build failures identify the exact target', async () => {
   );
 });
 
-test('Bake environment snapshot is structured and excludes outer grants', () => {
+test('Bake environment snapshot is structured', () => {
   const snapshot = parseBakeEnvironmentSnapshot(
     'ILSense inputs valid.\n' +
     'SHARPLABNEXT_BAKE_ENVIRONMENT_JSON={"IMAGE_PREFIX":"registry.example/app","RELEASE_ID":"development"}\n',
@@ -135,47 +165,35 @@ test('Bake environment snapshot is structured and excludes outer grants', () => 
     RELEASE_ID: 'development',
   });
   assert.throws(() => parseBakeEnvironmentSnapshot('SHARPLABNEXT_BAKE_ENVIRONMENT_JSON=[]\n'), /must be an object/);
-  assert.throws(
-    () => parseBakeEnvironmentSnapshot(
-      'SHARPLABNEXT_BAKE_ENVIRONMENT_JSON=' +
-      '{"SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS":"true"}\n',
-    ),
-    /must not contain grant/,
-  );
 });
 
-test('candidate child environment replaces inherited development grants', () => {
+test('candidate child environment preserves the trusted snapshot and adds operator inputs', () => {
   const inherited = {
     Path: 'host-path',
-    sharplabnext_bake_allow_uncommitted_source_for_development: 'stale',
-    SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS: 'stale',
   };
   const clean = createBakeChildEnvironment(
     { IMAGE_PREFIX: 'registry.example/app' },
-    { allowUncommittedSourceForDevelopment: false },
+    {},
     inherited,
   );
   assert.equal(clean.Path, 'host-path');
   assert.equal(clean.IMAGE_PREFIX, 'registry.example/app');
-  assert.equal(clean.SHARPLABNEXT_BAKE_ALLOW_UNCOMMITTED_SOURCE_FOR_DEVELOPMENT, undefined);
-  assert.equal(clean.SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS, 'true');
 
-  const development = createBakeChildEnvironment(
+  const operatorEnvironment = createBakeChildEnvironment(
     { IMAGE_PREFIX: 'registry.example/app' },
-    { allowUncommittedSourceForDevelopment: true },
-    inherited,
+    { capabilityDefinitions },
+    {},
+    { 'jsharp20-development-base': 'registry.example/jsharp@sha256:' + 'a'.repeat(64) },
   );
-  assert.equal(development.SHARPLABNEXT_BAKE_ALLOW_UNCOMMITTED_SOURCE_FOR_DEVELOPMENT, 'true');
+  assert.equal(operatorEnvironment.JSHARP_TOOLCHAIN_IMAGE, 'registry.example/jsharp@sha256:' + 'a'.repeat(64));
 });
 
-test('source verification marker selects the build context without user flags', () => {
-  const clean = { allowUncommittedSourceForDevelopment: true };
+test('source verification marker is validated without changing ordinary content mode', () => {
+  const clean = {};
   assert.equal(applySourceVerificationMarker(clean, 'SHARPLABNEXT_SOURCE_VERIFIED=true\n'), 'true');
-  assert.equal(clean.allowUncommittedSourceForDevelopment, false);
 
-  const development = { allowUncommittedSourceForDevelopment: false };
+  const development = {};
   assert.equal(applySourceVerificationMarker(development, 'SHARPLABNEXT_SOURCE_VERIFIED=false\n'), 'false');
-  assert.equal(development.allowUncommittedSourceForDevelopment, true);
   assert.throws(
     () => applySourceVerificationMarker({}, 'SHARPLABNEXT_SOURCE_VERIFIED=maybe\n'),
     /invalid verification marker/,
@@ -186,12 +204,12 @@ test('runtime candidates resolve Bake environment once and still build in parall
   const options = {
     repositoryRoot,
     maximumParallel: 2,
-    allowUncommittedSourceForDevelopment: true,
+    sourceIdentityMode: 'content',
   };
   const images = [
-    { producer: { id: 'dotnet-10-linux-x64' } },
-    { producer: { id: 'wine-dotnet-10-linux-x64' } },
-    { producer: { id: 'wine-netfx48-linux-x64' } },
+    { producer: { id: 'dotnet-10-linux-x64' }, buildCapabilities: [] },
+    { producer: { id: 'wine-dotnet-10-linux-x64' }, buildCapabilities: ['wine'] },
+    { producer: { id: 'wine-netfx48-linux-x64' }, buildCapabilities: ['framework'] },
   ];
   let resolutions = 0;
   let active = 0;
@@ -226,8 +244,7 @@ test('runtime candidates resolve Bake environment once and still build in parall
   assert.ok(starts.every(call => call.command === process.execPath))
   assert.ok(starts.every(call => call.startOptions.cwd === repositoryRoot))
   assert.ok(starts.every(call => call.startOptions.env.IMAGE_PREFIX === 'sharplabnext'))
-  assert.ok(starts.every(call => call.startOptions.env.SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS === 'true'));
-  assert.ok(starts.every(call => call.startOptions.env.SHARPLABNEXT_BAKE_ALLOW_UNCOMMITTED_SOURCE_FOR_DEVELOPMENT === 'true'));
+  assert.ok(starts.every(call => call.startOptions.env.SHARPLABNEXT_SOURCE_IDENTITY_MODE === 'content'));
   assert.ok(starts.some(call => call.arguments_.includes('--wine-image')))
   assert.ok(starts.some(call => call.arguments_.includes('--framework-input')))
 });
@@ -251,7 +268,7 @@ test('complete image build keeps installers out of host execution', () => {
   const preparation = fs.readFileSync(path.join(repositoryRoot, 'eng', 'tools', 'prepare-framework-runtime.cs'), 'utf8');
   assert.match(orchestrator, /--installer-secret-file/);
   assert.match(orchestrator, /--cached-winetricks-payload-file/);
-  assert.match(orchestrator, /netfx35sp1-installer/);
+  assert.match(orchestrator, /cachedWinetricksPayloads/);
   assert.match(orchestrator, /'build', preparationScript, '--nologo'/);
   assert.match(orchestrator, /'run', preparationScript, '--no-build', '--'/);
   assert.match(orchestrator, /'--build-kind', 'wow64-base'/);
@@ -262,12 +279,12 @@ test('complete image build keeps installers out of host execution', () => {
   assert.doesNotMatch(orchestrator, /private-images|framework-companion-seeds/);
   assert.doesNotMatch(orchestrator, /prepare\w*Cache|seal\w*Cache|needsSeal|cache\.hit/);
   assert.doesNotMatch(orchestrator, /\['image', '(?:save|load)'/);
-  assert.match(orchestrator, /prepare-jsharp-toolchain\.cs/);
-  assert.match(orchestrator, /prepare-cppcli-toolchain\.cs/);
+  assert.match(orchestrator, /requiredOperatorDefinitions/);
+  assert.doesNotMatch(orchestrator, /jsharp20-development-base|cppcli-prepared-base/);
   assert.ok(orchestrator.indexOf('buildFrameworkOperators') < orchestrator.indexOf('buildOperatorImages'));
   assert.ok(orchestrator.indexOf('buildOperatorImages') < orchestrator.indexOf('buildBakeTargets'));
   assert.match(orchestrator, /maximumParallel: 5/);
-  assert.match(orchestrator, /runParallel\(seedTasks, 2\)/);
+  assert.match(orchestrator, /runParallel\(seedTasks, options\.maximumParallel\)/);
   assert.match(orchestrator, /runParallel\(tasks, options\.maximumParallel\)/);
   assert.doesNotMatch(orchestrator, /FrameworkMaxParallel|framework-max-parallel/);
   assert.match(orchestrator, /verify-buildkit\.cs/);

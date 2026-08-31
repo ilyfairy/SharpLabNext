@@ -35,7 +35,6 @@ internal static partial class FrameworkRuntimePreparation
         "[--installer-url-secret-file PATH | --installer-secret-file PATH] " +
         "[--cached-winetricks-payload-file PATH] " +
         "--accept-microsoft-dotnet-framework-eula " +
-        "[--allow-uncommitted-source-for-development] " +
         "[--repository-root PATH] [--docker-command COMMAND] [--dry-run]";
 
     public static async Task<int> RunAsync(string[] args)
@@ -44,10 +43,6 @@ internal static partial class FrameworkRuntimePreparation
         try
         {
             options = Parse(args);
-            if (IsContentSourceIdentity())
-            {
-                options = options with { AllowUncommittedSourceForDevelopment = true };
-            }
         }
         catch (UsageException exception)
         {
@@ -58,7 +53,7 @@ internal static partial class FrameworkRuntimePreparation
         try
         {
             var repositoryRoot = ResolveRepositoryRoot(options.RepositoryRoot);
-            ValidateSourceState(repositoryRoot, options.SourceRevision, options.DryRun, options.AllowUncommittedSourceForDevelopment);
+            ValidateSourceState(repositoryRoot, options.SourceRevision, options.DryRun);
             var inputs = Validate(options, repositoryRoot);
             var invocation = CreateDockerInvocation(options, inputs);
             if (options.DryRun)
@@ -67,7 +62,7 @@ internal static partial class FrameworkRuntimePreparation
                 return 0;
             }
 
-            return await ExecuteAsync(invocation, inputs, options.SourceRevision, options.AllowUncommittedSourceForDevelopment);
+            return await ExecuteAsync(invocation, inputs, options.SourceRevision);
         }
         catch (UsageException exception)
         {
@@ -105,7 +100,6 @@ internal static partial class FrameworkRuntimePreparation
         string? installerSecretFile = null;
         string? cachedWinetricksPayloadFile = null;
         var acceptEula = false;
-        var allowUncommittedSourceForDevelopment = false;
         var dryRun = false;
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -171,9 +165,6 @@ internal static partial class FrameworkRuntimePreparation
                 case "--accept-microsoft-dotnet-framework-eula":
                     acceptEula = true;
                     break;
-                case "--allow-uncommitted-source-for-development":
-                    allowUncommittedSourceForDevelopment = true;
-                    break;
                 case "--dry-run":
                     dryRun = true;
                     break;
@@ -238,7 +229,6 @@ internal static partial class FrameworkRuntimePreparation
             installerUrlSecretFile,
             installerSecretFile,
             cachedWinetricksPayloadFile,
-            allowUncommittedSourceForDevelopment,
             dryRun);
     }
 
@@ -266,7 +256,7 @@ internal static partial class FrameworkRuntimePreparation
         }
 
         var vendoredPayload = options.BuildKind == BuildKind.Wow64Base
-            ? null : ValidateVendoredPayload(repositoryRoot, manifest.VendoredWinetricksPayloads.Single(), options.AllowUncommittedSourceForDevelopment);
+            ? null : ValidateVendoredPayload(repositoryRoot, manifest.VendoredWinetricksPayloads.Single());
         var cachedPayloadLock = manifest.CachedWinetricksPayloads.Single();
         var cachedPayloadRequired = options.BuildKind switch
         {
@@ -451,7 +441,7 @@ internal static partial class FrameworkRuntimePreparation
         }
     }
 
-    private static ValidatedVendoredPayload ValidateVendoredPayload(string repositoryRoot, VendoredWinetricksPayload payload, bool allowUncommittedSourceForDevelopment)
+    private static ValidatedVendoredPayload ValidateVendoredPayload(string repositoryRoot, VendoredWinetricksPayload payload)
     {
         var normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(repositoryRoot));
         var path = Path.GetFullPath(Path.Combine(normalizedRoot, payload.RepositoryPath.Replace('/', Path.DirectorySeparatorChar)));
@@ -462,24 +452,13 @@ internal static partial class FrameworkRuntimePreparation
             throw new InputValidationException("The vendored Winetricks payload path escapes the repository root.");
         }
 
-        var contentIdentityMode = IsContentSourceIdentity() &&
-            allowUncommittedSourceForDevelopment;
+        var contentIdentityMode = IsContentSourceIdentity();
         string? attribute = null;
         if (!contentIdentityMode && HasGitMetadata(normalizedRoot))
+            attribute = RunGit(normalizedRoot, "check-attr", "filter", "--", payload.RepositoryPath).Trim();
+        else if (!contentIdentityMode)
         {
-            try
-            {
-                attribute = RunGit(normalizedRoot, "check-attr", "filter", "--", payload.RepositoryPath).Trim();
-            }
-            catch (InputValidationException) when (allowUncommittedSourceForDevelopment)
-            {
-                // The byte-level checks below remain authoritative when the
-                // optional Git metadata cannot be inspected.
-            }
-        }
-        else if (!contentIdentityMode && !allowUncommittedSourceForDevelopment)
-        {
-            throw new InputValidationException("The Framework source metadata is unavailable; use the local development build entry point.");
+            throw new InputValidationException("The Framework source metadata is unavailable for a verified source identity.");
         }
         if (attribute is not null && !attribute.EndsWith(": filter: lfs", StringComparison.Ordinal))
         {
@@ -750,7 +729,7 @@ internal static partial class FrameworkRuntimePreparation
             _ => throw new InputValidationException("The Framework companion seed generation is invalid.")
         };
 
-    private static async Task<int> ExecuteAsync(DockerInvocation invocation, ValidatedInputs inputs, string sourceRevision, bool allowUncommittedSourceForDevelopment)
+    private static async Task<int> ExecuteAsync(DockerInvocation invocation, ValidatedInputs inputs, string sourceRevision)
     {
         var startInfo = new ProcessStartInfo(invocation.Command)
         {
@@ -799,7 +778,7 @@ internal static partial class FrameworkRuntimePreparation
             }
         }
 
-        ValidateSourceState(inputs.RepositoryRoot, sourceRevision, dryRun: false, allowUncommittedSourceForDevelopment);
+        ValidateSourceState(inputs.RepositoryRoot, sourceRevision, dryRun: false);
         return 0;
     }
 
@@ -881,41 +860,22 @@ internal static partial class FrameworkRuntimePreparation
         return value;
     }
 
-    private static void ValidateSourceState(string repositoryRoot, string sourceRevision, bool dryRun, bool allowUncommittedSourceForDevelopment)
+    private static void ValidateSourceState(string repositoryRoot, string sourceRevision, bool dryRun)
     {
-        if (IsContentSourceIdentity() && allowUncommittedSourceForDevelopment)
-            return;
+        if (IsContentSourceIdentity()) return;
         if (!HasGitMetadata(repositoryRoot))
         {
-            if (allowUncommittedSourceForDevelopment)
-                return;
-            throw new InputValidationException("The Framework source metadata is unavailable; use the local development build entry point.");
+            throw new InputValidationException("The Framework source metadata is unavailable for a verified source identity.");
         }
 
-        string head;
-        try
-        {
-            head = RunGit(repositoryRoot, "rev-parse", "--verify", "HEAD").Trim();
-        }
-        catch (InputValidationException) when (allowUncommittedSourceForDevelopment)
-        {
-            return;
-        }
+        var head = RunGit(repositoryRoot, "rev-parse", "--verify", "HEAD").Trim();
         if (!StringComparer.Ordinal.Equals(head, sourceRevision))
         {
             throw new InputValidationException($"The source revision '{sourceRevision}' does not match Git HEAD '{head}'.");
         }
 
-        string status;
-        try
-        {
-            status = RunGit(repositoryRoot, "status", "--porcelain=v1", "--untracked-files=normal");
-        }
-        catch (InputValidationException) when (allowUncommittedSourceForDevelopment)
-        {
-            return;
-        }
-        if (!dryRun && status.Length != 0 && !allowUncommittedSourceForDevelopment)
+        var status = RunGit(repositoryRoot, "status", "--porcelain=v1", "--untracked-files=normal");
+        if (!dryRun && status.Length != 0)
         {
             throw new InputValidationException("The Framework operator source worktree must be clean.");
         }
@@ -1024,7 +984,6 @@ internal static partial class FrameworkRuntimePreparation
         string? InstallerUrlSecretFile,
         string? InstallerSecretFile,
         string? CachedWinetricksPayloadFile,
-        bool AllowUncommittedSourceForDevelopment,
         bool DryRun);
 
     private sealed record ValidatedInputs(string RepositoryRoot, string ManifestSha256, InstallerTarget? Target, ValidatedAssetSource AssetSource, ValidatedVendoredPayload? VendoredPayload, ValidatedCachedPayload? CachedPayload);

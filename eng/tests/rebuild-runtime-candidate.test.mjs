@@ -81,7 +81,7 @@ test('formal rebuild allows only source-revision-addressed Wine operator receipt
 test('formal rebuild rejects invalid targets and command failures', () => {
   let calls = 0
   assert.throws(
-    () => rebuildRuntimeCandidateFromCommittedSource('--allow-uncommitted-source-for-development', {}, {
+    () => rebuildRuntimeCandidateFromCommittedSource('--unsupported-option', {}, {
       runBuild() { calls++; return 0 },
     }),
     RuntimeCandidateRebuildError,

@@ -328,7 +328,7 @@ function gitStatusHasUnexpectedPaths(stdout, allowedPaths) {
 }
 
 export function validateGitSourceState(state, requestedRevision, options = {}) {
-  const { allowUncommittedSourceForDevelopment = false } = options
+  const { promotionMode = true } = options
   const failures = []
   if (!gitCommitPattern.test(requestedRevision ?? '')) {
     failures.push('SOURCE_REVISION must be a full lowercase Git commit')
@@ -340,15 +340,10 @@ export function validateGitSourceState(state, requestedRevision, options = {}) {
       `SOURCE_REVISION '${requestedRevision}' does not match Git HEAD '${state.headRevision}'`,
     )
   }
-  if (state?.isDirty === true && !allowUncommittedSourceForDevelopment) {
-    failures.push(
-      'runtime candidate source worktree is dirty; use the explicit development override ' +
-      'only for a non-promotable local candidate',
-    )
-  }
+  if (state?.isDirty === true && promotionMode) failures.push('runtime candidate source worktree is dirty')
   return Object.freeze({
     failures: Object.freeze(failures),
-    promotionEligible: failures.length === 0 && state?.isDirty === false,
+    promotionEligible: failures.length === 0 && state?.isDirty === false && promotionMode,
   })
 }
 

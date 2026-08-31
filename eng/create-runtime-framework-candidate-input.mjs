@@ -255,14 +255,9 @@ export function createFrameworkCandidateInput(options) {
 
 function parseArguments(argv) {
   if (argv.includes('--help') || argv.includes('-h')) return { help: true };
-  const values = { allowUncommittedSourceForDevelopment: false };
+  const values = {};
   const fields = { '--parent-image': 'parentImage', '--metadata-image': 'metadataImage', '--matrix-input': 'matrixInput', '--runtime-matrix': 'runtimeMatrix', '--source-revision': 'sourceRevision', '--output': 'output' };
   for (let index = 0; index < argv.length; index++) {
-    if (argv[index] === '--allow-uncommitted-source-for-development') {
-      if (values.allowUncommittedSourceForDevelopment) fail('--allow-uncommitted-source-for-development may be supplied once');
-      values.allowUncommittedSourceForDevelopment = true;
-      continue;
-    }
     const field = fields[argv[index]];
     if (field === undefined || values[field] !== undefined) fail(`unknown or duplicate argument '${argv[index]}'`);
     const value = argv[++index];
@@ -279,12 +274,11 @@ function usage() {
   return `Usage: node eng/create-runtime-framework-candidate-input.mjs \\
   --parent-image <repository@sha256:...> --metadata-image <repository@sha256:...> \\
   --matrix-input <matrix-input.json> --source-revision <40/64-hex> \\
-  --output <candidate-input.json> [--runtime-matrix <runtime-matrix.json>] \\
-  [--allow-uncommitted-source-for-development]`;
+  --output <candidate-input.json> [--runtime-matrix <runtime-matrix.json>]`;
 }
 
-function workingTreeSourceContext(sourceRevision, spawn) {
-  if (String(process.env[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() === contentSourceIdentityMode &&
+function workingTreeSourceContext(sourceRevision, spawn, environment = process.env) {
+  if (String(environment[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() === contentSourceIdentityMode &&
       isGitCommitIdentity(sourceRevision)) {
     return Object.freeze({ directory: repositoryRoot, dispose() {} });
   }
@@ -327,8 +321,8 @@ export function runCreateFrameworkCandidateInput(argv, options = {}) {
   try {
     const parsed = parseArguments(argv);
     if (parsed.help) { output.log(usage()); return 0; }
-    if (parsed.allowUncommittedSourceForDevelopment) {
-      sourceContext = workingTreeSourceContext(parsed.sourceRevision, options.spawn ?? spawnSync);
+    if (String((options.environment ?? process.env)[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() === contentSourceIdentityMode) {
+      sourceContext = workingTreeSourceContext(parsed.sourceRevision, options.spawn ?? spawnSync, options.environment ?? process.env);
     } else {
       const createContext = options.createCommittedSourceContext ?? createCommittedSourceContext;
       sourceContext = createContext({

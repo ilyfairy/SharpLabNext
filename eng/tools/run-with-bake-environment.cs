@@ -15,11 +15,7 @@ string? baseImageManifestPath = null;
 string? sourceRevision = null;
 string? repositoryRoot = null;
 string? runtimeMatrixPath = null;
-var allowUncommittedSourceForDevelopment = false;
-var allowDevelopmentImageInputs = false;
 var emitEnvironmentJson = false;
-const string developmentGrantEnvironmentVariable = "SHARPLABNEXT_BAKE_ALLOW_UNCOMMITTED_SOURCE_FOR_DEVELOPMENT";
-const string developmentImageInputsGrantEnvironmentVariable = "SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS";
 const string sourceIdentityModeEnvironmentVariable = "SHARPLABNEXT_SOURCE_IDENTITY_MODE";
 const string contentSourceIdentityMode = "content";
 const string environmentJsonPrefix = "SHARPLABNEXT_BAKE_ENVIRONMENT_JSON=";
@@ -45,12 +41,6 @@ for (var index = 0; index < args.Length; index++)
         case "--runtime-matrix":
             runtimeMatrixPath = RequiredValue(args, ref index);
             break;
-        case "--allow-uncommitted-source-for-development":
-            allowUncommittedSourceForDevelopment = true;
-            break;
-        case "--allow-development-image-inputs":
-            allowDevelopmentImageInputs = true;
-            break;
         case "--emit-environment-json":
             emitEnvironmentJson = true;
             break;
@@ -70,23 +60,16 @@ for (var index = 0; index < args.Length; index++)
     }
 }
 
-// Content-addressed builds are ordinary local builds by definition. Keep the
-// low-level wrapper consistent with the top-level entry point even when it is
-// invoked directly without the legacy development switch.
-if (string.Equals(Environment.GetEnvironmentVariable(sourceIdentityModeEnvironmentVariable), contentSourceIdentityMode, StringComparison.OrdinalIgnoreCase))
-{
-    allowUncommittedSourceForDevelopment = true;
-}
+var sourceIdentityMode = string.Equals(Environment.GetEnvironmentVariable(sourceIdentityModeEnvironmentVariable), contentSourceIdentityMode, StringComparison.OrdinalIgnoreCase) ? SourceIdentityMode.Content : SourceIdentityMode.VerifiedRevision;
 
 if (string.IsNullOrWhiteSpace(lockPath) || string.IsNullOrWhiteSpace(baseImageManifestPath) || string.IsNullOrWhiteSpace(sourceRevision) || string.IsNullOrWhiteSpace(repositoryRoot))
 {
-    Console.Error.WriteLine("Usage: dotnet run eng/tools/run-with-bake-environment.cs -- " + "--lock PATH --base-images PATH --source-revision REVISION --repository-root PATH " + "[--runtime-matrix PATH] " + "[--allow-uncommitted-source-for-development] " + "[--allow-development-image-inputs] " + "[--development-image-input NAME=REFERENCE] " + "[--emit-environment-json] " + "[--image-prefix PREFIX] [-- COMMAND [ARG...]]");
+    Console.Error.WriteLine("Usage: dotnet run eng/tools/run-with-bake-environment.cs -- " + "--lock PATH --base-images PATH --source-revision REVISION --repository-root PATH " + "[--runtime-matrix PATH] [--development-image-input NAME=REFERENCE] " + "[--emit-environment-json] [--image-prefix PREFIX] [-- COMMAND [ARG...]]");
     return 64;
 }
-
-if (developmentImageInputs.Count > 0 && !allowDevelopmentImageInputs)
+if (developmentImageInputs.Count > 0 && sourceIdentityMode != SourceIdentityMode.Content)
 {
-    Console.Error.WriteLine("--development-image-input requires --allow-development-image-inputs.");
+    Console.Error.WriteLine("--development-image-input requires content source identity.");
     return 64;
 }
 
@@ -98,11 +81,11 @@ if (emitEnvironmentJson && command.Count > 0)
 
 try
 {
-    await VerifyILSenseInputsAsync(repositoryRoot, lockPath, allowUncommittedSourceForDevelopment);
-    var sourceDateEpoch = await SourceDateEpochResolver.ResolveAsync(repositoryRoot, sourceRevision, allowUncommittedSourceForDevelopment);
+    await VerifyILSenseInputsAsync(repositoryRoot, lockPath, sourceIdentityMode == SourceIdentityMode.Content);
+    var sourceDateEpoch = await SourceDateEpochResolver.ResolveAsync(repositoryRoot, sourceRevision, sourceIdentityMode);
     var controlRuntimeTargetFramework = await ReadControlRuntimeTargetFrameworkAsync(runtimeMatrixPath ?? Path.Combine(repositoryRoot, "profiles", "runtime-matrix.json"));
     var environment = await BakeEnvironmentResolver.CreateAsync(lockPath, baseImageManifestPath, sourceRevision, sourceDateEpoch, imagePrefix, controlRuntimeTargetFramework: controlRuntimeTargetFramework);
-    environment["DEVELOPMENT_IMAGE_INPUTS"] = allowDevelopmentImageInputs ? "true" : "false";
+    environment["DEVELOPMENT_IMAGE_INPUTS"] = sourceIdentityMode == SourceIdentityMode.Content ? "true" : "false";
     foreach (var pair in developmentImageInputs)
         environment[pair.Key] = pair.Value;
     if (emitEnvironmentJson)
@@ -122,16 +105,10 @@ try
         startInfo.ArgumentList.Add(argument);
     foreach (var pair in environment)
         startInfo.Environment[pair.Key] = pair.Value;
-    startInfo.Environment.Remove(developmentGrantEnvironmentVariable);
-    startInfo.Environment.Remove(developmentImageInputsGrantEnvironmentVariable);
-    if (string.Equals(Environment.GetEnvironmentVariable(sourceIdentityModeEnvironmentVariable), contentSourceIdentityMode, StringComparison.OrdinalIgnoreCase))
+    if (sourceIdentityMode == SourceIdentityMode.Content)
     {
         startInfo.Environment[sourceIdentityModeEnvironmentVariable] = contentSourceIdentityMode;
     }
-    if (allowUncommittedSourceForDevelopment)
-        startInfo.Environment[developmentGrantEnvironmentVariable] = "true";
-    if (allowDevelopmentImageInputs)
-        startInfo.Environment[developmentImageInputsGrantEnvironmentVariable] = "true";
 
     using var process = Process.Start(startInfo);
     if (process is null)
@@ -165,8 +142,7 @@ static async Task VerifyILSenseInputsAsync(string repositoryRoot, string release
     var verifier = Path.Combine(repositoryRoot, "eng", "tools", "verify-ilsense-inputs.cs");
     var startInfo = new ProcessStartInfo { FileName = dotnet, WorkingDirectory = repositoryRoot, UseShellExecute = false };
     var verifierArguments = new List<string> { "run", verifier, "--", "--repository-root", repositoryRoot, "--lock", releaseLockPath };
-    if (allowMissingGit)
-        verifierArguments.Add("--allow-missing-git");
+    if (allowMissingGit) verifierArguments.Add("--allow-missing-git");
     foreach (var argument in verifierArguments)
         startInfo.ArgumentList.Add(argument);
 

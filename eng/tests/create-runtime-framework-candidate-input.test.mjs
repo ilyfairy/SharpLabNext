@@ -286,7 +286,7 @@ test('CLI validates matrix and installer provenance from the requested committed
   assert.match(mismatchMessages.errors.join('\n'), /installer-manifest-sha256/)
 })
 
-test('CLI development override uses the current worktree only after binding Git HEAD', t => {
+test('content source identity uses the current worktree without Git metadata', t => {
   const state = prepare(t)
   const outputPath = path.join(state.root, 'development-candidate.json')
   const messages = {
@@ -306,8 +306,7 @@ test('CLI development override uses the current worktree only after binding Git 
     '--runtime-matrix', runtimeMatrixPath,
     '--source-revision', revision,
     '--output', outputPath,
-    '--allow-uncommitted-source-for-development',
-  ], { spawn, output: messages }), 0, messages.errors.join('\n'))
+  ], { environment: { SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }, spawn, output: messages }), 0, messages.errors.join('\n'))
   assert.equal(JSON.parse(fs.readFileSync(outputPath, 'utf8')).sourceRevision, revision)
 
   messages.errors.length = 0
@@ -320,7 +319,6 @@ test('CLI development override uses the current worktree only after binding Git 
     '--matrix-input', state.matrixInputPath,
     '--source-revision', revision,
     '--output', path.join(state.root, 'wrong-head.json'),
-    '--allow-uncommitted-source-for-development',
-  ], { spawn: wrongHead, output: messages }), 1)
-  assert.match(messages.errors.join('\n'), /must match Git HEAD/)
+  ], { environment: { SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }, spawn: wrongHead, output: messages }), 0)
+  assert.deepEqual(messages.errors, [])
 })

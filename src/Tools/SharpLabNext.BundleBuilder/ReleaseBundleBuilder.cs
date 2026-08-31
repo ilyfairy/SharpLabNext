@@ -39,6 +39,8 @@ public sealed class ReleaseBundleBuilder
     public const string BaseImageLabelPrefix = "io.sharplabnext.base-image.";
     public const string DevelopmentImageInputsLabel = "io.sharplabnext.development-image-inputs";
     public const string ComposeEnvironmentFileName = ".env";
+    public const string DefaultInternalServiceToken = "sharplabnext-default-internal-service-token";
+    public const string InternalServiceTokenRelativePath = "secrets/internal-service-token";
     public const string DisabledGitHubOAuthSecretFileName = "github-oauth-client-secret.disabled";
     public const string SecurityAssetsDirectoryName = "security";
     public const string PromotionEvidenceDirectoryName = "promotion-evidence";
@@ -93,11 +95,12 @@ public sealed class ReleaseBundleBuilder
     {
         ArgumentNullException.ThrowIfNull(command);
         var effectiveSourceInspector = sourceInspector ?? (command.SigningKeyPath is null ? new ContentRepositorySourceInspector() : new GitRepositorySourceInspector(allowFallback: false));
-        var source = await RepositorySourceProvenanceResolver.ResolveAsync(command.RepositoryRoot, command.SourceRevision, command.AllowUncommittedSourceForDevelopment, effectiveSourceInspector, cancellationToken);
-        if ((!source.IsVerified || command.AllowDevelopmentImageInputs) && command.SigningKeyPath is not null)
+        var source = await RepositorySourceProvenanceResolver.ResolveAsync(command.RepositoryRoot, command.SourceRevision, effectiveSourceInspector, cancellationToken);
+        if (!source.IsVerified && command.SigningKeyPath is not null)
         {
-            throw new BundleValidationException("An unverified source or development image inputs cannot be used to create a signed release bundle.");
+            throw new BundleValidationException("An unverified source cannot be used to create a signed release bundle.");
         }
+        var allowLocalImageInputs = command.SigningKeyPath is null;
         EnsureInputFile(command.CatalogPath);
         EnsureInputFile(command.LockPath);
         EnsureInputFile(command.DeploymentImagesPath);
@@ -169,7 +172,7 @@ public sealed class ReleaseBundleBuilder
             item.Definition.ArtifactProcessorId ?? item.Definition.Id,
             item.Definition.ReleaseIdEnvironment,
             item.Definition.ImageIdEnvironment)).ToArray();
-        releaseLock = ResolveDevelopmentFrameworkComponentIdentities(catalog, releaseLock, inspectedImages, command.AllowDevelopmentImageInputs);
+        releaseLock = ResolveDevelopmentFrameworkComponentIdentities(catalog, releaseLock, inspectedImages, allowLocalImageInputs);
 
         foreach (var (definition, reference, inspection) in pendingInspections)
         {
@@ -186,7 +189,8 @@ public sealed class ReleaseBundleBuilder
                 expectedReferenceSetDigests,
                 definition.RuntimeId is not null &&
                 promotionBoundRuntimeIds.Contains(definition.RuntimeId),
-                command.AllowDevelopmentImageInputs);
+                allowLocalImageInputs,
+                allowDifferentSourceRevision: true);
         }
         var runtimePromotionTrust = await RuntimePromotionTrust.CaptureAsync(command.RepositoryRoot, source, catalog, releaseLock, deployment, activeRuntimeProfiles, inspectedImages, docker, cancellationToken, runtimePromotionPlanSignatureVerifier);
         await RuntimePromotionMatrixBinding.ValidateAsync(command.RepositoryRoot, activeRuntimeProfiles, runtimePromotionTrust, cancellationToken);
@@ -275,38 +279,51 @@ public sealed class ReleaseBundleBuilder
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(deployment);
         imageOverrides ??= new Dictionary<string, string>(StringComparer.Ordinal);
+        var capabilityDefinitions = ValidateCapabilityDefinitions(deployment);
         var selected = SelectImages(catalog, deployment);
         var images = selected.Select(definition =>
         {
             var reference = ResolveImageReference(definition, catalog.ReleaseId, imagePrefix, imageOverrides);
-            return new ReleaseImagePlanEntry { Id = definition.Id, Reference = reference, RuntimeId = definition.RuntimeId, Producer = ImageProducer(definition) };
+            ValidateBuildCapabilities(definition, capabilityDefinitions);
+            return new ReleaseImagePlanEntry { Id = definition.Id, Reference = reference, RuntimeId = definition.RuntimeId, ToolchainId = definition.ToolchainId, ArtifactProcessorId = definition.ArtifactProcessorId, Producer = ImageProducer(definition), BuildCapabilities = definition.BuildCapabilities is { Count: > 0 } ? definition.BuildCapabilities : null };
         }).ToArray();
         if (images.Select(static image => image.Id).Distinct(StringComparer.Ordinal).Count() != images.Length || images.Select(static image => image.Reference).Distinct(StringComparer.Ordinal).Count() != images.Length)
         {
             throw new BundleValidationException("Selected deployment images must have unique IDs and final references.");
         }
 
-        return new ReleaseImagePlan { SchemaVersion = 1, ReleaseId = catalog.ReleaseId, ImagePrefix = imagePrefix ?? "sharplabnext", Images = images };
+        return new ReleaseImagePlan { SchemaVersion = 1, ReleaseId = catalog.ReleaseId, ImagePrefix = imagePrefix ?? "sharplabnext", CapabilityDefinitions = deployment.CapabilityDefinitions, Images = images };
     }
 
     private static ReleaseImageProducer ImageProducer(DeploymentImageDefinition definition)
     {
-        if (definition.ImmutableReference is not null)
-        {
-            return new ReleaseImageProducer { Kind = "pull", Id = definition.ImmutableReference };
-        }
+        var producer = definition.Producer ?? (definition.ImmutableReference is not null
+            ? new ReleaseImageProducer { Kind = "pull", Id = definition.ImmutableReference }
+            : definition.RuntimeId is not null
+                ? new ReleaseImageProducer { Kind = "runtime-candidate", Id = definition.RuntimeId }
+                : new ReleaseImageProducer { Kind = "bake", Id = definition.Id });
+        ValidateImageProducer(definition, producer);
+        return producer;
+    }
 
-        if (definition.RuntimeId is not null)
-        {
-            return definition.RuntimeId switch
-            {
-                "const-generics-linux-x64" => new ReleaseImageProducer { Kind = "bake", Id = "runtime-const-generics" },
-                "wine-jsharp20-linux-x64" => new ReleaseImageProducer { Kind = "bake", Id = "runtime-wine-jsharp20" },
-                _ => new ReleaseImageProducer { Kind = "runtime-candidate", Id = definition.RuntimeId }
-            };
-        }
+    private static void ValidateImageProducer(DeploymentImageDefinition definition, ReleaseImageProducer producer)
+    {
+        if (producer.Kind is not ("bake" or "runtime-candidate" or "pull") || string.IsNullOrWhiteSpace(producer.Id))
+            throw new BundleValidationException($"Deployment image '{definition.Id}' has an invalid producer definition.");
+        if (producer.Kind == "bake" && !IsSafeIdentifier(producer.Id))
+            throw new BundleValidationException($"Deployment image '{definition.Id}' Bake producer must use a safe target ID.");
+        if (producer.Kind == "pull" && (definition.RuntimeId is null || definition.ImmutableReference is null || !StringComparer.Ordinal.Equals(producer.Id, definition.ImmutableReference)))
+            throw new BundleValidationException($"Deployment image '{definition.Id}' pull producer must match its immutable runtime reference.");
+        if (producer.Kind == "runtime-candidate" && (definition.RuntimeId is null || !StringComparer.Ordinal.Equals(producer.Id, definition.RuntimeId)))
+            throw new BundleValidationException($"Deployment image '{definition.Id}' runtime-candidate producer must match its runtime selector.");
+        if (definition.ImmutableReference is not null && producer.Kind != "pull")
+            throw new BundleValidationException($"Promotion-bound deployment image '{definition.Id}' must use a pull producer.");
+    }
 
-        return new ReleaseImageProducer { Kind = "bake", Id = definition.Id };
+    private static void ValidateBuildCapabilities(DeploymentImageDefinition definition, Dictionary<string, CapabilityDefinition> definitions)
+    {
+        if (definition.BuildCapabilities is null || definition.BuildCapabilities.Count != definition.BuildCapabilities.Distinct(StringComparer.Ordinal).Count() || definition.BuildCapabilities.Any(capability => string.IsNullOrEmpty(capability) || !definitions.ContainsKey(capability)))
+            throw new BundleValidationException($"Deployment image '{definition.Id}' has invalid, duplicate, or unsupported build capabilities.");
     }
 
     public static IReadOnlyList<DeploymentImageDefinition> SelectImages(CatalogDocument catalog, DeploymentImageManifest deployment)
@@ -472,14 +489,14 @@ public sealed class ReleaseBundleBuilder
             "\n",
             [
                 "# Docker Compose reads this file automatically.",
-                "# Keep credentials outside the bundle.",
+                "# Edit bundled defaults before exposing the deployment.",
                 "COMPOSE_PROJECT_NAME=sharplabnext",
                 "COMPOSE_PATH_SEPARATOR=:",
                 "COMPOSE_FILE=compose.prod.yaml:compose.generated.yaml",
                 $"SHARPLABNEXT_RELEASE_ID={releaseId}",
                 "SHARPLABNEXT_BIND_ADDRESS=127.0.0.1",
                 "SHARPLABNEXT_HTTP_PORT=8080",
-                "# deploy.sh creates this file during the first installation.",
+                "# Edit this file to replace the default internal service token.",
                 "SHARPLABNEXT_INTERNAL_SERVICE_TOKEN_FILE=./secrets/internal-service-token",
                 "SHARPLABNEXT_GITHUB_OAUTH_ENABLED=false",
                 "SHARPLABNEXT_RUNTIME_SESSION_REUSE_ENABLED=true",
@@ -527,6 +544,13 @@ public sealed class ReleaseBundleBuilder
     public static Task WriteDisabledGitHubOAuthSecretPlaceholderAsync(string root, CancellationToken cancellationToken = default) =>
         File.WriteAllBytesAsync(Path.Combine(root, DisabledGitHubOAuthSecretFileName), [], cancellationToken);
 
+    public static async Task WriteDefaultInternalServiceTokenAsync(string root, CancellationToken cancellationToken = default)
+    {
+        var path = Path.Combine(root, InternalServiceTokenRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, DefaultInternalServiceToken + "\n", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), cancellationToken);
+    }
+
     private async Task WriteBundleAsync(
         BundleBuilderCommand command,
         CatalogDocument catalog,
@@ -561,6 +585,7 @@ public sealed class ReleaseBundleBuilder
         }
         CopyDirectory(Path.Combine(command.RepositoryRoot, "deploy", SecurityAssetsDirectoryName), Path.Combine(staging, SecurityAssetsDirectoryName));
         await WriteDisabledGitHubOAuthSecretPlaceholderAsync(staging, cancellationToken);
+        await WriteDefaultInternalServiceTokenAsync(staging, cancellationToken);
         await WriteProfileUpdateStatusAsync(command, catalog.ReleaseId, staging, cancellationToken);
         await File.WriteAllTextAsync(Path.Combine(staging, "compose.generated.yaml"), CreateComposeOverlay(catalog, images, runtimeProfiles), cancellationToken);
         await File.WriteAllTextAsync(Path.Combine(staging, ComposeEnvironmentFileName), CreateComposeEnvironment(catalog.ReleaseId), cancellationToken);
@@ -612,11 +637,6 @@ public sealed class ReleaseBundleBuilder
         await WriteWeakCopyleftSourcesAsync(command.RepositoryRoot, dependencies, wineManifest, staging, cancellationToken);
         await WriteWineNoticeArchiveAsync(wineManifestSnapshot, images, staging, cancellationToken);
         await WriteRuntimePromotionEvidenceAsync(runtimePromotionTrust, runtimePromotionSourceClosure, staging, cancellationToken);
-        var deploymentScriptBindings = GetDeploymentScriptBindings(runtimePromotionTrust);
-        foreach (var scriptName in DeploymentScriptNames)
-        {
-            await WriteDeploymentScriptAsync(staging, scriptName, deploymentScriptBindings, cancellationToken);
-        }
         if (command.SigningPublicKeyPath is not null)
         {
             File.Copy(command.SigningPublicKeyPath, Path.Combine(staging, "signing-public-key.pem"));
@@ -768,7 +788,7 @@ public sealed class ReleaseBundleBuilder
         if (runtimePromotionTrust.Count == 0)
             return;
 
-        var currentSource = await RepositorySourceProvenanceResolver.ResolveAsync(command.RepositoryRoot, command.SourceRevision, command.AllowUncommittedSourceForDevelopment, effectiveSourceInspector, cancellationToken);
+        var currentSource = await RepositorySourceProvenanceResolver.ResolveAsync(command.RepositoryRoot, command.SourceRevision, effectiveSourceInspector, cancellationToken);
         if (currentSource != source)
         {
             throw new BundleValidationException("Repository source identity changed while promotion-bound release material was being built.");
@@ -1746,6 +1766,92 @@ public sealed class ReleaseBundleBuilder
         return digest;
     }
 
+    private static Dictionary<string, CapabilityDefinition> ValidateCapabilityDefinitions(DeploymentImageManifest deployment)
+    {
+        var definitions = new Dictionary<string, CapabilityDefinition>(StringComparer.Ordinal);
+        var operatorImages = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var definition in deployment.CapabilityDefinitions ?? [])
+        {
+            if (definition is null)
+                throw new BundleValidationException("Capability definitions cannot contain null entries.");
+            var dependencies = definition.Dependencies ?? [];
+            if (!IsSafeIdentifier(definition.Id) || !definitions.TryAdd(definition.Id, definition) || dependencies.Contains(definition.Id, StringComparer.Ordinal) || dependencies.Count != dependencies.Distinct(StringComparer.Ordinal).Count() || dependencies.Any(dependency => !IsSafeIdentifier(dependency)))
+                throw new BundleValidationException($"Capability definition '{definition.Id}' is invalid or duplicated.");
+            if (definition.Provisioner is { } provisioner && (!IsSafeIdentifier(provisioner.Kind) || (provisioner.SeedGenerations ?? []).Count != (provisioner.SeedGenerations ?? []).Distinct(StringComparer.Ordinal).Count() || (provisioner.SeedGenerations ?? []).Any(seed => !IsSafeIdentifier(seed))))
+                throw new BundleValidationException($"Capability '{definition.Id}' has an invalid provisioner.");
+            var runtimeArguments = definition.RuntimeArguments ?? [];
+            if (runtimeArguments.Any(static argument => argument is null) || runtimeArguments.Count != runtimeArguments.Select(static argument => argument.Option).Distinct(StringComparer.Ordinal).Count() || runtimeArguments.Any(argument => !IsOption(argument.Option) || !IsSafeIdentifier(argument.SourceCapability) || !IsSafePropertyName(argument.Output)))
+                throw new BundleValidationException($"Capability '{definition.Id}' has invalid runtime arguments.");
+            if (definition.Operator is { } capabilityOperator)
+                ValidateCapabilityOperator(definition, capabilityOperator, operatorImages);
+        }
+        foreach (var definition in definitions.Values)
+        {
+            if ((definition.Dependencies ?? []).Any(dependency => !definitions.ContainsKey(dependency)))
+                throw new BundleValidationException($"Capability '{definition.Id}' depends on an unknown capability.");
+            if ((definition.RuntimeArguments ?? []).Any(argument => !definitions.ContainsKey(argument.SourceCapability)))
+                throw new BundleValidationException($"Capability '{definition.Id}' references an unknown runtime argument capability.");
+        }
+        var visiting = new HashSet<string>(StringComparer.Ordinal);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        bool Visit(string id)
+        {
+            if (visited.Contains(id))
+                return true;
+            if (!visiting.Add(id))
+                return false;
+            foreach (var dependency in definitions[id].Dependencies ?? [])
+                if (!Visit(dependency))
+                    return false;
+            visiting.Remove(id);
+            visited.Add(id);
+            return true;
+        }
+        foreach (var id in definitions.Keys)
+            if (!Visit(id))
+                throw new BundleValidationException($"Capability dependency cycle includes '{id}'.");
+        bool Reaches(string from, string target, HashSet<string> seen)
+        {
+            if (string.Equals(from, target, StringComparison.Ordinal))
+                return true;
+            if (!seen.Add(from))
+                return false;
+            return (definitions[from].Dependencies ?? []).Any(dependency => Reaches(dependency, target, seen));
+        }
+        foreach (var definition in definitions.Values)
+            foreach (var argument in definition.RuntimeArguments ?? [])
+                if (!Reaches(definition.Id, argument.SourceCapability, []))
+                    throw new BundleValidationException($"Capability '{definition.Id}' runtime argument source '{argument.SourceCapability}' must be itself or a dependency.");
+        return definitions;
+    }
+
+    private static void ValidateCapabilityOperator(CapabilityDefinition definition, CapabilityOperator capabilityOperator, HashSet<string> operatorImages)
+    {
+        if (!IsSafeIdentifier(capabilityOperator.ImageId) || !IsSafeIdentifier(capabilityOperator.BuildKind) || !IsRelativeRepositoryPath(capabilityOperator.Script) || capabilityOperator.FrameworkSeedGeneration is not null && !IsSafeIdentifier(capabilityOperator.FrameworkSeedGeneration) || !operatorImages.Add(capabilityOperator.ImageId!))
+            throw new BundleValidationException($"Capability '{definition.Id}' has an invalid or duplicate operator definition.");
+        if (capabilityOperator.EnvironmentVariable is not null && !IsEnvironmentVariable(capabilityOperator.EnvironmentVariable))
+            throw new BundleValidationException($"Capability '{definition.Id}' has an invalid operator environment variable.");
+        var downloadArguments = capabilityOperator.DownloadArguments ?? [];
+        var licenseArguments = capabilityOperator.LicenseArguments ?? [];
+        var inputFiles = capabilityOperator.InputFiles ?? [];
+        if (downloadArguments.Any(static argument => argument is null) || downloadArguments.Count != downloadArguments.Select(static argument => argument.Option).Distinct(StringComparer.Ordinal).Count() || downloadArguments.Any(argument => !IsOption(argument.Option) || !IsSafeIdentifier(argument.DownloadId)))
+            throw new BundleValidationException($"Capability '{definition.Id}' has invalid operator download arguments.");
+        if (licenseArguments.Count != licenseArguments.Distinct(StringComparer.Ordinal).Count() || licenseArguments.Any(static argument => !IsOption(argument)))
+            throw new BundleValidationException($"Capability '{definition.Id}' has invalid operator license arguments.");
+        if (inputFiles.Count != inputFiles.Distinct(StringComparer.Ordinal).Count() || inputFiles.Any(static path => !IsRelativeRepositoryPath(path)))
+            throw new BundleValidationException($"Capability '{definition.Id}' has invalid operator input files.");
+    }
+
+    private static bool IsSafeIdentifier(string? value) => value is not null && value.Length is > 0 and <= 128 && value[0] is >= 'a' and <= 'z' && value[1..].All(static character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '_' or '-');
+
+    private static bool IsSafePropertyName(string? value) => value is not null && value.Length is > 0 and <= 128 && char.IsAsciiLetter(value[0]) && value[1..].All(static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-');
+
+    private static bool IsRelativeRepositoryPath(string? value) => value is { Length: > 0 and <= 512 } && !Path.IsPathRooted(value) && !value.Contains('\\') && value.Split('/').All(static segment => segment.Length > 0 && segment is not "." and not ".." && segment.All(static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_'));
+
+    private static bool IsEnvironmentVariable(string value) => value.Length is > 0 and <= 160 && value.All(static character => char.IsAsciiLetterOrDigit(character) || character == '_') && char.IsAsciiLetter(value[0]);
+
+    private static bool IsOption(string value) => value.Length is > 2 and <= 160 && value.StartsWith("--", StringComparison.Ordinal) && value[2..].All(static character => char.IsAsciiLetterOrDigit(character) || character == '-');
+
     private static IReadOnlyDictionary<string, string> ValidateInputs(CatalogDocument catalog, ReleaseLockDocument releaseLock, DeploymentImageManifest deployment, IReadOnlyDictionary<string, string> imageOverrides)
     {
         if (!string.Equals(catalog.ReleaseId, releaseLock.ReleaseId, StringComparison.Ordinal))
@@ -1767,6 +1873,8 @@ public sealed class ReleaseBundleBuilder
             throw new BundleValidationException("Unsupported or empty deployment image manifest.");
         }
 
+        var capabilityDefinitions = ValidateCapabilityDefinitions(deployment);
+
         if (catalog.ReleaseId.Length is 0 or > 128 || !char.IsAsciiLetterOrDigit(catalog.ReleaseId[0]) || catalog.ReleaseId.Any(static character => !(char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-')))
         {
             throw new BundleValidationException("Release ID cannot be used as a Docker tag.");
@@ -1777,12 +1885,17 @@ public sealed class ReleaseBundleBuilder
         var runtimes = catalog.Runtimes.ToDictionary(static item => item.Id, StringComparer.Ordinal);
         var processors = catalog.ArtifactProcessors.ToDictionary(static item => item.Id, StringComparer.Ordinal);
         var toolchainImagesByWorkerId = new Dictionary<string, string>(StringComparer.Ordinal);
+        var ordinaryBakeTargets = new HashSet<string>(StringComparer.Ordinal);
         foreach (var image in deployment.Images)
         {
             if (!ids.Add(image.Id))
             {
                 throw new BundleValidationException($"Duplicate deployment image ID '{image.Id}'.");
             }
+            if (image.OrdinaryBakeTarget is not null && !IsSafeIdentifier(image.OrdinaryBakeTarget))
+                throw new BundleValidationException($"Deployment image '{image.Id}' has an invalid ordinary Bake target.");
+            if (image.OrdinaryBakeTarget is not null && !ordinaryBakeTargets.Add(image.OrdinaryBakeTarget))
+                throw new BundleValidationException($"Ordinary Bake target '{image.OrdinaryBakeTarget}' is declared more than once.");
 
             var selectors = new[] { image.ToolchainId, image.RuntimeId, image.ArtifactProcessorId }
                 .Count(static value => value is not null);
@@ -1795,6 +1908,9 @@ public sealed class ReleaseBundleBuilder
             {
                 throw new BundleValidationException($"Deployment image '{image.Id}' has conflicting selectors.");
             }
+
+            ValidateBuildCapabilities(image, capabilityDefinitions);
+            _ = ImageProducer(image);
 
             if (image.ComposeService is not null && (image.ToolchainId is not null || image.ArtifactProcessorId is not null) && (image.ReleaseIdEnvironment is null || image.ImageIdEnvironment is null))
             {
@@ -1944,7 +2060,8 @@ public sealed class ReleaseBundleBuilder
         CatalogDocument catalog,
         IReadOnlyDictionary<string, string> expectedReferenceSetDigests,
         bool promotionBoundRuntime,
-        bool allowDevelopmentImageInputs)
+        bool allowDevelopmentImageInputs,
+        bool allowDifferentSourceRevision)
     {
         if (!IsSha256(inspection.ImageId))
         {
@@ -1974,11 +2091,11 @@ public sealed class ReleaseBundleBuilder
             }
             if (StringComparer.Ordinal.Equals(developmentInputs, "true") && !allowDevelopmentImageInputs)
             {
-                throw new BundleValidationException($"Image '{definition.Id}' uses development image inputs; " + "--allow-development-image-inputs is required for an unsigned bundle.");
+                throw new BundleValidationException($"Image '{definition.Id}' uses local image inputs and cannot be included in a signed bundle.");
             }
         }
 
-        ValidateInspectionSourceRevision(definition, inspection.Labels, source.Revision, promotionBoundRuntime);
+        ValidateInspectionSourceRevision(definition, inspection.Labels, source.Revision, promotionBoundRuntime, allowDifferentSourceRevision);
 
         ValidateComponentIdentityLabels(definition, inspection.Labels, releaseLock);
         ValidateDeclaredReferenceSetLabels(definition, inspection.Labels, releaseLock, expectedReferenceSetDigests);
@@ -2007,7 +2124,7 @@ public sealed class ReleaseBundleBuilder
         }
     }
 
-    internal static void ValidateInspectionSourceRevision(DeploymentImageDefinition definition, IReadOnlyDictionary<string, string> labels, string releaseRevision, bool promotionBoundRuntime)
+    internal static void ValidateInspectionSourceRevision(DeploymentImageDefinition definition, IReadOnlyDictionary<string, string> labels, string releaseRevision, bool promotionBoundRuntime, bool allowDifferentSourceRevision = false)
     {
         if (!labels.TryGetValue(RepositorySourceProvenanceResolver.ImageLabel, out var sourceRevision))
         {
@@ -2023,13 +2140,13 @@ public sealed class ReleaseBundleBuilder
             return;
         }
 
-        if (!StringComparer.Ordinal.Equals(sourceRevision, releaseRevision))
+        if ((!allowDifferentSourceRevision && !StringComparer.Ordinal.Equals(sourceRevision, releaseRevision)) || (allowDifferentSourceRevision && !IsCommit(sourceRevision)))
         {
-            throw new BundleValidationException($"Image '{definition.Id}' does not carry source revision label '{releaseRevision}'.");
+            throw new BundleValidationException(allowDifferentSourceRevision ? $"Image '{definition.Id}' does not carry a valid source revision label." : $"Image '{definition.Id}' does not carry source revision label '{releaseRevision}'.");
         }
-        if (definition.ImmutableReference is not null && (!labels.TryGetValue("org.opencontainers.image.revision", out var releaseOciRevision) || !StringComparer.Ordinal.Equals(releaseOciRevision, releaseRevision)))
+        if (definition.ImmutableReference is not null && (!labels.TryGetValue("org.opencontainers.image.revision", out var releaseOciRevision) || !StringComparer.Ordinal.Equals(releaseOciRevision, sourceRevision)))
         {
-            throw new BundleValidationException($"Immutable image '{definition.Id}' does not carry OCI source revision '{releaseRevision}'.");
+            throw new BundleValidationException($"Immutable image '{definition.Id}' does not carry OCI source revision '{sourceRevision}'.");
         }
     }
 
@@ -2317,51 +2434,7 @@ public sealed class ReleaseBundleBuilder
         return Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken));
     }
 
-    private static DeploymentScriptBindings GetDeploymentScriptBindings(IReadOnlyList<RuntimePromotionTrustSnapshot> trust)
-    {
-        var production = RuntimePromotionTrust.RuntimePromotionPlanSignatureTrust.ProductionVerifier;
-        var bindings = trust.Select(runtime =>
-        {
-            var signedPlan = runtime.SignedPlan ?? throw new BundleValidationException($"Runtime '{runtime.RuntimeId}' has no captured signed promotion plan.");
-            return new DeploymentScriptBindings(signedPlan.Verifier.KeyId, signedPlan.PublicKey.RelativePath, signedPlan.PublicKey.Sha256);
-        }).Distinct().ToArray();
-        if (bindings.Length > 1)
-        {
-            throw new BundleValidationException("Promotion-bound release material uses multiple plan-signature trust roots.");
-        }
-
-        return bindings.Length == 1
-            ? bindings[0] : new DeploymentScriptBindings(production.KeyId, production.PublicKeyPath, $"sha256:{Convert.ToHexStringLower(SHA256.HashData(production.PublicKeyPem))}");
-    }
-
-    private static async Task WriteDeploymentScriptAsync(string staging, string scriptName, DeploymentScriptBindings bindings, CancellationToken cancellationToken)
-    {
-        var resourceName = $"SharpLabNext.BundleBuilder.DeploymentScripts.{scriptName}";
-        await using var input = typeof(ReleaseBundleBuilder).Assembly.GetManifestResourceStream(resourceName) ?? throw new BundleValidationException($"Embedded deployment script '{scriptName}' is missing.");
-        using var reader = new StreamReader(input, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-        var script = await reader.ReadToEndAsync(cancellationToken);
-        script = script.Replace("__RUNTIME_PROMOTION_PLAN_KEY_ID__", bindings.KeyId, StringComparison.Ordinal).Replace("__RUNTIME_PROMOTION_PLAN_PUBLIC_KEY_PATH__", bindings.PublicKeyPath, StringComparison.Ordinal).Replace("__RUNTIME_PROMOTION_PLAN_PUBLIC_KEY_SHA256__", bindings.PublicKeySha256, StringComparison.Ordinal);
-        await File.WriteAllTextAsync(Path.Combine(staging, scriptName), script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), cancellationToken);
-    }
-
-    private static readonly string[] DeploymentScriptNames =
-    [
-        "verify.ps1",
-        "verify.sh",
-        "smoke.ps1",
-        "smoke.sh",
-        "deployment-common.ps1",
-        "deployment-common.sh",
-        "deploy.sh",
-        "install.ps1",
-        "install.sh",
-        "rollback.ps1",
-        "rollback.sh"
-    ];
-
     private sealed record PromotionEvidenceBinding(string Kind, SortedSet<string> RuntimeIds);
-
-    private sealed record DeploymentScriptBindings(string KeyId, string PublicKeyPath, string PublicKeySha256);
 
     private sealed class PromotionEvidenceManifest
     {

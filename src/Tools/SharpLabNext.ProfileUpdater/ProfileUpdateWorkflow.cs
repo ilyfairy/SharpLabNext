@@ -246,7 +246,7 @@ public sealed class ProfileUpdateWorkflow
     private async Task<IReadOnlyList<ProfileUpdateExternalCommand>> CreateBuildCommandsAsync(CandidateContext candidate, string configuration, CancellationToken cancellationToken)
     {
         var sourceRevision = $"candidate-{DigestHex(candidate.Digest)[..12]}";
-        var sourceDateEpoch = await SourceDateEpochResolver.ResolveAsync(candidate.WorkspaceRoot, sourceRevision, allowUncommittedSourceForDevelopment: true, cancellationToken: cancellationToken);
+        var sourceDateEpoch = await SourceDateEpochResolver.ResolveAsync(candidate.WorkspaceRoot, sourceRevision, SourceIdentityMode.Content, cancellationToken: cancellationToken);
         var bakeEnvironment = BakeEnvironmentResolver.Create(candidate.Document, Path.Combine(candidate.WorkspaceRoot, "profiles", "base-images.json"), sourceRevision, sourceDateEpoch, "sharplabnext");
         return
         [
@@ -381,8 +381,7 @@ public sealed class ProfileUpdateWorkflow
                 "--lock", candidate.Material.LockPath,
                 "--output", bundleRoot,
                 "--metadata-only",
-                "--source-revision", $"candidate-{DigestHex(candidate.Digest)[..12]}",
-                "--allow-uncommitted-source-for-development"
+                "--source-revision", $"candidate-{DigestHex(candidate.Digest)[..12]}"
             ],
             workingDirectory: candidate.WorkspaceRoot));
         commands.Add(Command("docker", [..composeArguments, "config", "--quiet"], composeEnvironment, candidate.WorkspaceRoot));

@@ -130,19 +130,16 @@ public static class RepositorySourceProvenanceResolver
     // an abstract source state. Real non-Git worktrees use the content hash.
     public const string LocalUncommittedRevision = "0f92ac96a34a11b45d5a836a4a602b79e9b4e5ba607fce7965d0ee46cea8e408";
 
-    public static async Task<RepositorySourceProvenance> ResolveAsync(string repositoryRoot, string? requestedRevision, bool allowUncommittedSourceForDevelopment, IRepositorySourceInspector? inspector = null, CancellationToken cancellationToken = default)
+    public static async Task<RepositorySourceProvenance> ResolveAsync(string repositoryRoot, string? requestedRevision, IRepositorySourceInspector? inspector = null, CancellationToken cancellationToken = default)
     {
         inspector ??= new GitRepositorySourceInspector();
         var state = await inspector.InspectAsync(repositoryRoot, cancellationToken);
-        return Resolve(state, requestedRevision, allowUncommittedSourceForDevelopment);
+        return Resolve(state, requestedRevision);
     }
 
-    public static RepositorySourceProvenance Resolve(RepositorySourceState state, string? requestedRevision, bool allowUncommittedSourceForDevelopment)
+    public static RepositorySourceProvenance Resolve(RepositorySourceState state, string? requestedRevision)
     {
         ArgumentNullException.ThrowIfNull(state);
-        // Kept in the public shape for callers from older entry points. The
-        // verification result is derived from the observed source itself.
-        _ = allowUncommittedSourceForDevelopment;
         var requested = string.IsNullOrWhiteSpace(requestedRevision) ? null : requestedRevision.Trim();
         var contentIdentityMode = string.Equals(Environment.GetEnvironmentVariable(SourceIdentityModeEnvironmentVariable), ContentSourceIdentityMode, StringComparison.OrdinalIgnoreCase);
         if (requested is not null && IsReservedUnknown(requested))
@@ -151,9 +148,15 @@ public static class RepositorySourceProvenanceResolver
         }
         if (contentIdentityMode)
         {
-            // A content-addressed build must describe the bytes that are
-            // actually present. Ignore legacy commit overrides in this mode.
-            requested = null;
+            // A content-addressed build must keep the identity captured by
+            // the outer release invocation. Re-resolving a different value
+            // here would let the build and bundle stages describe different
+            // source trees.
+            if (requested is not null && (state.HeadRevision is null || !string.Equals(requested, state.HeadRevision, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new BundleValidationException($"Requested source content identity '{requested}' does not match current source content '{state.HeadRevision ?? "<unavailable>"}'.");
+            }
+            requested = state.HeadRevision;
         }
 
         if (state.IsGitRepository && state.HeadRevision is not null && requested is not null && !string.Equals(requested, state.HeadRevision, StringComparison.OrdinalIgnoreCase))
@@ -191,10 +194,10 @@ public static class RepositorySourceProvenanceResolver
 
 internal static class SourceContentFingerprint
 {
-    private const string FingerprintVersion = "sharplabnext-source-content-v1\0";
+    private const string FingerprintVersion = "sharplabnext-source-content-v2\0";
     private static readonly HashSet<string> ExcludedDirectories = new(StringComparer.Ordinal)
     {
-        ".git", ".tmp", "_tmp", ".vs", ".idea", ".vscode", "artifacts", "bin", "obj", "node_modules", "dist", "coverage", "TestResults"
+        ".git", ".tmp", "_tmp", ".vs", ".idea", ".vscode", "artifacts", "artifacts_deleted", "bin", "obj", "node_modules", "dist", "coverage", "TestResults"
     };
 
     public static string Compute(string root)
@@ -256,7 +259,7 @@ internal static class SourceContentFingerprint
         }
     }
 
-    private static bool IsExcluded(string relative) => relative.Split('/').Any(ExcludedDirectories.Contains);
+    private static bool IsExcluded(string relative) => relative.Split('/').Any(segment => ExcludedDirectories.Contains(segment) || segment.StartsWith(".sharplabnext-", StringComparison.Ordinal)) || relative.Equals("third_party/ILSense", StringComparison.Ordinal) || relative.StartsWith("third_party/ILSense/", StringComparison.Ordinal) || relative.Equals("deploy/secrets", StringComparison.Ordinal) || relative.StartsWith("deploy/secrets/", StringComparison.Ordinal) || relative.StartsWith("frontend/test-results/", StringComparison.Ordinal) || relative.StartsWith("deploy/compose.generated.", StringComparison.Ordinal) || Path.GetFileName(relative) is ".env" || Path.GetFileName(relative).StartsWith(".env.", StringComparison.Ordinal);
 
     private static void AppendText(IncrementalHash hash, string value) => hash.AppendData(Encoding.UTF8.GetBytes(value));
 }

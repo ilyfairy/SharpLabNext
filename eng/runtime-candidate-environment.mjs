@@ -28,11 +28,9 @@ const safeIdPattern = /^[a-z0-9][a-z0-9._-]{0,127}$/
 const safeDigestPinnedImagePattern = /^[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64}$/
 const wineOperatorReceiptInput = 'WINE_CORECLR_OPERATOR_RECEIPT'
 const wineOperatorReceiptSignatureInput = 'WINE_CORECLR_OPERATOR_RECEIPT_SIG'
-const developmentSourceOverride = '--allow-uncommitted-source-for-development'
-const developmentImageInputsOverride = '--allow-development-image-inputs'
+const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE'
+const contentSourceIdentityMode = 'content'
 const historicalFrameworkDevelopmentOverride = '--allow-historical-framework-input-for-development'
-const outerDevelopmentGrantInput = 'SHARPLABNEXT_BAKE_ALLOW_UNCOMMITTED_SOURCE_FOR_DEVELOPMENT'
-const outerDevelopmentImageInputsGrant = 'SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS'
 const historicalFrameworkDevelopmentInput = 'RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_DEVELOPMENT_OPT_IN'
 const developmentOperatorWrapperInput = 'WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN'
 const developmentOperatorTagInput = 'WINE_CORECLR_DEVELOPMENT_OPERATOR_TAG'
@@ -50,9 +48,7 @@ export const runtimeCandidateEnvironmentUsage = `Usage:
     [--wine-operator-receipt-signature ABSOLUTE_PATH]
     [--framework-input PATH]
     [--publish-to <registry-host>/<repository>:<RELEASE_ID>]
-    [-- [--allow-uncommitted-source-for-development]
-         [--allow-development-image-inputs]
-         [--allow-historical-framework-input-for-development]
+    [-- [--allow-historical-framework-input-for-development]
          [build-runtime-candidate options]]`
 
 export class RuntimeCandidateEnvironmentError extends Error {
@@ -556,16 +552,7 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
       output.log(runtimeCandidateEnvironmentUsage)
       return 0
     }
-    const developmentOverrideCount = (parsed.buildArguments ?? []).filter(argument => argument === developmentSourceOverride).length
-    if (developmentOverrideCount > 1) {
-      fail(`${developmentSourceOverride} may be supplied once after --.`)
-    }
-    const developmentMode = developmentOverrideCount === 1
-    const developmentImageInputsOverrideCount = (parsed.buildArguments ?? []).filter(argument => argument === developmentImageInputsOverride).length
-    if (developmentImageInputsOverrideCount > 1) {
-      fail(`${developmentImageInputsOverride} may be supplied once after --.`)
-    }
-    const developmentImageInputsMode = developmentImageInputsOverrideCount === 1
+    const contentSourceIdentity = String(values[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() === contentSourceIdentityMode
     const historicalFrameworkOverrideCount = (parsed.buildArguments ?? []).filter(argument => argument === historicalFrameworkDevelopmentOverride).length
     if (historicalFrameworkOverrideCount > 1) {
       fail(`${historicalFrameworkDevelopmentOverride} may be supplied once after --.`)
@@ -578,7 +565,7 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
     const derived = deriveRuntimeCandidateEnvironment(parsed.profileId, matrix, {
       wineImage: parsed.wineImage,
       frameworkInput,
-      allowLocalDevelopmentWineOperator: developmentMode || developmentImageInputsMode,
+      allowLocalDevelopmentWineOperator: contentSourceIdentity,
     })
     if (parsed.publishDestination !== undefined && parsed.buildArguments !== undefined) {
       fail('--publish-to cannot be combined with candidate build options after --.')
@@ -589,9 +576,9 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
     const sharedFrameworkCandidate =
       derived.target === 'runtime-wine-framework-matrix-shared-candidate'
     const localWineOperatorMode = wineCoreClrCandidate &&
-      (developmentMode || developmentImageInputsMode)
+      contentSourceIdentity
     const frameworkDevelopmentMode = sharedFrameworkCandidate &&
-      (historicalFrameworkMode || developmentImageInputsMode)
+      (historicalFrameworkMode || contentSourceIdentity)
     const hasWineOperatorReceipt = parsed.wineOperatorReceiptPath !== undefined
     const hasWineOperatorReceiptSignature = parsed.wineOperatorReceiptSignaturePath !== undefined
     if (hasWineOperatorReceipt !== hasWineOperatorReceiptSignature) {
@@ -614,12 +601,7 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
     if (historicalFrameworkMode && !sharedFrameworkCandidate) {
       fail(`${historicalFrameworkDevelopmentOverride} is supported only for shared Wine Framework candidates.`)
     }
-    if (historicalFrameworkMode && values[outerDevelopmentGrantInput] !== 'true') {
-      fail(
-        `${historicalFrameworkDevelopmentOverride} requires the outer run-with-bake-environment ` +
-        'development grant.',
-      )
-    }
+    if (historicalFrameworkMode && !contentSourceIdentity) fail(`${historicalFrameworkDevelopmentOverride} requires content source identity.`)
     if (historicalFrameworkMode &&
         (!isGitCommitIdentity(values.SOURCE_REVISION) ||
          !isGitCommitIdentity(frameworkInput?.sourceRevision) ||
@@ -632,29 +614,8 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
     if (historicalFrameworkMode && hasWineOperatorReceipt) {
       fail('Historical Framework development candidates must not receive formal operator receipts.')
     }
-    if (developmentMode &&
-        (!commandMode || parsed.publishDestination !== undefined)) {
-      fail(`${developmentSourceOverride} is accepted only for local candidate builds.`)
-    }
-    if (developmentMode && values[outerDevelopmentGrantInput] !== 'true') {
-      fail(
-        `${developmentSourceOverride} requires the outer run-with-bake-environment ` +
-        'development grant.',
-      )
-    }
-    if (developmentImageInputsMode &&
-        (!isRealLocalBuild(parsed.buildArguments) || parsed.publishDestination !== undefined)) {
-      fail(`${developmentImageInputsOverride} is accepted only for real local candidate builds.`)
-    }
-    if (developmentImageInputsMode && values[outerDevelopmentImageInputsGrant] !== 'true') {
-      fail(
-        `${developmentImageInputsOverride} requires the outer run-with-bake-environment ` +
-        'development image-input grant.',
-      )
-    }
-    if (developmentImageInputsMode && wineCandidate && hasWineOperatorReceipt) {
-      fail('Development image-input candidate builds must not receive formal operator receipts.')
-    }
+    if (contentSourceIdentity && parsed.publishDestination !== undefined) fail('Content source identity is accepted only for local candidate builds.')
+    if (contentSourceIdentity && wineCandidate && hasWineOperatorReceipt) fail('Content source candidates must not receive formal operator receipts.')
     if (frameworkDevelopmentMode &&
         (!isGitCommitIdentity(values.SOURCE_REVISION) ||
          !isGitCommitIdentity(frameworkInput?.sourceRevision))) {
@@ -687,8 +648,6 @@ export function runRuntimeCandidateEnvironment(argv, options = {}) {
         ]
       : [derived.target, '--destination', parsed.publishDestination]
     const childEnvironment = { ...values, ...derived.environment }
-    delete childEnvironment[outerDevelopmentGrantInput]
-    delete childEnvironment[outerDevelopmentImageInputsGrant]
     delete childEnvironment[wineOperatorReceiptInput]
     delete childEnvironment[wineOperatorReceiptSignatureInput]
     delete childEnvironment.WINE_CORECLR_OPERATOR_RECEIPT_SHA256

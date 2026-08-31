@@ -1,27 +1,89 @@
 {
   "schemaVersion": 1,
+  "capabilityDefinitions": [
+    {
+      "id": "wine",
+      "dependencies": [],
+      "provisioner": {
+        "kind": "wine-operator"
+      },
+      "runtimeArguments": [
+        { "option": "--wine-image", "sourceCapability": "wine", "output": "localTag" }
+      ]
+    },
+    {
+      "id": "framework",
+      "dependencies": ["wine"],
+      "provisioner": {
+        "kind": "framework-matrix",
+        "requiresPrerequisites": true,
+        "requiresRegistry": true,
+        "seedGenerations": []
+      },
+      "runtimeArguments": [
+        { "option": "--wine-image", "sourceCapability": "wine", "output": "digest" },
+        { "option": "--framework-input", "sourceCapability": "framework", "output": "candidateInput" }
+      ]
+    },
+    {
+      "id": "jsharp",
+      "dependencies": ["framework"],
+      "operator": {
+        "imageId": "jsharp20-development-base",
+        "buildKind": "jsharp20",
+        "script": "eng/tools/prepare-jsharp-toolchain.cs",
+        "frameworkSeedGeneration": "clr2",
+        "environmentVariable": "JSHARP_TOOLCHAIN_IMAGE",
+        "downloadArguments": [],
+        "licenseArguments": ["--accept-microsoft-dotnet-eula", "--accept-microsoft-jsharp-eula"],
+        "inputFiles": ["deploy/docker/Dockerfile.operator-jsharp20"]
+      }
+    },
+    {
+      "id": "cppcli",
+      "dependencies": ["framework"],
+      "operator": {
+        "imageId": "cppcli-prepared-base",
+        "buildKind": "cppcli",
+        "script": "eng/tools/prepare-cppcli-toolchain.cs",
+        "frameworkSeedGeneration": "clr4",
+        "environmentVariable": "CPPCLI_PREPARED_BASE_IMAGE",
+        "downloadArguments": [
+          { "option": "--msvc-wine-source", "downloadId": "msvc-wine-source" },
+          { "option": "--visual-studio-manifest", "downloadId": "visual-studio-manifest" },
+          { "option": "--netfx48-developer-pack", "downloadId": "netfx48-developer-pack" }
+        ],
+        "licenseArguments": ["--accept-microsoft-cpp-build-tools-license", "--accept-microsoft-dotnet-eula"],
+        "inputFiles": ["deploy/docker/Dockerfile.operator-cppcli-base", "deploy/docker/cppcli-netfx-env.sh", "deploy/docker/extract-netfx48-sdk.py"]
+      }
+    }
+  ],
   "images": [
     {
       "id": "gateway",
       "repository": "sharplabnext/gateway",
+      "ordinaryBakeTarget": "gateway",
       "always": true,
       "composeService": "gateway"
     },
     {
       "id": "artifact-store",
       "repository": "sharplabnext/artifact-store",
+      "ordinaryBakeTarget": "artifact-store",
       "always": true,
       "composeService": "artifact-store"
     },
     {
       "id": "runtime-supervisor",
       "repository": "sharplabnext/runtime-supervisor",
+      "ordinaryBakeTarget": "runtime-supervisor",
       "always": true,
       "composeService": "runtime-supervisor"
     },
     {
       "id": "worker-roslyn-stable",
       "repository": "sharplabnext/worker-roslyn-stable",
+      "ordinaryBakeTarget": "worker-roslyn-stable",
       "toolchainId": "roslyn-stable",
       "composeService": "worker-roslyn-stable",
       "releaseIdEnvironment": "RoslynWorker__ReleaseId",
@@ -30,6 +92,7 @@
     {
       "id": "worker-roslyn-netfx48",
       "repository": "sharplabnext/worker-roslyn-netfx48",
+      "ordinaryBakeTarget": "worker-roslyn-netfx48",
       "toolchainId": "roslyn-stable-netfx48",
       "lockComponentIds": [
         "roslyn-stable",
@@ -55,6 +118,7 @@
     {
       "id": "worker-roslyn-main",
       "repository": "sharplabnext/worker-roslyn-main",
+      "ordinaryBakeTarget": "worker-roslyn-main",
       "toolchainId": "roslyn-main",
       "composeService": "worker-roslyn-main",
       "releaseIdEnvironment": "RoslynWorker__ReleaseId",
@@ -76,6 +140,7 @@
     {
       "id": "worker-fsharp",
       "repository": "sharplabnext/worker-fsharp",
+      "ordinaryBakeTarget": "worker-fsharp",
       "toolchainId": "fsharp-stable",
       "lockComponentIds": [
         "fsharp-core"
@@ -87,6 +152,7 @@
     {
       "id": "worker-gsharp",
       "repository": "sharplabnext/worker-gsharp",
+      "ordinaryBakeTarget": "worker-gsharp",
       "toolchainId": "gsharp-stable",
       "lockComponentIds": [
         "gsharp-source",
@@ -100,6 +166,7 @@
     {
       "id": "worker-peachpie",
       "repository": "sharplabnext/worker-peachpie",
+      "ordinaryBakeTarget": "worker-peachpie",
       "toolchainId": "peachpie-stable",
       "lockComponentIds": [
         "peachpie-runtime",
@@ -113,6 +180,7 @@
       "id": "worker-cppcli",
       "repository": "sharplabnext/worker-cppcli",
       "toolchainId": "msvc-cppcli-netfx48",
+      "buildCapabilities": ["cppcli"],
       "lockComponentIds": [
         "msvc-wine-source",
         "netfx48-ref"
@@ -125,6 +193,7 @@
       "id": "worker-jsharp",
       "repository": "sharplabnext/worker-jsharp",
       "toolchainId": "vjc-jsharp20",
+      "buildCapabilities": ["jsharp"],
       "lockComponentIds": [
         "jsharp20",
         "jsharp20-ref"
@@ -136,6 +205,7 @@
     {
       "id": "worker-il",
       "repository": "sharplabnext/worker-il",
+      "ordinaryBakeTarget": "worker-il",
       "toolchainId": "mobius-ilasm-stable",
       "lockComponentIds": [
         "ilsense",
@@ -148,6 +218,7 @@
     {
       "id": "worker-minilang",
       "repository": "sharplabnext/worker-minilang",
+      "ordinaryBakeTarget": "worker-minilang",
       "toolchainId": "minilang-stable",
       "composeService": "worker-minilang",
       "releaseIdEnvironment": "MINILANG_RELEASE_ID",
@@ -183,6 +254,7 @@
     {
       "id": "worker-artifacts-jsil",
       "repository": "sharplabnext/worker-artifacts-jsil",
+      "ordinaryBakeTarget": "worker-artifacts-jsil",
       "artifactProcessorId": "artifacts-jsil",
       "lockComponentIds": [
         "jsil-source",
@@ -200,6 +272,7 @@
     {
       "id": "worker-artifacts-il-assembler",
       "repository": "sharplabnext/worker-artifacts-il-assembler",
+      "ordinaryBakeTarget": "worker-artifacts-il-assembler",
       "artifactProcessorId": "il-assembler",
       "composeService": "worker-artifacts-il-assembler",
       "releaseIdEnvironment": "ArtifactAssembler__ReleaseId",
@@ -222,12 +295,14 @@
     {
       "id": "dotnet-10-linux-x64",
       "repository": "sharplabnext/runtime-dotnet-10-linux-x64",
+      "ordinaryBakeTarget": "runtime-dotnet10",
       "runtimeId": "dotnet-10-linux-x64",
       "lockComponentId": "dotnet-10-linux-x64"
     },
     {
       "id": "dotnet-11-preview-linux-x64",
       "repository": "sharplabnext/runtime-dotnet-11-preview-linux-x64",
+      "ordinaryBakeTarget": "runtime-dotnet11",
       "runtimeId": "dotnet-11-preview-linux-x64",
       "lockComponentId": "dotnet-11-preview-linux-x64"
     },
@@ -235,6 +310,7 @@
       "id": "const-generics-linux-x64",
       "repository": "sharplabnext/runtime-const-generics",
       "runtimeId": "const-generics-linux-x64",
+      "producer": { "kind": "bake", "id": "runtime-const-generics" },
       "lockComponentIds": [
         "const-generics-runtime-source",
         "const-generics-ref"
@@ -245,12 +321,15 @@
       "id": "wine-netfx48-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx48-linux-x64",
       "runtimeId": "wine-netfx48-linux-x64",
+      "buildCapabilities": ["framework"],
       "lockComponentId": "wine-netfx48-linux-x64"
     },
     {
       "id": "wine-jsharp20-linux-x64",
       "repository": "sharplabnext/runtime-wine-jsharp20",
       "runtimeId": "wine-jsharp20-linux-x64",
+      "producer": { "kind": "bake", "id": "runtime-wine-jsharp20" },
+      "buildCapabilities": ["jsharp"],
       "lockComponentIds": [
         "jsharp20",
         "vjc-jsharp20"
@@ -321,42 +400,49 @@
       "id": "wine-dotnet-5-linux-x64",
       "repository": "sharplabnext/runtime-wine-dotnet-5-linux-x64",
       "runtimeId": "wine-dotnet-5-linux-x64",
+      "buildCapabilities": ["wine"],
       "lockComponentId": "wine-dotnet-5-linux-x64"
     },
     {
       "id": "wine-dotnet-6-linux-x64",
       "repository": "sharplabnext/runtime-wine-dotnet-6-linux-x64",
       "runtimeId": "wine-dotnet-6-linux-x64",
+      "buildCapabilities": ["wine"],
       "lockComponentId": "wine-dotnet-6-linux-x64"
     },
     {
       "id": "wine-dotnet-7-linux-x64",
       "repository": "sharplabnext/runtime-wine-dotnet-7-linux-x64",
       "runtimeId": "wine-dotnet-7-linux-x64",
+      "buildCapabilities": ["wine"],
       "lockComponentId": "wine-dotnet-7-linux-x64"
     },
     {
       "id": "wine-dotnet-8-linux-x64",
       "repository": "sharplabnext/runtime-wine-dotnet-8-linux-x64",
       "runtimeId": "wine-dotnet-8-linux-x64",
+      "buildCapabilities": ["wine"],
       "lockComponentId": "wine-dotnet-8-linux-x64"
     },
     {
       "id": "wine-dotnet-9-linux-x64",
       "repository": "sharplabnext/runtime-wine-dotnet-9-linux-x64",
       "runtimeId": "wine-dotnet-9-linux-x64",
+      "buildCapabilities": ["wine"],
       "lockComponentId": "wine-dotnet-9-linux-x64"
     },
     {
       "id": "wine-dotnet-10-linux-x64",
       "repository": "sharplabnext/runtime-wine-dotnet-10-linux-x64",
       "runtimeId": "wine-dotnet-10-linux-x64",
+      "buildCapabilities": ["wine"],
       "lockComponentId": "wine-dotnet-10-linux-x64"
     },
     {
       "id": "wine-dotnet-11-preview-linux-x64",
       "repository": "sharplabnext/runtime-wine-dotnet-11-preview-linux-x64",
       "runtimeId": "wine-dotnet-11-preview-linux-x64",
+      "buildCapabilities": ["wine"],
       "lockComponentId": "wine-dotnet-11-preview-linux-x64"
     },
     {
@@ -369,78 +455,91 @@
       "id": "wine-netfx20-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx20-linux-x64",
       "runtimeId": "wine-netfx20-linux-x64",
+      "buildCapabilities": ["framework"],
       "lockComponentId": "wine-netfx20-linux-x64"
     },
     {
       "id": "wine-netfx30-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx30-linux-x64",
       "runtimeId": "wine-netfx30-linux-x64",
+      "buildCapabilities": ["framework"],
       "lockComponentId": "wine-netfx30-linux-x64"
     },
     {
       "id": "wine-netfx35-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx35-linux-x64",
       "runtimeId": "wine-netfx35-linux-x64",
+      "buildCapabilities": ["framework"],
       "lockComponentId": "wine-netfx35-linux-x64"
     },
     {
       "id": "wine-netfx40-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx40-linux-x64",
       "runtimeId": "wine-netfx40-linux-x64",
+      "buildCapabilities": ["framework"],
       "lockComponentId": "wine-netfx40-linux-x64"
     },
     {
       "id": "wine-netfx45-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx45-linux-x64",
       "runtimeId": "wine-netfx45-linux-x64",
+      "buildCapabilities": ["framework"],
       "lockComponentId": "wine-netfx45-linux-x64"
     },
     {
       "id": "wine-netfx451-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx451-linux-x64",
       "runtimeId": "wine-netfx451-linux-x64",
+      "buildCapabilities": ["framework"],
       "lockComponentId": "wine-netfx451-linux-x64"
     },
     {
       "id": "wine-netfx452-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx452-linux-x64",
       "runtimeId": "wine-netfx452-linux-x64",
+      "buildCapabilities": ["framework"],
       "lockComponentId": "wine-netfx452-linux-x64"
     },
     {
       "id": "wine-netfx46-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx46-linux-x64",
       "runtimeId": "wine-netfx46-linux-x64",
+      "buildCapabilities": ["framework"],
       "lockComponentId": "wine-netfx46-linux-x64"
     },
     {
       "id": "wine-netfx461-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx461-linux-x64",
       "runtimeId": "wine-netfx461-linux-x64",
+      "buildCapabilities": ["framework"],
       "lockComponentId": "wine-netfx461-linux-x64"
     },
     {
       "id": "wine-netfx462-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx462-linux-x64",
       "runtimeId": "wine-netfx462-linux-x64",
+      "buildCapabilities": ["framework"],
       "lockComponentId": "wine-netfx462-linux-x64"
     },
     {
       "id": "wine-netfx47-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx47-linux-x64",
       "runtimeId": "wine-netfx47-linux-x64",
+      "buildCapabilities": ["framework"],
       "lockComponentId": "wine-netfx47-linux-x64"
     },
     {
       "id": "wine-netfx471-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx471-linux-x64",
       "runtimeId": "wine-netfx471-linux-x64",
+      "buildCapabilities": ["framework"],
       "lockComponentId": "wine-netfx471-linux-x64"
     },
     {
       "id": "wine-netfx472-linux-x64",
       "repository": "sharplabnext/runtime-wine-netfx472-linux-x64",
       "runtimeId": "wine-netfx472-linux-x64",
+      "buildCapabilities": ["framework"],
       "lockComponentId": "wine-netfx472-linux-x64"
     }
   ]

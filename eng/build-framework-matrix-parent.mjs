@@ -348,8 +348,7 @@ export function validateParentInputs(values, matrixInput = undefined) {
   if (!isGitCommitIdentity(values?.SOURCE_REVISION) &&
       !(developmentRevision && developmentOverride)) {
     failures.push(
-      'SOURCE_REVISION must be a lowercase 40- or 64-character Git commit ' +
-      '(or development with --allow-uncommitted-source-for-development)',
+      'SOURCE_REVISION must be a lowercase 40- or 64-character Git commit (or content identity development)',
     )
   }
   if (typeof values?.IMAGE !== 'string' || !imageTag.test(values.IMAGE)) {
@@ -457,14 +456,9 @@ export function createParentBuildArguments(values, matrixInput, dockerfilePath) 
 
 function parseArguments(arguments_) {
   const values = { VERSION: 'development' }
-  let allowDirty = false
   let push = false
   for (let index = 0; index < arguments_.length; index++) {
     const argument = arguments_[index]
-    if (argument === '--allow-uncommitted-source-for-development') {
-      allowDirty = true
-      continue
-    }
     if (argument === '--push') {
       if (push) fail('--push may be specified only once')
       push = true
@@ -479,7 +473,7 @@ function parseArguments(arguments_) {
     if (!allowed.has(name)) fail(`unknown argument '${argument}'`)
     values[name] = arguments_[++index]
   }
-  values.allowDirty = allowDirty
+  values.allowDirty = false
   values.push = push
   return values
 }

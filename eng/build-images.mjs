@@ -10,9 +10,6 @@ import {
   createOperatorImageBuildSpec,
 } from './image-build-inputs.mjs';
 import {
-  computeBuildCacheInputFingerprintSync,
-} from './build-cache-inputs.mjs';
-import {
   wineCoreClrOperatorExpectedLabels,
 } from './build-runtime-candidate.mjs';
 import {
@@ -29,108 +26,195 @@ const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE
 const contentSourceIdentityMode = 'content';
 const imageIdPattern = /^sha256:[0-9a-f]{64}$/;
 const digestReferencePattern = /^[^@\s]+@sha256:[0-9a-f]{64}$/;
+const capabilityIdPattern = /^[a-z0-9][a-z0-9._-]*$/;
 const developmentInputsLabel = 'io.sharplabnext.development-image-inputs';
 const sourceRevisionLabel = 'io.sharplabnext.source.revision';
 const versionLabel = 'org.opencontainers.image.version';
 const bakeEnvironmentJsonPrefix = 'SHARPLABNEXT_BAKE_ENVIRONMENT_JSON=';
-const developmentSourceGrant = 'SHARPLABNEXT_BAKE_ALLOW_UNCOMMITTED_SOURCE_FOR_DEVELOPMENT';
-const developmentImageInputsGrant = 'SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS';
-const buildCacheStateSchemaVersion = 1;
-const buildCacheStateFilename = 'build-images-state.json';
 const imageCacheProbePrefix = 'SHARPLABNEXT_IMAGE_CACHE=';
 // A retry is for transient Docker/restore failures only.  BuildKit reuses
 // completed layers, so one bounded retry is enough without hiding real errors.
 const buildRetryAttempts = 2;
 const buildRetryDelayMilliseconds = 3_000;
-const frameworkIds = Object.freeze(['netfx20', 'netfx30', 'netfx35', 'netfx40', 'netfx45', 'netfx451', 'netfx452', 'netfx46', 'netfx461', 'netfx462', 'netfx47', 'netfx471', 'netfx472', 'netfx48']);
-const jsharpBuildTargets = new Set(['runtime-wine-jsharp20', 'worker-jsharp', 'worker-artifacts-default']);
-const cppcliBuildTargets = new Set(['runtime-wine-netfx48', 'worker-cppcli']);
-
-// These targets can be built as ordinary local images without first
-// materializing the private Wine/Framework operator graph.  The full release
-// path still handles the remaining targets and runtime candidates through the
-// complete image plan.
-const ordinaryBakeTargetImageNames = Object.freeze({
-  gateway: 'gateway',
-  'artifact-store': 'artifact-store',
-  'runtime-supervisor': 'runtime-supervisor',
-  'runtime-dotnet10': 'runtime-dotnet10',
-  'runtime-dotnet11': 'runtime-dotnet11',
-  'worker-roslyn-stable': 'worker-roslyn-stable',
-  'worker-roslyn-netfx48': 'worker-roslyn-netfx48',
-  'worker-roslyn-main': 'worker-roslyn-main',
-  'worker-fsharp': 'worker-fsharp',
-  'worker-gsharp': 'worker-gsharp',
-  'worker-peachpie': 'worker-peachpie',
-  'worker-il': 'worker-il',
-  'worker-minilang': 'worker-minilang',
-  'worker-artifacts-jsil': 'worker-artifacts-jsil',
-  'worker-artifacts-il-assembler': 'worker-artifacts-il-assembler',
-});
-
-const ordinaryBakeTargetAliases = Object.freeze({
-  'dotnet-10-linux-x64': 'runtime-dotnet10',
-  'dotnet-11-preview-linux-x64': 'runtime-dotnet11',
-});
-
-export function resolveOrdinaryBakeTarget(value) {
+export function resolveOrdinaryBakeTarget(value, repositoryRoot = defaultRepositoryRoot) {
   const requested = String(value ?? '').trim();
-  const target = Object.hasOwn(ordinaryBakeTargetAliases, requested)
-    ? ordinaryBakeTargetAliases[requested]
-    : requested;
-  const imageName = Object.hasOwn(ordinaryBakeTargetImageNames, target)
-    ? ordinaryBakeTargetImageNames[target]
-    : undefined;
-  if (typeof imageName !== 'string') {
-    const supported = Object.keys(ordinaryBakeTargetImageNames).sort().join(', ');
+  const document = readJson(path.join(repositoryRoot, 'deploy', 'images.json'), 'deployment image manifest');
+  const definitions = Array.isArray(document?.images) ? document.images : [];
+  const standalone = definitions.filter(definition => typeof definition?.ordinaryBakeTarget === 'string' && !(definition.buildCapabilities?.length > 0));
+  const matches = standalone.filter(definition => definition.id === requested || definition.runtimeId === requested || definition.ordinaryBakeTarget === requested);
+  if (matches.length !== 1) {
+    const supported = standalone.map(definition => definition.ordinaryBakeTarget).sort().join(', ');
     fail(
       `Target '${requested}' is not a standalone ordinary image target. ` +
       `Supported targets: ${supported}. ` +
       'Use --all for the complete operator and runtime image graph.',
     );
   }
-  return Object.freeze({ bakeTarget: target, imageName });
+  const definition = matches[0];
+  return Object.freeze({ bakeTarget: definition.ordinaryBakeTarget, imageName: definition.ordinaryBakeTarget, id: definition.id, runtimeId: definition.runtimeId, toolchainId: definition.toolchainId, artifactProcessorId: definition.artifactProcessorId, buildCapabilities: definition.buildCapabilities ?? [] });
 }
 
-// These are external build capabilities, not language-specific cache paths.
-// A target asks for a capability; the dependency closure below supplies the
-// shared operators only when a missing output actually needs them.
-const buildCapabilityRules = Object.freeze([
-  Object.freeze({
-    id: 'wine',
-    matches: image => image.producer.kind === 'runtime-candidate' &&
-      /^(?:wine-dotnet|wine-netfx)/.test(image.producer.id),
-  }),
-  Object.freeze({
-    id: 'framework',
-    matches: image => image.producer.kind === 'runtime-candidate' &&
-      /^wine-netfx/.test(image.producer.id),
-  }),
-  Object.freeze({
-    id: 'jsharp',
-    matches: image => image.producer.kind === 'bake' &&
-      jsharpBuildTargets.has(image.producer.id),
-  }),
-  Object.freeze({
-    id: 'cppcli',
-    matches: image => image.producer.kind === 'bake' &&
-      cppcliBuildTargets.has(image.producer.id),
-  }),
-]);
-
-export function resolveBuildCapabilities(images) {
-  const capabilities = new Set();
-  for (const image of images ?? []) {
-    if (image?.producer === undefined) continue;
-    for (const rule of buildCapabilityRules) {
-      if (rule.matches(image)) capabilities.add(rule.id);
+function capabilityDefinitionsById(definitions) {
+  if (!Array.isArray(definitions)) fail('Release image plan capabilityDefinitions must be an array');
+  const result = new Map();
+  for (const definition of definitions) {
+    if (definition === null || typeof definition !== 'object' || Array.isArray(definition) ||
+        typeof definition.id !== 'string' || !capabilityIdPattern.test(definition.id) || result.has(definition.id)) {
+      fail('Release image plan contains an invalid or duplicate capability definition');
+    }
+    const dependencies = definition.dependencies ?? [];
+    if (!Array.isArray(dependencies) || dependencies.some(dependency => typeof dependency !== 'string' || dependency.length === 0 || dependency === definition.id || dependencies.indexOf(dependency) !== dependencies.lastIndexOf(dependency))) {
+      fail(`Capability '${definition.id}' has invalid or duplicate dependencies`);
+    }
+    if (definition.provisioner !== undefined && (definition.provisioner === null || typeof definition.provisioner !== 'object' || Array.isArray(definition.provisioner) || typeof definition.provisioner.kind !== 'string' || !capabilityIdPattern.test(definition.provisioner.kind) || typeof definition.provisioner.requiresPrerequisites !== 'undefined' && typeof definition.provisioner.requiresPrerequisites !== 'boolean' || typeof definition.provisioner.requiresRegistry !== 'undefined' && typeof definition.provisioner.requiresRegistry !== 'boolean' || definition.provisioner.seedGenerations !== undefined && (!Array.isArray(definition.provisioner.seedGenerations) || definition.provisioner.seedGenerations.some(value => typeof value !== 'string' || !capabilityIdPattern.test(value)) || new Set(definition.provisioner.seedGenerations).size !== definition.provisioner.seedGenerations.length))) {
+      fail(`Capability '${definition.id}' has an invalid provisioner`);
+    }
+    const runtimeArguments = definition.runtimeArguments ?? [];
+    if (!Array.isArray(runtimeArguments) || runtimeArguments.some(argument => argument === null || typeof argument !== 'object' || Array.isArray(argument) || typeof argument.option !== 'string' || !/^--[A-Za-z0-9][A-Za-z0-9-]*$/.test(argument.option) || typeof argument.sourceCapability !== 'string' || !capabilityIdPattern.test(argument.sourceCapability) || typeof argument.output !== 'string' || !/^[A-Za-z][A-Za-z0-9._-]*$/.test(argument.output)) || new Set(runtimeArguments.map(argument => argument.option)).size !== runtimeArguments.length) {
+      fail(`Capability '${definition.id}' has invalid runtime arguments`);
+    }
+    result.set(definition.id, definition);
+  }
+  const reaches = (from, target, seen = new Set()) => {
+    if (from === target) return true;
+    if (!seen.add(from)) return false;
+    return (result.get(from)?.dependencies ?? []).some(dependency => reaches(dependency, target, seen));
+  };
+  for (const definition of result.values()) {
+    for (const dependency of definition.dependencies ?? []) {
+      if (!result.has(dependency)) fail(`Capability '${definition.id}' depends on unknown capability '${dependency}'`);
+    }
+    for (const argument of definition.runtimeArguments ?? []) {
+      if (!result.has(argument.sourceCapability)) fail(`Capability '${definition.id}' runtime argument references unknown capability '${argument.sourceCapability}'`);
+      if (!reaches(definition.id, argument.sourceCapability)) fail(`Capability '${definition.id}' runtime argument source '${argument.sourceCapability}' must be itself or a dependency`);
     }
   }
-  if (capabilities.has('framework') || capabilities.has('jsharp') || capabilities.has('cppcli')) {
-    capabilities.add('framework');
-    capabilities.add('wine');
+  const visiting = new Set();
+  const visited = new Set();
+  const visit = id => {
+    if (visited.has(id)) return;
+    if (visiting.has(id)) fail(`Capability dependency cycle includes '${id}'`);
+    visiting.add(id);
+    for (const dependency of result.get(id).dependencies ?? []) visit(dependency);
+    visiting.delete(id);
+    visited.add(id);
+  };
+  for (const id of result.keys()) visit(id);
+  return result;
+}
+
+function defaultCapabilityDefinitions() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(defaultRepositoryRoot, 'deploy', 'images.json'), 'utf8')).capabilityDefinitions ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function validPlanProducer(image) {
+  const producer = image?.producer;
+  if (!['bake', 'runtime-candidate', 'pull'].includes(producer?.kind) || typeof producer.id !== 'string' || producer.id.length === 0) return false;
+  if (producer.kind === 'runtime-candidate') return typeof image.runtimeId === 'string' && producer.id === image.runtimeId;
+  if (producer.kind === 'pull') return typeof image.runtimeId === 'string' && producer.id === image.reference;
+  return capabilityIdPattern.test(producer.id);
+}
+
+export function resolveBuildCapabilities(images, definitions = defaultCapabilityDefinitions()) {
+  const definitionsById = capabilityDefinitionsById(definitions);
+  const capabilities = new Set();
+  for (const image of images ?? []) {
+    const declared = image?.buildCapabilities ?? [];
+    if (!Array.isArray(declared)) fail('Image plan buildCapabilities must be an array');
+    for (const capability of declared) {
+      if (!definitionsById.has(capability)) fail(`Unknown build capability '${capability}' in image plan`);
+      capabilities.add(capability);
+    }
+  }
+  const pending = [...capabilities];
+  while (pending.length > 0) {
+    const capability = pending.pop();
+    for (const dependency of definitionsById.get(capability).dependencies ?? []) {
+      if (!capabilities.has(dependency)) {
+        capabilities.add(dependency);
+        pending.push(dependency);
+      }
+    }
   }
   return Object.freeze(capabilities);
+}
+
+function orderedCapabilityDefinitions(definitions, capabilities) {
+  const definitionsById = capabilityDefinitionsById(definitions);
+  const ordered = [];
+  const visited = new Set();
+  const visit = id => {
+    if (visited.has(id)) return;
+    visited.add(id);
+    for (const dependency of definitionsById.get(id)?.dependencies ?? []) visit(dependency);
+    ordered.push(definitionsById.get(id));
+  };
+  for (const id of capabilities) visit(id);
+  return ordered;
+}
+
+function requiredCapabilityDefinitions(definitions, capabilities) {
+  return orderedCapabilityDefinitions(definitions, capabilities).filter(definition => definition !== undefined);
+}
+
+function capabilityProvisioners(definitions, capabilities) {
+  return requiredCapabilityDefinitions(definitions, capabilities).filter(definition => definition.provisioner !== undefined);
+}
+
+function imagesUsingProvisioner(images, definitions, provisionerKind) {
+  const ids = new Set(definitions.filter(definition => definition.provisioner?.kind === provisionerKind).map(definition => definition.id));
+  return images.filter(image => [...resolveBuildCapabilities([image], definitions)].some(capability => ids.has(capability)));
+}
+
+export function resolveRuntimeArguments(image, definitions, resources) {
+  const definitionsById = capabilityDefinitionsById(definitions);
+  const declared = new Set(image.buildCapabilities ?? []);
+  for (const capability of declared) if (!definitionsById.has(capability)) fail(`Image '${image.id ?? image.producer?.id ?? '<unknown>'}' references unknown capability '${capability}'`);
+  const ordered = orderedCapabilityDefinitions(definitions, resolveBuildCapabilities([image], definitions));
+  const arguments_ = [];
+  const optionValues = new Map();
+  const isDependencyOf = (capability, dependency) => {
+    const pending = [...(definitionsById.get(capability)?.dependencies ?? [])];
+    const visited = new Set();
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (current === dependency) return true;
+      if (visited.has(current)) continue;
+      visited.add(current);
+      pending.push(...(definitionsById.get(current)?.dependencies ?? []));
+    }
+    return false;
+  };
+  for (const definition of ordered) {
+    const capability = definition.id;
+    for (const argument of definition.runtimeArguments ?? []) {
+      const resource = resources?.[argument.sourceCapability];
+      const value = resource?.[argument.output];
+      if (typeof value !== 'string' || value.length === 0) fail(`Capability '${capability}' runtime argument '${argument.option}' requires output '${argument.output}' from '${argument.sourceCapability}'`);
+      const previous = optionValues.get(argument.option);
+      if (previous !== undefined) {
+        if (!isDependencyOf(capability, previous.capability)) fail(`Image '${image.id ?? image.producer?.id ?? '<unknown>'}' receives duplicate runtime option '${argument.option}' from capability '${capability}'`);
+        arguments_[previous.index + 1] = value;
+        optionValues.set(argument.option, { value, capability, index: previous.index });
+        continue;
+      }
+      optionValues.set(argument.option, { value, capability, index: arguments_.length });
+      arguments_.push(argument.option, value);
+    }
+  }
+  return arguments_;
+}
+
+function dependencyResource(definition, resources, output) {
+  for (const dependency of definition.dependencies ?? []) {
+    const value = resources?.[dependency]?.[output];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  fail(`Capability '${definition.id}' requires dependency output '${output}'`);
 }
 
 export class BuildImagesError extends Error {
@@ -268,95 +352,13 @@ function atomicWrite(filename, bytes) {
   }
 }
 
-function buildCacheStatePath(options) { return path.join(options.repositoryRoot, 'artifacts', buildCacheStateFilename); }
-
-function readBuildCacheState(options) {
-  try {
-    const state = JSON.parse(fs.readFileSync(buildCacheStatePath(options), 'utf8'));
-    if (state?.schemaVersion !== buildCacheStateSchemaVersion ||
-        typeof state.sourceInputDigest !== 'string' ||
-        typeof state.imageContentDigest !== 'string' ||
-        typeof state.sourceRevision !== 'string' ||
-        typeof state.imagePrefix !== 'string') {
-      return undefined;
-    }
-    return state;
-  } catch {
-    return undefined;
-  }
-}
-
-function imagePlanContentDigest(imagePlan) {
-  const images = imagePlan.plan.images.map(image => ({
-    id: image.id,
-    runtimeId: image.runtimeId ?? null,
-    producer: image.producer,
-  })).sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
-  return `sha256:${crypto.createHash('sha256').update(JSON.stringify({ images })).digest('hex')}`;
-}
-
-function createBuildCacheIdentity(options, imagePlan, sourceRevision, sourceInputDigest) {
-  if (sourceInputDigest === undefined) return undefined;
-  return Object.freeze({
-    schemaVersion: buildCacheStateSchemaVersion,
-    sourceInputDigest,
-    imageContentDigest: imagePlanContentDigest(imagePlan),
-    sourceRevision,
-    imagePrefix: options.imagePrefix,
-  });
-}
-
-function buildCacheStateMatches(state, identity) {
-  return state !== undefined && identity !== undefined &&
-    state.schemaVersion === identity.schemaVersion &&
-    state.sourceInputDigest === identity.sourceInputDigest &&
-    state.imageContentDigest === identity.imageContentDigest &&
-    state.sourceRevision === identity.sourceRevision &&
-    state.imagePrefix === identity.imagePrefix;
-}
-
-function writeBuildCacheState(options, identity) {
-  if (identity === undefined) return;
-  atomicWrite(
-    buildCacheStatePath(options),
-    `${JSON.stringify(identity, null, 2)}\n`,
-  );
-}
-
-function recordBuildCacheState(options, identity, sourceInputDigest) {
-  if (identity === undefined || sourceInputDigest === undefined) return false;
-  const currentDigest = resolveBuildCacheInputDigest(options);
-  if (currentDigest !== sourceInputDigest) {
-    console.warn('Source inputs changed during image build; cache state was not recorded.');
-    return false;
-  }
-  writeBuildCacheState(options, identity);
-  return true;
-}
-
-function resolveBuildCacheInputDigest(options) {
-  try {
-    return computeBuildCacheInputFingerprintSync(options.repositoryRoot);
-  } catch (error) {
-    // If the source tree cannot be scanned, the resolved content identity
-    // still gives the cache state a stable source key.
-    if (sourceRevisionPattern.test(options.resolvedSourceRevision ?? '')) {
-      return `sha256:${options.resolvedSourceRevision}`;
-    }
-    console.warn(`Build cache input fingerprint unavailable; using image labels only: ${error.message}`);
-    return undefined;
-  }
-}
-
 export function applySourceVerificationMarker(options, output) {
   const verified = String(output).split(/\r?\n/).filter(line => line.startsWith('SHARPLABNEXT_SOURCE_VERIFIED=')).at(-1)?.slice('SHARPLABNEXT_SOURCE_VERIFIED='.length);
   if (verified !== undefined && verified !== 'true' && verified !== 'false') {
     fail('Source provenance resolver returned an invalid verification marker');
   }
-  // The marker is authoritative for the internal source binding. Ordinary
-  // builds intentionally use the development context for every source tree;
-  // the legacy command-line switch remains accepted by lower-level tools.
-  if (verified !== undefined) options.allowUncommittedSourceForDevelopment = verified !== 'true';
+  // Ordinary builds bind their labels to a content identity. Promotion and
+  // signing tools independently require a verified clean Git source.
   return verified;
 }
 
@@ -386,18 +388,42 @@ function generateImagePlan(options, sourceRevision) {
   const plan = readJson(output, 'release image plan');
   if (plan?.schemaVersion !== 1 || typeof plan.releaseId !== 'string' ||
       !Array.isArray(plan.images) || plan.images.length === 0) fail('Release image plan is invalid');
+  const capabilityDefinitions = capabilityDefinitionsById(plan.capabilityDefinitions ?? []);
   const ids = new Set();
   const references = new Set();
   for (const image of plan.images) {
     if (typeof image?.id !== 'string' || ids.has(image.id) ||
         typeof image?.reference !== 'string' || references.has(image.reference) ||
-        !['bake', 'runtime-candidate', 'pull'].includes(image?.producer?.kind) ||
-        typeof image?.producer?.id !== 'string') fail('Release image plan contains an invalid or duplicate entry');
+        !validPlanProducer(image) ||
+        (image.buildCapabilities !== undefined && !Array.isArray(image.buildCapabilities)) ||
+        (image.buildCapabilities ?? []).some(capability => typeof capability !== 'string' || !capabilityDefinitions.has(capability)) ||
+        new Set(image.buildCapabilities ?? []).size !== (image.buildCapabilities ?? []).length) fail('Release image plan contains an invalid or duplicate entry');
     ids.add(image.id);
     references.add(image.reference);
   }
   const digest = `sha256:${crypto.createHash('sha256').update(JSON.stringify(plan)).digest('hex')}`;
-  return { plan, path: output, digest };
+  return { plan, path: output, digest, capabilityDefinitions };
+}
+
+function operatorEnvironmentInputs(operatorImages, capabilityDefinitions) {
+  const inputs = {};
+  for (const definition of capabilityDefinitions ?? []) {
+    const operator = definition?.operator;
+    if (operator?.environmentVariable === undefined) continue;
+    const reference = operatorImages?.[operator.imageId];
+    if (reference === undefined) continue;
+    const name = String(operator.environmentVariable);
+    if (!/^[A-Z][A-Z0-9_]*$/.test(name)) fail(`Capability '${definition.id}' has an invalid operator environment variable`);
+    if (inputs[name] !== undefined && inputs[name] !== reference) fail(`Operator environment variable '${name}' is assigned more than once`);
+    inputs[name] = reference;
+  }
+  return inputs;
+}
+
+function appendOperatorEnvironmentArguments(arguments_, operatorImages, capabilityDefinitions) {
+  for (const [name, reference] of Object.entries(operatorEnvironmentInputs(operatorImages, capabilityDefinitions))) {
+    arguments_.push('--development-image-input', `${name}=${reference}`);
+  }
 }
 
 function bakeEnvironmentArguments(options, sourceRevision, operatorImages) {
@@ -409,17 +435,8 @@ function bakeEnvironmentArguments(options, sourceRevision, operatorImages) {
     '--source-revision', sourceRevision,
     '--repository-root', options.repositoryRoot,
     '--image-prefix', options.imagePrefix,
-    '--allow-development-image-inputs',
   ];
-  if (operatorImages !== undefined) {
-    arguments_.push(
-      '--development-image-input',
-      `CPPCLI_PREPARED_BASE_IMAGE=${operatorImages['cppcli-prepared-base']}`,
-      '--development-image-input',
-      `JSHARP_TOOLCHAIN_IMAGE=${operatorImages['jsharp20-development-base']}`,
-    );
-  }
-  if (options.allowUncommittedSourceForDevelopment) arguments_.push('--allow-uncommitted-source-for-development');
+  appendOperatorEnvironmentArguments(arguments_, operatorImages, options.capabilityDefinitions);
   return arguments_;
 }
 
@@ -463,9 +480,6 @@ export function parseBakeEnvironmentSnapshot(output) {
     if (!/^[A-Z][A-Z0-9_]*$/.test(name) || typeof value !== 'string') {
       fail('Bake environment resolver JSON contains an invalid environment entry');
     }
-    if (name === developmentSourceGrant || name === developmentImageInputsGrant) {
-      fail(`Bake environment resolver JSON must not contain grant '${name}'`);
-    }
   }
   return Object.freeze({ ...document });
 }
@@ -483,20 +497,7 @@ export function createBakeChildEnvironment(snapshot, options, parentEnvironment 
   if (options.sourceIdentityMode === contentSourceIdentityMode) {
     environment[sourceIdentityModeEnvironmentVariable] = contentSourceIdentityMode;
   }
-  for (const name of Object.keys(environment)) {
-    const normalized = name.toUpperCase();
-    if (normalized === developmentSourceGrant || normalized === developmentImageInputsGrant) {
-      delete environment[name];
-    }
-  }
-  if (options.allowUncommittedSourceForDevelopment) {
-    environment[developmentSourceGrant] = 'true';
-  }
-  environment[developmentImageInputsGrant] = 'true';
-  if (operatorImages !== undefined) {
-    environment.CPPCLI_PREPARED_BASE_IMAGE = operatorImages['cppcli-prepared-base'] ?? '';
-    environment.JSHARP_TOOLCHAIN_IMAGE = operatorImages['jsharp20-development-base'] ?? '';
-  }
+  Object.assign(environment, operatorEnvironmentInputs(operatorImages, options.capabilityDefinitions));
   return environment;
 }
 
@@ -639,12 +640,24 @@ function imageRepository(reference) {
   return reference.slice(0, tag);
 }
 
-function validateImageInspection(image, reference, expectedLabels, description) {
+function validateImageInspection(image, reference, expectedLabels, description, allowDifferentSourceRevision = false) {
   if (!imageIdPattern.test(image?.Id ?? '') || image?.Os !== 'linux' || image?.Architecture !== 'amd64') {
     fail(`${description} '${reference}' is not one immutable linux/amd64 image`);
   }
   const labels = image.Config?.Labels ?? {};
+  const sourceExpected = expectedLabels[sourceRevisionLabel];
+  const ociExpected = expectedLabels['org.opencontainers.image.revision'];
+  const allowSourcePair = allowDifferentSourceRevision &&
+    typeof sourceExpected === 'string' && sourceExpected === ociExpected;
   for (const [name, expected] of Object.entries(expectedLabels)) {
+    if (allowDifferentSourceRevision && name === sourceRevisionLabel) {
+      if (!sourceRevisionPattern.test(labels[name] ?? '')) fail(`${description} '${reference}' has an invalid source revision label`);
+      continue;
+    }
+    if (allowSourcePair && name === 'org.opencontainers.image.revision') {
+      if (!sourceRevisionPattern.test(labels[name] ?? '') || labels[name] !== labels[sourceRevisionLabel]) fail(`${description} '${reference}' has mismatched source revision labels`);
+      continue;
+    }
     if (labels[name] !== expected) {
       fail(
         `${description} '${reference}' label '${name}' is ` +
@@ -655,8 +668,8 @@ function validateImageInspection(image, reference, expectedLabels, description) 
   return image;
 }
 
-export function validateReusableImageInspection(image, reference, expectedLabels) {
-  validateImageInspection(image, reference, expectedLabels, 'Cached prerequisite image');
+export function validateReusableImageInspection(image, reference, expectedLabels, allowDifferentSourceRevision = true) {
+  validateImageInspection(image, reference, expectedLabels, 'Cached prerequisite image', allowDifferentSourceRevision);
   const repository = imageRepository(reference);
   const digests = (image.RepoDigests ?? []).filter(value => value.startsWith(`${repository}@sha256:`));
   const digest = digests.find(value => digestReferencePattern.test(value));
@@ -679,13 +692,14 @@ function tryInspectImage(reference, repositoryRoot) {
 
 // BuildKit owns layer reuse. This probe only looks in Docker's local image
 // store; it never turns a cache miss into a registry pull or a second cache
-// repository. A stale local tag is treated as a miss and rebuilt by BuildKit.
-function tryReuseLocalImage(reference, expectedLabels, repositoryRoot, enabled = true) {
+// repository. Development images remain reusable across source revisions;
+// explicit rebuild selectors are the opt-in invalidation mechanism.
+function tryReuseLocalImage(reference, expectedLabels, repositoryRoot, enabled = true, allowDifferentSourceRevision = true) {
   if (!enabled) return undefined;
   const image = tryInspectImage(reference, repositoryRoot);
   if (image === undefined) return undefined;
   try {
-    validateImageInspection(image, reference, expectedLabels, 'Local cached image');
+    validateImageInspection(image, reference, expectedLabels, 'Local cached image', allowDifferentSourceRevision);
     console.log(`Build cache hit: ${reference} -> ${image.Id}`);
     return image;
   } catch {
@@ -703,9 +717,9 @@ function registryImageTag(options, name) {
 // Publish only the immutable identity required by a digest-pinned named
 // context. This is transport, not a build cache: the source remains in the
 // Docker image store and BuildKit still decides which layers are rebuilt.
-function publishImmutableImage(source, destination, expectedLabels, repositoryRoot) {
+function publishImmutableImage(source, destination, expectedLabels, repositoryRoot, allowDifferentSourceRevision = true) {
   const sourceImage = inspectImage(source, repositoryRoot);
-  validateImageInspection(sourceImage, source, expectedLabels, 'Built image');
+  validateImageInspection(sourceImage, source, expectedLabels, 'Built image', allowDifferentSourceRevision);
   const existing = tryInspectImage(destination, repositoryRoot);
   if (existing?.Id === sourceImage.Id) {
     try { return validateReusableImageInspection(existing, destination, expectedLabels); } catch { /* republish */ }
@@ -732,15 +746,7 @@ function buildWineOperator(options, sourceRevision, snapshot = undefined, requir
     ...wineCoreClrUserspaceEnvironment(bakeSnapshot, options.repositoryRoot),
     SOURCE_REVISION: sourceRevision,
   };
-  const sourceBinding = Object.freeze(options.allowUncommittedSourceForDevelopment
-    ? {
-        context: 'working-tree-development',
-        promotionEligible: false,
-      }
-    : {
-        context: 'committed',
-        promotionEligible: true,
-      });
+  const sourceBinding = Object.freeze({ context: 'working-tree-content', promotionEligible: false });
   const expectedLabels = {
     ...wineCoreClrOperatorExpectedLabels(values, sourceBinding),
     'org.opencontainers.image.revision': sourceRevision,
@@ -771,9 +777,7 @@ function buildWineOperator(options, sourceRevision, snapshot = undefined, requir
     return { localTag, digest };
   }
 
-  const arguments_ = [path.join(options.repositoryRoot, 'eng', 'build-wine-coreclr-operator.mjs')];
-  if (options.allowUncommittedSourceForDevelopment) arguments_.push('--allow-uncommitted-source-for-development');
-  runInBakeEnvironment(options, sourceRevision, undefined, process.execPath, arguments_, bakeSnapshot);
+  runInBakeEnvironment(options, sourceRevision, undefined, process.execPath, [path.join(options.repositoryRoot, 'eng', 'build-wine-coreclr-operator.mjs')], bakeSnapshot);
   const built = inspectImage(releaseTag, options.repositoryRoot);
   validateImageInspection(built, releaseTag, expectedLabels, 'Built image');
   runWithRetry('docker', ['image', 'tag', releaseTag, localTag], { cwd: options.repositoryRoot });
@@ -792,9 +796,11 @@ function buildWineOperator(options, sourceRevision, snapshot = undefined, requir
 
 function frameworkManifest(repositoryRoot) {
   const document = readJson(path.join(repositoryRoot, 'profiles', 'runtime-framework-installers.json'), 'Framework installer manifest');
-  if (document?.schemaVersion !== 1 || !Array.isArray(document.targets) ||
-      JSON.stringify(document.targets.map(target => target.id)) !== JSON.stringify(frameworkIds)) {
-    fail('Framework installer manifest does not contain the canonical 14 rows');
+  const matrix = readJson(path.join(repositoryRoot, 'profiles', 'runtime-matrix.json'), 'runtime matrix');
+  const expectedIds = matrix?.framework?.targets?.map(target => target.id);
+  const actualIds = document?.targets?.map(target => target.id);
+  if (document?.schemaVersion !== 1 || !Array.isArray(actualIds) || actualIds.length === 0 || !Array.isArray(expectedIds) || JSON.stringify(actualIds) !== JSON.stringify(expectedIds) || new Set(actualIds).size !== actualIds.length) {
+    fail('Framework installer manifest does not match the runtime matrix rows');
   }
   return document;
 }
@@ -806,11 +812,16 @@ function baseImage(repositoryRoot, id) {
   return image.reference;
 }
 
-async function buildFrameworkOperators(options, sourceRevision, wineDigest, downloads, targetIds = frameworkIds, seedGenerations = undefined) {
+async function buildFrameworkOperators(options, sourceRevision, wineDigest, downloads, targetIds = undefined, seedGenerations = undefined) {
   const manifest = frameworkManifest(options.repositoryRoot);
+  downloads ??= {};
+  targetIds ??= manifest.targets.map(target => target.id);
   const selectedTargetIds = new Set(targetIds);
   const selectedTargets = manifest.targets.filter(candidate => selectedTargetIds.has(candidate.id));
-  const requiredSeedGenerations = new Set(seedGenerations ?? selectedTargets.map(target => target.clrGeneration === 'clr2' ? 'clr4' : 'clr2'));
+  const requiredSeedGenerations = new Set([
+    ...(seedGenerations ?? []),
+    ...selectedTargets.map(target => target.clrGeneration === 'clr2' ? 'clr4' : 'clr2'),
+  ]);
   const rootImage = baseImage(options.repositoryRoot, 'dotnet-runtime-deps');
   if (requiredSeedGenerations.size === 0) {
     return {
@@ -828,6 +839,7 @@ async function buildFrameworkOperators(options, sourceRevision, wineDigest, down
     wineDigest,
     rootImage,
   );
+  for (const generation of requiredSeedGenerations) if (!seedSpec.images.some(seed => seed.generation === generation)) fail(`Framework seed generation '${generation}' is not declared by the seed contract`);
   const commonTag = `${options.imagePrefix}/framework-wow64-base:content`;
   const commonRegistryTag = registryImageTag(options, 'framework-wow64-base');
   const commonArguments = [
@@ -841,9 +853,6 @@ async function buildFrameworkOperators(options, sourceRevision, wineDigest, down
     '--seed-input-sha256', seedSpec.inputSha256,
     '--accept-microsoft-dotnet-framework-eula',
   ];
-  if (options.allowUncommittedSourceForDevelopment) {
-    commonArguments.push('--allow-uncommitted-source-for-development');
-  }
   let commonImage = tryReuseLocalImage(
     commonTag,
     {
@@ -937,19 +946,20 @@ async function buildFrameworkOperators(options, sourceRevision, wineDigest, down
         '--seed-input-sha256', seedSpec.inputSha256,
         '--accept-microsoft-dotnet-framework-eula',
       ];
-      if (seed.generation === 'clr2') {
+      const companion = manifest.companionPrefixes?.[seed.generation];
+      const cachedPayload = manifest.cachedWinetricksPayloads?.find(payload => payload.verb === companion?.winetricksVerb);
+      if (cachedPayload !== undefined) {
+        const cachedFile = downloads?.[cachedPayload.prerequisiteId];
+        if (typeof cachedFile !== 'string' || cachedFile.length === 0) fail(`Framework seed '${seed.id}' has no cached payload download`);
         arguments_.push(
           '--cached-winetricks-payload-file',
-          downloads['netfx35sp1-installer'],
+          cachedFile,
         );
-      }
-      if (options.allowUncommittedSourceForDevelopment) {
-        arguments_.push('--allow-uncommitted-source-for-development');
       }
       await startWithRetry('dotnet', arguments_, { cwd: options.repositoryRoot });
     },
   }));
-  await runParallel(seedTasks, 2);
+  await runParallel(seedTasks, options.maximumParallel);
 
   for (const { seed, localTag, registryTag, expectedLabels } of missingSeeds) {
     seedReferences.set(
@@ -1029,13 +1039,18 @@ async function buildFrameworkOperators(options, sourceRevision, wineDigest, down
         '--source-revision', sourceRevision,
         '--accept-microsoft-dotnet-framework-eula',
       ];
-      if (options.allowUncommittedSourceForDevelopment) arguments_.push('--allow-uncommitted-source-for-development');
-      if (target.id === 'netfx451') arguments_.push('--installer-secret-file', downloads['netfx451-installer']);
-      if (target.id === 'netfx47') arguments_.push('--installer-secret-file', downloads['netfx47-installer']);
-      if (target.recipe.kind === 'winetricks' && target.recipe.verb === 'dotnet35sp1') {
+      if (target.recipe.kind === 'operator-installer') {
+        const installer = Object.entries(downloads).find(([, filename]) => path.basename(filename).toLowerCase() === String(target.recipe.fileName).toLowerCase());
+        if (installer === undefined) fail(`Framework target '${target.id}' has no locked installer download`);
+        arguments_.push('--installer-secret-file', installer[1]);
+      }
+      const cachedPayload = manifest.cachedWinetricksPayloads?.find(payload => payload.verb === target.recipe.verb);
+      if (cachedPayload !== undefined) {
+        const cachedFile = downloads?.[cachedPayload.prerequisiteId];
+        if (typeof cachedFile !== 'string' || cachedFile.length === 0) fail(`Framework target '${target.id}' has no cached payload download`);
         arguments_.push(
           '--cached-winetricks-payload-file',
-          downloads['netfx35sp1-installer'],
+          cachedFile,
         );
       }
       await startWithRetry('dotnet', arguments_, { cwd: options.repositoryRoot });
@@ -1057,115 +1072,82 @@ async function buildFrameworkOperators(options, sourceRevision, wineDigest, down
   };
 }
 
-async function buildOperatorImages(options, prerequisiteState, framework, requiredIds) {
-  const manifest = readPrerequisiteManifest(path.join(options.repositoryRoot, 'eng', 'release-prerequisites.json'));
-  const frameworkSeeds = {
-    clr2: framework.seedReferences.get('clr2')?.digest,
-    clr4: framework.seedReferences.get('clr4')?.digest,
-  };
-  const spec = await createOperatorImageBuildSpec(
-    options.repositoryRoot,
-    manifest,
-    frameworkSeeds,
-  );
-  const jsharpScript = path.join(options.repositoryRoot, 'eng', 'tools', 'prepare-jsharp-toolchain.cs');
-  const cppcliScript = path.join(options.repositoryRoot, 'eng', 'tools', 'prepare-cppcli-toolchain.cs');
-  const jsharp = prerequisiteState.generatedImages['jsharp20-development-base'];
-  const cppcli = prerequisiteState.generatedImages['cppcli-prepared-base'];
-  if (jsharp?.buildKind !== 'jsharp20' || cppcli?.buildKind !== 'cppcli') {
-    fail('Prerequisite state does not contain the canonical generated images');
+function confinedRepositoryFile(repositoryRoot, relativePath, label) {
+  if (typeof relativePath !== 'string' || relativePath.length === 0 || path.isAbsolute(relativePath) || relativePath.includes('\\') || relativePath.split('/').some(segment => segment.length === 0 || segment === '.' || segment === '..')) {
+    fail(`${label} has an invalid repository-relative path`);
   }
-  const tasks = [
-    {
-      id: 'jsharp20-development-base',
-      script: jsharpScript,
-      label: "Source-built operator image 'jsharp20'",
-      run: () => startWithRetry('dotnet', [
-        'run', jsharpScript, '--no-build', '--',
-        '--repository-root', options.repositoryRoot,
-        '--framework-seed-image', frameworkSeeds.clr2,
-        '--output-image', jsharp.reference,
-        '--operator-build-input-sha256', spec.inputSha256,
-        '--accept-microsoft-dotnet-eula',
-        '--accept-microsoft-jsharp-eula',
-      ], { cwd: options.repositoryRoot }),
-    },
-    {
-      id: 'cppcli-prepared-base',
-      script: cppcliScript,
-      label: "Source-built operator image 'cppcli'",
-      run: () => startWithRetry('dotnet', [
-        'run', cppcliScript, '--no-build', '--',
-        '--repository-root', options.repositoryRoot,
-        '--framework-seed-image', frameworkSeeds.clr4,
-        '--output-image', cppcli.reference,
-        '--msvc-wine-source',
-        prerequisiteState.downloads['msvc-wine-source'],
-        '--visual-studio-manifest',
-        prerequisiteState.downloads['visual-studio-manifest'],
-        '--netfx48-developer-pack',
-        prerequisiteState.downloads['netfx48-developer-pack'],
-        '--operator-build-input-sha256', spec.inputSha256,
-        '--accept-microsoft-cpp-build-tools-license',
-        '--accept-microsoft-dotnet-eula',
-      ], { cwd: options.repositoryRoot }),
-    },
-  ];
+  const root = path.resolve(repositoryRoot);
+  const filename = path.resolve(root, ...relativePath.split('/'));
+  if (!filename.startsWith(`${root}${path.sep}`)) fail(`${label} escapes the repository root`);
+  return filename;
+}
 
+function requiredOperatorDefinitions(capabilityDefinitions, capabilities) {
+  return capabilityDefinitions.filter(definition => capabilities.has(definition.id) && definition.operator !== undefined);
+}
+
+function operatorDownloadArguments(operator, downloads) {
+  const arguments_ = [];
+  for (const item of operator.downloadArguments ?? []) {
+    if (item === null || typeof item !== 'object' || typeof item.option !== 'string' || typeof item.downloadId !== 'string') fail('Operator download argument metadata is invalid');
+    const value = downloads?.[item.downloadId];
+    if (typeof value !== 'string' || value.length === 0) fail(`Operator download '${item.downloadId}' is missing from the prerequisite cache`);
+    arguments_.push(item.option, value);
+  }
+  return arguments_;
+}
+
+async function buildOperatorImages(options, prerequisiteState, framework, manifest, capabilityDefinitions, requiredCapabilities) {
+  if (manifest === undefined) fail('Operator image build requires a validated prerequisite manifest');
+  const definitions = requiredOperatorDefinitions(capabilityDefinitions, requiredCapabilities);
+  if (definitions.length === 0) return {};
+  const frameworkSeeds = Object.fromEntries([...framework.seedReferences.entries()].map(([generation, seed]) => [generation, seed.digest]));
+  const spec = await createOperatorImageBuildSpec(options.repositoryRoot, manifest, frameworkSeeds, definitions);
+  const generatedImages = new Map(manifest.value.generatedImages.map(image => [image.id, image]));
   const result = {};
-  const required = new Set(requiredIds);
   const missingTasks = [];
   const imageMetadata = new Map();
-  for (const image of spec.images.filter(candidate => required.has(candidate.id))) {
-    const seed = image.buildKind === 'jsharp20'
-      ? frameworkSeeds.clr2
-      : frameworkSeeds.clr4;
+  for (const definition of definitions) {
+    const operator = definition.operator;
+    const image = generatedImages.get(operator.imageId);
+    if (image === undefined || (operator.buildKind !== undefined && image.buildKind !== operator.buildKind)) fail(`Capability '${definition.id}' references an invalid generated operator image`);
+    const script = confinedRepositoryFile(options.repositoryRoot, operator.script, `Capability '${definition.id}' operator script`);
+    const seed = operator.frameworkSeedGeneration === undefined ? undefined : frameworkSeeds[operator.frameworkSeedGeneration];
+    if (operator.frameworkSeedGeneration !== undefined && typeof seed !== 'string') fail(`Capability '${definition.id}' references an unavailable framework seed '${operator.frameworkSeedGeneration}'`);
     const expectedLabels = {
       'io.sharplabnext.operator-build.strategy': 'source-built-operator-image-v1',
       'io.sharplabnext.operator-build.input-sha256': spec.inputSha256,
       'io.sharplabnext.operator-build.image-id': image.id,
       'io.sharplabnext.operator-build.build-kind': image.buildKind,
-      'io.sharplabnext.operator-build.framework-seed-image': seed,
+      ...(seed === undefined ? {} : { 'io.sharplabnext.operator-build.framework-seed-image': seed }),
       'io.sharplabnext.operator-only': 'true',
       'io.sharplabnext.redistribution': 'operator-supplied-only',
     };
     const registryTag = registryImageTag(options, image.id);
-    imageMetadata.set(image.id, { localTag: image.reference, registryTag, expectedLabels });
-    const cached = tryReuseLocalImage(
-      image.reference,
-      expectedLabels,
-      options.repositoryRoot,
-      options.reuseExisting,
-    );
+    imageMetadata.set(image.id, { registryTag, expectedLabels });
+    const planned = { id: image.id, producer: { id: image.id }, buildCapabilities: [definition.id] };
+    const cached = tryReuseLocalImage(image.reference, expectedLabels, options.repositoryRoot, options.reuseExisting && !isRebuildRequested(options, planned));
     if (cached !== undefined) {
-      result[image.id] = publishImmutableImage(
-        image.reference,
-        registryTag,
-        expectedLabels,
-        options.repositoryRoot,
-      );
+      result[image.id] = publishImmutableImage(image.reference, registryTag, expectedLabels, options.repositoryRoot);
       continue;
     }
-    const task = tasks.find(candidate => candidate.id === image.id);
-    if (task === undefined) fail(`Operator image '${image.id}' has no build task`);
-    missingTasks.push(task);
+    const arguments_ = ['run', script, '--no-build', '--', '--repository-root', options.repositoryRoot];
+    if (seed !== undefined) arguments_.push('--framework-seed-image', seed);
+    arguments_.push('--output-image', image.reference, '--operator-build-input-sha256', spec.inputSha256, ...operatorDownloadArguments(operator, prerequisiteState.downloads), ...(operator.licenseArguments ?? []));
+    missingTasks.push({
+      id: image.id,
+      script,
+      label: `Source-built operator image '${definition.id}'`,
+      run: () => startWithRetry('dotnet', arguments_, { cwd: options.repositoryRoot }),
+    });
   }
-  for (const script of [...new Set(missingTasks.map(task => task.script))]) {
-    runWithRetry('dotnet', ['build', script, '--nologo'], { cwd: options.repositoryRoot });
-  }
-  await runParallel(missingTasks, 2);
-
+  for (const script of [...new Set(missingTasks.map(task => task.script))]) runWithRetry('dotnet', ['build', script, '--nologo'], { cwd: options.repositoryRoot });
+  await runParallel(missingTasks, options.maximumParallel);
   for (const task of missingTasks) {
-    const image = spec.images.find(candidate => candidate.id === task.id);
-    if (image === undefined) fail(`Operator image '${task.id}' has no build specification`);
-    const metadata = imageMetadata.get(image.id);
-    if (metadata === undefined) fail(`Operator image '${image.id}' has no cache metadata`);
-    result[image.id] = publishImmutableImage(
-      image.reference,
-      metadata.registryTag,
-      metadata.expectedLabels,
-      options.repositoryRoot,
-    );
+    const metadata = imageMetadata.get(task.id);
+    if (metadata === undefined) fail(`Operator image '${task.id}' has no cache metadata`);
+    const image = generatedImages.get(task.id);
+    result[task.id] = publishImmutableImage(image.reference, metadata.registryTag, metadata.expectedLabels, options.repositoryRoot);
   }
   return result;
 }
@@ -1197,7 +1179,7 @@ function buildFrameworkControlImages(options, sourceRevision, wineDigest, built,
     'io.sharplabnext.framework.matrix-content': 'metadata-only-v1',
     'io.sharplabnext.framework.matrix-strategy': 'shared-framework-prefix-input-v1',
     'io.sharplabnext.framework.matrix-input-sha256': matrixInput.sha256,
-    'io.sharplabnext.framework.matrix-row-count': '14',
+    'io.sharplabnext.framework.matrix-row-count': String(built.manifest.targets.length),
     'org.opencontainers.image.revision': sourceRevision,
     'io.sharplabnext.source.revision': sourceRevision,
   };
@@ -1215,7 +1197,6 @@ function buildFrameworkControlImages(options, sourceRevision, wineDigest, built,
       '--image', metadataTag,
       '--version', options.releaseId,
     ];
-    if (options.allowUncommittedSourceForDevelopment) contextArguments.push('--allow-uncommitted-source-for-development');
     runWithRetry(process.execPath, contextArguments, { cwd: options.repositoryRoot });
     metadataImage = inspectImage(metadataTag, options.repositoryRoot);
     validateImageInspection(metadataImage, metadataTag, metadataLabels, 'Built image');
@@ -1257,7 +1238,6 @@ function buildFrameworkControlImages(options, sourceRevision, wineDigest, built,
       '--image', parentTag,
       '--version', options.releaseId,
     ];
-    if (options.allowUncommittedSourceForDevelopment) parentArguments.push('--allow-uncommitted-source-for-development');
     runWithRetry(process.execPath, parentArguments, { cwd: options.repositoryRoot });
     parentImage = inspectImage(parentTag, options.repositoryRoot);
     validateImageInspection(parentImage, parentTag, parentLabels, 'Built image');
@@ -1278,9 +1258,6 @@ function buildFrameworkControlImages(options, sourceRevision, wineDigest, built,
     '--matrix-input', matrixInput.filename,
     '--source-revision', sourceRevision,
     '--output', candidateInput,
-    ...(options.allowUncommittedSourceForDevelopment
-      ? ['--allow-uncommitted-source-for-development']
-      : []),
   ], { cwd: options.repositoryRoot });
   return { candidateInput, metadataDigest, parentDigest };
 }
@@ -1301,7 +1278,11 @@ function ordinaryImageExpectedLabels(sourceRevision, releaseId) {
 }
 
 async function runOrdinaryImageBuild(options, sourceRevision, output) {
-  const target = resolveOrdinaryBakeTarget(options.target);
+  const target = resolveOrdinaryBakeTarget(options.target, options.repositoryRoot);
+  const ordinaryPlan = { id: target.id, runtimeId: target.runtimeId, toolchainId: target.toolchainId, artifactProcessorId: target.artifactProcessorId, buildCapabilities: target.buildCapabilities, producer: { id: target.bakeTarget } };
+  if (options.rebuildTargets?.some(selector => !matchesRebuildTarget(ordinaryPlan, selector))) {
+    fail(`--rebuild-target does not match ordinary target '${target.bakeTarget}'; use --all to select release images`);
+  }
   // Resolve the same lock/base-image environment used by Bake, but do not
   // create a release plan or start any prerequisite/operator orchestration.
   const environmentSnapshot = resolveBakeEnvironmentSnapshot(options, sourceRevision, undefined);
@@ -1321,7 +1302,7 @@ async function runOrdinaryImageBuild(options, sourceRevision, output) {
     reference,
     expectedLabels,
     options.repositoryRoot,
-    options.reuseExisting,
+    options.reuseExisting && !isRebuildRequested(options, ordinaryPlan),
   );
   if (options.cacheProbe) {
     output.log(`${imageCacheProbePrefix}${cached === undefined ? 'miss' : 'hit'}`);
@@ -1346,6 +1327,8 @@ export async function buildRuntimeCandidates(options, sourceRevision, operatorIm
   const resolveEnvironment = operations.resolveBakeEnvironmentSnapshot ??
     resolveBakeEnvironmentSnapshot;
   const startCandidate = operations.start ?? startWithRetry;
+  const capabilityDefinitions = operations.capabilityDefinitions ?? options.capabilityDefinitions ?? defaultCapabilityDefinitions();
+  const capabilityResources = operations.capabilityResources ?? { wine, framework };
   const snapshot = operations.environmentSnapshot ??
     resolveEnvironment(options, sourceRevision, operatorImages);
   const environment = createBakeChildEnvironment(
@@ -1359,13 +1342,8 @@ export async function buildRuntimeCandidates(options, sourceRevision, operatorIm
     run: async () => {
       const profileId = image.producer.id;
       const arguments_ = [path.join(options.repositoryRoot, 'eng', 'runtime-candidate-environment.mjs'), profileId];
-      if (profileId.startsWith('wine-dotnet-')) {
-        arguments_.push('--wine-image', wine.localTag);
-      } else if (profileId.startsWith('wine-netfx')) {
-        arguments_.push('--wine-image', wine.digest, '--framework-input', framework.candidateInput);
-      }
-      arguments_.push('--', '--allow-development-image-inputs');
-      if (options.allowUncommittedSourceForDevelopment) arguments_.push('--allow-uncommitted-source-for-development');
+      arguments_.push(...resolveRuntimeArguments(image, capabilityDefinitions, capabilityResources));
+      arguments_.push('--');
       await startCandidate(process.execPath, arguments_, {
         cwd: options.repositoryRoot,
         env: environment,
@@ -1375,7 +1353,7 @@ export async function buildRuntimeCandidates(options, sourceRevision, operatorIm
   await runParallel(tasks, options.maximumParallel);
 }
 
-function validateFinalImageInspection(planned, image, plan, sourceRevision) {
+function validateFinalImageInspection(planned, image, plan, sourceRevision, allowDifferentSourceRevision = false) {
   const labels = image.Config?.Labels ?? {};
   if (!imageIdPattern.test(image.Id ?? '') || image.Os !== 'linux' || image.Architecture !== 'amd64') {
     fail(`Final image '${planned.id}' is not one immutable linux/amd64 image`);
@@ -1384,7 +1362,7 @@ function validateFinalImageInspection(planned, image, plan, sourceRevision) {
     fail(`Final image '${planned.id}' does not carry release label '${plan.releaseId}'`);
   }
   if (planned.producer.kind !== 'pull') {
-    if (labels[sourceRevisionLabel] !== sourceRevision) fail(`Final image '${planned.id}' does not carry source revision '${sourceRevision}'`);
+    if (!sourceRevisionPattern.test(labels[sourceRevisionLabel] ?? '') || (!allowDifferentSourceRevision && labels[sourceRevisionLabel] !== sourceRevision)) fail(`Final image '${planned.id}' does not carry a valid source revision${allowDifferentSourceRevision ? '' : ` '${sourceRevision}'`}`);
     if (labels[developmentInputsLabel] !== 'true') fail(`Final image '${planned.id}' is missing the development image-input marker`);
   }
   return labels;
@@ -1407,7 +1385,7 @@ function tryReuseFinalImage(planned, plan, sourceRevision, repositoryRoot) {
     const image = tryInspectImage(reference, repositoryRoot);
     if (image === undefined) continue;
     try {
-      validateFinalImageInspection(planned, image, plan, sourceRevision);
+      validateFinalImageInspection(planned, image, plan, sourceRevision, true);
     } catch {
       continue;
     }
@@ -1419,13 +1397,59 @@ function tryReuseFinalImage(planned, plan, sourceRevision, repositoryRoot) {
   return undefined;
 }
 
+function normalizeRebuildTarget(value) { return String(value ?? '').trim().toLowerCase(); }
+
+export function matchesRebuildTarget(planned, selector) {
+  const normalized = normalizeRebuildTarget(selector);
+  const separator = normalized.indexOf(':');
+  const namespace = separator > 0 ? normalized.slice(0, separator) : undefined;
+  const target = separator > 0 ? normalized.slice(separator + 1) : normalized;
+  if (target.length === 0) return false;
+  const id = String(planned?.id ?? '').toLowerCase();
+  const producer = String(planned?.producer?.id ?? '').toLowerCase();
+  const namespacedValues = {
+    capability: (planned?.buildCapabilities ?? []).map(value => String(value).toLowerCase()),
+    feature: (planned?.buildCapabilities ?? []).map(value => String(value).toLowerCase()),
+    runtime: [String(planned?.runtimeId ?? '').toLowerCase()],
+    image: [id],
+    producer: [producer],
+    toolchain: [String(planned?.toolchainId ?? '').toLowerCase()],
+    processor: [String(planned?.artifactProcessorId ?? '').toLowerCase()],
+  };
+  if (namespace !== undefined && !Object.hasOwn(namespacedValues, namespace)) return false;
+  const values = namespace === undefined
+    ? [...new Set(Object.values(namespacedValues).flat())]
+    : namespacedValues[namespace];
+  if (target.includes('*')) {
+    const pattern = new RegExp(`^${target.split('*').map(value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`);
+    return values.some(value => pattern.test(value));
+  }
+  return values.some(value => value === target);
+}
+
+function validateRebuildTargets(options, plan) {
+  const selectors = [...new Set((options.rebuildTargets ?? []).map(normalizeRebuildTarget).filter(Boolean))];
+  const unmatched = selectors.filter(selector => !plan.images.some(image => matchesRebuildTarget(image, selector)));
+  if (unmatched.length > 0) {
+    const supported = [...new Set(plan.images.flatMap(image => [image.id, image.producer?.id, image.runtimeId, image.toolchainId, image.artifactProcessorId, ...(image.buildCapabilities ?? [])].filter(Boolean)))].sort().join(', ');
+    fail(`Unknown --rebuild-target '${unmatched[0]}'. Available image, producer, component, and capability targets: ${supported}`);
+  }
+  options.rebuildTargets = selectors;
+}
+
+function isRebuildRequested(options, planned) { return (options.rebuildTargets ?? []).some(selector => matchesRebuildTarget(planned, selector)); }
+
 function partitionPlannedImages(options, plan, sourceRevision, forceRebuild = false) {
   const cached = new Map();
   const missing = [];
   for (const planned of plan.images) {
+    if (options.reuseExisting === false || forceRebuild || isRebuildRequested(options, planned)) {
+      missing.push(planned);
+      continue;
+    }
     // Pull-only entries are independent of the repository source. Keep them
     // reusable even when a source-input fingerprint invalidates build outputs.
-    if (planned.producer.kind === 'pull' && options.reuseExisting !== false) {
+    if (planned.producer.kind === 'pull') {
       const image = tryInspectImage(planned.reference, options.repositoryRoot);
       if (image !== undefined) {
         try {
@@ -1435,10 +1459,6 @@ function partitionPlannedImages(options, plan, sourceRevision, forceRebuild = fa
           missing.push(planned);
         }
       } else missing.push(planned);
-      continue;
-    }
-    if (options.reuseExisting === false || forceRebuild) {
-      missing.push(planned);
       continue;
     }
     const image = tryReuseFinalImage(planned, plan, sourceRevision, options.repositoryRoot);
@@ -1452,7 +1472,7 @@ function verifyFinalImages(options, sourceRevision, plan, imagePlanDigest) {
   const result = [];
   for (const planned of plan.images) {
     const image = inspectImage(planned.reference, options.repositoryRoot);
-    validateFinalImageInspection(planned, image, plan, sourceRevision);
+    validateFinalImageInspection(planned, image, plan, sourceRevision, options.reuseExisting !== false);
     if (planned.producer.kind !== 'pull') {
       const contentAlias = `${imageRepository(planned.reference)}:content`;
       if (contentAlias !== planned.reference) {
@@ -1469,7 +1489,6 @@ function verifyFinalImages(options, sourceRevision, plan, imagePlanDigest) {
     releaseId: plan.releaseId,
     sourceRevision,
     imagePlanDigest: imagePlanDigest,
-    developmentImageInputs: true,
     images: result,
   }, null, 2)}\n`);
   return output;
@@ -1481,7 +1500,6 @@ function parseArguments(argv) {
     imagePrefix: 'sharplabnext',
     sourceRevision: undefined,
     maximumParallel: 5,
-    allowUncommittedSourceForDevelopment: false,
     acceptMicrosoftLicenses: false,
     offline: false,
     planOnly: false,
@@ -1490,15 +1508,16 @@ function parseArguments(argv) {
     target: 'gateway',
     all: false,
     targetSpecified: false,
+    rebuildTargets: [],
   };
   for (let index = 0; index < argv.length; index++) {
     const argument = argv[index];
-    if (argument === '--allow-uncommitted-source-for-development') { result.allowUncommittedSourceForDevelopment = true; continue; }
     if (argument === '--accept-microsoft-licenses') { result.acceptMicrosoftLicenses = true; continue; }
     if (argument === '--offline') { result.offline = true; continue; }
     if (argument === '--plan-only') { result.planOnly = true; continue; }
     if (argument === '--cache-probe') { result.cacheProbe = true; continue; }
     if (argument === '--no-reuse-existing') { result.reuseExisting = false; continue; }
+    if (argument === '--rebuild-target') { const value = argv[++index]; if (value === undefined || value.length === 0) fail('--rebuild-target requires a value'); result.rebuildTargets.push(value); continue; }
     if (argument === '--all') {
       if (result.targetSpecified) fail('--target and --all cannot be used together');
       result.all = true;
@@ -1532,10 +1551,48 @@ function parseArguments(argv) {
 function usage() {
   return `Usage: node eng/build-images.mjs [--repository-root PATH] [--image-prefix PREFIX]\n` +
     `  [--source-revision COMMIT] [--max-parallel 1..8] [--offline]\n` +
-    `  [--target TARGET | --all] [--allow-uncommitted-source-for-development]\n` +
-    `  [--plan-only] [--cache-probe] [--no-reuse-existing]\n` +
+    `  [--target TARGET | --all]\n` +
+    `  [--plan-only] [--cache-probe] [--no-reuse-existing] [--rebuild-target TARGET]\n` +
     `  [--accept-microsoft-licenses]\n` +
     `  (default target: gateway; default parallelism: 5; --all selects the complete image graph)`;
+}
+
+const capabilityProvisionerHandlers = Object.freeze({
+  'wine-operator': async context => {
+    const resource = buildWineOperator(context.options, context.sourceRevision, context.environmentSnapshot, context.needsFrameworkSeeds);
+    return { resource, wine: resource };
+  },
+  'framework-matrix': async context => {
+    const wineDigest = dependencyResource(context.definition, context.resources, 'digest');
+    const operators = await buildFrameworkOperators(context.options, context.sourceRevision, wineDigest, context.prerequisiteState?.downloads, context.frameworkCandidates.length > 0 ? undefined : [], context.requiredSeedGenerations);
+    const resource = context.frameworkCandidates.length > 0
+      ? buildFrameworkControlImages(context.options, context.sourceRevision, wineDigest, operators, createFrameworkMatrixInput(context.options, operators))
+      : operators;
+    return { resource, operators };
+  },
+});
+
+async function provisionCapabilityResources(options, sourceRevision, capabilities, definitions, prerequisiteState, prerequisiteManifest, environmentSnapshot, candidates, requiredSeedGenerations) {
+  const providers = capabilityProvisioners(definitions, capabilities);
+  const frameworkCandidates = imagesUsingProvisioner(candidates, definitions, 'framework-matrix');
+  const needsFrameworkSeeds = frameworkCandidates.length > 0 || requiredSeedGenerations.size > 0;
+  const resources = {};
+  let wine = {};
+  let operators = { seedReferences: new Map(), references: new Map() };
+  for (const definition of providers) {
+    const handler = capabilityProvisionerHandlers[definition.provisioner.kind];
+    if (typeof handler !== 'function') fail(`Capability '${definition.id}' uses unsupported provisioner '${definition.provisioner.kind}'`);
+    const result = await handler({ options, sourceRevision, definition, prerequisiteState, environmentSnapshot, resources, frameworkCandidates, requiredSeedGenerations, needsFrameworkSeeds });
+    resources[definition.id] = result.resource;
+    if (result.wine !== undefined) wine = result.wine;
+    if (result.operators !== undefined) operators = result.operators;
+  }
+  if (needsFrameworkSeeds && operators.seedInputSha256 === undefined) fail('Framework seed provisioning requires a framework-matrix provisioner');
+  const operatorDefinitions = requiredOperatorDefinitions(definitions, capabilities);
+  const operatorImages = operatorDefinitions.length > 0
+    ? await buildOperatorImages(options, prerequisiteState, operators, prerequisiteManifest, definitions, capabilities)
+    : {};
+  return { resources, wine, operators, operatorImages, frameworkCandidates };
 }
 
 export async function runBuildImages(argv, output = console) {
@@ -1543,7 +1600,8 @@ export async function runBuildImages(argv, output = console) {
   try {
     const options = parseArguments(argv);
     if (options.help) { output.log(usage()); return 0; }
-    // The ordinary image entry point is content-addressed and does not need Git.
+    // Source labels use a content identity; local reuse is controlled only by
+    // explicit rebuild options and never requires Git metadata.
     options.sourceIdentityMode = contentSourceIdentityMode;
     process.env[sourceIdentityModeEnvironmentVariable] = contentSourceIdentityMode;
     const sourceRevision = resolveSourceRevision(options);
@@ -1552,20 +1610,8 @@ export async function runBuildImages(argv, output = console) {
       return await runOrdinaryImageBuild(options, sourceRevision, output);
     }
     const imagePlan = generateImagePlan(options, sourceRevision);
+    validateRebuildTargets(options, imagePlan.plan);
     options.releaseId = imagePlan.plan.releaseId;
-    const sourceInputDigest = resolveBuildCacheInputDigest(options);
-    const cacheIdentity = createBuildCacheIdentity(
-      options,
-      imagePlan,
-      sourceRevision,
-      sourceInputDigest,
-    );
-    const previousCacheState = readBuildCacheState(options);
-    // A clean commit already identifies the source input. Only a dirty
-    // development tree needs the extra fingerprint gate; otherwise an
-    // unrelated README/test change would disable every local image shortcut.
-    const cacheStateMismatch = options.allowUncommittedSourceForDevelopment &&
-      !buildCacheStateMatches(previousCacheState, cacheIdentity);
     const counts = Object.fromEntries(['bake', 'runtime-candidate', 'pull'].map(kind => [kind, imagePlan.plan.images.filter(image => image.producer.kind === kind).length]));
     output.log(`Release image plan: ${imagePlan.plan.images.length} images (${counts.bake} Bake, ${counts['runtime-candidate']} runtime candidates, ${counts.pull} immutable pulls).`);
     if (options.planOnly) return 0;
@@ -1575,18 +1621,16 @@ export async function runBuildImages(argv, output = console) {
       options,
       imagePlan.plan,
       sourceRevision,
-      cacheStateMismatch,
+      false,
     );
     output.log(`Image cache: ${imageState.cached.size} hit, ${imageState.missing.length} to build.`);
     if (options.cacheProbe) {
       const hit = imageState.missing.length === 0;
       output.log(`${imageCacheProbePrefix}${hit ? 'hit' : 'miss'}`);
-      if (hit) recordBuildCacheState(options, cacheIdentity, sourceInputDigest);
       return 0;
     }
     if (imageState.missing.length === 0) {
       const validationPath = verifyFinalImages(options, sourceRevision, imagePlan.plan, imagePlan.digest);
-      recordBuildCacheState(options, cacheIdentity, sourceInputDigest);
       output.log(`All planned release images were already present and validated. Identity record: ${validationPath}`);
       return 0;
     }
@@ -1594,7 +1638,8 @@ export async function runBuildImages(argv, output = console) {
     const missingIds = new Set(imageState.missing.map(image => image.id));
     const bakeTargets = [...new Set(imagePlan.plan.images.filter(image => image.producer.kind === 'bake' && missingIds.has(image.id)).map(image => image.producer.id))].sort();
     const candidates = imagePlan.plan.images.filter(image => image.producer.kind === 'runtime-candidate' && missingIds.has(image.id));
-    const capabilities = resolveBuildCapabilities(imageState.missing);
+    options.capabilityDefinitions = imagePlan.capabilityDefinitions;
+    const capabilities = resolveBuildCapabilities(imageState.missing, imagePlan.capabilityDefinitions);
     output.log(`Build capabilities: ${capabilities.size === 0 ? 'none' : [...capabilities].join(', ')}`);
 
     runWithRetry('dotnet', [
@@ -1607,18 +1652,23 @@ export async function runBuildImages(argv, output = console) {
     }
     if (bakeTargets.length === 0 && candidates.length === 0) {
       const validationPath = verifyFinalImages(options, sourceRevision, imagePlan.plan, imagePlan.digest);
-      recordBuildCacheState(options, cacheIdentity, sourceInputDigest);
       output.log(`Fetched and validated every planned release image. Identity record: ${validationPath}`);
       return 0;
     }
 
     let prerequisiteState;
-    const needsOperatorInputs = capabilities.has('framework') ||
-      capabilities.has('jsharp') || capabilities.has('cppcli');
-    const prerequisiteManifest = needsOperatorInputs
+    const operatorDefinitions = requiredOperatorDefinitions(imagePlan.capabilityDefinitions, capabilities);
+    const providers = capabilityProvisioners(imagePlan.capabilityDefinitions, capabilities);
+    const requiredSeedGenerations = new Set([
+      ...operatorDefinitions.map(definition => definition.operator?.frameworkSeedGeneration).filter(value => typeof value === 'string' && value.length > 0),
+      ...providers.flatMap(definition => definition.provisioner.seedGenerations ?? []),
+    ]);
+    const needsRegistry = requiredSeedGenerations.size > 0 || providers.some(definition => definition.provisioner.requiresRegistry === true);
+    const needsPrerequisites = operatorDefinitions.length > 0 || needsRegistry || providers.some(definition => definition.provisioner.requiresPrerequisites === true);
+    const prerequisiteManifest = needsPrerequisites
       ? readPrerequisiteManifest(path.join(options.repositoryRoot, 'eng', 'release-prerequisites.json'))
       : undefined;
-    if (needsOperatorInputs) {
+    if (needsPrerequisites) {
       const prerequisiteOutput = {
         logs: [],
         log(value) { this.logs.push(String(value)); output.log(value); },
@@ -1632,12 +1682,7 @@ export async function runBuildImages(argv, output = console) {
       if (prerequisiteStatus !== 0) fail('Prerequisite preparation failed');
       prerequisiteState = JSON.parse(prerequisiteOutput.logs.at(-1));
     }
-    const frameworkCandidates = candidates.filter(image => /^wine-netfx/.test(image.producer.id));
-    const requiredOperatorIds = [];
-    if (capabilities.has('jsharp')) requiredOperatorIds.push('jsharp20-development-base');
-    if (capabilities.has('cppcli')) requiredOperatorIds.push('cppcli-prepared-base');
-    const needsFrameworkSeeds = frameworkCandidates.length > 0 || requiredOperatorIds.length > 0;
-    if (needsFrameworkSeeds) {
+    if (needsRegistry) {
       await ensureLocalRegistry(prerequisiteState?.localRegistry ?? prerequisiteManifest?.value.localRegistry, options.repositoryRoot);
     }
 
@@ -1649,29 +1694,12 @@ export async function runBuildImages(argv, output = console) {
       sourceRevision,
       undefined,
     );
-    let wine = {};
-    let operators = { seedReferences: new Map(), references: new Map() };
-    let operatorImages = {};
-    let framework = {};
-    if (capabilities.has('wine')) {
-      wine = buildWineOperator(options, sourceRevision, bakeEnvironmentSnapshot, needsFrameworkSeeds);
-    }
-    if (needsFrameworkSeeds) {
-      operators = await buildFrameworkOperators(options, sourceRevision, wine.digest, prerequisiteState?.downloads, frameworkCandidates.length > 0 ? frameworkIds : [], requiredOperatorIds.length > 0 ? ['clr2', 'clr4'] : undefined);
-    }
-    if (requiredOperatorIds.length > 0) {
-      operatorImages = await buildOperatorImages(options, prerequisiteState, operators, requiredOperatorIds);
-    }
-    if (frameworkCandidates.length > 0) {
-      const matrixInput = createFrameworkMatrixInput(options, operators);
-      framework = buildFrameworkControlImages(options, sourceRevision, wine.digest, operators, matrixInput);
-    }
+    const provisioned = await provisionCapabilityResources(options, sourceRevision, capabilities, imagePlan.capabilityDefinitions, prerequisiteState, prerequisiteManifest, bakeEnvironmentSnapshot, candidates, requiredSeedGenerations);
 
-    buildBakeTargets(options, sourceRevision, operatorImages, bakeTargets, bakeEnvironmentSnapshot);
+    buildBakeTargets(options, sourceRevision, provisioned.operatorImages, bakeTargets, bakeEnvironmentSnapshot);
 
-    await buildRuntimeCandidates(options, sourceRevision, operatorImages, candidates, wine, framework, { environmentSnapshot: bakeEnvironmentSnapshot });
+    await buildRuntimeCandidates(options, sourceRevision, provisioned.operatorImages, candidates, provisioned.wine, provisioned.resources, { environmentSnapshot: bakeEnvironmentSnapshot, capabilityDefinitions: imagePlan.capabilityDefinitions, capabilityResources: provisioned.resources });
     const validationPath = verifyFinalImages(options, sourceRevision, imagePlan.plan, imagePlan.digest);
-    recordBuildCacheState(options, cacheIdentity, sourceInputDigest);
     output.log(`Built and validated every planned release image. Identity record: ${validationPath}`);
     return 0;
   } catch (error) {

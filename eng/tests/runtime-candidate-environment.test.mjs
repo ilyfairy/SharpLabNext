@@ -27,8 +27,6 @@ assert.ok(runtimeDepsImage)
 const fakeWineImage = pinnedImage('wine-operator', '9')
 const localDevelopmentWineImage = 'registry.example/sharplabnext/operator-wine-coreclr:candidate-test'
 const localDevelopmentWineImageId = `sha256:${'7'.repeat(64)}`
-const outerDevelopmentGrantInput = 'SHARPLABNEXT_BAKE_ALLOW_UNCOMMITTED_SOURCE_FOR_DEVELOPMENT'
-const outerDevelopmentImageInputsGrant = 'SHARPLABNEXT_BAKE_ALLOW_DEVELOPMENT_IMAGE_INPUTS'
 const historicalFrameworkDevelopmentInput = 'RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_DEVELOPMENT_OPT_IN'
 
 function pinnedImage(name, character) { return `registry.example/${name}@sha256:${character.repeat(64)}`; }
@@ -48,20 +46,10 @@ function commonEnvironment() {
   }
 }
 
-test('outer Bake launcher sanitizes and emits only its explicit development grants', () => {
+test('outer Bake launcher propagates content source identity without CLI grants', () => {
   const source = fs.readFileSync(path.join(repositoryRoot, 'eng', 'tools', 'run-with-bake-environment.cs'), 'utf8')
-  assert.ok(source.includes(outerDevelopmentGrantInput))
-  assert.ok(source.includes(outerDevelopmentImageInputsGrant))
-  assert.match(source, /startInfo\.Environment\.Remove\(developmentGrantEnvironmentVariable\)/)
-  assert.match(source, /startInfo\.Environment\.Remove\(developmentImageInputsGrantEnvironmentVariable\)/)
-  assert.match(
-    source,
-    /if \(allowUncommittedSourceForDevelopment\)\s+startInfo\.Environment\[developmentGrantEnvironmentVariable\] = "true"/,
-  )
-  assert.match(
-    source,
-    /if \(allowDevelopmentImageInputs\)\s+startInfo\.Environment\[developmentImageInputsGrantEnvironmentVariable\] = "true"/,
-  )
+  assert.match(source, /SHARPLABNEXT_SOURCE_IDENTITY_MODE/)
+  assert.doesNotMatch(source, /--allow-(?:uncommitted|development)-/)
   assert.match(source, /case "--emit-environment-json"/)
   assert.match(source, /SHARPLABNEXT_BAKE_ENVIRONMENT_JSON=/)
   assert.match(source, /BakeEnvironmentJsonSerializerContext\.Default\.DictionaryStringString/)
@@ -311,7 +299,7 @@ test('CLI output is a row-only overlay and command mode invokes the reviewed bui
   assert.equal(calls[1].options.env.ORDINARY_BASE_INPUT, 'retained')
 })
 
-test('development image-input mode supports ordinary Linux and Mono candidates locally', () => {
+test('content source identity supports ordinary Linux and Mono candidates locally', () => {
   const output = {
     logs: [], errors: [],
     log(value) { this.logs.push(value) },
@@ -322,41 +310,24 @@ test('development image-input mode supports ordinary Linux and Mono candidates l
     calls.push({ command, arguments_, options })
     return { status: 0 }
   }
-  const values = {
-    ...commonEnvironment(),
-    [outerDevelopmentImageInputsGrant]: 'true',
-  }
+  const values = { ...commonEnvironment(), SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content' }
 
   for (const profileId of ['dotnet-5-linux-x64', 'mono-6.12-linux-x64']) {
     assert.equal(runRuntimeCandidateEnvironment([
       profileId,
-      '--', '--allow-development-image-inputs', '--progress', 'plain',
+      '--', '--progress', 'plain',
     ], { output, values, spawn }), 0, `${profileId}: ${output.errors.join('\n')}`)
     const call = calls.at(-1)
     assert.equal(path.basename(call.arguments_[0]), 'build-runtime-candidate.mjs')
-    assert.ok(call.arguments_.includes('--allow-development-image-inputs'))
-    assert.equal(call.options.env[outerDevelopmentImageInputsGrant], undefined)
+    assert.equal(call.options.env.SHARPLABNEXT_SOURCE_IDENTITY_MODE, 'content')
     assert.equal(call.options.env.RUNTIME_MATRIX_HISTORICAL_FRAMEWORK_DEVELOPMENT_OPT_IN, undefined)
     assert.equal(call.options.env.WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN, undefined)
   }
 
-  output.errors.length = 0
-  assert.equal(runRuntimeCandidateEnvironment([
-    'dotnet-5-linux-x64',
-    '--', '--allow-development-image-inputs', '--progress', 'plain',
-  ], { output, values: commonEnvironment(), spawn }), 1)
-  assert.match(output.errors.at(-1), /development image-input grant/)
-
-  output.errors.length = 0
-  assert.equal(runRuntimeCandidateEnvironment([
-    'dotnet-5-linux-x64',
-    '--', '--allow-development-image-inputs', '--print',
-  ], { output, values, spawn }), 1)
-  assert.match(output.errors.at(-1), /only for real local candidate builds/)
   assert.equal(calls.length, 2)
 })
 
-test('development image-input mode binds the exact local Wine CoreCLR operator', () => {
+test('content source identity binds the exact local Wine CoreCLR operator', () => {
   const output = {
     logs: [], errors: [],
     log(value) { this.logs.push(value) },
@@ -366,8 +337,7 @@ test('development image-input mode binds the exact local Wine CoreCLR operator',
   const options = {
     output,
     values: {
-      ...commonEnvironment(),
-      [outerDevelopmentImageInputsGrant]: 'true',
+      ...commonEnvironment(), SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content',
     },
     inspectDockerImage(reference) {
       assert.equal(reference, localDevelopmentWineImage)
@@ -382,7 +352,7 @@ test('development image-input mode binds the exact local Wine CoreCLR operator',
   assert.equal(runRuntimeCandidateEnvironment([
     'wine-dotnet-9-linux-x64',
     '--wine-image', localDevelopmentWineImage,
-    '--', '--allow-development-image-inputs', '--progress', 'plain',
+    '--', '--progress', 'plain',
   ], options), 0, output.errors.join('\n'))
   assert.equal(calls.length, 1)
   assert.equal(calls[0].invocation.env.RUNTIME_MATRIX_WINE_IMAGE, localDevelopmentWineImageId)
@@ -394,13 +364,13 @@ test('development image-input mode binds the exact local Wine CoreCLR operator',
   assert.equal(runRuntimeCandidateEnvironment([
     'wine-dotnet-9-linux-x64',
     '--wine-image', fakeWineImage,
-    '--', '--allow-development-image-inputs', '--progress', 'plain',
+    '--', '--progress', 'plain',
   ], options), 1)
   assert.match(output.errors.at(-1), /exact Wine operator tag/)
   assert.equal(calls.length, 1)
 })
 
-test('development image-input mode accepts current Framework provenance without receipts', t => {
+test('content source identity accepts current Framework provenance without receipts', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sharplabnext-framework-development-cli-'))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
   const inputPath = path.join(root, 'framework-input.json')
@@ -412,8 +382,7 @@ test('development image-input mode accepts current Framework provenance without 
   }
   const calls = []
   const values = {
-    ...commonEnvironment(),
-    [outerDevelopmentImageInputsGrant]: 'true',
+    ...commonEnvironment(), SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content',
     WINE_CORECLR_OPERATOR_RECEIPT: 'stale-receipt.json',
     WINE_CORECLR_OPERATOR_RECEIPT_SIG: 'stale-receipt.json.sig',
   }
@@ -422,7 +391,7 @@ test('development image-input mode accepts current Framework provenance without 
     'wine-netfx48-linux-x64',
     '--wine-image', fakeWineImage,
     '--framework-input', inputPath,
-    '--', '--allow-development-image-inputs', '--progress', 'plain',
+    '--', '--progress', 'plain',
   ], {
     output,
     values,
@@ -435,7 +404,6 @@ test('development image-input mode accepts current Framework provenance without 
   assert.equal(calls[0].options.env[historicalFrameworkDevelopmentInput], undefined)
   assert.equal(calls[0].options.env.WINE_CORECLR_OPERATOR_RECEIPT, undefined)
   assert.equal(calls[0].options.env.WINE_CORECLR_OPERATOR_RECEIPT_SIG, undefined)
-  assert.equal(calls[0].options.env[outerDevelopmentImageInputsGrant], undefined)
 })
 
 test('Wine command mode requires and forwards an explicit signed operator receipt pair', () => {
@@ -509,7 +477,7 @@ test('Wine command mode requires and forwards an explicit signed operator receip
   }
 })
 
-test('Wine CoreCLR development command requires explicit outer and candidate opt-ins', () => {
+test('content source identity enables a local Wine CoreCLR candidate without a receipt', () => {
   const output = {
     logs: [], errors: [],
     log(value) { this.logs.push(value) },
@@ -528,7 +496,6 @@ test('Wine CoreCLR development command requires explicit outer and candidate opt
     },
   }
 
-  // The command-scoped outer grant cannot select development mode by itself.
   assert.equal(runRuntimeCandidateEnvironment([
     'wine-dotnet-9-linux-x64',
     '--wine-image', localDevelopmentWineImage,
@@ -537,34 +504,7 @@ test('Wine CoreCLR development command requires explicit outer and candidate opt
     ...baseOptions,
     values: {
       ...commonEnvironment(),
-      [outerDevelopmentGrantInput]: 'true',
-    },
-  }), 1)
-  assert.equal(calls.length, 0)
-
-  // The candidate opt-in cannot manufacture the outer grant.
-  output.errors.length = 0
-  assert.equal(runRuntimeCandidateEnvironment([
-    'wine-dotnet-9-linux-x64',
-    '--wine-image', localDevelopmentWineImage,
-    '--', '--allow-uncommitted-source-for-development', '--progress', 'plain',
-  ], {
-    ...baseOptions,
-    values: commonEnvironment(),
-  }), 1)
-  assert.match(output.errors.at(-1), /outer run-with-bake-environment development grant/)
-  assert.equal(calls.length, 0)
-
-  output.errors.length = 0
-  assert.equal(runRuntimeCandidateEnvironment([
-    'wine-dotnet-9-linux-x64',
-    '--wine-image', localDevelopmentWineImage,
-    '--', '--allow-uncommitted-source-for-development', '--progress', 'plain',
-  ], {
-    ...baseOptions,
-    values: {
-      ...commonEnvironment(),
-      [outerDevelopmentGrantInput]: 'true',
+      SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content',
       WINE_CORECLR_OPERATOR_RECEIPT: 'stale-receipt.json',
       WINE_CORECLR_OPERATOR_RECEIPT_SIG: 'stale-receipt.json.sig',
       WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN: 'stale',
@@ -572,19 +512,13 @@ test('Wine CoreCLR development command requires explicit outer and candidate opt
       WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE_ID: 'stale',
       WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE: 'true',
     },
-  }), 0)
+  }), 0, output.errors.join('\n'))
   assert.equal(calls.length, 1)
   assert.deepEqual(calls[0].arguments_.slice(1), [
     'runtime-wine-dotnet-matrix-candidate',
-    '--allow-uncommitted-source-for-development',
     '--progress', 'plain',
   ])
-  assert.equal(
-    calls[0].arguments_.filter(argument => argument === '--allow-uncommitted-source-for-development').length,
-    1,
-  )
   assert.equal(calls[0].invocation.env.RUNTIME_MATRIX_WINE_IMAGE, localDevelopmentWineImageId)
-  assert.equal(calls[0].invocation.env[outerDevelopmentGrantInput], undefined)
   assert.equal(calls[0].invocation.env.WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN, 'true')
   assert.equal(calls[0].invocation.env.WINE_CORECLR_DEVELOPMENT_OPERATOR_TAG, localDevelopmentWineImage)
   assert.equal(calls[0].invocation.env.WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE_ID, localDevelopmentWineImageId)
@@ -592,37 +526,6 @@ test('Wine CoreCLR development command requires explicit outer and candidate opt
   assert.equal(calls[0].invocation.env.WINE_CORECLR_OPERATOR_RECEIPT_SIG, undefined)
   assert.equal(calls[0].invocation.env.WINE_CORECLR_DEVELOPMENT_OPERATOR_IMAGE, undefined)
 
-  for (const argv of [
-    [
-      'wine-dotnet-9-linux-x64', '--wine-image', fakeWineImage,
-      '--', '--allow-uncommitted-source-for-development', '--progress', 'plain',
-    ],
-    [
-      'wine-dotnet-9-linux-x64', '--wine-image', localDevelopmentWineImage,
-      '--', '--allow-uncommitted-source-for-development',
-      '--allow-uncommitted-source-for-development', '--progress', 'plain',
-    ],
-    [
-      'wine-dotnet-9-linux-x64', '--wine-image', localDevelopmentWineImage,
-      '--publish-to',
-      'registry.example/sharplabnext/runtime-wine-dotnet-9-linux-x64:candidate-test',
-      '--', '--allow-uncommitted-source-for-development',
-    ],
-    [
-      'wine-dotnet-9-linux-x64', '--wine-image', localDevelopmentWineImage,
-      '--allow-uncommitted-source-for-development',
-    ],
-  ]) {
-    output.errors.length = 0
-    assert.equal(runRuntimeCandidateEnvironment(argv, {
-      ...baseOptions,
-      values: {
-        ...commonEnvironment(),
-        [outerDevelopmentGrantInput]: 'true',
-      },
-    }), 1)
-  }
-  assert.equal(calls.length, 1)
 })
 
 test('historical Framework development mode is explicit, local-only, and non-receipted', t => {
@@ -634,8 +537,7 @@ test('historical Framework development mode is explicit, local-only, and non-rec
   const output = { logs: [], errors: [], log(value) { this.logs.push(value) }, error(value) { this.errors.push(value) } }
   const calls = []
   const baseValues = {
-    ...commonEnvironment(),
-    [outerDevelopmentGrantInput]: 'true',
+    ...commonEnvironment(), SHARPLABNEXT_SOURCE_IDENTITY_MODE: 'content',
     [historicalFrameworkDevelopmentInput]: 'forged',
     WINE_CORECLR_OPERATOR_RECEIPT: 'stale-receipt.json',
     WINE_CORECLR_OPERATOR_RECEIPT_SIG: 'stale-receipt.json.sig',
@@ -659,19 +561,9 @@ test('historical Framework development mode is explicit, local-only, and non-rec
     '--allow-historical-framework-input-for-development', '--progress', 'plain',
   ])
   assert.equal(calls[0].options.env[historicalFrameworkDevelopmentInput], 'true')
-  assert.equal(calls[0].options.env[outerDevelopmentGrantInput], undefined)
   assert.equal(calls[0].options.env.WINE_CORECLR_OPERATOR_RECEIPT, undefined)
   assert.equal(calls[0].options.env.WINE_CORECLR_OPERATOR_RECEIPT_SIG, undefined)
   assert.equal(calls[0].options.env.WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN, undefined)
-
-  assert.equal(runRuntimeCandidateEnvironment([
-    ...commonArguments,
-    '--', '--allow-historical-framework-input-for-development',
-    '--allow-uncommitted-source-for-development', '--progress', 'plain',
-  ], { output, values: baseValues, spawn }), 0, output.errors.join('\n'))
-  assert.equal(calls.length, 2)
-  assert.equal(calls[1].options.env[historicalFrameworkDevelopmentInput], 'true')
-  assert.equal(calls[1].options.env.WINE_CORECLR_DEVELOPMENT_WRAPPER_OPT_IN, undefined)
 
   const cases = [
     {
@@ -681,13 +573,13 @@ test('historical Framework development mode is explicit, local-only, and non-rec
         '--', '--allow-historical-framework-input-for-development', '--progress', 'plain',
       ],
       values: baseValues,
-      error: /only for shared Wine Framework candidates/,
+      error: /exact Wine operator tag|only for shared Wine Framework candidates/,
     },
     {
-      name: 'no outer grant',
+      name: 'no content identity',
       argv: [...commonArguments, '--', '--allow-historical-framework-input-for-development'],
       values: commonEnvironment(),
-      error: /outer run-with-bake-environment development grant/,
+      error: /requires content source identity/,
     },
     {
       name: 'same source revision',
@@ -756,5 +648,5 @@ test('historical Framework development mode is explicit, local-only, and non-rec
     assert.equal(runRuntimeCandidateEnvironment(argv, { output, values, spawn }), 1, name)
     assert.match(output.errors.join('\n'), error, name)
   }
-  assert.equal(calls.length, 2)
+  assert.equal(calls.length, 1)
 })

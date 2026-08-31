@@ -74,8 +74,8 @@ const commonExpectedLabels = Object.freeze({
   'com.sharplabnext.runtime-candidate.promotion-eligible': 'true',
 })
 
-const developmentSourceOverride = '--allow-uncommitted-source-for-development'
-const developmentImageInputsOverride = '--allow-development-image-inputs'
+const sourceIdentityModeEnvironmentVariable = 'SHARPLABNEXT_SOURCE_IDENTITY_MODE'
+const contentSourceIdentityMode = 'content'
 const historicalFrameworkOverride = '--allow-historical-framework-input-for-development'
 const candidateSourceContextInput = 'RUNTIME_CANDIDATE_SOURCE_CONTEXT'
 const candidatePromotionEligibilityInput = 'RUNTIME_CANDIDATE_PROMOTION_ELIGIBLE'
@@ -1308,7 +1308,7 @@ function candidateSourceExpectedLabels(values) {
         context === 'working-tree-historical-framework-input-development') &&
        promotionEligible === 'false')
     : ((context === 'committed' && promotionEligible === 'true') ||
-       (context === 'working-tree-development' && promotionEligible === 'false'))
+       (context === 'working-tree-content' && promotionEligible === 'false'))
   if (!valid) {
     throw new Error(`${candidateSourceContextInput}/${candidatePromotionEligibilityInput} do not match the candidate development mode`)
   }
@@ -1345,9 +1345,9 @@ export function wineCoreClrOperatorExpectedLabels(values, sourceBinding = undefi
     promotionEligible: true,
   })
   const validSource = (source.context === 'committed' && source.promotionEligible === true) ||
-    (source.context === 'working-tree-development' && source.promotionEligible === false)
+    (source.context === 'working-tree-content' && source.promotionEligible === false)
   if (!validSource) {
-    throw new Error('Wine CoreCLR operator source binding must be committed/true or working-tree-development/false')
+    throw new Error('Wine CoreCLR operator source binding must be committed/true or working-tree-content/false')
   }
   return {
     ...wineCoreClrOperatorStaticLabels,
@@ -1738,32 +1738,20 @@ export function runCandidateBuild(argv, values = process.env, spawn = spawnSync,
   if (target === undefined) {
     output.error(
       'Usage: node eng/build-runtime-candidate.mjs <candidate-target> ' +
-      `[${developmentSourceOverride}] [${developmentImageInputsOverride}] ` +
       `[${historicalFrameworkOverride}] ` +
       '[docker buildx bake options]',
     )
     return 64
   }
 
-  const developmentOverrideCount = rawAdditionalArguments.filter(argument => argument === developmentSourceOverride).length
-  if (developmentOverrideCount > 1) {
-    output.error(`runtime candidate input error: ${developmentSourceOverride} may be specified once`)
-    return 64
-  }
-  const allowUncommittedSourceForDevelopment = developmentOverrideCount === 1
-  const developmentImageInputsOverrideCount = rawAdditionalArguments.filter(argument => argument === developmentImageInputsOverride).length
-  if (developmentImageInputsOverrideCount > 1) {
-    output.error(`runtime candidate input error: ${developmentImageInputsOverride} may be specified once`)
-    return 64
-  }
-  const allowDevelopmentImageInputs = developmentImageInputsOverrideCount === 1
+  const contentSourceIdentity = String(values?.[sourceIdentityModeEnvironmentVariable] ?? '').toLowerCase() === contentSourceIdentityMode
   const historicalFrameworkOverrideCount = rawAdditionalArguments.filter(argument => argument === historicalFrameworkOverride).length
   if (historicalFrameworkOverrideCount > 1) {
     output.error(`runtime candidate input error: ${historicalFrameworkOverride} may be specified once`)
     return 64
   }
   const historicalFrameworkFlagPresent = historicalFrameworkOverrideCount === 1
-  const additionalArguments = rawAdditionalArguments.filter(argument => argument !== developmentSourceOverride && argument !== developmentImageInputsOverride && argument !== historicalFrameworkOverride)
+  const additionalArguments = rawAdditionalArguments.filter(argument => argument !== historicalFrameworkOverride)
   let developmentWineOperator = false
   let historicalFrameworkInput = false
   let currentFrameworkDevelopmentInput = false
@@ -1775,7 +1763,7 @@ export function runCandidateBuild(argv, values = process.env, spawn = spawnSync,
     validateAdditionalArguments(additionalArguments)
     developmentWineOperator = developmentWineOperatorRequested(
       target,
-      allowUncommittedSourceForDevelopment || allowDevelopmentImageInputs,
+      contentSourceIdentity,
       values,
     )
     historicalFrameworkInput = historicalFrameworkInputRequested(
@@ -1783,7 +1771,7 @@ export function runCandidateBuild(argv, values = process.env, spawn = spawnSync,
       historicalFrameworkFlagPresent,
       values,
     )
-    currentFrameworkDevelopmentInput = allowDevelopmentImageInputs &&
+    currentFrameworkDevelopmentInput = contentSourceIdentity &&
       target === 'runtime-wine-framework-matrix-shared-candidate' &&
       !historicalFrameworkInput
     if (currentFrameworkDevelopmentInput && [
@@ -1848,24 +1836,19 @@ export function runCandidateBuild(argv, values = process.env, spawn = spawnSync,
         allowedDirtyPaths,
         fallbackRevision: values.SOURCE_REVISION,
       })
-      sourceBinding = validateGitSourceState(sourceState, values.SOURCE_REVISION, {
-        allowUncommittedSourceForDevelopment,
-      })
+      sourceBinding = validateGitSourceState(sourceState, values.SOURCE_REVISION, { promotionMode: !contentSourceIdentity })
       if (sourceBinding.failures.length > 0) {
         for (const failure of sourceBinding.failures) {
           output.error(`runtime candidate source error: ${failure}`)
         }
         return 1
       }
-      if (allowDevelopmentImageInputs) {
-        sourceBinding = { ...sourceBinding, promotionEligible: false }
-      }
       if (developmentWineOperator && sourceBinding.promotionEligible) {
-        throw new Error('development Wine operator requires working-tree-development source context')
+        throw new Error('development Wine operator requires content source identity')
       }
       if (!sourceBinding.promotionEligible) {
         output.log(
-          'Source worktree is dirty under the explicit development override; ' +
+          'Content source identity selects local working-tree bytes; ' +
           'this local candidate is not eligible for a promotion receipt.',
         )
       } else {
@@ -1881,7 +1864,7 @@ export function runCandidateBuild(argv, values = process.env, spawn = spawnSync,
         ? (sourceBinding.promotionEligible
             ? 'committed-historical-framework-input-development'
             : 'working-tree-historical-framework-input-development')
-        : (sourceBinding.promotionEligible ? 'committed' : 'working-tree-development')
+        : (sourceBinding.promotionEligible ? 'committed' : 'working-tree-content')
       dockerEnvironment[candidatePromotionEligibilityInput] =
         sourceBinding.promotionEligible && !historicalFrameworkInput ? 'true' : 'false'
     } catch (error) {
@@ -1990,7 +1973,7 @@ export function runCandidateBuild(argv, values = process.env, spawn = spawnSync,
           dockerEnvironment,
           {
             sourceBinding: {
-              context: 'working-tree-development',
+              context: 'working-tree-content',
               promotionEligible: false,
             },
             requirePinnedReference: false,
@@ -2061,12 +2044,7 @@ export function runCandidateBuild(argv, values = process.env, spawn = spawnSync,
         allowedDirtyPaths,
         fallbackRevision: values.SOURCE_REVISION,
       })
-      let after = validateGitSourceState(sourceState, values.SOURCE_REVISION, {
-        allowUncommittedSourceForDevelopment,
-      })
-      if (allowDevelopmentImageInputs) {
-        after = { ...after, promotionEligible: false }
-      }
+      const after = validateGitSourceState(sourceState, values.SOURCE_REVISION, { promotionMode: !contentSourceIdentity })
       if (after.failures.length > 0 ||
           after.promotionEligible !== sourceBinding.promotionEligible) {
         for (const failure of after.failures) {
@@ -2103,7 +2081,7 @@ export function runCandidateBuild(argv, values = process.env, spawn = spawnSync,
           dockerEnvironment,
           {
             sourceBinding: {
-              context: 'working-tree-development',
+              context: 'working-tree-content',
               promotionEligible: false,
             },
             requirePinnedReference: false,
