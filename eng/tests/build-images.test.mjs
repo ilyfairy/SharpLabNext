@@ -266,8 +266,9 @@ test('complete image build keeps installers out of host execution', () => {
   assert.match(orchestrator, /prepare-cppcli-toolchain\.cs/);
   assert.ok(orchestrator.indexOf('buildFrameworkOperators') < orchestrator.indexOf('buildOperatorImages'));
   assert.ok(orchestrator.indexOf('buildOperatorImages') < orchestrator.indexOf('buildBakeTargets'));
+  assert.match(orchestrator, /maximumParallel: 5/);
   assert.match(orchestrator, /runParallel\(seedTasks, 2\)/);
-  assert.match(orchestrator, /runParallel\(tasks, Math\.min\(options\.maximumParallel, 2\)\)/);
+  assert.match(orchestrator, /runParallel\(tasks, options\.maximumParallel\)/);
   assert.doesNotMatch(orchestrator, /FrameworkMaxParallel|framework-max-parallel/);
   assert.match(orchestrator, /verify-buildkit\.cs/);
   assert.match(orchestrator, /requires the Docker Buildx driver/);

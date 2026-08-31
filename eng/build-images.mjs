@@ -1047,7 +1047,7 @@ async function buildFrameworkOperators(options, sourceRevision, wineDigest, down
       ));
     },
   }));
-  await runParallel(tasks, Math.min(options.maximumParallel, 2));
+  await runParallel(tasks, options.maximumParallel);
   return {
     manifest,
     rootImage,
@@ -1480,7 +1480,7 @@ function parseArguments(argv) {
     repositoryRoot: defaultRepositoryRoot,
     imagePrefix: 'sharplabnext',
     sourceRevision: undefined,
-    maximumParallel: Math.max(1, Math.min(4, Math.floor((Number(process.env.NUMBER_OF_PROCESSORS) || 8) / 2))),
+    maximumParallel: 5,
     allowUncommittedSourceForDevelopment: false,
     acceptMicrosoftLicenses: false,
     offline: false,
@@ -1535,7 +1535,7 @@ function usage() {
     `  [--target TARGET | --all] [--allow-uncommitted-source-for-development]\n` +
     `  [--plan-only] [--cache-probe] [--no-reuse-existing]\n` +
     `  [--accept-microsoft-licenses]\n` +
-    `  (default target: gateway; --all selects the complete image graph)`;
+    `  (default target: gateway; default parallelism: 5; --all selects the complete image graph)`;
 }
 
 export async function runBuildImages(argv, output = console) {

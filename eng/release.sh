@@ -45,7 +45,7 @@ while (($# > 0)); do
       shift
       ;;
     -h|--help)
-      echo "Usage: eng/release.sh [--output PATH] [--image-prefix PREFIX] [--source-revision COMMIT] [--max-parallel 1..8] [--offline] [--rebuild-images] [--bundle-only] [--metadata-only] [--allow-uncommitted-source-for-development] --accept-microsoft-licenses"
+      echo "Usage: eng/release.sh [--output PATH] [--image-prefix PREFIX] [--source-revision COMMIT] [--max-parallel 1..8 (default 5)] [--offline] [--rebuild-images] [--bundle-only] [--metadata-only] [--allow-uncommitted-source-for-development] --accept-microsoft-licenses"
       exit 0
       ;;
     *) echo "Unknown argument: $1" >&2; exit 64 ;;

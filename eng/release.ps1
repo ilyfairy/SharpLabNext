@@ -4,7 +4,7 @@ param(
     [string]$ImagePrefix = "sharplabnext",
     [string]$SourceRevision,
     [ValidateRange(1, 8)]
-    [int]$MaxParallel = 4,
+    [int]$MaxParallel = 5,
     [switch]$AllowUncommittedSourceForDevelopment,
     [switch]$AcceptMicrosoftLicenses,
     [switch]$Offline,

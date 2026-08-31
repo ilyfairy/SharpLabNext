@@ -30,8 +30,8 @@ invocation; put reusable logic in an existing module and expose a command only
 when it has a distinct input/output contract.
 
 `build-images` defaults to one local image (`gateway:development` with the
-default prefix). Use `--target` for another standalone Bake target and `--all`
-only for the complete release graph. Ordinary builds use source content
-identity and do not require Git metadata. The default test gate recursively
+default prefix) and permits five concurrent image tasks. Use `--target` for
+another standalone Bake target and `--all` only for the complete release graph.
+Ordinary builds use source content identity and do not require Git metadata. The default test gate recursively
 runs all `eng/tests/**/*.test.mjs` files; invoke `node --test` with that file
 set directly when only the Node gate is needed.
