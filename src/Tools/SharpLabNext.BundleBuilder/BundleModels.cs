@@ -247,10 +247,6 @@ public sealed record DependencyComponent(string PackageManager, string Name, str
 
 public sealed record DependencyInventoryDocument(int SchemaVersion, DateTimeOffset GeneratedAt, IReadOnlyList<DependencyComponent> Components);
 
-public sealed record SourceMaterialDocument(int SchemaVersion, DateTimeOffset GeneratedAt, IReadOnlyList<SourceMaterialComponent> Components);
-
-public sealed record SourceMaterialComponent(string PackageManager, string Name, string Version, string License, string? SourceUri, string MaterialPath);
-
 public sealed record LicensePolicy
 {
     public required int SchemaVersion { get; init; }

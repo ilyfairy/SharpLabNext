@@ -47,12 +47,12 @@ Initial implementation references:
   `NetFx64.exe` above neither contains nor licenses J#.
 - Wine 9.0 userspace is assembled from the exact Ubuntu package closure in the
   reviewed `wine-coreclr-userspace` component. Wine is LGPL-2.1-or-later; the
-  corresponding exact source material, package inventory, and required notices
-  are retained by the offline bundle. The Wine/Xvfb dependency closure includes
-  Xorg components under MIT-style terms; their exact Debian/Ubuntu copyright
-  records are retained with that inventory. Neither userspace nor notices are
-  taken from private, ignored, temporary, host-produced, or copied `/usr`
-  images.
+  exact binary and source package identities, Ubuntu snapshot URLs, SHA-256
+  digests, and package inventory are retained in bundle SBOM and provenance;
+  the required Debian/Ubuntu copyright records are retained in the bundle
+  notice archive. The Wine/Xvfb dependency closure includes Xorg components
+  under MIT-style terms. Neither userspace nor notices are taken from private,
+  ignored, temporary, host-produced, or copied `/usr` images.
 - FsAutoComplete, Apache-2.0. Architectural reference only; not currently bundled.
 - FSharp.Compiler.Service 43.12.204, MIT.
 - FSharp.Core 10.1.204, MIT. Bundled as an exact support assembly in executable F# artifact bundles.

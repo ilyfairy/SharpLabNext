@@ -34,8 +34,6 @@ public sealed class BundleBuilderTests
             ["wine_9.0~repack.orig.tar.xz"] = Encoding.UTF8.GetBytes("test wine orig"),
             ["wine_9.0~repack-4build3.debian.tar.xz"] = Encoding.UTF8.GetBytes("test wine debian")
         };
-    private static readonly Dictionary<string, byte[]> TestOperatingSystemSourceFiles =
-        new(StringComparer.Ordinal);
     private static readonly byte[] TestWineNoticeArchive = CreateTestWineNoticeArchive();
     private static readonly WineRuntimePackageManifest TestWineManifest = CreateTestWineManifest();
 
@@ -135,14 +133,7 @@ public sealed class BundleBuilderTests
             Assert.True(File.Exists(Path.Combine(output, "sbom", "release.cdx.json")));
             Assert.True(File.Exists(Path.Combine(output, "sbom", "dependencies.json")));
             Assert.Equal(JsonSerializer.SerializeToUtf8Bytes(TestWineManifest, RuntimeProfileFixtureJsonOptions), await File.ReadAllBytesAsync(Path.Combine(output, "sbom", "runtime-wine-packages.json"), TestContext.Current.CancellationToken));
-            var wineSourceRoot = Path.Combine(output, "sources", "ubuntu", "20260810T000000Z", "pool", "universe", "w", "wine");
-            foreach (var (fileName, expectedBytes) in TestWineSourceFiles)
-                Assert.Equal(expectedBytes, await File.ReadAllBytesAsync(Path.Combine(wineSourceRoot, fileName), TestContext.Current.CancellationToken));
-            using (var wineSourceManifestDocument = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(output, "sources", "manifest.json"), TestContext.Current.CancellationToken)))
-            {
-                var wineMaterial = Assert.Single(wineSourceManifestDocument.RootElement.GetProperty("components").EnumerateArray(), static component => component.GetProperty("packageManager").GetString() == "apt-source" && component.GetProperty("name").GetString() == "wine");
-                Assert.Equal("sources/ubuntu/20260810T000000Z/pool/universe/w/wine", wineMaterial.GetProperty("materialPath").GetString());
-            }
+            Assert.False(Directory.Exists(Path.Combine(output, "sources")));
             using (var wineDependencyDocument = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(output, "sbom", "dependencies.json"), TestContext.Current.CancellationToken)))
             {
                 Assert.DoesNotContain(wineDependencyDocument.RootElement.GetProperty("components").EnumerateArray(), static component => component.GetProperty("packageManager").GetString() == "apt-source");
@@ -299,17 +290,6 @@ public sealed class BundleBuilderTests
 
             using var cyclone = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(output, "sbom", "release.cdx.json"), TestContext.Current.CancellationToken));
             Assert.Contains(cyclone.RootElement.GetProperty("components").EnumerateArray(), static component => component.GetProperty("name").GetString() == "moby/profiles" && component.GetProperty("purl").GetString() == "pkg:github/moby/profiles@seccomp%2Fv0.1.0");
-
-            using var sourceMaterials = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(output, "sources", "manifest.json"), TestContext.Current.CancellationToken));
-            var sourceComponents = sourceMaterials.RootElement.GetProperty("components").EnumerateArray().ToArray();
-            Assert.Contains(sourceComponents, static component => component.GetProperty("name").GetString() == "lightningcss" && component.GetProperty("license").GetString() == "MPL-2.0");
-            Assert.DoesNotContain(sourceComponents, static component => component.GetProperty("name").GetString() == "lightningcss-android-arm64");
-            foreach (var component in sourceComponents)
-            {
-                var materialPath = component.GetProperty("materialPath").GetString();
-                Assert.False(string.IsNullOrWhiteSpace(materialPath));
-                Assert.True(Directory.Exists(Path.Combine(output, materialPath!.Replace('/', Path.DirectorySeparatorChar))));
-            }
 
             var productionCompose = await File.ReadAllTextAsync(Path.Combine(output, "compose.prod.yaml"), TestContext.Current.CancellationToken);
             Assert.Contains("source: ./profile-update-status.json", productionCompose, StringComparison.Ordinal);
@@ -1427,59 +1407,12 @@ public sealed class BundleBuilderTests
                 null,
                 MetadataOnly: true,
                 new Dictionary<string, string>());
-            var builder = new ReleaseBundleBuilder(new FakeDockerCli(), sourceInspector: new FakeRepositorySourceInspector(new RepositorySourceState(true, TestSourceRevision, false)), runtimePromotionSourceInspector: new FakeRuntimePromotionSourceInspector(), externalSourceMaterialFetcher: new FakeExternalSourceMaterialFetcher());
+            var builder = new ReleaseBundleBuilder(new FakeDockerCli(), sourceInspector: new FakeRepositorySourceInspector(new RepositorySourceState(true, TestSourceRevision, false)), runtimePromotionSourceInspector: new FakeRuntimePromotionSourceInspector());
 
             var exception = await Assert.ThrowsAsync<BundleValidationException>(() => builder.BuildAsync(command, TestContext.Current.CancellationToken));
 
             Assert.Contains("does not match its release lock identity", exception.Message, StringComparison.Ordinal);
             Assert.False(Directory.Exists(output));
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-                Directory.Delete(testRoot, recursive: true);
-        }
-    }
-
-    [Fact]
-    public async Task OperatingSystemSourceClosureWritesTheExactReviewedFilesAndMaterialEntries()
-    {
-        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-wine-source-{Guid.NewGuid():N}");
-        try
-        {
-            Directory.CreateDirectory(testRoot);
-            var materials = new List<SourceMaterialComponent>();
-            var builder = new ReleaseBundleBuilder(new FakeDockerCli(), externalSourceMaterialFetcher: new FakeExternalSourceMaterialFetcher());
-
-            await builder.WriteOperatingSystemSourcesAsync(TestWineManifest, testRoot, materials, TestContext.Current.CancellationToken);
-
-            Assert.Equal(162, materials.Count);
-            var material = Assert.Single(materials, static item => item.Name == "wine");
-            Assert.Equal("apt-source", material.PackageManager);
-            Assert.Equal("sources/ubuntu/20260810T000000Z/pool/universe/w/wine", material.MaterialPath);
-            foreach (var (relativePath, expectedBytes) in TestOperatingSystemSourceFiles)
-                Assert.Equal(expectedBytes, await File.ReadAllBytesAsync(Path.Combine(testRoot, "sources", "ubuntu", "20260810T000000Z", relativePath.Replace('/', Path.DirectorySeparatorChar)), TestContext.Current.CancellationToken));
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-                Directory.Delete(testRoot, recursive: true);
-        }
-    }
-
-    [Fact]
-    public async Task OperatingSystemSourceClosureRejectsRedirectAndTamperedContent()
-    {
-        var testRoot = Path.Combine(Path.GetTempPath(), $"sharplabnext-wine-source-{Guid.NewGuid():N}");
-        try
-        {
-            Directory.CreateDirectory(testRoot);
-            var redirecting = new ReleaseBundleBuilder(new FakeDockerCli(), externalSourceMaterialFetcher: new RedirectingExternalSourceMaterialFetcher());
-            await Assert.ThrowsAsync<BundleValidationException>(() => redirecting.WriteOperatingSystemSourcesAsync(TestWineManifest, testRoot, [], TestContext.Current.CancellationToken));
-            Assert.Empty(Directory.EnumerateFiles(testRoot, "*", SearchOption.AllDirectories));
-
-            var tampered = new ReleaseBundleBuilder(new FakeDockerCli(), externalSourceMaterialFetcher: new TamperedExternalSourceMaterialFetcher());
-            await Assert.ThrowsAsync<BundleValidationException>(() => tampered.WriteOperatingSystemSourcesAsync(TestWineManifest, testRoot, [], TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -1724,7 +1657,6 @@ public sealed class BundleBuilderTests
         const string baseUri = snapshotUri + "pool/universe/w/wine/";
         const string wineVersion = "9.0~repack-4build3";
         var sourceFiles = TestWineSourceFiles.Select(pair => new WineSourceOfferFile { Path = pair.Key, Sha256 = Convert.ToHexStringLower(SHA256.HashData(pair.Value)), SizeBytes = pair.Value.Length }).OrderBy(static file => file.Path.EndsWith(".dsc", StringComparison.Ordinal) ? 0 : file.Path.EndsWith(".orig.tar.xz", StringComparison.Ordinal) ? 1 : 2).ToArray();
-        TestOperatingSystemSourceFiles.Clear();
         var sourcePackages = new List<WineSourcePackage>();
         for (var sourceIndex = 0; sourceIndex < 160; sourceIndex++)
         {
@@ -1735,7 +1667,6 @@ public sealed class BundleBuilderTests
                 var suffix = fileIndex == 0 ? ".dsc" : $".part-{fileIndex}.tar.xz";
                 var path = $"pool/main/s/{name}/{name}_1.0.0{suffix}";
                 var bytes = Encoding.UTF8.GetBytes($"{name}:{fileIndex}");
-                TestOperatingSystemSourceFiles.Add(path, bytes);
                 return new WineSourcePackageFile { Path = path, Sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)), SizeBytes = bytes.Length };
             }).ToArray();
             sourcePackages.Add(CreateSourcePackage(name, "1.0.0", "main", files));
@@ -1743,7 +1674,6 @@ public sealed class BundleBuilderTests
         var winePackageFiles = TestWineSourceFiles.Select(pair =>
         {
             var path = "pool/universe/w/wine/" + pair.Key;
-            TestOperatingSystemSourceFiles.Add(path, pair.Value);
             return new WineSourcePackageFile { Path = path, Sha256 = Convert.ToHexStringLower(SHA256.HashData(pair.Value)), SizeBytes = pair.Value.Length };
         }).OrderBy(static file => file.Path, StringComparer.Ordinal).ToArray();
         sourcePackages.Add(CreateSourcePackage("wine", wineVersion, "universe", winePackageFiles));
@@ -1752,7 +1682,6 @@ public sealed class BundleBuilderTests
             var suffix = fileIndex == 0 ? ".dsc" : $".part-{fileIndex}.tar.xz";
             var path = $"pool/main/x/xorg-server/xorg-server_21.1.12-1ubuntu1.6{suffix}";
             var bytes = Encoding.UTF8.GetBytes($"xorg:{fileIndex}");
-            TestOperatingSystemSourceFiles.Add(path, bytes);
             return new WineSourcePackageFile { Path = path, Sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)), SizeBytes = bytes.Length };
         }).ToArray();
         sourcePackages.Add(CreateSourcePackage("xorg-server", "2:21.1.12-1ubuntu1.6", "main", xorgFiles));
@@ -2226,7 +2155,7 @@ public sealed class BundleBuilderTests
     }
 
     private static ReleaseBundleBuilder CreateBuilder(IDockerCli docker, IBundleSigner? signer = null) =>
-        new(docker, signer, new FakeRepositorySourceInspector(new RepositorySourceState(true, TestSourceRevision, false)), new FakeRuntimePromotionSourceInspector(), new FakeExternalSourceMaterialFetcher(), new TestWineRuntimePackageManifestSnapshotProvider(), RuntimePromotionTrustTests.CreateTestPlanVerifier());
+        new(docker, signer, new FakeRepositorySourceInspector(new RepositorySourceState(true, TestSourceRevision, false)), new FakeRuntimePromotionSourceInspector(), new TestWineRuntimePackageManifestSnapshotProvider(), RuntimePromotionTrustTests.CreateTestPlanVerifier());
 
     private sealed class TestWineRuntimePackageManifestSnapshotProvider : IWineRuntimePackageManifestSnapshotProvider
     {
@@ -2260,7 +2189,6 @@ public sealed class BundleBuilderTests
             var sourceRoot = FindSourceRepositoryRoot();
             var root = CreateFixtureRoot();
             CopyRepositorySource(sourceRoot, root);
-            CopyRequiredNpmSourceMaterial(sourceRoot, root);
             InstallCompletedPromotion(root);
             var deployment = JsonSerializer.Deserialize<DeploymentImageManifest>(File.ReadAllText(Path.Combine(root, "deploy", "images.json")), RuntimeProfileFixtureJsonOptions) ?? throw new InvalidOperationException("Deployment image fixture is invalid.");
             var imagesByReference = new Dictionary<string, PromotionFixtureImage>(StringComparer.Ordinal);
@@ -2423,37 +2351,6 @@ public sealed class BundleBuilderTests
                     var child = Path.Combine(currentDestination, name);
                     Directory.CreateDirectory(child);
                     pending.Push((directory, child));
-                }
-            }
-        }
-
-        private static void CopyRequiredNpmSourceMaterial(string sourceRoot, string destinationRoot)
-        {
-            using var packageLock = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(sourceRoot, "frontend", "package-lock.json")));
-            foreach (var package in packageLock.RootElement.GetProperty("packages").EnumerateObject().Where(static property =>
-                             property.Name.StartsWith("node_modules/", StringComparison.Ordinal) &&
-                             property.Value.TryGetProperty("license", out var license) &&
-                             license.GetString() is { } value &&
-                             (value.Contains("LGPL-", StringComparison.OrdinalIgnoreCase) || value.Contains("MPL-", StringComparison.OrdinalIgnoreCase))))
-            {
-                var relativePackagePath = package.Name["node_modules/".Length..].Replace('/', Path.DirectorySeparatorChar);
-                var source = Path.Combine(sourceRoot, "frontend", "node_modules", relativePackagePath);
-                if (!Directory.Exists(source))
-                    continue;
-                var destination = Path.Combine(destinationRoot, "frontend", "node_modules", relativePackagePath);
-                var pending = new Stack<(string Source, string Destination)>();
-                pending.Push((source, destination));
-                while (pending.Count > 0)
-                {
-                    var (currentSource, currentDestination) = pending.Pop();
-                    Directory.CreateDirectory(currentDestination);
-                    foreach (var file in Directory.EnumerateFiles(currentSource))
-                        File.Copy(file, Path.Combine(currentDestination, Path.GetFileName(file)));
-                    foreach (var directory in Directory.EnumerateDirectories(currentSource))
-                    {
-                        var child = Path.Combine(currentDestination, Path.GetFileName(directory));
-                        pending.Push((directory, child));
-                    }
                 }
             }
         }
@@ -2828,38 +2725,6 @@ public sealed class BundleBuilderTests
             Assert.True(File.Exists(publicKeyPath));
             WasCalled = true;
             await File.WriteAllTextAsync(signaturePath, "test signature", cancellationToken);
-        }
-    }
-
-    private sealed class FakeExternalSourceMaterialFetcher : IExternalSourceMaterialFetcher
-    {
-        public Task<ExternalSourceMaterial> FetchAsync(Uri sourceUri, CancellationToken cancellationToken)
-        {
-            var poolIndex = sourceUri.AbsolutePath.IndexOf("/pool/", StringComparison.Ordinal);
-            var path = poolIndex >= 0 ? sourceUri.AbsolutePath[(poolIndex + 1)..] : string.Empty;
-            if (!TestOperatingSystemSourceFiles.TryGetValue(path, out var bytes))
-                throw new BundleValidationException($"Unexpected test source URI '{sourceUri}'.");
-            return Task.FromResult(new ExternalSourceMaterial(sourceUri, bytes.Length, new MemoryStream(bytes, writable: false)));
-        }
-    }
-
-    private sealed class RedirectingExternalSourceMaterialFetcher : IExternalSourceMaterialFetcher
-    {
-        public Task<ExternalSourceMaterial> FetchAsync(Uri sourceUri, CancellationToken cancellationToken) =>
-            Task.FromResult(new ExternalSourceMaterial(
-                new Uri("https://redirect.example.test/wine-source"),
-                1,
-                new MemoryStream([0x00], writable: false)));
-    }
-
-    private sealed class TamperedExternalSourceMaterialFetcher : IExternalSourceMaterialFetcher
-    {
-        public Task<ExternalSourceMaterial> FetchAsync(Uri sourceUri, CancellationToken cancellationToken)
-        {
-            var poolIndex = sourceUri.AbsolutePath.IndexOf("/pool/", StringComparison.Ordinal);
-            var path = poolIndex >= 0 ? sourceUri.AbsolutePath[(poolIndex + 1)..] : string.Empty;
-            var length = TestOperatingSystemSourceFiles[path].Length;
-            return Task.FromResult(new ExternalSourceMaterial(sourceUri, length, new MemoryStream(Enumerable.Repeat((byte)0x00, length).ToArray(), writable: false)));
         }
     }
 

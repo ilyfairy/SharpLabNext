@@ -15,19 +15,17 @@ public sealed class ReleaseBundleBuilder
     private readonly IBundleSigner? signer;
     private readonly IRepositorySourceInspector? sourceInspector;
     private readonly IRuntimePromotionSourceInspector? runtimePromotionSourceInspector;
-    private readonly IExternalSourceMaterialFetcher? externalSourceMaterialFetcher;
     private readonly IWineRuntimePackageManifestSnapshotProvider wineManifestProvider;
     private readonly RuntimePromotionPlanSignatureVerifier runtimePromotionPlanSignatureVerifier;
 
-    public ReleaseBundleBuilder(IDockerCli docker, IBundleSigner? signer = null, IRepositorySourceInspector? sourceInspector = null, IRuntimePromotionSourceInspector? runtimePromotionSourceInspector = null, IExternalSourceMaterialFetcher? externalSourceMaterialFetcher = null) : this(docker, signer, sourceInspector, runtimePromotionSourceInspector, externalSourceMaterialFetcher, new RepositoryWineRuntimePackageManifestSnapshotProvider(), RuntimePromotionTrust.RuntimePromotionPlanSignatureTrust.ProductionVerifier) { }
+    public ReleaseBundleBuilder(IDockerCli docker, IBundleSigner? signer = null, IRepositorySourceInspector? sourceInspector = null, IRuntimePromotionSourceInspector? runtimePromotionSourceInspector = null) : this(docker, signer, sourceInspector, runtimePromotionSourceInspector, new RepositoryWineRuntimePackageManifestSnapshotProvider(), RuntimePromotionTrust.RuntimePromotionPlanSignatureTrust.ProductionVerifier) { }
 
-    internal ReleaseBundleBuilder(IDockerCli docker, IBundleSigner? signer, IRepositorySourceInspector? sourceInspector, IRuntimePromotionSourceInspector? runtimePromotionSourceInspector, IExternalSourceMaterialFetcher? externalSourceMaterialFetcher, IWineRuntimePackageManifestSnapshotProvider wineManifestProvider, RuntimePromotionPlanSignatureVerifier runtimePromotionPlanSignatureVerifier)
+    internal ReleaseBundleBuilder(IDockerCli docker, IBundleSigner? signer, IRepositorySourceInspector? sourceInspector, IRuntimePromotionSourceInspector? runtimePromotionSourceInspector, IWineRuntimePackageManifestSnapshotProvider wineManifestProvider, RuntimePromotionPlanSignatureVerifier runtimePromotionPlanSignatureVerifier)
     {
         this.docker = docker ?? throw new ArgumentNullException(nameof(docker));
         this.signer = signer;
         this.sourceInspector = sourceInspector;
         this.runtimePromotionSourceInspector = runtimePromotionSourceInspector;
-        this.externalSourceMaterialFetcher = externalSourceMaterialFetcher;
         this.wineManifestProvider = wineManifestProvider ?? throw new ArgumentNullException(nameof(wineManifestProvider));
         this.runtimePromotionPlanSignatureVerifier = runtimePromotionPlanSignatureVerifier ?? throw new ArgumentNullException(nameof(runtimePromotionPlanSignatureVerifier));
     }
@@ -223,7 +221,7 @@ public sealed class ReleaseBundleBuilder
                 runtimePromotionSourceClosure,
                 staging,
                 cancellationToken);
-            Directory.Move(staging, output);
+            await MoveStagingDirectoryAsync(staging, output, cancellationToken);
         }
         finally
         {
@@ -570,7 +568,6 @@ public sealed class ReleaseBundleBuilder
         Directory.CreateDirectory(Path.Combine(staging, "sbom"));
         Directory.CreateDirectory(Path.Combine(staging, "provenance"));
         Directory.CreateDirectory(Path.Combine(staging, "provenance", "maintained"));
-        Directory.CreateDirectory(Path.Combine(staging, "sources"));
         File.Copy(command.CatalogPath, Path.Combine(staging, "catalog.json"));
         File.Copy(command.ComposePath, Path.Combine(staging, "compose.prod.yaml"));
         File.Copy(baseImagesPath, Path.Combine(staging, "base-images.json"));
@@ -630,7 +627,6 @@ public sealed class ReleaseBundleBuilder
         await WriteJsonAsync(Path.Combine(staging, "sbom", "release.spdx.json"), CreateSpdx(catalog.ReleaseId, bundleLock, images, dependencies, wineManifest), SpdxJsonOptions, cancellationToken);
         await WriteJsonAsync(Path.Combine(staging, "sbom", "release.cdx.json"), CreateCycloneDx(catalog.ReleaseId, bundleLock, images, dependencies, wineManifest), cancellationToken);
         await WriteJsonAsync(Path.Combine(staging, "provenance", "release.slsa.json"), CreateProvenance(command, catalog, releaseLock, images, dependencies, wineManifestSnapshot, baseImages, runtimeMatrixBaseImages, maintainedProvenance, source), cancellationToken);
-        await WriteWeakCopyleftSourcesAsync(command.RepositoryRoot, dependencies, wineManifest, staging, cancellationToken);
         await WriteWineNoticeArchiveAsync(wineManifestSnapshot, images, staging, cancellationToken);
         await WriteRuntimePromotionEvidenceAsync(runtimePromotionTrust, runtimePromotionSourceClosure, staging, cancellationToken);
         if (command.SigningPublicKeyPath is not null)
@@ -885,93 +881,6 @@ public sealed class ReleaseBundleBuilder
         Message = message
     };
 
-    private async Task WriteWeakCopyleftSourcesAsync(string repositoryRoot, IReadOnlyList<DependencyComponent> dependencies, WineRuntimePackageManifest wineManifest, string staging, CancellationToken cancellationToken)
-    {
-        var materials = new List<SourceMaterialComponent>();
-        foreach (var dependency in dependencies.Where(static dependency => !dependency.Optional && (dependency.License.Contains("LGPL-", StringComparison.OrdinalIgnoreCase) || dependency.License.Contains("MPL-", StringComparison.OrdinalIgnoreCase))))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!string.Equals(dependency.PackageManager, "npm", StringComparison.Ordinal))
-            {
-                throw new BundleValidationException($"Weak-copyleft dependency '{dependency.PackageManager}:{dependency.Name}@{dependency.Version}' has no approved offline source material provider.");
-            }
-
-            var nodeModules = Path.GetFullPath(Path.Combine(repositoryRoot, "frontend", "node_modules"));
-            var packagePath = Path.GetFullPath(Path.Combine(nodeModules, dependency.Name.Replace('/', Path.DirectorySeparatorChar)));
-            var nodeModulesPrefix = nodeModules.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-            if (!packagePath.StartsWith(nodeModulesPrefix, StringComparison.OrdinalIgnoreCase) || !Directory.Exists(packagePath))
-            {
-                throw new BundleValidationException($"Weak-copyleft npm source material is missing for '{dependency.Name}@{dependency.Version}'. Run npm ci before bundling.");
-            }
-
-            var relative = Path.Combine("sources", "npm", $"{SafeFileName(dependency.Name)}-{SafeFileName(dependency.Version)}")
-                .Replace('\\', '/');
-            await CopyDirectoryBoundedAsync(packagePath, Path.Combine(staging, relative.Replace('/', Path.DirectorySeparatorChar)), maximumBytes: 256L * 1024 * 1024, maximumFiles: 20_000, cancellationToken);
-            materials.Add(new SourceMaterialComponent(dependency.PackageManager, dependency.Name, dependency.Version, dependency.License, dependency.SourceUri, relative));
-        }
-
-        await WriteOperatingSystemSourcesAsync(wineManifest, staging, materials, cancellationToken);
-
-        await WriteJsonAsync(Path.Combine(staging, "sources", "manifest.json"), new SourceMaterialDocument(1, DateTimeOffset.UtcNow, materials), cancellationToken);
-    }
-
-    internal async Task WriteOperatingSystemSourcesAsync(WineRuntimePackageManifest manifest, string staging, List<SourceMaterialComponent> materials, CancellationToken cancellationToken)
-    {
-        var sourceRoot = Path.Combine(staging, "sources", "ubuntu");
-        Directory.CreateDirectory(sourceRoot);
-        var materialized = new HashSet<string>(StringComparer.Ordinal);
-        var fileCount = 0;
-        long totalBytes = 0;
-        foreach (var sourcePackage in manifest.SourcePackages)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var identity = $"{sourcePackage.Name}\0{sourcePackage.Version}";
-            if (!materialized.Add(identity))
-                throw new BundleValidationException("Wine source package was requested more than once.");
-
-            var sourceDirectory = sourcePackage.Files[0].Path[..sourcePackage.Files[0].Path.LastIndexOf('/')];
-            if (sourcePackage.Files.Any(file => !file.Path.StartsWith(sourceDirectory + "/", StringComparison.Ordinal)))
-            {
-                throw new BundleValidationException($"Operating-system source package '{sourcePackage.Name}@{sourcePackage.Version}' spans multiple pool directories.");
-            }
-            var relative = $"sources/ubuntu/{sourcePackage.ArchiveSnapshotId}/{sourceDirectory}";
-            var destination = Path.Combine(staging, relative.Replace('/', Path.DirectorySeparatorChar));
-            Directory.CreateDirectory(destination);
-            foreach (var file in sourcePackage.Files)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var sourceUri = WineRuntimePackageManifestLoader.ArchiveUri(manifest, sourcePackage.ArchiveSnapshotId, file.Path);
-                await using var material = await (externalSourceMaterialFetcher ?? new HttpClientExternalSourceMaterialFetcher()).FetchAsync(sourceUri, cancellationToken);
-                if (Uri.Compare(material.FinalUri, sourceUri, UriComponents.AbsoluteUri, UriFormat.UriEscaped, StringComparison.Ordinal) != 0)
-                {
-                    throw new BundleValidationException($"Operating-system source material '{file.Path}' redirected away from its reviewed snapshot URL.");
-                }
-                if (material.ContentLength is { } contentLength && contentLength != file.SizeBytes)
-                {
-                    throw new BundleValidationException($"Operating-system source material '{file.Path}' has an unexpected content length.");
-                }
-
-                var destinationPath = Path.Combine(destination, Path.GetFileName(file.Path));
-                var inspection = await CopyExternalSourceMaterialAsync(material.Content, destinationPath, file.SizeBytes, WineRuntimePackageManifestLoader.MaximumClosureSourceTotalBytes - totalBytes, cancellationToken);
-                if (!string.Equals(inspection.Sha256, file.Sha256, StringComparison.Ordinal) || inspection.SizeBytes != file.SizeBytes)
-                {
-                    throw new BundleValidationException($"Operating-system source material '{file.Path}' does not match its reviewed SHA-256 identity.");
-                }
-                fileCount = checked(fileCount + 1);
-                totalBytes = checked(totalBytes + inspection.SizeBytes);
-            }
-
-            var descriptor = sourcePackage.Files.Single(static file => file.Path.EndsWith(".dsc", StringComparison.Ordinal));
-            materials.Add(new SourceMaterialComponent("apt-source", sourcePackage.Name, sourcePackage.Version, string.Equals(sourcePackage.Name, "wine", StringComparison.Ordinal) ? "LGPL-2.1+" : "NOASSERTION", WineRuntimePackageManifestLoader.ArchiveUri(manifest, sourcePackage.ArchiveSnapshotId, descriptor.Path).AbsoluteUri, relative));
-        }
-
-        var expectedTotal = manifest.SourcePackages.Sum(static package => package.Files.Sum(static file => file.SizeBytes));
-        if (materialized.Count != WineRuntimePackageManifestLoader.RequiredSourcePackageCount || fileCount != WineRuntimePackageManifestLoader.RequiredSourceFileCount || totalBytes != expectedTotal || totalBytes > WineRuntimePackageManifestLoader.MaximumClosureSourceTotalBytes)
-        {
-            throw new BundleValidationException("Operating-system source material did not produce the exact reviewed 162-source/526-file closure.");
-        }
-    }
-
     internal async Task WriteWineNoticeArchiveAsync(WineRuntimePackageManifestSnapshot manifestSnapshot, IReadOnlyList<InspectedImage> images, string staging, CancellationToken cancellationToken)
     {
         var manifest = manifestSnapshot.Manifest;
@@ -1035,68 +944,6 @@ public sealed class ReleaseBundleBuilder
 
         if (!actual.SetEquals(expected.Keys))
             throw new BundleValidationException("Wine notice archive is missing reviewed copyright entries.");
-    }
-
-    private static async Task<ExternalSourceMaterialInspection> CopyExternalSourceMaterialAsync(Stream input, string destination, long expectedSize, long remainingTotalBytes, CancellationToken cancellationToken)
-    {
-        if (remainingTotalBytes < expectedSize)
-            throw new BundleValidationException("Wine source material exceeds the offline bundle limit.");
-
-        using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
-        await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var buffer = new byte[64 * 1024];
-        long sizeBytes = 0;
-        while (true)
-        {
-            var read = await input.ReadAsync(buffer, cancellationToken);
-            if (read == 0)
-                break;
-
-            sizeBytes = checked(sizeBytes + read);
-            if (sizeBytes > expectedSize || sizeBytes > remainingTotalBytes)
-                throw new BundleValidationException("Wine source material exceeds its reviewed size limit.");
-            hash.AppendData(buffer.AsSpan(0, read));
-            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
-        }
-
-        return new ExternalSourceMaterialInspection(Convert.ToHexStringLower(hash.GetHashAndReset()), sizeBytes);
-    }
-
-    private sealed record ExternalSourceMaterialInspection(string Sha256, long SizeBytes);
-
-    private static async Task CopyDirectoryBoundedAsync(string source, string destination, long maximumBytes, int maximumFiles, CancellationToken cancellationToken)
-    {
-        Directory.CreateDirectory(destination);
-        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = false, AttributesToSkip = FileAttributes.ReparsePoint, ReturnSpecialDirectories = false };
-        long totalBytes = 0;
-        var fileCount = 0;
-        foreach (var sourcePath in Directory.EnumerateFiles(source, "*", options))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var info = new FileInfo(sourcePath);
-            fileCount = checked(fileCount + 1);
-            totalBytes = checked(totalBytes + info.Length);
-            if (fileCount > maximumFiles || totalBytes > maximumBytes)
-                throw new BundleValidationException("Weak-copyleft source material exceeds the offline bundle limit.");
-            var relative = Path.GetRelativePath(source, sourcePath);
-            if (relative.StartsWith("..", StringComparison.Ordinal))
-                throw new BundleValidationException("Source material escaped its package directory.");
-            var destinationPath = Path.Combine(destination, relative);
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-            await using var input = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-            await using var output = new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-            await input.CopyToAsync(output, cancellationToken);
-        }
-    }
-
-    private static string SafeFileName(string value)
-    {
-        var builder = new StringBuilder(value.Length);
-        foreach (var character in value)
-        {
-            builder.Append(char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '_');
-        }
-        return builder.Length > 0 ? builder.ToString() : "component";
     }
 
     private static bool IsCanonicalBundlePath(string value) =>
@@ -2431,6 +2278,24 @@ public sealed class ReleaseBundleBuilder
         public required string[] ProfileIds { get; init; }
 
         public required string[] RuntimeIds { get; init; }
+    }
+
+    private static async Task MoveStagingDirectoryAsync(string staging, string output, CancellationToken cancellationToken)
+    {
+        const int maximumAttempts = 6;
+        for (var attempt = 1; ; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                Directory.Move(staging, output);
+                return;
+            }
+            catch (Exception exception) when (OperatingSystem.IsWindows() && exception is IOException or UnauthorizedAccessException && attempt < maximumAttempts && !Directory.Exists(output) && !File.Exists(output))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(50 * (1 << (attempt - 1))), cancellationToken);
+            }
+        }
     }
 
     private static void DeleteStagingDirectory(string staging, string parent)
