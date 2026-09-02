@@ -31,10 +31,10 @@ when it has a distinct input/output contract.
 
 `build-images` defaults to the Gateway image using the current lock release ID
 and permits five concurrent image tasks. Use `--target` for another standalone
-Bake target and `--all` only for the complete release graph.
-Ordinary builds use source content identity and do not require Git metadata. The default test gate recursively
-runs all `eng/tests/**/*.test.mjs` files; invoke `node --test` with that file
-set directly when only the Node gate is needed.
+Bake target and `--all` only for the complete release graph. Each invocation
+submits its targets to BuildKit, which reuses unchanged layers. The default
+test gate recursively runs all `eng/tests/**/*.test.mjs` files; invoke
+`node --test` with that file set directly when only the Node gate is needed.
 
 The deployment manifest is the source of build planning metadata. Its optional
 `producer` field records a non-default Bake or candidate target, and

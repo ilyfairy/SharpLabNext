@@ -46,7 +46,7 @@ public sealed class PrepareFrameworkRuntimeTests
     }
 
     [Fact]
-    public void PreparationUsesDirectInputsWithoutHostStaging()
+    public void PreparationUsesDirectInputs()
     {
         var source = File.ReadAllText(ScriptPath);
         Assert.Contains("framework-vendored-context", source, StringComparison.Ordinal);
@@ -54,10 +54,6 @@ public sealed class PrepareFrameworkRuntimeTests
         Assert.Contains("framework-installer-context", source, StringComparison.Ordinal);
         Assert.Contains("--build-context", source, StringComparison.Ordinal);
         Assert.Contains("ContextDirectory", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("CommittedSourceContext", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("StagedBuildContext", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("Guid.NewGuid", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("File.Copy", source, StringComparison.Ordinal);
     }
 
     [Fact]

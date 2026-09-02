@@ -220,10 +220,9 @@ function inspectImage(reference, spawn = spawnSync) {
 }
 
 export function inspectOrPullOperator(row, spawn = spawnSync, expectedImages = undefined) {
-  // Operators are produced by the current build and are already in the local
-  // Docker store.  A best-effort cache probe must never turn into an implicit
-  // registry login/pull (which is unreliable over SSH and defeats BuildKit's
-  // own layer cache).
+  // Operators are produced by the current build and must already be in the
+  // local Docker store. Inspect the supplied digest; never turn this input
+  // validation into an implicit registry login or pull.
   const info = inspectImage(row.operatorImage, spawn)
   if (info === undefined) fail(`Docker operator image '${row.operatorImage}' is unavailable`)
   const failures = validateOperatorImageInspection(row, info, expectedImages)

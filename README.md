@@ -212,9 +212,7 @@ The repository uses the system .NET SDK, Node.js, and npm for host commands.
 Versions inside Dockerfiles are reproducible image-build inputs, not additional
 host installations.
 
-The build only needs the pinned `third_party/ILSense` source files to be
-present. How those files were obtained is outside the build; no Git metadata,
-repository status, or submodule command is read by the ordinary entry points.
+The build requires the pinned `third_party/ILSense` source files to be present.
 
 ## Quick Start
 
@@ -225,7 +223,7 @@ Build and packaging entry points have separate responsibilities:
 | Entry point | Responsibility |
 | --- | --- |
 | `eng/build.ps1` / `eng/build.sh` | Restore and build the host backend/frontend and run static contract checks. It does not build Docker images. |
-| `eng/build-images.ps1` / `eng/build-images.sh` | Build one ordinary local Docker image by default; no Git metadata, environment switch, or bundle step is required. Pass `-All`/`--all` only for the complete image graph. |
+| `eng/build-images.ps1` / `eng/build-images.sh` | Build one ordinary local Docker image by default. Pass `-Target <name>` for a standalone target or `-All`/`--all` for the complete image graph. |
 | `eng/bundle.ps1` / `eng/bundle.sh` | Validate and package an already-complete image set. It performs no restore or image build and fails on missing or mismatched images. |
 | `eng/release.ps1` / `eng/release.sh` | Complete entry point: preflight output and static contracts, build and validate every planned image, then create the offline bundle only after all images pass. |
 
@@ -276,7 +274,7 @@ Winetricks' exact cache path so container builds do not depend on its legacy
 downloader or TLS stack.
 
 The complete image build creates the classic WoW64 build layer once, then
-builds exactly two private companion seeds: CLR 2 with .NET Framework 3.5 and
+builds exactly two companion seeds: CLR 2 with .NET Framework 3.5 and
 CLR 4 with .NET Framework 4.8. Each exact Framework operator starts from the
 opposite-generation seed and installs only its selected target. It still
 verifies both prefixes, disables the matching NGen services, removes installer
@@ -284,24 +282,16 @@ residue, and records the seed image digest before the existing immutable-file
 deduplication runs. Framework operators use the same `--max-parallel` setting
 as the rest of the release graph (the default is 5).
 
-The build does not export these seeds through an additional `docker image save`
-archive. Every invocation submits the same locked build graph to BuildKit;
-Docker reuses unchanged layers and naturally invalidates them when the build
-input identity changes. Reinstalling Docker or clearing every image rebuilds
-the seeds from the supplied and verified input bytes without requiring a
-pre-generated image TAR.
-
 J# is rebuilt from its supplied installer bytes and the CLR2 seed. C++/CLI is
 rebuilt from the locked `msvc-wine` revision, Visual Studio 18.8 manifest and
 .NET Framework 4.8 Developer Pack. The source archives and Microsoft inputs are
 downloaded as size/SHA-256-verified bytes under the ignored prerequisite cache;
 all extraction, setup and `/clr` preflight work occurs inside Docker.
 
-The J# and C++/CLI bases are likewise submitted to BuildKit on every image
-build; no separate `private-images.tar` is written. Docker's layer cache speeds
-up ordinary incremental builds, while a cleared Docker store rebuilds them from
-the locked inputs above. `artifacts/prerequisites/downloads` caches only
-verified source/download bytes, not Docker images.
+Framework seeds and the J#/C++/CLI bases are submitted directly to BuildKit in
+the same graph. Docker reuses unchanged layers and invalidates stages whose
+Dockerfile, context, or build arguments changed. The prerequisite cache stores
+only verified source/download bytes.
 
 ### Build A Complete Bundle
 
@@ -311,17 +301,10 @@ Build every image and package the result from the repository root:
 .\eng\release.ps1 -AcceptMicrosoftLicenses
 ```
 
-This complete entry point source-builds the private bases, injects their
-inspected digest-pinned references into the remaining image graph, and creates
-one directly deployable bundle. The normal command produces an unsigned bundle;
-formal signing still requires independently verifiable source and image inputs.
-
-The ordinary build entry points resolve source identity from the source files
-themselves. They do not read Git metadata or worktree status, and an exported
-tree without `.git` builds the same way as a checkout. The resulting images are
-ordinary local build outputs and the bundle is unsigned by default. Formal
-signing is a separate operation that requires independently verifiable
-provenance.
+This entry runs the host checks, builds and validates the complete Docker graph,
+then creates one directly deployable bundle. The normal command produces an
+unsigned bundle; formal signing still requires independently verifiable source
+and image inputs.
 
 The default output is
 `artifacts/releases/sharplabnext-yyyy-MM-dd-HH-mm-ss`. Each timestamped child
@@ -335,21 +318,13 @@ overwritten; use a new explicit path when a specific release name is needed:
   -OutputDirectory D:\Bundles\sharplabnext-2026-08-24
 ```
 
-### Reuse And Selective Rebuild
+### Docker Build Cache
 
-Use `build-images.ps1` to build ordinary images or `bundle.ps1` to package an
-existing image set. A normal `release.ps1`/`release.sh` run first reuses every
-valid local image; source or wrapper changes do not invalidate that reuse. Add
-`-RebuildTarget`/`--rebuild-target` for selected images, or
-`-RebuildImages`/`--rebuild-images` for an explicit full rebuild. `-BundleOnly`
-(or `--bundle-only`) is an optional direct packaging shortcut. `-Offline` only
-prevents prerequisite-cache downloads; a cold BuildKit cache can still require
-the locked Docker, NuGet, npm, or source origins.
-
-Rebuild selectors accept `image:`, `runtime:`, `toolchain:`, `processor:`,
-`producer:`, and `capability:` namespaces. An unqualified selector checks all
-of those identities, and `*` is supported, for example `-RebuildTarget
-"image:worker-gsharp"` or `-RebuildTarget "*const-generics*"`.
+`build-images.ps1` builds a local target; use `-Target` for one standalone image
+or `-All` for the complete graph. `release.ps1`/`release.sh` build and package
+the complete graph. Docker/BuildKit reuses unchanged layers. `-BundleOnly` (or
+`--bundle-only`) packages images that are already present, and `-Offline` uses
+only locally available prerequisite inputs.
 
 ### Deploy The Bundle
 

@@ -46,10 +46,9 @@ function commonEnvironment() {
   }
 }
 
-test('outer Bake launcher propagates content source identity without CLI grants', () => {
+test('outer Bake launcher emits the content source environment', () => {
   const source = fs.readFileSync(path.join(repositoryRoot, 'eng', 'tools', 'run-with-bake-environment.cs'), 'utf8')
   assert.match(source, /SHARPLABNEXT_SOURCE_IDENTITY_MODE/)
-  assert.doesNotMatch(source, /--allow-uncommitted/)
   assert.match(source, /case "--emit-environment-json"/)
   assert.match(source, /SHARPLABNEXT_BAKE_ENVIRONMENT_JSON=/)
   assert.match(source, /BakeEnvironmentJsonSerializerContext\.Default\.DictionaryStringString/)

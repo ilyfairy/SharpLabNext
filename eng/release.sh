@@ -7,9 +7,7 @@ build_arguments=(--all)
 output_directory=""
 source_revision=""
 accept_microsoft_licenses=false
-rebuild_images=false
 bundle_only=false
-rebuild_targets=()
 
 while (($# > 0)); do
   case "$1" in
@@ -24,20 +22,12 @@ while (($# > 0)); do
       source_revision="$2"
       shift 2
       ;;
-    --rebuild-target)
-      rebuild_targets+=("${2:?--rebuild-target requires a value}")
-      shift 2
-      ;;
     --max-parallel)
       build_arguments+=("$1" "$2")
       shift 2
       ;;
     --offline)
       build_arguments+=("$1")
-      shift
-      ;;
-    --rebuild-images)
-      rebuild_images=true
       shift
       ;;
     --bundle-only)
@@ -50,7 +40,7 @@ while (($# > 0)); do
       shift
       ;;
     -h|--help)
-      echo "Usage: eng/release.sh [--output PATH] [--image-prefix PREFIX] [--source-revision COMMIT] [--rebuild-target TARGET ...] [--max-parallel 1..8 (default 5)] [--offline] [--rebuild-images] [--bundle-only] [--metadata-only] --accept-microsoft-licenses"
+      echo "Usage: eng/release.sh [--output PATH] [--image-prefix PREFIX] [--source-revision COMMIT] [--max-parallel 1..8 (default 5)] [--offline] [--bundle-only] [--metadata-only] --accept-microsoft-licenses"
       exit 0
       ;;
     *) echo "Unknown argument: $1" >&2; exit 64 ;;
@@ -78,34 +68,10 @@ if [[ -z "$source_revision" ]]; then
   exit 1
 fi
 build_arguments+=(--source-revision "$source_revision")
-for target in "${rebuild_targets[@]}"; do build_arguments+=(--rebuild-target "$target"); done
 bundle_arguments+=(--source-revision "$source_revision")
-if [[ "$rebuild_images" == true ]]; then build_arguments+=(--no-reuse-existing); fi
 
 if [[ "$bundle_only" == false ]]; then
-  image_cache_hit=false
-  if [[ "$rebuild_images" == false ]]; then
-    probe_status=0
-    if probe_output="$(bash "$repository_root/eng/build-images.sh" "${build_arguments[@]}" --cache-probe 2>&1)"; then
-      probe_status=0
-    else
-      probe_status=$?
-    fi
-    printf '%s\n' "$probe_output"
-    if [[ "$probe_status" != 0 ]]; then
-      echo "SharpLabNext image cache probe failed." >&2
-      exit "$probe_status"
-    fi
-    if grep -Fqx 'SHARPLABNEXT_IMAGE_CACHE=hit' <<< "$probe_output"; then
-      image_cache_hit=true
-    fi
-  fi
-
-  if [[ "$image_cache_hit" == false ]]; then
-    bash "$repository_root/eng/build.sh" --configuration Release --skip-validation
-    bash "$repository_root/eng/build-images.sh" "${build_arguments[@]}"
-  else
-    echo "All release images are cached; skipping host and Docker image builds."
-  fi
+  bash "$repository_root/eng/build.sh" --configuration Release --skip-validation
+  bash "$repository_root/eng/build-images.sh" "${build_arguments[@]}"
 fi
 bash "$repository_root/eng/bundle.sh" "${bundle_arguments[@]}"

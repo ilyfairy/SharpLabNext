@@ -15,6 +15,9 @@ test-results
 *.binlog
 *.user
 *.suo
+**/Properties/launchSettings.json
+**/__pycache__
+*.pyc
 .env
 .env.*
 !*.example

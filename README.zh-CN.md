@@ -190,8 +190,7 @@ Cancel、State 和可恢复的事件订阅。LSP session 同样使用 WebSocket�
 宿主命令直接使用系统安装的 .NET SDK、Node.js 和 npm。Dockerfile 中的版本只属于
 可复现镜像构建输入，不表示要在宿主机重复安装一套工具。
 
-构建只要求经过审核的 `third_party/ILSense` 源码文件已经存在。文件的获取方式不属于
-构建流程；普通入口不会读取 Git 元数据、仓库状态，也不会执行 submodule 命令。
+构建只要求经过审核的 `third_party/ILSense` 源码文件已经存在。
 
 ## 快速启动
 
@@ -202,7 +201,7 @@ Cancel、State 和可恢复的事件订阅。LSP session 同样使用 WebSocket�
 | 入口 | 职责 |
 | --- | --- |
 | `eng/build.ps1` / `eng/build.sh` | 在宿主机 restore、构建前后端并运行静态合同校验，不构建 Docker 镜像。 |
-| `eng/build-images.ps1` / `eng/build-images.sh` | 默认构建一个普通本地 Docker 镜像（不需要 Git 元数据、环境开关或 bundle）；传入 `-All`/`--all` 时才构建完整镜像图。 |
+| `eng/build-images.ps1` / `eng/build-images.sh` | 默认构建一个普通本地 Docker 镜像；传入 `-Target <名称>` 构建独立目标，传入 `-All`/`--all` 构建完整镜像图。 |
 | `eng/bundle.ps1` / `eng/bundle.sh` | 只检查并打包已经存在的完整镜像集合，不做 restore 或镜像构建。缺少或身份不匹配时立即失败。 |
 | `eng/release.ps1` / `eng/release.sh` | 完整入口：预检输出和所有静态合同、构建并校验全部计划镜像，全部成功后才生成离线 bundle。 |
 
@@ -245,26 +244,21 @@ BuildKit 私有输入，在隔离的 Linux/Wine 构建阶段用静默参数安�
 临时安装器随后从镜像层删除。3.5 SP1 文件会预填 Winetricks 的精确缓存路径，因此容器
 构建不再依赖其旧下载器或 TLS 栈。
 
-完整镜像构建只创建一次 classic WoW64 构建层，然后只构建两份私有 companion seed：
+完整镜像构建只创建一次 classic WoW64 构建层，然后只构建两份 companion seed：
 CLR 2 + .NET Framework 3.5，以及 CLR 4 + .NET Framework 4.8。每个精确 Framework
 operator 从另一代 CLR 的 seed 开始，只安装自己选择的目标版本；之后仍会预检两份
 prefix、禁用对应 NGen 服务、删除安装器残留、记录 seed 镜像 digest，并执行现有的
 不可变文件去重。Framework operator 使用与整个 release 图相同的
 `--max-parallel`，默认并发数为 5。
 
-构建脚本不会再通过 `docker image save` 额外封存这些 seed。每次构建都会把同一个锁定
-构建图交给 BuildKit；Docker 自身复用未变化的镜像层，输入摘要变化则使对应层自然失效。
-重装 Docker 或清空全部镜像后，会从本地已提供的输入与经过校验的下载字节重新构建，不依赖任何
-预先生成的镜像 TAR。
-
 J# 会从已提供的安装器字节与 CLR2 seed 重建。C++/CLI 会从锁定的 `msvc-wine` revision、
 Visual Studio 18.8 manifest 与 .NET Framework 4.8 Developer Pack 重建。源码归档和
 Microsoft 输入只作为经过大小/SHA-256 校验的字节下载到被忽略的 prerequisite cache；
 解压、准备和真实 `/clr` 预检全部发生在 Docker 内。
 
-J# 和 C++/CLI 基础镜像同样始终交给 BuildKit 构建，不再另存 `private-images.tar`。
-普通增量构建由 Docker 层缓存加速；清空 Docker 后则从上述锁定输入重新构建。
-`artifacts/prerequisites/downloads` 只缓存校验过的原始下载字节，不保存 Docker 镜像。
+Framework seed 和 J#/C++/CLI 基础镜像会在同一个构建图中直接交给 BuildKit。Docker 会复用
+未变化的镜像层，只让 Dockerfile、上下文或构建参数发生变化的阶段失效。prerequisite cache
+只保存校验过的源码和下载字节。
 
 ### 构建完整 Bundle
 
@@ -274,13 +268,8 @@ J# 和 C++/CLI 基础镜像同样始终交给 BuildKit 构建，不再另存 `pr
 .\eng\release.ps1 -AcceptMicrosoftLicenses
 ```
 
-该完整入口会构建私有基础镜像，把实际检查得到的 digest-pinned 引用注入其余镜像图，
-并生成一个可直接部署的完整 bundle。普通命令默认生成 unsigned bundle；正式签名仍要求
-源码和镜像输入具备可独立验证的来源。
-
-普通构建入口直接根据源码文件计算内容身份，不读取 Git 元数据或工作树状态；没有 `.git`
-的导出源码树与 checkout 使用相同流程。生成的镜像是普通本地构建产物，bundle 默认
-unsigned。正式签名是独立操作，届时才要求独立、可验证的 provenance。
+该入口运行主机构建检查，构建并校验完整 Docker 图，然后生成一个可直接部署的 bundle。
+普通命令默认生成 unsigned bundle；正式签名仍要求源码和镜像输入具备可独立验证的来源。
 
 默认输出目录是 `artifacts/releases/sharplabnext-yyyy-MM-dd-HH-mm-ss`。每个时间戳子目录
 都是完整部署单元，可以直接复制到生产主机，也可以改成 GitHub Release 名称后压缩为 ZIP。
@@ -292,19 +281,12 @@ bundle 不会覆盖已有目录；需要指定发布名时传入一个尚不存�
   -OutputDirectory D:\Bundles\sharplabnext-2026-08-24
 ```
 
-### 镜像复用与指定重建
+### Docker 构建缓存
 
-构建普通镜像或只打包现有镜像时分别调用 `build-images.ps1` 与 `bundle.ps1`。普通的
-`release.ps1`/`release.sh` 会先复用所有有效的本地镜像；源码或包装脚本变化不会使缓存
-失效。需要时传入重复的 `-RebuildTarget`/`--rebuild-target` 只重建指定镜像，或显式传入
-`-RebuildImages`/`--rebuild-images` 全量重建。`-BundleOnly`（或 `--bundle-only`）只是
-可选的直接打包快捷方式。`-Offline`
-只禁止前置缓存联网补齐；从完全空的 BuildKit 缓存构建上游源码仍可能需要访问清单锁定的
-Docker、NuGet、npm 或源码地址。
-
-重建选择器支持 `image:`、`runtime:`、`toolchain:`、`processor:`、`producer:` 和
-`capability:` 命名空间。不带命名空间时会检查所有这些身份，也支持 `*` 通配符，例如
-`-RebuildTarget "image:worker-gsharp"` 或 `-RebuildTarget "*const-generics*"`。
+`build-images.ps1` 默认构建一个本地目标；传入 `-Target` 构建独立镜像，传入 `-All` 构建
+完整镜像图。`release.ps1`/`release.sh` 负责构建并打包完整镜像图。Docker/BuildKit 会复用
+未变化的镜像层。`-BundleOnly`（或 `--bundle-only`）只打包已经存在的镜像，`-Offline` 只使用
+本地已有的前置构建输入。
 
 ### 部署 Bundle
 

@@ -183,8 +183,7 @@ public sealed class ReleaseBundleBuilder
                 runtimeMatrixBaseImages,
                 catalog,
                 expectedReferenceSetDigests,
-                definition.RuntimeId is not null && promotionBoundRuntimeIds.Contains(definition.RuntimeId),
-                allowDifferentSourceRevision: true);
+                definition.RuntimeId is not null && promotionBoundRuntimeIds.Contains(definition.RuntimeId));
         }
         var runtimePromotionTrust = await RuntimePromotionTrust.CaptureAsync(command.RepositoryRoot, source, catalog, releaseLock, deployment, activeRuntimeProfiles, inspectedImages, docker, cancellationToken, runtimePromotionPlanSignatureVerifier);
         await RuntimePromotionMatrixBinding.ValidateAsync(command.RepositoryRoot, activeRuntimeProfiles, runtimePromotionTrust, cancellationToken);
@@ -1899,8 +1898,7 @@ public sealed class ReleaseBundleBuilder
         RuntimeMatrixBaseImageBindings runtimeMatrixBaseImages,
         CatalogDocument catalog,
         IReadOnlyDictionary<string, string> expectedReferenceSetDigests,
-        bool promotionBoundRuntime,
-        bool allowDifferentSourceRevision)
+        bool promotionBoundRuntime)
     {
         if (!IsSha256(inspection.ImageId))
         {
@@ -1922,7 +1920,7 @@ public sealed class ReleaseBundleBuilder
             throw new BundleValidationException($"Image '{definition.Id}' does not carry release label '{releaseId}'.");
         }
 
-        ValidateInspectionSourceRevision(definition, inspection.Labels, source.Revision, promotionBoundRuntime, allowDifferentSourceRevision);
+        ValidateInspectionSourceRevision(definition, inspection.Labels, source.Revision, promotionBoundRuntime);
 
         ValidateComponentIdentityLabels(definition, inspection.Labels, releaseLock);
         ValidateDeclaredReferenceSetLabels(definition, inspection.Labels, releaseLock, expectedReferenceSetDigests);
@@ -1951,7 +1949,7 @@ public sealed class ReleaseBundleBuilder
         }
     }
 
-    internal static void ValidateInspectionSourceRevision(DeploymentImageDefinition definition, IReadOnlyDictionary<string, string> labels, string releaseRevision, bool promotionBoundRuntime, bool allowDifferentSourceRevision = false)
+    internal static void ValidateInspectionSourceRevision(DeploymentImageDefinition definition, IReadOnlyDictionary<string, string> labels, string releaseRevision, bool promotionBoundRuntime)
     {
         if (!labels.TryGetValue(RepositorySourceProvenanceResolver.ImageLabel, out var sourceRevision))
         {
@@ -1967,9 +1965,9 @@ public sealed class ReleaseBundleBuilder
             return;
         }
 
-        if ((!allowDifferentSourceRevision && !StringComparer.Ordinal.Equals(sourceRevision, releaseRevision)) || (allowDifferentSourceRevision && !IsCommit(sourceRevision)))
+        if (!StringComparer.Ordinal.Equals(sourceRevision, releaseRevision))
         {
-            throw new BundleValidationException(allowDifferentSourceRevision ? $"Image '{definition.Id}' does not carry a valid source revision label." : $"Image '{definition.Id}' does not carry source revision label '{releaseRevision}'.");
+            throw new BundleValidationException($"Image '{definition.Id}' does not carry source revision label '{releaseRevision}'.");
         }
         if (definition.ImmutableReference is not null && (!labels.TryGetValue("org.opencontainers.image.revision", out var releaseOciRevision) || !StringComparer.Ordinal.Equals(releaseOciRevision, sourceRevision)))
         {

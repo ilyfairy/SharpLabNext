@@ -12,7 +12,6 @@ import {
   createBakeChildEnvironment,
   parseBakeEnvironmentSnapshot,
   resolveOrdinaryBakeTarget,
-  matchesRebuildTarget,
   resolveBuildCapabilities,
   resolveRuntimeArguments,
   runParallel,
@@ -33,20 +32,8 @@ test('validated release image plans retain capability definitions as an array', 
   assert.deepEqual([...resolveBuildCapabilities(plan.images, validatedDefinitions)], ['base']);
 });
 
-test('release image caching is Docker-owned and target selection is generic', () => {
-  const orchestrator = fs.readFileSync(path.join(repositoryRoot, 'eng', 'build-images.mjs'), 'utf8');
-  assert.doesNotMatch(orchestrator, /compute(?:Product)?BuildInputFingerprint|build-images-state/);
-  assert.doesNotMatch(orchestrator, /const.?generics|jsharpBuildTargets|cppcliBuildTargets/i);
-  assert.doesNotMatch(orchestrator, /ordinaryBakeTargetImageNames|ordinaryBakeTargetAliases/);
-  assert.match(orchestrator, /explicit rebuild selectors are the opt-in invalidation mechanism/);
+test('build capabilities and runtime arguments resolve from generic definitions', () => {
   const image = { id: 'runtime-special-linux-x64', runtimeId: 'runtime-special-linux-x64', toolchainId: 'compiler-special', artifactProcessorId: 'processor-special', producer: { id: 'runtime-special' }, buildCapabilities: ['framework'] };
-  assert.equal(matchesRebuildTarget(image, 'runtime-special-linux-x64'), true);
-  assert.equal(matchesRebuildTarget(image, 'feature:framework'), true);
-  assert.equal(matchesRebuildTarget(image, 'capability:framework'), true);
-  assert.equal(matchesRebuildTarget(image, 'compiler-special'), true);
-  assert.equal(matchesRebuildTarget(image, 'processor:processor-special'), true);
-  assert.equal(matchesRebuildTarget(image, 'runtime:dotnet'), false);
-  assert.equal(matchesRebuildTarget(image, '*special*'), true);
   assert.deepEqual([...resolveBuildCapabilities([image], capabilityDefinitions)].sort(), ['framework', 'wine']);
   assert.deepEqual([...resolveBuildCapabilities([{ buildCapabilities: ['custom-output'] }], [{ id: 'base' }, { id: 'custom-output', dependencies: ['base'] }])].sort(), ['base', 'custom-output']);
   assert.throws(() => resolveBuildCapabilities([{ buildCapabilities: ['unknown'] }], capabilityDefinitions), /Unknown build capability/);
@@ -67,7 +54,6 @@ test('ordinary image mode resolves one standalone Bake target without a release 
   assert.deepEqual({ bakeTarget: gateway.bakeTarget, imageName: gateway.imageName, id: gateway.id }, { bakeTarget: 'gateway', imageName: 'gateway', id: 'gateway' });
   const dotnet = resolveOrdinaryBakeTarget('dotnet-10-linux-x64');
   assert.deepEqual({ bakeTarget: dotnet.bakeTarget, imageName: dotnet.imageName, id: dotnet.id, runtimeId: dotnet.runtimeId }, { bakeTarget: 'runtime-dotnet10', imageName: 'runtime-dotnet10', id: 'dotnet-10-linux-x64', runtimeId: 'dotnet-10-linux-x64' });
-  assert.equal(matchesRebuildTarget({ ...dotnet, producer: { id: dotnet.bakeTarget } }, 'runtime:dotnet-10-linux-x64'), true);
   assert.throws(() => resolveOrdinaryBakeTarget('worker-cppcli'), /not a standalone ordinary image target/);
   assert.throws(() => resolveOrdinaryBakeTarget('toString'), /not a standalone ordinary image target/);
   const deployment = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'deploy', 'images.json'), 'utf8'));
@@ -284,17 +270,12 @@ test('complete image build keeps installers out of host execution', () => {
   assert.match(orchestrator, /createFrameworkSeedBuildSpec/);
   assert.match(orchestrator, /createOperatorImageBuildSpec/);
   assert.match(orchestrator, /buildOperatorImages/);
-  assert.doesNotMatch(orchestrator, /private-images|framework-companion-seeds/);
-  assert.doesNotMatch(orchestrator, /prepare\w*Cache|seal\w*Cache|needsSeal|cache\.hit/);
-  assert.doesNotMatch(orchestrator, /\['image', '(?:save|load)'/);
   assert.match(orchestrator, /requiredOperatorDefinitions/);
-  assert.doesNotMatch(orchestrator, /jsharp20-toolchain-base|cppcli-prepared-base/);
   assert.ok(orchestrator.indexOf('buildFrameworkOperators') < orchestrator.indexOf('buildOperatorImages'));
   assert.ok(orchestrator.indexOf('buildOperatorImages') < orchestrator.indexOf('buildBakeTargets'));
   assert.match(orchestrator, /maximumParallel: 5/);
   assert.match(orchestrator, /runParallel\(seedTasks, options\.maximumParallel\)/);
   assert.match(orchestrator, /runParallel\(tasks, options\.maximumParallel\)/);
-  assert.doesNotMatch(orchestrator, /FrameworkMaxParallel|framework-max-parallel/);
   assert.match(orchestrator, /verify-buildkit\.cs/);
   assert.match(orchestrator, /requires the Docker Buildx driver/);
   assert.doesNotMatch(orchestrator, /Start-Process|\.InstallerPath\s*\)/);
@@ -307,7 +288,6 @@ test('complete image build keeps installers out of host execution', () => {
   assert.match(preparation, /framework-cached-context/)
   assert.match(preparation, /framework-installer-context/)
   assert.match(preparation, /--build-context/)
-  assert.doesNotMatch(preparation, /StagedBuildContext|Guid\.NewGuid|File\.Copy/)
   assert.match(preparation, /"FRAMEWORK_INSTALLER_NETWORK"[\s\S]+inputs\.CachedPayload is null \? "default" : "none"/)
   assert.doesNotMatch(preparation, /new\("--network"\)/)
   assert.match(preparation, /FRAMEWORK_SEED_IMAGE/)

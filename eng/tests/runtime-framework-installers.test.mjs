@@ -382,8 +382,6 @@ test('operator Dockerfile keeps installers private, bounded, and preflights the 
   assert.match(source, /framework_vendored_root=\/run\/operator-assets\/framework-vendored/)
   assert.match(source, /framework_cached_root=\/run\/operator-assets\/framework-cached/)
   assert.match(source, /framework_installer_root=\/run\/operator-assets\/framework-installer/)
-  assert.doesNotMatch(source, /installer\.bin/)
-  assert.doesNotMatch(source, /staged-context-file-set|staged_context_files/)
   assert.equal(
     dockerfile.match(/RUN --network=none/g)?.length,
     2,

@@ -8,9 +8,6 @@ param(
     [switch]$AcceptMicrosoftLicenses,
     [switch]$Offline,
     [switch]$PlanOnly,
-    [switch]$CacheProbe,
-    [switch]$NoReuseExisting,
-    [string[]]$RebuildTarget,
     [switch]$All
 )
 
@@ -29,9 +26,6 @@ if (-not [string]::IsNullOrWhiteSpace($Target)) { $arguments += @("--target", $T
 if ($AcceptMicrosoftLicenses) { $arguments += "--accept-microsoft-licenses" }
 if ($Offline) { $arguments += "--offline" }
 if ($PlanOnly) { $arguments += "--plan-only" }
-if ($CacheProbe) { $arguments += "--cache-probe" }
-if ($NoReuseExisting) { $arguments += "--no-reuse-existing" }
-foreach ($value in $RebuildTarget) { $arguments += @("--rebuild-target", $value) }
 if ($All) { $arguments += "--all" }
 
 & node @arguments

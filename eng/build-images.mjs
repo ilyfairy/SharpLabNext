@@ -30,7 +30,6 @@ const capabilityIdPattern = /^[a-z0-9][a-z0-9._-]*$/;
 const sourceRevisionLabel = 'io.sharplabnext.source.revision';
 const versionLabel = 'org.opencontainers.image.version';
 const bakeEnvironmentJsonPrefix = 'SHARPLABNEXT_BAKE_ENVIRONMENT_JSON=';
-const imageCacheProbePrefix = 'SHARPLABNEXT_IMAGE_CACHE=';
 // A retry is for transient Docker/restore failures only.  BuildKit reuses
 // completed layers, so one bounded retry is enough without hiding real errors.
 const buildRetryAttempts = 2;
@@ -351,13 +350,13 @@ function atomicWrite(filename, bytes) {
   }
 }
 
-export function applySourceVerificationMarker(options, output) {
+export function applySourceVerificationMarker(_options, output) {
   const verified = String(output).split(/\r?\n/).filter(line => line.startsWith('SHARPLABNEXT_SOURCE_VERIFIED=')).at(-1)?.slice('SHARPLABNEXT_SOURCE_VERIFIED='.length);
   if (verified !== undefined && verified !== 'true' && verified !== 'false') {
     fail('Source provenance resolver returned an invalid verification marker');
   }
-  // Ordinary builds bind their labels to a content identity. Promotion and
-  // signing tools independently require a verified clean Git source.
+  // Ordinary builds use a stable local label. Promotion and signing tools
+  // independently require a verified clean Git source.
   return verified;
 }
 
@@ -695,23 +694,6 @@ function tryInspectImage(reference, repositoryRoot) {
   try { return inspectImage(reference, repositoryRoot); } catch { return undefined; }
 }
 
-// BuildKit owns layer reuse. This probe only looks in Docker's local image
-// store; it never turns a cache miss into a registry pull or a second cache
-// repository. Content images remain reusable across source revisions;
-// explicit rebuild selectors are the opt-in invalidation mechanism.
-function tryReuseLocalImage(reference, expectedLabels, repositoryRoot, enabled = true, allowDifferentSourceRevision = true) {
-  if (!enabled) return undefined;
-  const image = tryInspectImage(reference, repositoryRoot);
-  if (image === undefined) return undefined;
-  try {
-    validateImageInspection(image, reference, expectedLabels, 'Local cached image', allowDifferentSourceRevision);
-    console.log(`Build cache hit: ${reference} -> ${image.Id}`);
-    return image;
-  } catch {
-    return undefined;
-  }
-}
-
 function registryImageTag(options, name) {
   const prefix = String(options.imagePrefix).startsWith('localhost:5000/')
     ? String(options.imagePrefix)
@@ -758,28 +740,8 @@ function buildWineOperator(options, sourceRevision, snapshot = undefined, requir
     [sourceRevisionLabel]: sourceRevision,
     'io.sharplabnext.base-image.dotnet-runtime-deps': values.BASE_DOTNET_RUNTIME_DEPS_IMAGE,
   };
-  // Keep one content tag across build and release identities. The release-scoped
-  // tag is applied by the operator wrapper and remains only a user-facing alias.
   const localTag = `${options.imagePrefix}/operator-wine-coreclr:content`;
   const releaseTag = `${options.imagePrefix}/operator-wine-coreclr:${options.releaseId}`;
-  const cached = tryReuseLocalImage(
-    localTag,
-    expectedLabels,
-    options.repositoryRoot,
-    options.reuseExisting,
-  );
-  if (cached !== undefined) {
-    const digest = requireImmutableReference
-      ? publishImmutableImage(
-        localTag,
-        registryImageTag(options, 'operator-wine-coreclr'),
-        expectedLabels,
-        options.repositoryRoot,
-      )
-      : cached.Id;
-    return { localTag, digest };
-  }
-
   runInBakeEnvironment(options, sourceRevision, undefined, process.execPath, [path.join(options.repositoryRoot, 'eng', 'build-wine-coreclr-operator.mjs')], bakeSnapshot);
   const built = inspectImage(releaseTag, options.repositoryRoot);
   validateImageInspection(built, releaseTag, expectedLabels, 'Built image');
@@ -856,7 +818,10 @@ async function buildFrameworkOperators(options, sourceRevision, wineDigest, down
     '--seed-input-sha256', seedSpec.inputSha256,
     '--accept-microsoft-dotnet-framework-eula',
   ];
-  let commonImage = tryReuseLocalImage(
+  runWithRetry('dotnet', commonArguments, { cwd: options.repositoryRoot });
+  const commonImage = inspectImage(commonTag, options.repositoryRoot);
+  validateImageInspection(
+    commonImage,
     commonTag,
     {
       'io.sharplabnext.framework.build-role': 'wow64-base',
@@ -864,24 +829,8 @@ async function buildFrameworkOperators(options, sourceRevision, wineDigest, down
       'io.sharplabnext.operator-only': 'true',
       'io.sharplabnext.redistribution': 'operator-supplied-only',
     },
-    options.repositoryRoot,
-    options.reuseExisting,
+    'Built image',
   );
-  if (commonImage === undefined) {
-    runWithRetry('dotnet', commonArguments, { cwd: options.repositoryRoot });
-    commonImage = inspectImage(commonTag, options.repositoryRoot);
-    validateImageInspection(
-      commonImage,
-      commonTag,
-      {
-        'io.sharplabnext.framework.build-role': 'wow64-base',
-        'io.sharplabnext.framework.seed-input-sha256': seedSpec.inputSha256,
-        'io.sharplabnext.operator-only': 'true',
-        'io.sharplabnext.redistribution': 'operator-supplied-only',
-      },
-      'Built image',
-    );
-  }
   const commonDigest = publishImmutableImage(
     commonTag,
     commonRegistryTag,
@@ -895,7 +844,41 @@ async function buildFrameworkOperators(options, sourceRevision, wineDigest, down
   );
 
   const seedReferences = new Map();
-  const missingSeeds = [];
+  const seedTasks = [];
+  for (const seed of seedSpec.images.filter(candidate => requiredSeedGenerations.has(candidate.generation))) {
+    const localTag = `${options.imagePrefix}/framework-companion-seed-${seed.generation}:content`;
+    seedTasks.push({
+      label: `Framework companion seed '${seed.id}'`,
+      run: async () => {
+        const arguments_ = [
+          'run', preparationScript, '--no-build', '--',
+          '--build-kind', 'companion-seed',
+          '--repository-root', options.repositoryRoot,
+          '--seed-generation', seed.generation,
+          '--framework-wow64-base-image', commonDigest,
+          '--base-image', wineDigest,
+          '--root-image', rootImage,
+          '--output-image', localTag,
+          '--source-revision', sourceRevision,
+          '--seed-input-sha256', seedSpec.inputSha256,
+          '--accept-microsoft-dotnet-framework-eula',
+        ];
+        const companion = manifest.companionPrefixes?.[seed.generation];
+        const cachedPayload = manifest.cachedWinetricksPayloads?.find(payload => payload.verb === companion?.winetricksVerb);
+        if (cachedPayload !== undefined) {
+          const cachedFile = downloads?.[cachedPayload.prerequisiteId];
+          if (typeof cachedFile !== 'string' || cachedFile.length === 0) fail(`Framework seed '${seed.id}' has no cached payload download`);
+          arguments_.push(
+            '--cached-winetricks-payload-file',
+            cachedFile,
+          );
+        }
+        await startWithRetry('dotnet', arguments_, { cwd: options.repositoryRoot });
+      },
+    });
+  }
+  await runParallel(seedTasks, options.maximumParallel);
+
   for (const seed of seedSpec.images.filter(candidate => requiredSeedGenerations.has(candidate.generation))) {
     const localTag = `${options.imagePrefix}/framework-companion-seed-${seed.generation}:content`;
     const registryTag = registryImageTag(options, `framework-companion-seed-${seed.generation}`);
@@ -911,60 +894,6 @@ async function buildFrameworkOperators(options, sourceRevision, wineDigest, down
       'io.sharplabnext.operator-only': 'true',
       'io.sharplabnext.redistribution': 'operator-supplied-only',
     };
-    const cached = tryReuseLocalImage(
-      localTag,
-      expectedLabels,
-      options.repositoryRoot,
-      options.reuseExisting,
-    );
-    if (cached !== undefined) {
-      seedReferences.set(seed.generation, {
-        ...seed,
-        reference: localTag,
-        digest: publishImmutableImage(
-          localTag,
-          registryTag,
-          expectedLabels,
-          options.repositoryRoot,
-        ),
-      });
-      continue;
-    }
-    missingSeeds.push({ seed, localTag, registryTag, expectedLabels });
-  }
-
-  const seedTasks = missingSeeds.map(({ seed, localTag }) => ({
-    label: `Framework companion seed '${seed.id}'`,
-    run: async () => {
-      const arguments_ = [
-        'run', preparationScript, '--no-build', '--',
-        '--build-kind', 'companion-seed',
-        '--repository-root', options.repositoryRoot,
-        '--seed-generation', seed.generation,
-        '--framework-wow64-base-image', commonDigest,
-        '--base-image', wineDigest,
-        '--root-image', rootImage,
-        '--output-image', localTag,
-        '--source-revision', sourceRevision,
-        '--seed-input-sha256', seedSpec.inputSha256,
-        '--accept-microsoft-dotnet-framework-eula',
-      ];
-      const companion = manifest.companionPrefixes?.[seed.generation];
-      const cachedPayload = manifest.cachedWinetricksPayloads?.find(payload => payload.verb === companion?.winetricksVerb);
-      if (cachedPayload !== undefined) {
-        const cachedFile = downloads?.[cachedPayload.prerequisiteId];
-        if (typeof cachedFile !== 'string' || cachedFile.length === 0) fail(`Framework seed '${seed.id}' has no cached payload download`);
-        arguments_.push(
-          '--cached-winetricks-payload-file',
-          cachedFile,
-        );
-      }
-      await startWithRetry('dotnet', arguments_, { cwd: options.repositoryRoot });
-    },
-  }));
-  await runParallel(seedTasks, options.maximumParallel);
-
-  for (const { seed, localTag, registryTag, expectedLabels } of missingSeeds) {
     seedReferences.set(
       seed.generation,
       {
@@ -981,7 +910,7 @@ async function buildFrameworkOperators(options, sourceRevision, wineDigest, down
   }
 
   const references = new Map();
-  const missingTargets = [];
+  const targets = [];
   for (const target of selectedTargets) {
     const tag = `${options.imagePrefix}/operator-${target.id}:content`;
     const registryTag = registryImageTag(options, `operator-${target.id}`);
@@ -1009,25 +938,10 @@ async function buildFrameworkOperators(options, sourceRevision, wineDigest, down
       'io.sharplabnext.operator-base': wineDigest,
       'io.sharplabnext.operator-root': rootImage,
     };
-    const cached = tryReuseLocalImage(
-      tag,
-      expectedLabels,
-      options.repositoryRoot,
-      options.reuseExisting,
-    );
-    if (cached !== undefined) {
-      references.set(target.id, publishImmutableImage(
-        tag,
-        registryTag,
-        expectedLabels,
-        options.repositoryRoot,
-      ));
-    } else {
-      missingTargets.push({ target, tag, registryTag, seed, expectedLabels });
-    }
+    targets.push({ target, tag, registryTag, seed, expectedLabels });
   }
 
-  const tasks = missingTargets.map(({ target, tag, registryTag, seed, expectedLabels }) => ({
+  const tasks = targets.map(({ target, tag, registryTag, seed, expectedLabels }) => ({
     label: `Framework operator '${target.id}'`,
     run: async () => {
       const arguments_ = [
@@ -1108,7 +1022,7 @@ async function buildOperatorImages(options, prerequisiteState, framework, manife
   const spec = await createOperatorImageBuildSpec(options.repositoryRoot, manifest, frameworkSeeds, definitions);
   const generatedImages = new Map(manifest.value.generatedImages.map(image => [image.id, image]));
   const result = {};
-  const missingTasks = [];
+  const tasks = [];
   const imageMetadata = new Map();
   for (const definition of definitions) {
     const operator = definition.operator;
@@ -1128,27 +1042,21 @@ async function buildOperatorImages(options, prerequisiteState, framework, manife
     };
     const registryTag = registryImageTag(options, image.id);
     imageMetadata.set(image.id, { registryTag, expectedLabels });
-    const planned = { id: image.id, producer: { id: image.id }, buildCapabilities: [definition.id] };
-    const cached = tryReuseLocalImage(image.reference, expectedLabels, options.repositoryRoot, options.reuseExisting && !isRebuildRequested(options, planned));
-    if (cached !== undefined) {
-      result[image.id] = publishImmutableImage(image.reference, registryTag, expectedLabels, options.repositoryRoot);
-      continue;
-    }
     const arguments_ = ['run', script, '--no-build', '--', '--repository-root', options.repositoryRoot];
     if (seed !== undefined) arguments_.push('--framework-seed-image', seed);
     arguments_.push('--output-image', image.reference, '--operator-build-input-sha256', spec.inputSha256, ...operatorDownloadArguments(operator, prerequisiteState.downloads), ...(operator.licenseArguments ?? []));
-    missingTasks.push({
+    tasks.push({
       id: image.id,
       script,
       label: `Source-built operator image '${definition.id}'`,
       run: () => startWithRetry('dotnet', arguments_, { cwd: options.repositoryRoot }),
     });
   }
-  for (const script of [...new Set(missingTasks.map(task => task.script))]) runWithRetry('dotnet', ['build', script, '--nologo'], { cwd: options.repositoryRoot });
-  await runParallel(missingTasks, options.maximumParallel);
-  for (const task of missingTasks) {
+  for (const script of [...new Set(tasks.map(task => task.script))]) runWithRetry('dotnet', ['build', script, '--nologo'], { cwd: options.repositoryRoot });
+  await runParallel(tasks, options.maximumParallel);
+  for (const task of tasks) {
     const metadata = imageMetadata.get(task.id);
-    if (metadata === undefined) fail(`Operator image '${task.id}' has no cache metadata`);
+    if (metadata === undefined) fail(`Operator image '${task.id}' has no build metadata`);
     const image = generatedImages.get(task.id);
     result[task.id] = publishImmutableImage(image.reference, metadata.registryTag, metadata.expectedLabels, options.repositoryRoot);
   }
@@ -1186,24 +1094,16 @@ function buildFrameworkControlImages(options, sourceRevision, wineDigest, built,
     'org.opencontainers.image.revision': sourceRevision,
     'io.sharplabnext.source.revision': sourceRevision,
   };
-  let metadataImage = tryReuseLocalImage(
-    metadataTag,
-    metadataLabels,
-    options.repositoryRoot,
-    options.reuseExisting,
-  );
-  if (metadataImage === undefined) {
-    const contextArguments = [
-      path.join(options.repositoryRoot, 'eng', 'build-framework-matrix-context.mjs'),
-      '--matrix-input', matrixInput.filename,
-      '--source-revision', sourceRevision,
-      '--image', metadataTag,
-      '--version', options.releaseId,
-    ];
-    runWithRetry(process.execPath, contextArguments, { cwd: options.repositoryRoot });
-    metadataImage = inspectImage(metadataTag, options.repositoryRoot);
-    validateImageInspection(metadataImage, metadataTag, metadataLabels, 'Built image');
-  }
+  const contextArguments = [
+    path.join(options.repositoryRoot, 'eng', 'build-framework-matrix-context.mjs'),
+    '--matrix-input', matrixInput.filename,
+    '--source-revision', sourceRevision,
+    '--image', metadataTag,
+    '--version', options.releaseId,
+  ];
+  runWithRetry(process.execPath, contextArguments, { cwd: options.repositoryRoot });
+  const metadataImage = inspectImage(metadataTag, options.repositoryRoot);
+  validateImageInspection(metadataImage, metadataTag, metadataLabels, 'Built image');
   const metadataDigest = publishImmutableImage(
     metadataTag,
     metadataRegistryTag,
@@ -1224,27 +1124,19 @@ function buildFrameworkControlImages(options, sourceRevision, wineDigest, built,
     'io.sharplabnext.operator-image.wine': wineDigest,
     'io.sharplabnext.operator-root': built.rootImage,
   };
-  let parentImage = tryReuseLocalImage(
-    parentTag,
-    parentLabels,
-    options.repositoryRoot,
-    options.reuseExisting,
-  );
-  if (parentImage === undefined) {
-    const parentArguments = [
-      path.join(options.repositoryRoot, 'eng', 'build-framework-matrix-parent.mjs'),
-      '--root-image', built.rootImage,
-      '--wine-image', wineDigest,
-      '--framework-matrix-source-uri', `docker://${metadataDigest}`,
-      '--framework-matrix-input-sha256', matrixInput.sha256,
-      '--source-revision', sourceRevision,
-      '--image', parentTag,
-      '--version', options.releaseId,
-    ];
-    runWithRetry(process.execPath, parentArguments, { cwd: options.repositoryRoot });
-    parentImage = inspectImage(parentTag, options.repositoryRoot);
-    validateImageInspection(parentImage, parentTag, parentLabels, 'Built image');
-  }
+  const parentArguments = [
+    path.join(options.repositoryRoot, 'eng', 'build-framework-matrix-parent.mjs'),
+    '--root-image', built.rootImage,
+    '--wine-image', wineDigest,
+    '--framework-matrix-source-uri', `docker://${metadataDigest}`,
+    '--framework-matrix-input-sha256', matrixInput.sha256,
+    '--source-revision', sourceRevision,
+    '--image', parentTag,
+    '--version', options.releaseId,
+  ];
+  runWithRetry(process.execPath, parentArguments, { cwd: options.repositoryRoot });
+  const parentImage = inspectImage(parentTag, options.repositoryRoot);
+  validateImageInspection(parentImage, parentTag, parentLabels, 'Built image');
   const parentDigest = publishImmutableImage(
     parentTag,
     parentRegistryTag,
@@ -1281,10 +1173,6 @@ function ordinaryImageExpectedLabels(sourceRevision, releaseId) {
 
 async function runOrdinaryImageBuild(options, sourceRevision, output) {
   const target = resolveOrdinaryBakeTarget(options.target, options.repositoryRoot);
-  const ordinaryPlan = { id: target.id, runtimeId: target.runtimeId, toolchainId: target.toolchainId, artifactProcessorId: target.artifactProcessorId, buildCapabilities: target.buildCapabilities, producer: { id: target.bakeTarget } };
-  if (options.rebuildTargets?.some(selector => !matchesRebuildTarget(ordinaryPlan, selector))) {
-    fail(`--rebuild-target does not match ordinary target '${target.bakeTarget}'; use --all to select release images`);
-  }
   // Resolve the same lock/base-image environment used by Bake, but do not
   // create a release plan or start any prerequisite/operator orchestration.
   const environmentSnapshot = resolveBakeEnvironmentSnapshot(options, sourceRevision, undefined);
@@ -1299,21 +1187,6 @@ async function runOrdinaryImageBuild(options, sourceRevision, output) {
   output.log(`Source identity: ${sourceRevision}`);
 
   if (options.planOnly) return 0;
-
-  const cached = tryReuseLocalImage(
-    reference,
-    expectedLabels,
-    options.repositoryRoot,
-    options.reuseExisting && !isRebuildRequested(options, ordinaryPlan),
-  );
-  if (options.cacheProbe) {
-    output.log(`${imageCacheProbePrefix}${cached === undefined ? 'miss' : 'hit'}`);
-    return 0;
-  }
-  if (cached !== undefined) {
-    output.log(`Ordinary image already present: ${reference} (${cached.Id})`);
-    return 0;
-  }
 
   runWithRetry('dotnet', [
     'run', path.join(options.repositoryRoot, 'eng', 'tools', 'verify-buildkit.cs'),
@@ -1369,111 +1242,11 @@ function validateFinalImageInspection(planned, image, plan, sourceRevision, allo
   return labels;
 }
 
-// A failed bundle must not invalidate images that were already built.  Keep
-// this probe deliberately local: BuildKit owns layer reuse and a cache check
-// must never turn into an implicit registry pull (especially on SSH sessions).
-function finalImageAliases(planned) {
-  if (planned.producer.kind === 'pull') return [planned.reference];
-  const repository = imageRepository(planned.reference);
-  const aliases = [planned.reference];
-  if (planned.producer.kind === 'runtime-candidate') aliases.push(`${repository}:candidate`);
-  aliases.push(`${repository}:content`);
-  return aliases;
-}
-
-function tryReuseFinalImage(planned, plan, sourceRevision, repositoryRoot) {
-  for (const reference of finalImageAliases(planned)) {
-    const image = tryInspectImage(reference, repositoryRoot);
-    if (image === undefined) continue;
-    try {
-      validateFinalImageInspection(planned, image, plan, sourceRevision, true);
-    } catch {
-      continue;
-    }
-    if (reference !== planned.reference) {
-      runWithRetry('docker', ['image', 'tag', reference, planned.reference], { cwd: repositoryRoot });
-    }
-    return image;
-  }
-  return undefined;
-}
-
-function normalizeRebuildTarget(value) { return String(value ?? '').trim().toLowerCase(); }
-
-export function matchesRebuildTarget(planned, selector) {
-  const normalized = normalizeRebuildTarget(selector);
-  const separator = normalized.indexOf(':');
-  const namespace = separator > 0 ? normalized.slice(0, separator) : undefined;
-  const target = separator > 0 ? normalized.slice(separator + 1) : normalized;
-  if (target.length === 0) return false;
-  const id = String(planned?.id ?? '').toLowerCase();
-  const producer = String(planned?.producer?.id ?? '').toLowerCase();
-  const namespacedValues = {
-    capability: (planned?.buildCapabilities ?? []).map(value => String(value).toLowerCase()),
-    feature: (planned?.buildCapabilities ?? []).map(value => String(value).toLowerCase()),
-    runtime: [String(planned?.runtimeId ?? '').toLowerCase()],
-    image: [id],
-    producer: [producer],
-    toolchain: [String(planned?.toolchainId ?? '').toLowerCase()],
-    processor: [String(planned?.artifactProcessorId ?? '').toLowerCase()],
-  };
-  if (namespace !== undefined && !Object.hasOwn(namespacedValues, namespace)) return false;
-  const values = namespace === undefined
-    ? [...new Set(Object.values(namespacedValues).flat())]
-    : namespacedValues[namespace];
-  if (target.includes('*')) {
-    const pattern = new RegExp(`^${target.split('*').map(value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`);
-    return values.some(value => pattern.test(value));
-  }
-  return values.some(value => value === target);
-}
-
-function validateRebuildTargets(options, plan) {
-  const selectors = [...new Set((options.rebuildTargets ?? []).map(normalizeRebuildTarget).filter(Boolean))];
-  const unmatched = selectors.filter(selector => !plan.images.some(image => matchesRebuildTarget(image, selector)));
-  if (unmatched.length > 0) {
-    const supported = [...new Set(plan.images.flatMap(image => [image.id, image.producer?.id, image.runtimeId, image.toolchainId, image.artifactProcessorId, ...(image.buildCapabilities ?? [])].filter(Boolean)))].sort().join(', ');
-    fail(`Unknown --rebuild-target '${unmatched[0]}'. Available image, producer, component, and capability targets: ${supported}`);
-  }
-  options.rebuildTargets = selectors;
-}
-
-function isRebuildRequested(options, planned) { return (options.rebuildTargets ?? []).some(selector => matchesRebuildTarget(planned, selector)); }
-
-function partitionPlannedImages(options, plan, sourceRevision, forceRebuild = false) {
-  const cached = new Map();
-  const missing = [];
-  for (const planned of plan.images) {
-    if (options.reuseExisting === false || forceRebuild || isRebuildRequested(options, planned)) {
-      missing.push(planned);
-      continue;
-    }
-    // Pull-only entries are independent of the repository source. Keep them
-    // reusable even when a source-input fingerprint invalidates build outputs.
-    if (planned.producer.kind === 'pull') {
-      const image = tryInspectImage(planned.reference, options.repositoryRoot);
-      if (image !== undefined) {
-        try {
-          validateFinalImageInspection(planned, image, plan, sourceRevision);
-          cached.set(planned.id, image);
-        } catch {
-          missing.push(planned);
-        }
-      } else missing.push(planned);
-      continue;
-    }
-    const image = tryReuseFinalImage(planned, plan, sourceRevision, options.repositoryRoot);
-    if (image === undefined) missing.push(planned);
-    else cached.set(planned.id, image);
-  }
-  return { cached, missing };
-}
-
 function verifyFinalImages(options, sourceRevision, plan, imagePlanDigest) {
   const result = [];
   for (const planned of plan.images) {
     const image = inspectImage(planned.reference, options.repositoryRoot);
-    validateFinalImageInspection(planned, image, plan, sourceRevision, options.reuseExisting !== false);
+    validateFinalImageInspection(planned, image, plan, sourceRevision);
     if (planned.producer.kind !== 'pull') {
       const contentAlias = `${imageRepository(planned.reference)}:content`;
       if (contentAlias !== planned.reference) {
@@ -1504,21 +1277,15 @@ function parseArguments(argv) {
     acceptMicrosoftLicenses: false,
     offline: false,
     planOnly: false,
-    cacheProbe: false,
-    reuseExisting: true,
     target: 'gateway',
     all: false,
     targetSpecified: false,
-    rebuildTargets: [],
   };
   for (let index = 0; index < argv.length; index++) {
     const argument = argv[index];
     if (argument === '--accept-microsoft-licenses') { result.acceptMicrosoftLicenses = true; continue; }
     if (argument === '--offline') { result.offline = true; continue; }
     if (argument === '--plan-only') { result.planOnly = true; continue; }
-    if (argument === '--cache-probe') { result.cacheProbe = true; continue; }
-    if (argument === '--no-reuse-existing') { result.reuseExisting = false; continue; }
-    if (argument === '--rebuild-target') { const value = argv[++index]; if (value === undefined || value.length === 0) fail('--rebuild-target requires a value'); result.rebuildTargets.push(value); continue; }
     if (argument === '--all') {
       if (result.targetSpecified) fail('--target and --all cannot be used together');
       result.all = true;
@@ -1553,7 +1320,7 @@ function usage() {
   return `Usage: node eng/build-images.mjs [--repository-root PATH] [--image-prefix PREFIX]\n` +
     `  [--source-revision COMMIT] [--max-parallel 1..8] [--offline]\n` +
     `  [--target TARGET | --all]\n` +
-    `  [--plan-only] [--cache-probe] [--no-reuse-existing] [--rebuild-target TARGET]\n` +
+    `  [--plan-only]\n` +
     `  [--accept-microsoft-licenses]\n` +
     `  (default target: gateway; default parallelism: 5; --all selects the complete image graph)`;
 }
@@ -1601,8 +1368,8 @@ export async function runBuildImages(argv, output = console) {
   try {
     const options = parseArguments(argv);
     if (options.help) { output.log(usage()); return 0; }
-    // Source labels use a content identity; local reuse is controlled only by
-    // explicit rebuild options and never requires Git metadata.
+    // Local builds use a stable non-Git label; Docker/BuildKit owns cache
+    // invalidation from the actual Dockerfile, context, and build arguments.
     options.sourceIdentityMode = contentSourceIdentityMode;
     process.env[sourceIdentityModeEnvironmentVariable] = contentSourceIdentityMode;
     const sourceRevision = resolveSourceRevision(options);
@@ -1611,36 +1378,16 @@ export async function runBuildImages(argv, output = console) {
       return await runOrdinaryImageBuild(options, sourceRevision, output);
     }
     const imagePlan = generateImagePlan(options, sourceRevision);
-    validateRebuildTargets(options, imagePlan.plan);
     options.releaseId = imagePlan.plan.releaseId;
     const counts = Object.fromEntries(['bake', 'runtime-candidate', 'pull'].map(kind => [kind, imagePlan.plan.images.filter(image => image.producer.kind === kind).length]));
     output.log(`Release image plan: ${imagePlan.plan.images.length} images (${counts.bake} Bake, ${counts['runtime-candidate']} runtime candidates, ${counts.pull} immutable pulls).`);
     if (options.planOnly) return 0;
     if (!options.acceptMicrosoftLicenses) fail('--accept-microsoft-licenses is required because the selected Catalog includes Microsoft proprietary runtime/toolchain inputs');
 
-    const imageState = partitionPlannedImages(
-      options,
-      imagePlan.plan,
-      sourceRevision,
-      false,
-    );
-    output.log(`Image cache: ${imageState.cached.size} hit, ${imageState.missing.length} to build.`);
-    if (options.cacheProbe) {
-      const hit = imageState.missing.length === 0;
-      output.log(`${imageCacheProbePrefix}${hit ? 'hit' : 'miss'}`);
-      return 0;
-    }
-    if (imageState.missing.length === 0) {
-      const validationPath = verifyFinalImages(options, sourceRevision, imagePlan.plan, imagePlan.digest);
-      output.log(`All planned release images were already present and validated. Identity record: ${validationPath}`);
-      return 0;
-    }
-
-    const missingIds = new Set(imageState.missing.map(image => image.id));
-    const bakeTargets = [...new Set(imagePlan.plan.images.filter(image => image.producer.kind === 'bake' && missingIds.has(image.id)).map(image => image.producer.id))].sort();
-    const candidates = imagePlan.plan.images.filter(image => image.producer.kind === 'runtime-candidate' && missingIds.has(image.id));
+    const bakeTargets = [...new Set(imagePlan.plan.images.filter(image => image.producer.kind === 'bake').map(image => image.producer.id))].sort();
+    const candidates = imagePlan.plan.images.filter(image => image.producer.kind === 'runtime-candidate');
     options.capabilityDefinitions = imagePlan.capabilityDefinitions;
-    const capabilities = resolveBuildCapabilities(imageState.missing, imagePlan.capabilityDefinitions);
+    const capabilities = resolveBuildCapabilities(imagePlan.plan.images, imagePlan.capabilityDefinitions);
     output.log(`Build capabilities: ${capabilities.size === 0 ? 'none' : [...capabilities].join(', ')}`);
 
     runWithRetry('dotnet', [
@@ -1648,13 +1395,8 @@ export async function runBuildImages(argv, output = console) {
     ], { cwd: options.repositoryRoot });
     verifyLocalImageBuildDriver(options.repositoryRoot);
 
-    for (const image of imageState.missing.filter(image => image.producer.kind === 'pull')) {
+    for (const image of imagePlan.plan.images.filter(image => image.producer.kind === 'pull')) {
       runWithRetry('docker', ['image', 'pull', image.reference], { cwd: options.repositoryRoot });
-    }
-    if (bakeTargets.length === 0 && candidates.length === 0) {
-      const validationPath = verifyFinalImages(options, sourceRevision, imagePlan.plan, imagePlan.digest);
-      output.log(`Fetched and validated every planned release image. Identity record: ${validationPath}`);
-      return 0;
     }
 
     let prerequisiteState;

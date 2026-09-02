@@ -490,7 +490,7 @@ public sealed class BundleBuilderTests
     public void SourceProvenanceUsesAnUnverifiedIdentityForMissingHeadAndDirtyTrees()
     {
         var noHead = RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(true, null, true), requestedRevision: null);
-        Assert.Equal(RepositorySourceProvenanceResolver.LocalUncommittedRevision, noHead.Revision);
+        Assert.Equal(RepositorySourceProvenanceResolver.LocalBuildRevision, noHead.Revision);
         Assert.False(noHead.IsVerified);
 
         var dirty = RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(true, TestSourceRevision, true), requestedRevision: null);
@@ -509,7 +509,7 @@ public sealed class BundleBuilderTests
     {
         var source = RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(false, null, true), requestedRevision: null);
 
-        Assert.Equal(RepositorySourceProvenanceResolver.LocalUncommittedRevision, source.Revision);
+        Assert.Equal(RepositorySourceProvenanceResolver.LocalBuildRevision, source.Revision);
         Assert.False(source.IsVerified);
         Assert.True(source.IsDirty);
     }
@@ -524,9 +524,9 @@ public sealed class BundleBuilderTests
     }
 
     [Fact]
-    public async Task SourceInspectorUsesAContentIdentityWhenGitMetadataIsUnavailable()
+    public async Task SourceInspectorDoesNotReadSourceBytesWhenGitMetadataIsUnavailable()
     {
-        var root = Path.Combine(Path.GetTempPath(), $"sharplabnext-source-fingerprint-{Guid.NewGuid():N}");
+        var root = Path.Combine(Path.GetTempPath(), $"sharplabnext-source-inspector-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         try
         {
@@ -537,16 +537,73 @@ public sealed class BundleBuilderTests
             var first = await inspector.InspectAsync(root, TestContext.Current.CancellationToken);
             Assert.False(first.IsGitRepository);
             Assert.True(first.IsDirty);
-            Assert.NotNull(first.HeadRevision);
-            Assert.Matches("^[0-9a-f]{64}$", first.HeadRevision!);
+            Assert.Null(first.HeadRevision);
 
             await File.WriteAllTextAsync(file, "two\n", TestContext.Current.CancellationToken);
             var second = await inspector.InspectAsync(root, TestContext.Current.CancellationToken);
-            Assert.NotEqual(first.HeadRevision, second.HeadRevision);
+            Assert.Null(second.HeadRevision);
         }
         finally
         {
             Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ContentSourceInspectorDoesNotScanLocalFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sharplabnext-source-state-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "source.txt"), "source\n", TestContext.Current.CancellationToken);
+            var inspector = new ContentRepositorySourceInspector();
+            var first = await inspector.InspectAsync(root, TestContext.Current.CancellationToken);
+            Assert.Null(first.HeadRevision);
+
+            Directory.CreateDirectory(Path.Combine(root, "Properties"));
+            Directory.CreateDirectory(Path.Combine(root, "__pycache__"));
+            await File.WriteAllTextAsync(Path.Combine(root, "Properties", "launchSettings.json"), "{}", TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(root, "worker.csproj.user"), "user", TestContext.Current.CancellationToken);
+            await File.WriteAllBytesAsync(Path.Combine(root, "__pycache__", "worker.pyc"), [1, 2, 3], TestContext.Current.CancellationToken);
+            var withToolingFiles = await inspector.InspectAsync(root, TestContext.Current.CancellationToken);
+            Assert.Null(withToolingFiles.HeadRevision);
+
+            await File.WriteAllTextAsync(Path.Combine(root, "packages.lock.json"), "{}", TestContext.Current.CancellationToken);
+            var withLockFile = await inspector.InspectAsync(root, TestContext.Current.CancellationToken);
+            Assert.Null(withLockFile.HeadRevision);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LocalBuildUsesStableIdentityWithoutGitComparison()
+    {
+        var captured = new string('a', 64);
+        var current = new string('b', 64);
+        var previousMode = Environment.GetEnvironmentVariable(RepositorySourceProvenanceResolver.SourceIdentityModeEnvironmentVariable);
+        try
+        {
+            Environment.SetEnvironmentVariable(RepositorySourceProvenanceResolver.SourceIdentityModeEnvironmentVariable, RepositorySourceProvenanceResolver.ContentSourceIdentityMode);
+            var source = RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(false, current, true), captured);
+            Assert.Equal(captured, source.Revision);
+            Assert.Equal(current, source.HeadRevision);
+            Assert.False(source.IsVerified);
+
+            var stable = RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(true, current, true), requestedRevision: null);
+            Assert.Equal(RepositorySourceProvenanceResolver.LocalBuildRevision, stable.Revision);
+            Assert.False(stable.IsVerified);
+
+            var gitState = RepositorySourceProvenanceResolver.Resolve(new RepositorySourceState(true, current, true), captured);
+            Assert.Equal(captured, gitState.Revision);
+            Assert.False(gitState.IsVerified);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(RepositorySourceProvenanceResolver.SourceIdentityModeEnvironmentVariable, previousMode);
         }
     }
 
@@ -639,23 +696,14 @@ public sealed class BundleBuilderTests
     }
 
     [Fact]
-    public void ReusedImageSourceRevisionMayDiffer()
+    public void OrdinaryImageSourceRevisionMustMatchTheBundleRevision()
     {
         var definition = new DeploymentImageDefinition { Id = "gateway", Repository = "registry.example/gateway" };
         var labels = new Dictionary<string, string>(StringComparer.Ordinal) { [RepositorySourceProvenanceResolver.ImageLabel] = new string('b', 40) };
 
-        ReleaseBundleBuilder.ValidateInspectionSourceRevision(definition, labels, new string('c', 40), promotionBoundRuntime: false, allowDifferentSourceRevision: true);
-    }
+        var exception = Assert.Throws<BundleValidationException>(() => ReleaseBundleBuilder.ValidateInspectionSourceRevision(definition, labels, new string('c', 40), promotionBoundRuntime: false));
 
-    [Fact]
-    public void ReusedImageSourceRevisionMustRemainACommitIdentity()
-    {
-        var definition = new DeploymentImageDefinition { Id = "gateway", Repository = "registry.example/gateway" };
-        var labels = new Dictionary<string, string>(StringComparer.Ordinal) { [RepositorySourceProvenanceResolver.ImageLabel] = "invalid" };
-
-        var exception = Assert.Throws<BundleValidationException>(() => ReleaseBundleBuilder.ValidateInspectionSourceRevision(definition, labels, new string('c', 40), promotionBoundRuntime: false, allowDifferentSourceRevision: true));
-
-        Assert.Contains("valid source revision", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("does not carry source revision label", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

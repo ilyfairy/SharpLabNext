@@ -8,8 +8,6 @@ param(
     [switch]$AcceptMicrosoftLicenses,
     [switch]$Offline,
     [switch]$MetadataOnly,
-    [switch]$RebuildImages,
-    [string[]]$RebuildTarget = @(),
     [switch]$BundleOnly
 )
 
@@ -35,37 +33,15 @@ $buildArguments = @{
     All = $true
 }
 $buildArguments.SourceRevision = $SourceRevision
-if ($RebuildTarget.Count -gt 0) { $buildArguments.RebuildTarget = $RebuildTarget }
 if ($AcceptMicrosoftLicenses) { $buildArguments.AcceptMicrosoftLicenses = $true }
 if ($Offline) { $buildArguments.Offline = $true }
-if ($RebuildImages) { $buildArguments.NoReuseExisting = $true }
 
 if (-not $BundleOnly) {
-    $imageCacheHit = $false
-    if (-not $RebuildImages) {
-        $probeArguments = $buildArguments.Clone()
-        $probeArguments.Remove("NoReuseExisting")
-        $probeArguments.CacheProbe = $true
-        $probeOutput = @(& (Join-Path $PSScriptRoot "build-images.ps1") @probeArguments 2>&1)
-        $probeExitCode = $LASTEXITCODE
-        $probeOutput | ForEach-Object { Write-Host $_ }
-        if ($probeExitCode -ne 0) { throw "SharpLabNext image cache probe failed." }
-        $imageCacheHit = $probeOutput | Where-Object {
-            [string]::Equals([string]$_, "SHARPLABNEXT_IMAGE_CACHE=hit", [StringComparison]::Ordinal)
-        } | Select-Object -First 1
-        $imageCacheHit = $null -ne $imageCacheHit
-    }
+    & (Join-Path $PSScriptRoot "build.ps1") -Configuration Release -SkipValidation
+    if ($LASTEXITCODE -ne 0) { throw "SharpLabNext host build and static validation failed." }
 
-    if (-not $imageCacheHit) {
-        & (Join-Path $PSScriptRoot "build.ps1") -Configuration Release -SkipValidation
-        if ($LASTEXITCODE -ne 0) { throw "SharpLabNext host build and static validation failed." }
-
-        & (Join-Path $PSScriptRoot "build-images.ps1") @buildArguments
-        if ($LASTEXITCODE -ne 0) { throw "SharpLabNext image build failed." }
-    }
-    else {
-        Write-Host "All release images are cached; skipping host and Docker image builds."
-    }
+    & (Join-Path $PSScriptRoot "build-images.ps1") @buildArguments
+    if ($LASTEXITCODE -ne 0) { throw "SharpLabNext image build failed." }
 }
 
 $bundleArguments = @{ ImagePrefix = $ImagePrefix }
