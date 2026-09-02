@@ -84,6 +84,8 @@ function expectStableRect(before: { x: number; y: number; width: number; height:
 interface TopToolbarSample {
   run: { x: number; y: number; width: number; height: number; right: number }
   actions: { x: number; y: number; width: number; height: number }
+  sourceSelectorClientWidth: number
+  sourceSelectorScrollWidth: number
   selectorClientWidth: number
   selectorScrollWidth: number
   documentClientWidth: number
@@ -100,8 +102,9 @@ async function startTopToolbarProbe(page: Page, isMobile: boolean) {
     const record = () => {
       const run = document.querySelector<HTMLElement>(runSelector)
       const actions = document.querySelector<HTMLElement>('.app-bar-actions')
+      const sourceSelector = document.querySelector<HTMLElement>('.selector-group--source')
       const selector = document.querySelector<HTMLElement>('.selector-group--result')
-      if (!run || !actions || !selector || run.getClientRects().length === 0) return
+      if (!run || !actions || !sourceSelector || !selector || run.getClientRects().length === 0) return
       const runRect = run.getBoundingClientRect()
       const actionsRect = actions.getBoundingClientRect()
       samples.push({
@@ -118,6 +121,8 @@ async function startTopToolbarProbe(page: Page, isMobile: boolean) {
           width: actionsRect.width,
           height: actionsRect.height,
         },
+        sourceSelectorClientWidth: sourceSelector.clientWidth,
+        sourceSelectorScrollWidth: sourceSelector.scrollWidth,
         selectorClientWidth: selector.clientWidth,
         selectorScrollWidth: selector.scrollWidth,
         documentClientWidth: document.documentElement.clientWidth,
@@ -160,6 +165,7 @@ function expectStableTopToolbar(samples: TopToolbarSample[]) {
   if (!initial) throw new Error('Top-toolbar probe produced no initial sample.')
   for (const sample of samples) {
     expect(sample.run.right, 'Run action overlaps the app-bar actions').toBeLessThanOrEqual(sample.actions.x + 0.5)
+    expect(sample.sourceSelectorScrollWidth, 'Source selector overflowed horizontally').toBeLessThanOrEqual(sample.sourceSelectorClientWidth + 1)
     expect(sample.selectorScrollWidth, 'Result selector overflowed horizontally').toBeLessThanOrEqual(sample.selectorClientWidth + 1)
     expect(sample.documentScrollWidth, 'Document overflowed horizontally').toBeLessThanOrEqual(sample.documentClientWidth)
     expect(sample.bodyScrollWidth, 'Body overflowed horizontally').toBeLessThanOrEqual(sample.documentClientWidth)
